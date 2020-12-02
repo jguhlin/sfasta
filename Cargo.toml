@@ -1,0 +1,17 @@
+[workspace]
+members = [
+    "./libsfasta",
+    "./sfa",
+]
+
+[profile.release]
+opt-level = 3
+lto = "fat"
+panic = "abort"
+codegen-units = 1
+debug = true
+
+[profile.dev]
+# opt-level = 3 # Memory allocation is too slow otherwise...
+debug = true
+# lto = true

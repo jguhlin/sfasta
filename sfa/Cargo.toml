@@ -1,0 +1,19 @@
+[package]
+name = "sfa"
+version = "0.2.0"
+authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+indicatif = "0.15.0"
+libsfasta = { path = "../libsfasta/" }
+serde = { version = "1.0.116", features = ["derive"] }
+hashbrown = { version = "0.9.1", features = ["nightly", "serde"] }
+rand = "0.7.3"
+rand_core = "0.5"
+rand_chacha = "0.2.2"
+bincode = "1.3.1"
+
+[dependencies.clap]
+version = "3.0.0-beta.2"
+features = [ "suggestions", "color", "yaml", "wrap_help"]

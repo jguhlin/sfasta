@@ -1,0 +1,59 @@
+name: sfa
+version: "0.0.1"
+author: Joseph Guhlin <joseph.guhlin@gmail.com>
+about: Tool for working with .sfasta files
+subcommands:
+    - convert:
+        about: "Convert a fasta file to SFASTA"
+        args: 
+            - input: 
+                about: Input FASTA file (.fasta, .fna, .faa)
+                index: 1
+                required: true
+    - stats:
+        about: Basic statistics of SFASTA file
+        args:
+            - input:
+                about: Input SFASTA file
+                index: 1
+                required: true
+    - bp:
+        args:
+            - input:
+                index: 1
+                required: true
+    - index:
+        about: Create an SFASTA index
+        args:
+            - input:
+                index: 1
+                required: true
+    - split:
+        about: Split an SFASTA sample. Useful for generating training and validation sets.
+        version: "0.0.1"
+        args:
+            - input:
+                index: 1
+                help: Input SFASTA file (should end in .sfasta)
+                required: true
+                takes_value: true
+            - output:
+                help: Output filename prefix (files will be PREFIX_train.sfasta and PREFIX_validation.sfasta)
+                required: true
+                takes_value: true
+                index: 2
+            - training:
+                short: t
+                help: 0 - 1, training amount to keep. 0.9 would keep 90% of all samples
+                default_value: "0.5"
+                takes_value: true
+                long: training-split
+            - length_mode:
+                short: l
+                help: Split by length of sequence rather than number of samples. Prefer this one.
+                long: length
+            - seed:
+                short: s
+                long: seed
+                help: Random seed (for reproducible results)
+                default_value: "1010"
