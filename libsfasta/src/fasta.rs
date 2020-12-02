@@ -1,9 +1,7 @@
-// TODO: Move FASTA handling code here...
-// To make uniform...
-
-use crate::utils::generic_open_file;
 use std::convert::TryInto;
 use std::io::{BufRead, BufReader};
+
+use crate::io::generic_open_file;
 
 pub struct Sequence {
     pub seq: Vec<u8>,

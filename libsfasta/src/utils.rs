@@ -3,33 +3,75 @@ use std::fs::{metadata, File};
 use std::io::BufReader;
 use std::io::Read;
 
-#[inline]
-pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) {
-    let filesize = metadata(filename)
-        .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
-        .len();
+pub fn get_index_filename(filename: &str) -> String {
+    let filenamepath = Path::new(&filename);
+    let filename = Path::new(filenamepath.file_name().unwrap())
+        .file_stem()
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned()
+        + ".sfai";
 
-    let file = match File::open(filename) {
+    let mut path = filenamepath.parent().unwrap().to_str().unwrap().to_owned();
+    if !path.is_empty() {
+        path += "/";
+    }
+
+    path + &filename
+}
+
+/// Get all IDs from an SFASTA file
+/// Really a debugging function...
+pub fn test_sfasta(filename: String) {
+    let file = match File::open(&filename) {
         Err(why) => panic!("Couldn't open {}: {}", filename, why.to_string()),
         Ok(file) => file,
     };
 
-    let file = BufReader::new(file);
-    let mut compressed: bool = false;
+    let filesize = metadata(&filename).expect("Unable to open file").len();
 
-    let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
-        compressed = true;
-        Box::new(flate2::read::GzDecoder::new(file))
-    } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai")
-    {
-        compressed = true;
-        Box::new(snap::read::FrameDecoder::new(file))
-    } else {
-        Box::new(file)
+    let mut reader = BufReader::with_capacity(512 * 1024, file);
+
+    let mut seqnum: usize = 0;
+
+    let header: Header = match bincode::deserialize_from(&mut reader) {
+        Ok(x) => x,
+        Err(_) => panic!("Header missing or malformed in SFASTA file"),
     };
 
-    (filesize as usize, compressed, fasta)
+    let mut pos = 0;
+
+    loop {
+        pos = reader
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API");
+
+        if pos == filesize {
+            break;
+        }
+
+        seqnum += 1;
+        let entry: EntryCompressedHeader = match bincode::deserialize_from(&mut reader) {
+            Ok(x) => x,
+            Err(x) => panic!("Found error: {}", x),
+        };
+
+        for _i in 0..entry.block_count as usize {
+            let _x: EntryCompressedBlock = bincode::deserialize_from(&mut reader).unwrap();
+        }
+    }
 }
+
+/// Checks that the file extension ends in .sfasta or adds it if necessary
+pub fn check_extension(filename: &str) -> String {
+    if !filename.ends_with(".sfasta") {
+        format!("{}.sfasta", filename)
+    } else {
+        filename.to_string()
+    }
+}
+
 
 /*
 pub fn get_good_sequence_coords(seq: &[u8]) -> Vec<(usize, usize)> {
