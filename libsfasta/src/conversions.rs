@@ -1,6 +1,6 @@
 use std::convert::TryFrom;
 use std::io::prelude::*;
-use std::io::{BufWriter, SeekFrom};
+use std::io::{BufReader, BufWriter, SeekFrom};
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
@@ -23,9 +23,9 @@ use crate::structs::{
 /// Internally buffers read and write buffers
 // TODO: Split into even smaller subfunctions
 // TODO: Pass in number of threads...
-pub fn convert_fasta<R, W>(
-    mut in_buf: R,
-    mut out_buf: W,
+pub fn convert_fasta<R, W: 'static>(
+    in_buf: R,
+    out_buf: W,
     out_idx_buf: W,
     citation: Option<String>,
     comment: Option<String>,
@@ -35,7 +35,6 @@ pub fn convert_fasta<R, W>(
     R: ReadAndSeek,
     W: WriteAndSeek,
 {
-    // in_buf will be buffered in the Fasta level
     let mut out_buf = BufWriter::with_capacity(1024 * 1024, out_buf);
 
     let header = Header {
@@ -57,6 +56,7 @@ pub fn convert_fasta<R, W>(
         .seek(SeekFrom::Current(0))
         .expect("Unable to work with seek API");
 
+    let mut in_buf = BufReader::with_capacity(1024 * 1024, in_buf);
     let fasta = Fasta::from_buffer(in_buf);
 
     let thread_count;

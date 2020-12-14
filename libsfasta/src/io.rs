@@ -241,7 +241,7 @@ pub fn load_index(filename: &str) -> Option<(Vec<String>, Vec<u64>, Vec<(String,
 }
 
 pub fn create_index<W>(
-    out_buf: &mut W,
+    out_buf: W,
     ids: Vec<String>,
     locations: Vec<u64>,
     block_ids: Vec<(String, u64)>,
