@@ -1,6 +1,3 @@
-use libsfasta as sfasta;
-use libsfasta::create_index;
-
 /*
 extern crate mimalloc;
 use mimalloc::MiMalloc;
@@ -11,17 +8,19 @@ static GLOBAL: MiMalloc = MiMalloc; */
 extern crate indicatif;
 extern crate rand;
 extern crate rand_chacha;
+extern crate clap;
 
-use rand::prelude::*;
-use rand_chacha::ChaCha20Rng;
 use std::fs::File;
 use std::io::{BufWriter, Seek, SeekFrom, Write};
 use std::path::Path;
 
-use indicatif::{HumanBytes, ProgressBar, ProgressIterator, ProgressStyle};
+use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 
-extern crate clap;
+use indicatif::{HumanBytes, ProgressBar, ProgressIterator, ProgressStyle};
 use clap::{load_yaml, App, ArgMatches};
+
+use libsfasta::prelude::*;
 
 fn main() {
     let yaml = load_yaml!("cli.yaml");
@@ -37,14 +36,14 @@ fn main() {
         split(&matches);
     }
     if let Some(matches) = matches.subcommand_matches("index") {
-        index(&matches);
+        index_file(&matches);
     }
 }
 
 fn convert(matches: &ArgMatches) {
     let fasta_filename = matches.value_of("input").unwrap();
     let path = Path::new(fasta_filename);
-    sfasta::convert_fasta_file(
+    convert_fasta_file(
         &fasta_filename,
         &path.file_stem().unwrap().to_str().unwrap(),
     );
@@ -66,8 +65,8 @@ fn write_entry_to_file(
     block_ids: &mut Vec<(String, u64)>,
     block_locations: &mut Vec<u64>,
     s: (
-        sfasta::EntryCompressedHeader,
-        Vec<sfasta::EntryCompressedBlock>,
+        EntryCompressedHeader,
+        Vec<EntryCompressedBlock>,
     ),
 ) {
     let mut pos = get_pos(fh);
@@ -96,8 +95,8 @@ fn write_to_file<I>(
 where
     I: Iterator<
         Item = (
-            sfasta::EntryCompressedHeader,
-            Vec<sfasta::EntryCompressedBlock>,
+            EntryCompressedHeader,
+            Vec<EntryCompressedBlock>,
         ),
     >,
 {
@@ -140,9 +139,9 @@ fn split(matches: &ArgMatches) {
     let out_valid = File::create(&valid_filename).expect("Unable to write to file");
     let mut out_valid: Box<dyn WriteAndSeek> = Box::new(BufWriter::new(out_valid));
 
-    let mut seqs = sfasta::Sequences::new(&sfasta_filename);
+    let mut seqs = Sequences::new(&sfasta_filename);
     if !length_mode {
-        seqs.set_mode(sfasta::SeqMode::Random);
+        seqs.set_mode(SeqMode::Random);
     }
     let seqs = seqs.into_compressed_sequences();
 
@@ -259,9 +258,9 @@ fn split(matches: &ArgMatches) {
 
 fn stats(matches: &ArgMatches) {
     let sfasta_filename = matches.value_of("input").unwrap();
-    let (_, idx) = sfasta::open_file(&sfasta_filename);
-    let mut seqs = sfasta::Sequences::new(&sfasta_filename);
-    seqs.set_mode(sfasta::SeqMode::Random);
+    let (_, idx) = open_file(&sfasta_filename);
+    let mut seqs = Sequences::new(&sfasta_filename);
+    seqs.set_mode(SeqMode::Random);
     let seqs = seqs.into_compressed_sequences();
 
     println!("Index Available: {}", idx.is_some());
@@ -276,8 +275,8 @@ fn stats(matches: &ArgMatches) {
         println!("id: {} Length: {}", e.0, e.1);
     }
 
-    let mut seqs = sfasta::Sequences::new(&sfasta_filename);
-    seqs.set_mode(sfasta::SeqMode::Random);
+    let mut seqs = Sequences::new(&sfasta_filename);
+    seqs.set_mode(SeqMode::Random);
     let mut seqs = seqs.into_compressed_sequences();
     let ec = seqs.next().unwrap();
 
@@ -287,7 +286,7 @@ fn stats(matches: &ArgMatches) {
     println!("{} {}", seq.len, ec.compressed_seq.len());*/
 }
 
-fn index(matches: &ArgMatches) {
+fn index_file(matches: &ArgMatches) {
     let sfasta_filename = matches.value_of("input").unwrap();
-    sfasta::index(sfasta_filename);
+    index(sfasta_filename);
 }

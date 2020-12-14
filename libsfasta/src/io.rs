@@ -1,16 +1,18 @@
-use std::fs::{File, metadata};
-use std::path::Path;
-use std::io::prelude::*;
-use std::io::{BufReader, Read};
-use std::io::{BufWriter, SeekFrom};
-use std::time::Instant;
 use std::convert::From;
 use std::convert::TryFrom;
+use std::fs::{metadata, File};
+use std::io::prelude::*;
+use std::io::{BufReader, Read};
+use std::io::{BufWriter, Seek, SeekFrom};
+use std::path::Path;
+use std::time::Instant;
 
 use hashbrown::HashMap;
 use serde::{Deserialize, Serialize};
 
-use crate::structs::{ReadAndSeek, Header, EntryCompressedHeader, EntryCompressedBlock};
+use crate::structs::{
+    EntryCompressedBlock, EntryCompressedHeader, Header, ReadAndSeek, WriteAndSeek,
+};
 use crate::utils::{check_extension, get_index_filename};
 
 pub struct Sequences {
@@ -122,9 +124,9 @@ pub fn get_headers_from_sfasta(filename: String) -> Vec<String> {
 
     ids
 }
-
+/*
 /// Indexes an SFASTA file
-pub fn index(filename: &str) -> String {
+pub fn index(filename: &str) {
     // TODO: Run a sanity check on the file first... Make sure it's valid
     // sfasta
 
@@ -199,7 +201,7 @@ pub fn index(filename: &str) -> String {
     }
 
     create_index(filename, ids, locations, block_ids, block_locations)
-}
+} */
 
 pub fn load_index(filename: &str) -> Option<(Vec<String>, Vec<u64>, Vec<(String, u64)>, Vec<u64>)> {
     let idx_filename = get_index_filename(filename);
@@ -224,7 +226,7 @@ pub fn load_index(filename: &str) -> Option<(Vec<String>, Vec<u64>, Vec<(String,
     let block_vals: Vec<u64> =
         bincode::deserialize_from(&mut idxfh).expect("Unable to read idx values");
 
-/*    let mut idxcache = IDXCACHE.get().unwrap().write().unwrap();
+    /*    let mut idxcache = IDXCACHE.get().unwrap().write().unwrap();
     idxcache.insert(
         idx_filename.clone(),
         (
@@ -238,13 +240,16 @@ pub fn load_index(filename: &str) -> Option<(Vec<String>, Vec<u64>, Vec<(String,
     Some((keys, vals, block_keys, block_vals))
 }
 
-pub fn create_index(
-    filename: &str,
+pub fn create_index<W>(
+    out_buf: &mut W,
     ids: Vec<String>,
     locations: Vec<u64>,
     block_ids: Vec<(String, u64)>,
     block_locations: Vec<u64>,
-) -> String {
+) where
+    W: WriteAndSeek,
+{
+    let mut out_buf = BufWriter::with_capacity(1024 * 1024, out_buf);
     let idx: HashMap<String, u64> = ids.into_iter().zip(locations).collect();
 
     let mut sorted: Vec<_> = idx.into_iter().collect();
@@ -252,18 +257,11 @@ pub fn create_index(
     let keys: Vec<_> = sorted.iter().map(|x| x.0.clone()).collect();
     let vals: Vec<_> = sorted.iter().map(|x| x.1.clone()).collect();
 
-    let output_filename = get_index_filename(filename);
-
-    let out_file = snap::write::FrameEncoder::new(
-        File::create(output_filename.clone()).expect("Unable to write to file"),
-    );
-
-    let mut out_fh = BufWriter::with_capacity(1024 * 1024, out_file);
     // bincode::serialize_into(&mut out_fh, &idx).expect("Unable to write index");
 
-    bincode::serialize_into(&mut out_fh, &(keys.len() as u64)).expect("Unable to write index");
-    bincode::serialize_into(&mut out_fh, &keys).expect("Unable to write index");
-    bincode::serialize_into(&mut out_fh, &vals).expect("Unable to write index");
+    bincode::serialize_into(&mut out_buf, &(keys.len() as u64)).expect("Unable to write index");
+    bincode::serialize_into(&mut out_buf, &keys).expect("Unable to write index");
+    bincode::serialize_into(&mut out_buf, &vals).expect("Unable to write index");
 
     let idx: HashMap<(String, u64), u64> = block_ids.into_iter().zip(block_locations).collect();
 
@@ -271,10 +269,8 @@ pub fn create_index(
     sorted.sort_by(|x, y| x.0.cmp(&y.0));
     let keys: Vec<_> = sorted.iter().map(|x| x.0.clone()).collect();
     let vals: Vec<_> = sorted.iter().map(|x| x.1.clone()).collect();
-    bincode::serialize_into(&mut out_fh, &keys).expect("Unable to write index");
-    bincode::serialize_into(&mut out_fh, &vals).expect("Unable to write index");
-
-    output_filename
+    bincode::serialize_into(&mut out_buf, &keys).expect("Unable to write index");
+    bincode::serialize_into(&mut out_buf, &vals).expect("Unable to write index");
 }
 
 #[inline]
@@ -305,58 +301,7 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
     (filesize as usize, compressed, fasta)
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    pub fn test_iosequences() {
-        sfasta::clear_idxcache();
-        sfasta::convert_fasta_file("test_data/test.fna", "test_data/test_sequences.sfasta");
-        let mut sequences = Box::new(sfasta::Sequences::new("test_data/test_sequences.sfasta"));
-        let sequence = sequences.next().unwrap();
-        println!("{:#?}", sequence);
-        assert!(sequence.id == "test");
-        assert!(sequence.end == 670);
-        assert!(sequence.location == 0);
-        assert!(sequence.seq.len() == 670);
-    }
-    /*
-    #[test]
-    pub fn test_regular_fasta_file() {
-        let mut sequences = Sequences::new("test_data/test.fna".to_string());
-        let sequence = sequences.next().unwrap();
-        assert!(sequence.id == "test");
-        assert!(sequence.end == 669);
-        assert!(sequence.location == 0);
-        assert!(sequence.seq.len() == 669);
-
-
-
-
-    }*/
-
-    #[test]
-    #[should_panic]
-    pub fn test_empty() {
-        let sequences = Box::new(sfasta::Sequences::new("test_data/empty.sfasta"));
-        Box::new(io::SequenceSplitter3N::new(sequences));
-    }
-
-    #[test]
-    pub fn test_sequences_impl() {
-        sfasta::clear_idxcache();
-        sfasta::convert_fasta_file(
-            "test_data/test_multiple.fna",
-            "test_data/test_sequences_impl.sfasta",
-        );
-        let seqs = Box::new(sfasta::Sequences::new(
-            "test_data/test_sequences_impl.sfasta",
-        ));
-        let count = seqs.count();
-        println!("Sequences Impl Count {}", count);
-        assert!(count == 8);
-    }
-
 }

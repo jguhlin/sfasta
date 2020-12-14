@@ -1,11 +1,11 @@
+use std::fs::{metadata, File};
 use std::io::prelude::*;
-use std::fs::{File, metadata};
 use std::io::{BufWriter, SeekFrom};
 
-use serde::{Deserialize, Serialize};
 use lz4::{Decoder, EncoderBuilder};
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
+use serde::{Deserialize, Serialize};
 
 use super::BLOCK_SIZE;
 use crate::io;
@@ -13,6 +13,9 @@ use crate::io;
 // SuperTrait -- needed for pyO3
 pub trait ReadAndSeek: Read + Seek + Send {}
 impl<T: Read + Seek + Send> ReadAndSeek for T {}
+
+pub trait WriteAndSeek: Write + Seek + Send {}
+impl<T: Write + Seek + Send> WriteAndSeek for T {}
 
 #[derive(PartialEq)]
 pub enum SeqMode {
@@ -55,8 +58,6 @@ pub struct Entry {
     pub comment: Option<String>,
     pub len: u64,
 }
-
-
 
 impl Entry {
     pub fn compress(

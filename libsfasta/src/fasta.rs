@@ -1,7 +1,9 @@
 use std::convert::TryInto;
+use std::io::prelude::*;
 use std::io::{BufRead, BufReader};
 
 use crate::io::generic_open_file;
+use crate::structs::ReadAndSeek;
 
 pub struct Sequence {
     pub seq: Vec<u8>,
@@ -14,12 +16,26 @@ pub struct Fasta {
     seqbuffer: Vec<u8>,
     next_seqid: Option<String>,
     seqlen: usize,
-    pub filesize: u64,
 }
 
 impl Fasta {
-    pub fn new(filename: &str) -> Fasta {
-        let (filesize, _, fh) = generic_open_file(filename);
+    pub fn from_buffer<R>(in_buf: &'static mut R) -> Fasta
+    where
+        R: ReadAndSeek,
+    {
+        let reader = Box::new(BufReader::with_capacity(512 * 1024, in_buf));
+
+        Fasta {
+            reader,
+            buffer: Vec::with_capacity(1024),
+            seqbuffer: Vec::with_capacity(32 * 1024 * 1024),
+            next_seqid: None,
+            seqlen: 0,
+        }
+    }
+
+    pub fn from_file(filename: &str) -> Fasta {
+        let (_filesize, _, fh) = generic_open_file(filename);
         let reader = Box::new(BufReader::with_capacity(512 * 1024, fh));
 
         Fasta {
@@ -28,7 +44,6 @@ impl Fasta {
             seqbuffer: Vec::with_capacity(32 * 1024 * 1024),
             next_seqid: None,
             seqlen: 0,
-            filesize: filesize.try_into().expect("Unable to convert to u64"),
         }
     }
 }
@@ -99,35 +114,4 @@ impl Iterator for Fasta {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // TODO: Test compressed...
-    #[test]
-    pub fn test_fasta_iterator_multiple() {
-        let mut fasta = Fasta::new("test_data/test_multiple.fna");
-        let seq = fasta.next().unwrap();
-        assert!(seq.id == "test1");
-        assert!(seq.seq == b"ACTGACTGACTGACTGACTGNNNNNNNNNNNNNNNNNNNACTGACTGGGTACCATTAGACACTGACTGACTGACTGACTGNNNNNNNNNNNNNNNNNNNACTGACTGGGTACCATTAGACCATTATA");
-        let seq_ids: Vec<String> = fasta.map(|x| x.id).collect();
-        assert!(seq_ids.len() == 7);
-    }
-
-    #[test]
-    pub fn test_fasta_iterator_empty() {
-        let fasta = Fasta::new("test_data/empty.fna");
-        let seq_ids: Vec<String> = fasta.map(|x| x.id).collect();
-        assert!(seq_ids.is_empty());
-    }
-
-    #[test]
-    pub fn test_fasta_iterator_single() {
-        let fasta = Fasta::new("test_data/test.fna");
-        let seq_ids: Vec<String> = fasta.map(|x| x.id).collect();
-        assert!(seq_ids.len() == 1);
-        let mut fasta = Fasta::new("test_data/test.fna");
-        let x = fasta.next().unwrap();
-        println!("SeqID: {}", x.id);
-        println!("Seq: {}", std::str::from_utf8(&x.seq).unwrap());
-        println!("SeqLen: {}", x.seq.len());
-        assert!(x.seq.len() == 670);
-    }
 }

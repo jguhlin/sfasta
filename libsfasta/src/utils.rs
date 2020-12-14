@@ -1,7 +1,9 @@
 /// Opens files, including compressed files (gzip or snappy)
 use std::fs::{metadata, File};
-use std::io::BufReader;
-use std::io::Read;
+use std::io::{BufReader, Read, Seek, SeekFrom};
+use std::path::Path;
+
+use crate::structs::*;
 
 pub fn get_index_filename(filename: &str) -> String {
     let filenamepath = Path::new(&filename);
@@ -71,7 +73,6 @@ pub fn check_extension(filename: &str) -> String {
         filename.to_string()
     }
 }
-
 
 /*
 pub fn get_good_sequence_coords(seq: &[u8]) -> Vec<(usize, usize)> {

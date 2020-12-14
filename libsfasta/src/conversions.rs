@@ -1,59 +1,63 @@
+use std::convert::TryFrom;
 use std::io::prelude::*;
-use std::fs::{File};
 use std::io::{BufWriter, SeekFrom};
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
-use std::sync::{Arc};
+use std::sync::Arc;
 use std::thread;
 use std::thread::park;
 
-use crossbeam::utils::Backoff;
 use crossbeam::queue::ArrayQueue;
+use crossbeam::utils::Backoff;
 
-use crate::utils::check_extension;
-use crate::io::{generic_open_file, create_index};
 use crate::fasta;
 use crate::fasta::Fasta;
-use crate::structs::{Header, CompressionType, Entry, EntryCompressedHeader, EntryCompressedBlock};
+use crate::io::create_index;
 use crate::structs::default_compression_level;
+use crate::structs::{
+    CompressionType, Entry, EntryCompressedBlock, EntryCompressedHeader, Header, ReadAndSeek,
+    WriteAndSeek,
+};
 
 /// Converts a FASTA file to an SFASTA file...
-pub fn convert_fasta_file(filename: &str, output: &str)
-// TODO: Make multithreaded for very large datasets (>= 1Gbp or 5Gbp or something)
-// TODO: Add progress bar option ... or not..
-//
-// Convert file to bincode/zstd for faster processing
-// Stores accession/taxon information inside the Sequence struct
+/// Internally buffers read and write buffers
+// TODO: Split into even smaller subfunctions
+// TODO: Pass in number of threads...
+pub fn convert_fasta<R, W>(
+    in_buf: &'static mut R,
+    out_buf: &'static mut W,
+    out_idx_buf: &'static mut W,
+    citation: Option<String>,
+    comment: Option<String>,
+    id: Option<String>,
+    compression_type: CompressionType,
+) where
+    R: ReadAndSeek,
+    W: WriteAndSeek,
 {
-    let output_filename = check_extension(output);
-
-    let out_file = File::create(output_filename.clone()).expect("Unable to write to file");
-    let mut out_fh = BufWriter::with_capacity(1024 * 1024, out_file);
-
-    let (filesize, _, _) = generic_open_file(filename);
+    // in_buf will be buffered in the Fasta level
+    let mut out_buf = BufWriter::with_capacity(1024 * 1024, out_buf);
 
     let header = Header {
-        citation: None,
-        comment: None,
-        id: Some(filename.to_string()),
-        compression_type: CompressionType::LZ4,
+        citation,
+        comment,
+        id: id,
+        compression_type,
     };
 
-    bincode::serialize_into(&mut out_fh, &header).expect("Unable to write to bincode output");
+    bincode::serialize_into(&mut out_buf, &header).expect("Unable to write to bincode output");
 
-    let starting_size = std::cmp::max((filesize / 500) as usize, 1024);
+    let mut ids = Vec::with_capacity(1024 * 1024);
+    let mut locations = Vec::with_capacity(1024 * 1024);
 
-    let mut ids = Vec::with_capacity(starting_size);
-    let mut locations = Vec::with_capacity(starting_size);
+    let mut block_ids = Vec::with_capacity(8 * 1024 * 1024);
+    let mut block_locations: Vec<u64> = Vec::with_capacity(8 * 1024 * 1024);
 
-    let mut block_ids = Vec::with_capacity(starting_size * 1024);
-    let mut block_locations: Vec<u64> = Vec::with_capacity(starting_size * 1024);
-
-    let mut pos = out_fh
+    let mut pos = out_buf
         .seek(SeekFrom::Current(0))
         .expect("Unable to work with seek API");
 
-    let fasta = Fasta::new(filename);
+    let fasta = Fasta::from_buffer(in_buf);
 
     let thread_count;
 
@@ -147,8 +151,7 @@ pub fn convert_fasta_file(filename: &str, output: &str)
                     if (written_entries.load(Ordering::Relaxed) == te.load(Ordering::Relaxed))
                         && shutdown.load(Ordering::Relaxed)
                     {
-                        drop(out_fh);
-                        create_index(&output_filename, ids, locations, block_ids, block_locations);
+                        create_index(out_idx_buf, ids, locations, block_ids, block_locations);
                         return;
                     }
                 }
@@ -156,20 +159,20 @@ pub fn convert_fasta_file(filename: &str, output: &str)
                     ids.push(cs.0.id.clone());
 
                     locations.push(pos);
-                    bincode::serialize_into(&mut out_fh, &cs.0)
+                    bincode::serialize_into(&mut out_buf, &cs.0)
                         .expect("Unable to write to bincode output");
 
                     for block in cs.1 {
-                        pos = out_fh
+                        pos = out_buf
                             .seek(SeekFrom::Current(0))
                             .expect("Unable to work with seek API");
                         block_locations.push(pos);
                         block_ids.push((block.id.clone(), block.block_id));
-                        bincode::serialize_into(&mut out_fh, &block)
+                        bincode::serialize_into(&mut out_buf, &block)
                             .expect("Unable to write to bincode output");
                     }
 
-                    pos = out_fh
+                    pos = out_buf
                         .seek(SeekFrom::Current(0))
                         .expect("Unable to work with seek API");
                     written_entries.fetch_add(1, Ordering::SeqCst);
@@ -219,4 +222,20 @@ fn generate_sfasta_compressed_entry(
     };
 
     entry.compress(compression_type, compression_level)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    // TODO: Test compressed...
+    #[test]
+    pub fn test_convert_fasta() {
+        let mut input = Cursor::new(">test\nACTGNANANANANANANANANANATCGGAGACTACGATA\n".to_string().as_bytes().to_vec());
+        let mut output: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+        let mut idx: Cursor<Vec<u8>> = Cursor::new(Vec::new());
+
+        convert_fasta(&mut input, &mut output, &mut idx, None, None, None, CompressionType::LZ4);
+    }
 }
