@@ -24,9 +24,9 @@ use crate::structs::{
 // TODO: Split into even smaller subfunctions
 // TODO: Pass in number of threads...
 pub fn convert_fasta<R, W>(
-    in_buf: &'static mut R,
-    out_buf: &'static mut W,
-    out_idx_buf: &'static mut W,
+    mut in_buf: R,
+    mut out_buf: W,
+    out_idx_buf: W,
     citation: Option<String>,
     comment: Option<String>,
     id: Option<String>,

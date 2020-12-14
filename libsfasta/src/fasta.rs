@@ -10,20 +10,20 @@ pub struct Sequence {
     pub id: String,
 }
 
-pub struct Fasta {
-    reader: Box<dyn BufRead + Send>,
+pub struct Fasta<R> {
+    reader: dyn Read,
     buffer: Vec<u8>,
     seqbuffer: Vec<u8>,
     next_seqid: Option<String>,
     seqlen: usize,
 }
 
-impl Fasta {
-    pub fn from_buffer<R>(in_buf: &'static mut R) -> Fasta
+impl<R: ReadAndSeek> Fasta<R> {
+    pub fn from_buffer(mut in_buf: R) -> Fasta<R>
     where
         R: ReadAndSeek,
     {
-        let reader = Box::new(BufReader::with_capacity(512 * 1024, in_buf));
+        let reader = BufReader::with_capacity(512 * 1024, in_buf);
 
         Fasta {
             reader,
@@ -34,7 +34,7 @@ impl Fasta {
         }
     }
 
-    pub fn from_file(filename: &str) -> Fasta {
+    pub fn from_file(filename: &str) -> Fasta<R> {
         let (_filesize, _, fh) = generic_open_file(filename);
         let reader = Box::new(BufReader::with_capacity(512 * 1024, fh));
 
@@ -48,7 +48,7 @@ impl Fasta {
     }
 }
 
-impl Iterator for Fasta {
+impl<R: ReadAndSeek> Iterator for Fasta<R> {
     type Item = Sequence;
 
     fn next(&mut self) -> Option<Sequence> {
