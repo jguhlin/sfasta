@@ -22,6 +22,7 @@ hashbrown = { version = "0.9.1", features = ["nightly", "serde"] }
 rand = "0.7.3"
 rand_core = "0.5"
 rand_chacha = "0.2.2"
-
-
-
+lz4_flex = "0.5.1"
+bitpacking = "0.8.2"
+twox-hash = "1.6.0"
+serde-big-array = {version = "0.3.0", features = ["const-generics"]}

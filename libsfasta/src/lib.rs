@@ -10,8 +10,12 @@ extern crate snap;
 extern crate thincollections;
 extern crate zstd;
 
+#[macro_use]
+extern crate serde_big_array;
+
 mod conversions;
 mod fasta;
+mod format2;
 mod io;
 pub mod prelude;
 mod structs;

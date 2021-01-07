@@ -19,8 +19,7 @@ pub struct Fasta<R> {
 }
 
 impl<R: BufRead> Fasta<R> {
-    pub fn from_buffer(mut in_buf: R) -> Fasta<R>
-    {
+    pub fn from_buffer(mut in_buf: R) -> Fasta<R> {
         // let reader = BufReader::with_capacity(512 * 1024, in_buf);
 
         Fasta {
