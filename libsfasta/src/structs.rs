@@ -23,7 +23,7 @@ pub enum SeqMode {
     Random,
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]
 pub enum CompressionType {
     ZSTD,   // 19 should be default compression ratio
     LZ4,    // 9 should be default compression ratio
@@ -31,6 +31,12 @@ pub enum CompressionType {
     GZIP,   // Please don't use this -- IMPLEMENT
     NAF,    // Not yet supported -- IMPLEMENT
     NONE,   // No Compression -- IMPLEMENT
+}
+
+impl Default for CompressionType {
+    fn default() -> CompressionType {
+        return CompressionType::ZSTD;
+    }
 }
 
 pub const fn default_compression_level(ct: CompressionType) -> i32 {

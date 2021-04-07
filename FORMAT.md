@@ -8,25 +8,32 @@ FASTA/Q format is slow for random access, even with an index provided by samtool
 By concatenating all of the sequences into successive blocks, it becomes more difficult to add or remove sequences at a whim. However, many large sequence files are rarely changed (NT, UniProt, nr, reads, etc).
 
 ## Warning
-This is a format still in heavy development, backwards compatability is specifically not guaranteed, nor desirable at this stage.
+This is a format still in heavy development, backwards compatability is incredibly unlikely and not desirable at this stage.
 
 ## File Format
 Bincoded, using serde.
 
-### Location of index
+### Overview
+* Directory struct
+* Parameters struct
+* Metadata struct
+* Sequence streams
+* Scores stream
+* Index struct
+
+### Directory
 Directory { 
     index_loc: u64,
     seq_loc: u64,
     scores_loc: Option(u64),
-    seqinfo_loc: Option(u64),
+    // seqinfo_loc: Option(u64),  // Not yet...
 }
 
-Address of various contents of the file. Written as u64::MAX-1 at first, then overwritten once file creation is completed.
+Address of various contents of the file. 
 
 Index loc: Location of the index.
 Seq Loc: Location of the sequence stream.
 Scores Loc: (Optional) Location of the scores stream.
-SeqInfo Loc: (Optional) Location of the sequence info stream.
 
 ### Parameters
 Parameters { 
@@ -48,13 +55,14 @@ Metadata {
     title: Option(String),
     description: Option(String),
     notes: Option(String),
+    download_url: Option(String),
+    homepage_url: Option(String),
 }
 
 ### Sequence Stream
-Biological sequences (reads, amino acids, nucleotides, DNA, RNA) are appended to a string of maximum size of block_size, and compressed and stores as a data structure.
+Biological sequences (reads, amino acids, nucleotides, DNA, RNA) are appended to a string of maximum size of block_size, and compressed and stored as a data structur
 
 SequenceBlock {
-    block_id: u64,
     compressed_seq: \[u8\],
 }
 
@@ -62,7 +70,6 @@ Each sequence can be addressed by the relevant block_id's and the byte-offset. F
 
 ### Scores Stream
 ScoresBlock {
-    block_id: u64,
     compressed_seq: \[u8\],
 }
 
@@ -76,6 +83,8 @@ Open string all concat'd? Then it's unstructued...
 
 ### Index
 Goal is to not store all of NT (for example) in a hashmap in memory at once.
+
+#### Need multiple indices, one for blocks, one for score blocks, one for seq ID's...
 
 IndexMetadata {
     index_levels: u8,

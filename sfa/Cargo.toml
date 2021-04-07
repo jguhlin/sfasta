@@ -7,12 +7,12 @@ edition = "2018"
 [dependencies]
 indicatif = "0.15.0"
 libsfasta = { path = "../libsfasta/" }
-serde = { version = "1.0.116", features = ["derive"] }
-hashbrown = { version = "0.9.1", features = ["nightly", "serde"] }
-rand = "0.7.3"
-rand_core = "0.5"
-rand_chacha = "0.2.2"
-bincode = "1.3.1"
+serde = { version = "1.0.125", features = ["derive"] }
+hashbrown = { version = "0.11.2", features = ["nightly", "serde"] }
+rand = "0.8.3"
+rand_core = "0.6.2"
+rand_chacha = "0.3.0"
+bincode = "1.3.2"
 
 [dependencies.clap]
 version = "3.0.0-beta.2"

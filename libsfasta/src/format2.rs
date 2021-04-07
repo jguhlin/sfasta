@@ -90,6 +90,7 @@ enum SequenceType {
 
 type Location = (u32, u32);
 
+/*
 struct SequenceBlocker<'sequenceblocker> {
     bytes_buffer: Vec<u8>,
     cur_block: u64,
@@ -103,7 +104,7 @@ impl<'sequenceblocker> SequenceBlocker<'sequenceblocker> {
         }
     }
 
-    pub fn add_sequence(&mut self, seq: &[u8]) -> Option<> {
+    pub fn add_sequence(&mut self, seq: &[u8]) -> Option<bool> {
         let start = self.bytes_buffer.len();
         let end;
         if self.bytes_buffer.len() + seq.len() <= SEQ_BLOCK_LEN {
@@ -113,7 +114,7 @@ impl<'sequenceblocker> SequenceBlocker<'sequenceblocker> {
             
         }
     }
-}
+} */
 
 #[derive(Deserialize, Serialize)]
 struct Sequence<'sequence> {
@@ -123,6 +124,7 @@ struct Sequence<'sequence> {
     pub locations: Vec<Location>,
 }
 
+/*
 #[derive(Deserialize, Serialize)]
 struct SequenceBlock<'seqblock> {
     pub block_id: u64,
@@ -137,7 +139,7 @@ impl<'seqblock> SequenceBlock<'seqblock> {
             bytes: &bytes_buffer,
         }
     }
-}
+} */
 
 // Utility functions...
 #[inline(always)]

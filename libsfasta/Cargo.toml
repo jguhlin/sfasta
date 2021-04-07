@@ -7,22 +7,22 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-serde = { version = "1.0.118", features = ["derive"] }
+serde = { version = "1.0.125", features = ["derive"] }
 crossbeam = "0.8.0"
 thincollections = "0.5.3"
 flate2 = { version = "1.0.19", features = ["zlib"] }
 static_assertions = "1.1.0"
 snap = "1.0.3"
-bincode = "1.3.1"
+bincode = "1.3.2"
 bumpalo = { version = "3.4.0", features = ["collections", "boxed"] }
-zstd = "0.5.3"
+zstd = "0.7.0"
 lz4 = "1.23.1"
 serde_bytes = "0.11.5"
-hashbrown = { version = "0.9.1", features = ["nightly", "serde"] }
-rand = "0.7.3"
-rand_core = "0.5"
-rand_chacha = "0.2.2"
-lz4_flex = "0.5.1"
+hashbrown = { version = "0.11.2", features = ["nightly", "serde"] }
+rand = "0.8.3"
+rand_core = "0.6.2"
+rand_chacha = "0.3.0"
+lz4_flex = "0.7.5"
 bitpacking = "0.8.2"
 twox-hash = "1.6.0"
 serde-big-array = {version = "0.3.0", features = ["const-generics"]}

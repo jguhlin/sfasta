@@ -14,10 +14,15 @@ extern crate zstd;
 extern crate serde_big_array;
 
 mod conversions;
+mod directory;
 mod fasta;
-mod format2;
+mod format;
 mod io;
+mod metadata;
+mod parameters;
 pub mod prelude;
+mod sequence_block;
+mod sequence_buffer;
 mod structs;
 mod utils;
 
