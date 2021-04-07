@@ -24,4 +24,15 @@ impl Sfasta {
         self.directory = self.directory.with_scores();
         self
     }
+
+    pub fn block_size(mut self, block_size: u32) -> Self {
+        self.parameters.block_size = block_size;
+        self
+    }
+
+    // TODO: Does nothing right now...
+    pub fn compression_type(mut self, compression: CompressionType) -> Self {
+        self.parameters.compression_type = compression;
+        self
+    }
 }

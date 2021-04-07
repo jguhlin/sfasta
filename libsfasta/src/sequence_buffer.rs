@@ -2,14 +2,20 @@ use crate::sequence_block::*;
 
 #[derive(Default)]
 pub struct SequenceBuffer {
-    block_size: u64,
-    cur_block_id: u64,
+    block_size: u32,
+    cur_block_id: u32,
     blocks: Vec<SequenceBlockCompressed>, // TODO: Replace with crossbeam queue or something...
     buffer: Vec<u8>,
 }
 
+impl Drop for SequenceBuffer {
+    fn drop(&mut self) {
+        assert!(self.buffer.len() == 0, "SequenceBuffer was not empty. Finalize the buffer to emit the final block.");
+    }
+}
+
 impl SequenceBuffer {
-    pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<(u64, (usize, usize))>, &'static str> {
+    pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<(u32, (usize, usize))>, &'static str> {
         assert!(self.block_size > 0);
 
         let mut locs = Vec::new();
@@ -44,7 +50,7 @@ impl SequenceBuffer {
         Ok(locs)
     }
 
-    fn emit_block(&mut self) {
+    pub fn emit_block(&mut self) {
         let newbuf = Vec::with_capacity(self.block_size as usize);
 
         let seq = std::mem::replace(&mut self.buffer, newbuf);
@@ -65,7 +71,7 @@ impl SequenceBuffer {
         self.buffer.len()
     }
 
-    pub fn with_blocksize(mut self, block_size: u64) -> Self {
+    pub fn with_blocksize(mut self, block_size: u32) -> Self {
         self.block_size = block_size;
         self.buffer = Vec::with_capacity(block_size as usize);
         self
@@ -99,12 +105,25 @@ mod tests {
         // THIS tests all emitted blocks... it DOES NOT test the "final" block
         // TODO: Probably a bad test once this is working with crossbeam stuff..
         println!("Block ID: {:#?}", sb.cur_block_id);
-        for i in sb.blocks {
+        for i in &sb.blocks {
             let j = i.decompress();
             assert!(j.seq.len() == test_block_size as usize);
         }
 
+        sb.emit_block();
+
         assert!(locs.len() == 10);
     }
+
+    #[test]
+    #[should_panic(expected = "SequenceBuffer was not empty. Finalize the buffer to emit the final block.")]
+    pub fn test_lingering_sequence_in_seqbuf() {
+        let myseq = b"ACTGGGGGGGG".to_vec();
+
+        let test_block_size = 512 * 1024;
+        
+        let mut sb = SequenceBuffer::default().with_blocksize(test_block_size);
+        
+        sb.add_sequence(&myseq[..]).expect("Error adding sequence");
+    }
 }
-    
