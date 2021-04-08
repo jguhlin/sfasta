@@ -1,7 +1,7 @@
+use std::any::Any;
 use std::fs::{metadata, File};
 use std::io::prelude::*;
 use std::io::{BufWriter, SeekFrom};
-use std::any::Any;
 
 use lz4::{Decoder, EncoderBuilder};
 use rand::prelude::*;

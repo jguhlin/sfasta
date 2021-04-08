@@ -1,28 +1,30 @@
 // Easy conversion functions
 use std::fs::{metadata, File};
-use std::io::{BufReader, BufWriter, Read, SeekFrom};
+use std::io::{BufReader, BufWriter, Read, SeekFrom, Seek};
+use std::thread;
+use std::thread::{park, JoinHandle};
+use std::sync::atomic::Ordering;
+
+use crossbeam::queue::ArrayQueue;
+use crossbeam::utils::Backoff;
 
 use crate::fasta::*;
 use crate::format::Sfasta;
-// use crate::sequence_buffer::SequenceBuffer;
+use crate::sequence_buffer::SequenceBuffer;
 use crate::structs::{
     CompressionType, Entry, EntryCompressedBlock, EntryCompressedHeader, Header, ReadAndSeek,
     WriteAndSeek,
 };
 
-/*
-
 // TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
-pub fn convert_fasta<R, W: 'static>(in_buf: R, out_buf: W, block_size: u32, threads: u16) 
+pub fn convert_fasta<W>(in_filename: &str, out_buf: &mut W, block_size: u32, threads: u16)
 where
-    R: ReadAndSeek,
     W: WriteAndSeek
 {
 //    let input = generic_open_file(filename);
 //    let input = Box::new(BufReader::with_capacity(512 * 1024, input.2));
 
-    let fasta = Fasta::from_buffer(BufReader::with_capacity(512 * 1024, in_buf));
     let sfasta = Sfasta::default().block_size(block_size);
 
     // Output file
@@ -36,13 +38,61 @@ where
     bincode::serialize_into(&mut out_fh, &sfasta.metadata)
         .expect("Unable to write Metadata to file");
 
-    // Multithread here? Or in sequence buffer? Or in output? Or both?
-
     let mut sb = SequenceBuffer::default()
         .with_block_size(block_size)
-        .with_threads(threads)
-        .with_output(Box::new(out_fh));
+        .with_threads(threads); // Effectively # of compression threads
 
+    let oq = sb.output_queue();
+    let shutdown = sb.shutdown_notified();
+
+    let in_filename = in_filename.to_string();
+    let reader_handle = thread::spawn(move || {
+        let (_, _, in_buf) = generic_open_file(&in_filename);
+        let fasta = Fasta::from_buffer(BufReader::with_capacity(512 * 1024, in_buf));
+
+        let mut seq_locs = Vec::new();
+        for i in fasta {
+            let loc = sb.add_sequence(&i.seq[..]).unwrap();
+            seq_locs.push((i.id, loc));
+        }
+
+        sb.finalize();
+
+        return seq_locs;
+    });
+
+    let mut block_locs = Vec::new();
+    let backoff = Backoff::new();
+    let mut pos = out_fh
+        .seek(SeekFrom::Current(0))
+        .expect("Unable to work with seek API");
+
+    let mut result;
+
+    loop {
+        result = oq.pop();
+
+        match result {
+            None => {
+                if oq.len() == 0 && shutdown.load(Ordering::Relaxed) {
+                    break
+                }
+                backoff.snooze();
+            }
+            Some((block_id, sb)) => {
+                bincode::serialize_into(&mut out_fh, &sb)
+                    .expect("Unable to write to bincode output");
+                
+                block_locs.push((block_id, pos));
+
+                let mut pos = out_fh
+                    .seek(SeekFrom::Current(0))
+                    .expect("Unable to work with seek API");
+            }
+        }
+    }
+
+    let seq_locs = reader_handle.join().unwrap();
 }
 
 #[inline]
@@ -73,5 +123,31 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
     (filesize as usize, compressed, fasta)
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+    use crate::directory::Directory;
+    use crate::parameters::Parameters;
+    use crate::metadata::Metadata;
+    use crate::sequence_block::{SequenceBlock, SequenceBlockCompressed};
 
-*/
+    #[test]
+    pub fn test_create_sfasta() {
+        let mut out_buf = Cursor::new(Vec::new());
+
+        convert_fasta("test_data/test_convert.fasta", &mut out_buf, 8 * 1024, 6);
+
+        out_buf.seek(SeekFrom::Start(0));
+
+        let d: Directory = bincode::deserialize_from(&mut out_buf).unwrap();
+        let p: Parameters = bincode::deserialize_from(&mut out_buf).unwrap();
+        let m: Metadata = bincode::deserialize_from(&mut out_buf).unwrap();
+
+        let b: SequenceBlockCompressed = bincode::deserialize_from(&mut out_buf).unwrap();
+        let b = b.decompress();
+
+        assert!(b.len() == 55);
+    }
+
+}

@@ -5,6 +5,7 @@ use std::io::{BufRead, BufReader};
 use crate::io::generic_open_file;
 use crate::structs::ReadAndSeek;
 
+#[derive(Debug)]
 pub struct Sequence {
     pub seq: Vec<u8>,
     pub id: String,
@@ -112,4 +113,14 @@ impl<R: BufRead> Iterator for Fasta<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io::BufReader;
+
+    #[test]
+    pub fn test_fasta_parse() {
+        let fakefasta = b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
+        let fakefasta_ = fakefasta.as_slice();
+        let mut fasta = Fasta::from_buffer(BufReader::new(fakefasta_));
+        let j = fasta.next();
+        let j = fasta.next();
+    }
 }

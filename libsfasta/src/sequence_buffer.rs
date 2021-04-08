@@ -12,20 +12,16 @@ use crossbeam::utils::Backoff;
 use crate::sequence_block::*;
 use crate::structs::{ReadAndSeek, WriteAndSeek};
 
-
-// TODO: Pop out writer function, only return the queue so writing can be done externally from this structs
-// Why? Because we need the filehandle (or buffer, or whatever) afterwards
-
 pub struct SequenceBuffer {
     block_size: u32,
     cur_block_id: u32,
     buffer: Vec<u8>,
     threads: u16,
     initialized: bool,
-    output_buffer: Option<Box<dyn WriteAndSeek>>,
     workers: Vec<JoinHandle<()>>,
-    write_worker: Option<JoinHandle<(Vec<(u32, u64)>, Box<dyn WriteAndSeek>)>>,
+    write_worker: Option<JoinHandle<()>>,
     write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
+    output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     compress_queue: Arc<ArrayQueue<(u32, SequenceBlock)>>,
     shutdown: Arc<AtomicBool>,
     total_entries: Arc<AtomicUsize>,
@@ -41,11 +37,11 @@ impl Default for SequenceBuffer {
             buffer: Vec::with_capacity(2 * 1024 * 1024),
             threads: 1,
             initialized: false,
-            output_buffer: None,
             workers: Vec::<JoinHandle<()>>::new(),
             write_worker: None,
             write_queue: Arc::new(ArrayQueue::new(16)),
-            compress_queue: Arc::new(ArrayQueue::new(16)),
+            compress_queue: Arc::new(ArrayQueue::new(64)),
+            output_queue: Arc::new(ArrayQueue::new(16)),
             shutdown: Arc::new(AtomicBool::new(false)),
             finalized: false,
             total_entries: Arc::new(AtomicUsize::new(0)),
@@ -85,10 +81,10 @@ impl SequenceBuffer {
         {
             let shutdown_copy = Arc::clone(&self.shutdown);
             let wq = Arc::clone(&self.write_queue);
-            let out_buf = std::mem::replace(&mut self.output_buffer, None);
             let we = Arc::clone(&self.written_entries);
+            let oq = Arc::clone(&self.output_queue);
             let handle = thread::spawn(move || {
-                _writer_worker_thread(wq, shutdown_copy, out_buf.unwrap(), we)
+                _writer_worker_thread(wq, oq, shutdown_copy, we)
             });
 
             self.write_worker = Some(handle);
@@ -97,7 +93,7 @@ impl SequenceBuffer {
         self.initialized = true;
     }
 
-    pub fn finalize(&mut self) -> (Vec<(u32, u64)>, Box<dyn WriteAndSeek>) {
+    pub fn finalize(&mut self) -> Result<(), &'static str> {
         // Emit the final block...
         self.emit_block();
         self.unpark();
@@ -121,10 +117,8 @@ impl SequenceBuffer {
 
         let writer_handle = std::mem::replace(&mut self.write_worker, None);
 
-        let (block_idx, output_buf) = writer_handle.unwrap().join().unwrap();
-        // let output_buf = std::mem::replace(&mut self.output_buffer, None).unwrap();
-
-        return (block_idx, output_buf);
+        writer_handle.unwrap().join().unwrap();
+        Ok(())
     }
 
     pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<(u32, (usize, usize))>, &'static str> {
@@ -214,15 +208,17 @@ impl SequenceBuffer {
     pub fn with_threads(mut self, threads: u16) -> Self {
         self._check_initialized();
         self.threads = threads;
-        self.compress_queue = Arc::new(ArrayQueue::new(threads as usize * 4));
+        self.compress_queue = Arc::new(ArrayQueue::new(threads as usize * 16));
         self.write_queue = Arc::new(ArrayQueue::new(threads as usize * 4));
         self
     }
 
-    pub fn with_output(mut self, outbuf: Box<dyn WriteAndSeek>) -> Self {
-        self._check_initialized();
-        self.output_buffer = Some(outbuf);
-        self
+    pub fn output_queue(&self) -> Arc<ArrayQueue<(u32, SequenceBlockCompressed)>> {
+        Arc::clone(&self.output_queue)
+    }
+
+    pub fn shutdown_notified(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.shutdown)
     }
 }
 
@@ -259,32 +255,27 @@ fn _compression_worker_thread(
 
 fn _writer_worker_thread(
     write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
+    output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     shutdown: Arc<AtomicBool>,
-    mut out_buf: Box<dyn WriteAndSeek>,
     written_entries: Arc<AtomicUsize>,
-) -> (Vec<(u32, u64)>, Box<dyn WriteAndSeek>) {
+) {
+
     let mut expected_block: u32 = 0;
     let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::new();
     let mut block_index: Vec<(u32, u64)> = Vec::new();
     let mut result;
     let backoff = Backoff::new();
 
-    let mut pos = out_buf
-        .seek(SeekFrom::Current(0))
-        .expect("Unable to work with seek API");
-
     loop {
-        // TODO: Code cleanup
-        // Bad headache + neckache so copy and paste abuse...
-
         while queue.contains_key(&expected_block) {
             let sbc = queue.remove(&expected_block).unwrap();
 
-            block_index.push((expected_block, pos));
-            bincode::serialize_into(&mut out_buf, &sbc).expect("Unable to write to bincode output");
-            pos = out_buf
-                .seek(SeekFrom::Current(0))
-                .expect("Unable to work with seek API");
+            let mut entry = (expected_block, sbc);
+            while let Err(x) = output_queue.push(entry) {
+                backoff.snooze();
+                entry = x;
+            }
+
             expected_block += 1;
             written_entries.fetch_add(1, Ordering::SeqCst);
         }
@@ -295,38 +286,12 @@ fn _writer_worker_thread(
             None => {
                 backoff.snooze();
                 if shutdown.load(Ordering::Relaxed) {
-                    return (block_index, out_buf);
+                    return
                 }
                 park();
             }
             Some((block_id, sbc)) => {
-                if block_id == expected_block {
-                    // Write this block...
-                    block_index.push((expected_block, pos));
-                    bincode::serialize_into(&mut out_buf, &sbc)
-                        .expect("Unable to write to bincode output");
-                    pos = out_buf
-                        .seek(SeekFrom::Current(0))
-                        .expect("Unable to work with seek API");
-                    expected_block += 1;
-                    written_entries.fetch_add(1, Ordering::SeqCst);
-                } else {
-                    println!("Storing {:#?}", block_id);
-                    queue.insert(block_id, sbc);
-                }
-
-                while queue.contains_key(&expected_block) {
-                    let sbc = queue.remove(&expected_block).unwrap();
-
-                    block_index.push((expected_block, pos));
-                    bincode::serialize_into(&mut out_buf, &sbc)
-                        .expect("Unable to write to bincode output");
-                    pos = out_buf
-                        .seek(SeekFrom::Current(0))
-                        .expect("Unable to work with seek API");
-                    expected_block += 1;
-                    written_entries.fetch_add(1, Ordering::SeqCst);
-                }
+                queue.insert(block_id, sbc);
             }
         }
     }
@@ -348,8 +313,9 @@ mod tests {
         // let temp_out = RwLock::new(temp_out);
 
         let mut sb = SequenceBuffer::default()
-            .with_block_size(test_block_size)
-            .with_output(Box::new(temp_out));
+            .with_block_size(test_block_size);
+
+        let oq = sb.output_queue();
 
         let mut locs = Vec::new();
 
@@ -364,16 +330,26 @@ mod tests {
         let loc = sb.add_sequence(&largeseq).unwrap();
         locs.extend(loc);
 
-        println!("Done adding seqs...");
+        // println!("Done adding seqs...");
 
-        let (block_idx, mut buf_out) = sb.finalize();
+        sb.finalize().expect("Unable to finalize SeqBuffer");
 
-        println!("Finalized...");
+        // println!("Finalized...");
+
+        // This is actually a test, just making sure it does not panic here
         drop(sb);
 
-        assert!(locs.len() == 10);
+        assert!(oq.len() == 9);
+        let g = oq.pop().unwrap();
+        let g = g.1.decompress();
+        assert!(g.len() == 524288);
+        let seq = std::str::from_utf8(&g.seq[0..100]).unwrap();
+        //println!("{:#?}", seq);
+        assert!(seq == "ACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGA");
+
+        /* assert!(locs.len() == 10);
         println!("Blocks: {}", block_idx.len());
-        assert!(block_idx.len() == 9);
+        assert!(block_idx.len() == 9); */
 
         /*
 
