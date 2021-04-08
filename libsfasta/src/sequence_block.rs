@@ -24,6 +24,10 @@ impl SequenceBlock {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.seq.len()
+    }
+
     // Convenience Function
     pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self.compression_type = compression_type;

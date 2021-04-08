@@ -14,8 +14,8 @@ use crate::io;
 pub trait ReadAndSeek: Read + Seek + Send {}
 impl<T: Read + Seek + Send> ReadAndSeek for T {}
 
-pub trait WriteAndSeek: Write + Seek + Send {}
-impl<T: Write + Seek + Send> WriteAndSeek for T {}
+pub trait WriteAndSeek: Write + Read + Seek + Send {}
+impl<T: Write + Read + Seek + Send> WriteAndSeek for T {}
 
 #[derive(PartialEq)]
 pub enum SeqMode {

@@ -13,6 +13,7 @@ extern crate zstd;
 #[macro_use]
 extern crate serde_big_array;
 
+mod conversion;
 mod conversions;
 mod directory;
 mod fasta;
@@ -25,7 +26,6 @@ mod sequence_block;
 mod sequence_buffer;
 mod structs;
 mod utils;
-mod conversion;
 
 pub use crate::fasta::*;
 pub use crate::io::*;
