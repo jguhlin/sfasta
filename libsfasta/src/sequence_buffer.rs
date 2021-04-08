@@ -12,6 +12,10 @@ use crossbeam::utils::Backoff;
 use crate::sequence_block::*;
 use crate::structs::{ReadAndSeek, WriteAndSeek};
 
+
+// TODO: Pop out writer function, only return the queue so writing can be done externally from this structs
+// Why? Because we need the filehandle (or buffer, or whatever) afterwards
+
 pub struct SequenceBuffer {
     block_size: u32,
     cur_block_id: u32,
@@ -333,6 +337,7 @@ mod tests {
     use super::*;
     use std::any::Any;
     use std::io::Seek;
+    use std::sync::RwLock;
 
     #[test]
     pub fn test_add_sequence() {
@@ -340,6 +345,7 @@ mod tests {
 
         let test_block_size = 512 * 1024;
         let temp_out: Cursor<Vec<u8>> = Cursor::new(Vec::with_capacity(512 * 1024 * 2));
+        // let temp_out = RwLock::new(temp_out);
 
         let mut sb = SequenceBuffer::default()
             .with_block_size(test_block_size)
@@ -369,6 +375,8 @@ mod tests {
         println!("Blocks: {}", block_idx.len());
         assert!(block_idx.len() == 9);
 
+        /*
+
         let mut buf_out: &mut Box<Cursor<Vec<u8>>> = Any::downcast_mut(&mut buf_out).unwrap();
         let mut buf_out = buf_out.to_owned();
 
@@ -386,6 +394,7 @@ mod tests {
         let decoded = decoded.decompress();
         let seq = std::str::from_utf8(&decoded.seq[0..100]).unwrap();
         assert!(seq == "CTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGAC");
+        */
     }
 
     #[test]
