@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::io::{BufReader, BufWriter, SeekFrom, Cursor};
+use std::io::{BufReader, BufWriter, Cursor, SeekFrom};
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
@@ -73,9 +73,7 @@ impl SequenceBuffer {
             let shutdown_copy = Arc::clone(&self.shutdown);
             let cq = Arc::clone(&self.compress_queue);
             let wq = Arc::clone(&self.write_queue);
-            let handle = thread::spawn(move ||
-                _compression_worker_thread(cq, wq, shutdown_copy)
-            );
+            let handle = thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy));
 
             self.workers.push(handle);
         }
@@ -86,9 +84,8 @@ impl SequenceBuffer {
             let out_buf = std::mem::replace(&mut self.output_buffer, None);
             let we = Arc::clone(&self.written_entries);
             let handle = thread::spawn(move || {
-                   _writer_worker_thread(wq, shutdown_copy, out_buf.unwrap(), we)
-                }
-            );
+                _writer_worker_thread(wq, shutdown_copy, out_buf.unwrap(), we)
+            });
 
             self.write_worker = Some(handle);
         }
@@ -104,7 +101,9 @@ impl SequenceBuffer {
 
         let backoff = Backoff::new();
 
-        while self.written_entries.load(Ordering::Relaxed) < self.total_entries.load(Ordering::Relaxed) {
+        while self.written_entries.load(Ordering::Relaxed)
+            < self.total_entries.load(Ordering::Relaxed)
+        {
             self.unpark();
             backoff.snooze();
         }
@@ -121,7 +120,7 @@ impl SequenceBuffer {
         let (block_idx, output_buf) = writer_handle.unwrap().join().unwrap();
         // let output_buf = std::mem::replace(&mut self.output_buffer, None).unwrap();
 
-        return (block_idx, output_buf)
+        return (block_idx, output_buf);
     }
 
     pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<(u32, (usize, usize))>, &'static str> {
@@ -175,7 +174,7 @@ impl SequenceBuffer {
         self.unpark();
 
         if x.len() == 0 {
-            return
+            return;
         }
 
         self.total_entries.fetch_add(1, Ordering::SeqCst);
@@ -201,7 +200,7 @@ impl SequenceBuffer {
         )
     }
 
-    pub fn with_blocksize(mut self, block_size: u32) -> Self {
+    pub fn with_block_size(mut self, block_size: u32) -> Self {
         self._check_initialized();
         self.block_size = block_size;
         self.buffer = Vec::with_capacity(block_size as usize);
@@ -222,7 +221,6 @@ impl SequenceBuffer {
         self
     }
 }
-
 
 fn _compression_worker_thread(
     compress_queue: Arc<ArrayQueue<(u32, SequenceBlock)>>,
@@ -272,7 +270,6 @@ fn _writer_worker_thread(
         .expect("Unable to work with seek API");
 
     loop {
-
         // TODO: Code cleanup
         // Bad headache + neckache so copy and paste abuse...
 
@@ -280,8 +277,7 @@ fn _writer_worker_thread(
             let sbc = queue.remove(&expected_block).unwrap();
 
             block_index.push((expected_block, pos));
-            bincode::serialize_into(&mut out_buf, &sbc)
-                .expect("Unable to write to bincode output");
+            bincode::serialize_into(&mut out_buf, &sbc).expect("Unable to write to bincode output");
             pos = out_buf
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API");
@@ -295,7 +291,7 @@ fn _writer_worker_thread(
             None => {
                 backoff.snooze();
                 if shutdown.load(Ordering::Relaxed) {
-                    return (block_index, out_buf)
+                    return (block_index, out_buf);
                 }
                 park();
             }
@@ -332,11 +328,11 @@ fn _writer_worker_thread(
     }
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::any::Any;
+    use std::io::Seek;
 
     #[test]
     pub fn test_add_sequence() {
@@ -346,7 +342,7 @@ mod tests {
         let temp_out: Cursor<Vec<u8>> = Cursor::new(Vec::with_capacity(512 * 1024 * 2));
 
         let mut sb = SequenceBuffer::default()
-            .with_blocksize(test_block_size)
+            .with_block_size(test_block_size)
             .with_output(Box::new(temp_out));
 
         let mut locs = Vec::new();
@@ -367,10 +363,14 @@ mod tests {
         let (block_idx, mut buf_out) = sb.finalize();
 
         println!("Finalized...");
+        drop(sb);
 
         assert!(locs.len() == 10);
         println!("Blocks: {}", block_idx.len());
         assert!(block_idx.len() == 9);
+
+        let mut buf_out: &mut Box<Cursor<Vec<u8>>> = Any::downcast_mut(&mut buf_out).unwrap();
+        let mut buf_out = buf_out.to_owned();
 
         buf_out.seek(SeekFrom::Start(0)).unwrap();
 
@@ -397,7 +397,7 @@ mod tests {
 
         let test_block_size = 512 * 1024;
 
-        let mut sb = SequenceBuffer::default().with_blocksize(test_block_size);
+        let mut sb = SequenceBuffer::default().with_block_size(test_block_size);
 
         sb.add_sequence(&myseq[..]).expect("Error adding sequence");
     }

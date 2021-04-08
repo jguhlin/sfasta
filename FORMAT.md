@@ -19,7 +19,10 @@ Bincoded, using serde.
 * Metadata struct
 * Sequence streams
 * Scores stream
+* Masking Stream
 * Index struct
+
+# TODO: Add masking stream...
 
 ### Directory
 Directory { 

@@ -1,6 +1,7 @@
 use std::fs::{metadata, File};
 use std::io::prelude::*;
 use std::io::{BufWriter, SeekFrom};
+use std::any::Any;
 
 use lz4::{Decoder, EncoderBuilder};
 use rand::prelude::*;
@@ -12,10 +13,13 @@ use crate::io;
 
 // SuperTrait -- needed for pyO3
 pub trait ReadAndSeek: Read + Seek + Send {}
-impl<T: Read + Seek + Send> ReadAndSeek for T {}
+impl<T: Read + Seek + Send + Sync> ReadAndSeek for T {}
 
-pub trait WriteAndSeek: Write + Read + Seek + Send {}
-impl<T: Write + Read + Seek + Send> WriteAndSeek for T {}
+pub trait WriteAndSeek: Write + Seek + Send + Sync {}
+impl<T: Write + Seek + Send + Sync + Any> WriteAndSeek for T {}
+
+pub trait T: Any {}
+impl T for WriteAndSeek {}
 
 #[derive(PartialEq)]
 pub enum SeqMode {

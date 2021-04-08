@@ -14,7 +14,6 @@ extern crate zstd;
 extern crate serde_big_array;
 
 mod conversion;
-mod conversions;
 mod directory;
 mod fasta;
 mod format;
