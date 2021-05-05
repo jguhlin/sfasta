@@ -85,7 +85,40 @@ Per sequence metadata? That'd be bad for compression though...
 Open string all concat'd? Then it's unstructued...
 
 ### Index
-Goal is to not store all of NT (for example) in a hashmap in memory at once.
+Goal is to **not** store all of NT (for example) in a hashmap in memory at once.
+
+#### Alternate Index Type
+
+#### Index Directory
+
+IndexDirectory {
+    id_index: Option(u64),
+    block_index: Option(u64),
+    scores_block_index: Option(u64),
+}
+
+Where u64 is the location from the index directory location.
+
+#### ID Index
+
+Index is stored as compressed blocks of 256(?) elements.
+IndexBlock {
+    first: u64,
+    end: u64,
+    compressed_index: Vec<u8>
+}
+
+First and end are the XxHash encoded in the case of IDs.
+
+Where compressed index is a bincode-encoded zstd compressed:
+
+Index => HashMap<id, location> where
+  id: String
+  location: (Vec<(u32, (u64, u64))>, Option<Vec<(u32, (u64, u64))>>)
+
+Second option and locs above are for scores (None if no scores)
+
+#### NOT USING BELOW
 
 #### Need multiple indices, one for blocks, one for score blocks, one for seq ID's...
 

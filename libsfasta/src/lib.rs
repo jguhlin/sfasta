@@ -10,21 +10,21 @@ extern crate snap;
 extern crate thincollections;
 extern crate zstd;
 
-#[macro_use]
 extern crate serde_big_array;
 
 mod conversion;
 mod directory;
+mod index_directory;
 mod fasta;
 mod format;
 mod io;
 mod metadata;
 mod parameters;
-pub mod prelude;
 mod sequence_block;
 mod sequence_buffer;
 mod structs;
 mod utils;
+pub mod prelude;
 
 pub use crate::fasta::*;
 pub use crate::io::*;

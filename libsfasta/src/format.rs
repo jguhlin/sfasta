@@ -1,4 +1,5 @@
 use crate::directory::Directory;
+use crate::index_directory::IndexDirectory;
 use crate::metadata::Metadata;
 use crate::parameters::Parameters;
 use crate::*;
@@ -7,6 +8,7 @@ pub struct Sfasta {
     pub directory: Directory,
     pub parameters: Parameters,
     pub metadata: Metadata,
+    pub index_directory: IndexDirectory,
 }
 
 impl Default for Sfasta {
@@ -15,11 +17,17 @@ impl Default for Sfasta {
             directory: Directory::default(),
             parameters: Parameters::default(),
             metadata: Metadata::default(),
+            index_directory: IndexDirectory::default().with_blocks().with_ids(),
         }
     }
 }
 
 impl Sfasta {
+    pub fn with_sequences(mut self) -> Self {
+        self.directory = self.directory.with_sequences();
+        self
+    }
+
     pub fn with_scores(mut self) -> Self {
         self.directory = self.directory.with_scores();
         self
