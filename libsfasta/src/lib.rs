@@ -24,6 +24,7 @@ mod sequence_block;
 mod sequence_buffer;
 mod structs;
 mod utils;
+mod index_generator;
 pub mod prelude;
 
 pub use crate::fasta::*;

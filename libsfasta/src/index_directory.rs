@@ -7,6 +7,7 @@ pub struct IndexDirectory {
     pub id_index: Option<u64>,
     pub block_index: Option<u64>,
     pub scores_block_index: Option<u64>,
+    pub masking_block_index: Option<u64>,
 }
 
 impl Default for IndexDirectory {
@@ -15,6 +16,7 @@ impl Default for IndexDirectory {
             id_index: None,
             block_index: None,
             scores_block_index: None,
+            masking_block_index: None,
         }
     }
 }
@@ -34,6 +36,12 @@ impl IndexDirectory {
         self.scores_block_index = Some(0);
         self
     }
+
+    pub fn with_masking(mut self) -> Self {
+        self.masking_block_index = Some(0);
+        self
+    }
+
 }
 
 #[cfg(test)]

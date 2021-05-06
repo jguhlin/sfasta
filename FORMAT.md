@@ -25,30 +25,35 @@ Bincoded, using serde.
 # TODO: Add masking stream...
 
 ### Directory
+```
 Directory { 
     index_loc: u64,
     seq_loc: u64,
     scores_loc: Option(u64),
     // seqinfo_loc: Option(u64),  // Not yet...
 }
+```
 
 Address of various contents of the file. 
 
-Index loc: Location of the index.
-Seq Loc: Location of the sequence stream.
-Scores Loc: (Optional) Location of the scores stream.
+Index loc: Location of the index.  
+Seq Loc: Location of the sequence stream.  
+Scores Loc: (Optional) Location of the scores stream.  
 
 ### Parameters
+```
 Parameters { 
     block_size: u32,
     compression_type: enum { Zstd, NAF, Lz4, Bzip2, Gzip, ... },
 }
+```
 
 Block size is how much sequence is compressed per block, represented by bytes. Default is 4Mbp..... option to benchmarking.
 
 Compression type is an ENUM of the compression algorithm used. Zstd is recommended.
 
 ### Metadata
+```
 Metadata {
     created_by: String,
     citation_doi: Option(String),
@@ -61,20 +66,25 @@ Metadata {
     download_url: Option(String),
     homepage_url: Option(String),
 }
+```
 
 ### Sequence Stream
 Biological sequences (reads, amino acids, nucleotides, DNA, RNA) are appended to a string of maximum size of block_size, and compressed and stored as a data structur
 
+```
 SequenceBlock {
     compressed_seq: \[u8\],
 }
+```
 
 Each sequence can be addressed by the relevant block_id's and the byte-offset. For example a sequence stored in blocks 3, 4, and 5 starting in block 3 at position 1,024,048 and ending in block 5 at position 1,042 would encompass all of block 4.
 
 ### Scores Stream
+```
 ScoresBlock {
     compressed_seq: \[u8\],
 }
+```
 
 Optional. See @Sequence Stream
 
@@ -90,31 +100,37 @@ Goal is to **not** store all of NT (for example) in a hashmap in memory at once.
 #### Alternate Index Type
 
 #### Index Directory
-
+```
 IndexDirectory {
     id_index: Option(u64),
     block_index: Option(u64),
     scores_block_index: Option(u64),
+    masking_block_index: Option(u64),
 }
+```
 
 Where u64 is the location from the index directory location.
 
 #### ID Index
 
 Index is stored as compressed blocks of 256(?) elements.
+```
 IndexBlock {
     first: u64,
     end: u64,
     compressed_index: Vec<u8>
 }
+```
 
 First and end are the XxHash encoded in the case of IDs.
 
 Where compressed index is a bincode-encoded zstd compressed:
 
+```
 Index => HashMap<id, location> where
   id: String
   location: (Vec<(u32, (u64, u64))>, Option<Vec<(u32, (u64, u64))>>)
+```
 
 Second option and locs above are for scores (None if no scores)
 
@@ -122,20 +138,27 @@ Second option and locs above are for scores (None if no scores)
 
 #### Need multiple indices, one for blocks, one for score blocks, one for seq ID's...
 
+```
 IndexMetadata {
     index_levels: u8,
 }
+```
 
 Index levels are how many levels the index branches go before becoming "leafs" which serve as endpoints.
 
+```
 Index {
     idx: HashMap(\[u8\], struct(Index OR IndexLeaf)),
 }
+```
 
+```
 IndexLeaf {
     idx: HashMap(\[u8\], Info),
 }
+```
 
+```
 Info {
     id: String, // Sequence ID
     seq_start: (block_id, u32),
@@ -147,6 +170,7 @@ Info {
     seqtype: ENUM( DNA, RNA, Protein ),
     seqlength: u64,
 }
+```
 
 ### Future
 Make it easier to add / remove sequences...
