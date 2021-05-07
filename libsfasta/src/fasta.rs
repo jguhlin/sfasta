@@ -117,7 +117,8 @@ mod tests {
 
     #[test]
     pub fn test_fasta_parse() {
-        let fakefasta = b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
+        let fakefasta =
+            b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
         let mut fasta = Fasta::from_buffer(BufReader::new(fakefasta_));
         let j = fasta.next();

@@ -12,3 +12,10 @@ use crossbeam::utils::Backoff;
 use crate::sequence_block::*;
 use crate::structs::{ReadAndSeek, WriteAndSeek};
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn test_bitpacking_u64() {}
+}

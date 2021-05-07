@@ -1,4 +1,5 @@
 extern crate bincode;
+extern crate bitpacking;
 extern crate bumpalo;
 extern crate crossbeam;
 extern crate flate2;
@@ -14,18 +15,18 @@ extern crate serde_big_array;
 
 mod conversion;
 mod directory;
-mod index_directory;
 mod fasta;
 mod format;
+mod index_directory;
+mod index_generator;
 mod io;
 mod metadata;
 mod parameters;
+pub mod prelude;
 mod sequence_block;
 mod sequence_buffer;
 mod structs;
 mod utils;
-mod index_generator;
-pub mod prelude;
 
 pub use crate::fasta::*;
 pub use crate::io::*;

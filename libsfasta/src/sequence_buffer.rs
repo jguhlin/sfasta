@@ -83,9 +83,7 @@ impl SequenceBuffer {
             let wq = Arc::clone(&self.write_queue);
             let we = Arc::clone(&self.written_entries);
             let oq = Arc::clone(&self.output_queue);
-            let handle = thread::spawn(move || {
-                _writer_worker_thread(wq, oq, shutdown_copy, we)
-            });
+            let handle = thread::spawn(move || _writer_worker_thread(wq, oq, shutdown_copy, we));
 
             self.write_worker = Some(handle);
         }
@@ -259,7 +257,6 @@ fn _writer_worker_thread(
     shutdown: Arc<AtomicBool>,
     written_entries: Arc<AtomicUsize>,
 ) {
-
     let mut expected_block: u32 = 0;
     let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::new();
     let mut block_index: Vec<(u32, u64)> = Vec::new();
@@ -286,7 +283,7 @@ fn _writer_worker_thread(
             None => {
                 backoff.snooze();
                 if shutdown.load(Ordering::Relaxed) {
-                    return
+                    return;
                 }
                 park();
             }
@@ -312,8 +309,7 @@ mod tests {
         let temp_out: Cursor<Vec<u8>> = Cursor::new(Vec::with_capacity(512 * 1024 * 2));
         // let temp_out = RwLock::new(temp_out);
 
-        let mut sb = SequenceBuffer::default()
-            .with_block_size(test_block_size);
+        let mut sb = SequenceBuffer::default().with_block_size(test_block_size);
 
         let oq = sb.output_queue();
 

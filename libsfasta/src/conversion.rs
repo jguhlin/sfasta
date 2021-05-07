@@ -1,9 +1,9 @@
 // Easy conversion functions
 use std::fs::{metadata, File};
-use std::io::{BufReader, BufWriter, Read, SeekFrom, Seek};
-use std::thread;
-use std::sync::atomic::Ordering;
 use std::hash::Hasher;
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom};
+use std::sync::atomic::Ordering;
+use std::thread;
 
 use crossbeam::utils::Backoff;
 use twox_hash::XxHash64;
@@ -11,23 +11,19 @@ use twox_hash::XxHash64;
 use crate::fasta::*;
 use crate::format::Sfasta;
 use crate::sequence_buffer::SequenceBuffer;
-use crate::structs::{
-    WriteAndSeek,
-};
+use crate::structs::WriteAndSeek;
 
 // TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
 // TODO: Will need to generalize this function so it works with FASTA & FASTQ
 pub fn convert_fasta<W>(in_filename: &str, out_buf: &mut W, block_size: u32, threads: u16)
 where
-    W: WriteAndSeek
+    W: WriteAndSeek,
 {
-//    let input = generic_open_file(filename);
-//    let input = Box::new(BufReader::with_capacity(512 * 1024, input.2));
+    //    let input = generic_open_file(filename);
+    //    let input = Box::new(BufReader::with_capacity(512 * 1024, input.2));
 
-    let sfasta = Sfasta::default()
-        .block_size(block_size)
-        .with_sequences(); // This is a FASTA, so no scores
+    let sfasta = Sfasta::default().block_size(block_size).with_sequences(); // This is a FASTA, so no scores
 
     // Output file
     // let out_file = File::create(output_filename.clone()).expect("Unable to write to file");
@@ -64,7 +60,7 @@ where
         // Finalize pushes the last block, which is likely smaller than the complete block size
         match sb.finalize() {
             Ok(()) => (),
-            Err(x) => panic!("Unable to finalize sequence buffer, {:#?}", x)
+            Err(x) => panic!("Unable to finalize sequence buffer, {:#?}", x),
         };
 
         return seq_locs;
@@ -85,14 +81,14 @@ where
         match result {
             None => {
                 if oq.len() == 0 && shutdown.load(Ordering::Relaxed) {
-                    break
+                    break;
                 }
                 backoff.snooze();
             }
             Some((block_id, sb)) => {
                 bincode::serialize_into(&mut out_fh, &sb)
                     .expect("Unable to write to bincode output");
-                
+
                 block_locs.push((block_id, pos));
 
                 pos = out_fh
@@ -127,14 +123,17 @@ where
     // TODO: Go to the beginning, and write the location of the index
 
     let seq_locs = reader_handle.join().unwrap();
-    let out = seq_locs.into_iter().map(|(i, j)| {
-        let mut h = XxHash64::with_seed(42);
-        h.write(i.as_bytes());
-        (h.finish(), i, j)
-    }).collect::<Vec<(u64, String, Vec<(u32, (u64, u64))>)>>();
+    let out = seq_locs
+        .into_iter()
+        .map(|(i, j)| {
+            let mut h = XxHash64::with_seed(42);
+            h.write(i.as_bytes());
+            (h.finish(), i, j)
+        })
+        .collect::<Vec<(u64, String, Vec<(u32, (u64, u64))>)>>();
 
     println!("{:#?}", out);
-    panic!();
+    //panic!();
 }
 
 #[inline]
@@ -168,11 +167,11 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use crate::directory::Directory;
-    use crate::parameters::Parameters;
     use crate::metadata::Metadata;
+    use crate::parameters::Parameters;
     use crate::sequence_block::{SequenceBlock, SequenceBlockCompressed};
+    use std::io::Cursor;
 
     #[test]
     pub fn test_create_sfasta() {
@@ -194,5 +193,4 @@ mod tests {
 
         assert!(b.len() == 55);
     }
-
 }

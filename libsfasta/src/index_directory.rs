@@ -41,7 +41,6 @@ impl IndexDirectory {
         self.masking_block_index = Some(0);
         self
     }
-
 }
 
 #[cfg(test)]
@@ -62,7 +61,7 @@ mod tests {
         assert!(encoded_x.len() == encoded_z.len());
     }
 
-/*    #[test]
+    /*    #[test]
     pub fn bincode_size_directory_struct() {
         let mut directory = IndexDirectory {
             version: 1,
