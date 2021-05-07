@@ -12,6 +12,7 @@ use crate::fasta::*;
 use crate::format::Sfasta;
 use crate::sequence_buffer::SequenceBuffer;
 use crate::structs::WriteAndSeek;
+use crate::types::*;
 
 // TODO: loc can probably be u32, u32 with block size max at 4GB (which it will never be)
 
@@ -132,7 +133,7 @@ where
             h.write(i.as_bytes());
             (h.finish(), i, j)
         })
-        .collect::<Vec<(u64, String, Vec<(u32, (u32, u32))>)>>();
+        .collect::<Vec<(u64, String, Vec<Loc>)>>();
 
     println!("{:#?}", out);
     //panic!();

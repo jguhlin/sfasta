@@ -11,6 +11,7 @@ use crossbeam::utils::Backoff;
 
 use crate::sequence_block::*;
 use crate::structs::{ReadAndSeek, WriteAndSeek};
+use crate::types::*;
 
 pub struct SequenceBuffer {
     block_size: u32,
@@ -119,7 +120,7 @@ impl SequenceBuffer {
         Ok(())
     }
 
-    pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<(u32, (u32, u32))>, &'static str> {
+    pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<Loc>, &'static str> {
         assert!(self.block_size > 0);
         assert!(self.finalized == false, "SeqBuffer has been finalized.");
         if !self.initialized {
