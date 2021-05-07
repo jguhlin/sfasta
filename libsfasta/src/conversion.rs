@@ -13,6 +13,8 @@ use crate::format::Sfasta;
 use crate::sequence_buffer::SequenceBuffer;
 use crate::structs::WriteAndSeek;
 
+// TODO: loc can probably be u32, u32 with block size max at 4GB (which it will never be)
+
 // TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
 // TODO: Will need to generalize this function so it works with FASTA & FASTQ
@@ -130,7 +132,7 @@ where
             h.write(i.as_bytes());
             (h.finish(), i, j)
         })
-        .collect::<Vec<(u64, String, Vec<(u32, (u64, u64))>)>>();
+        .collect::<Vec<(u64, String, Vec<(u32, (u32, u32))>)>>();
 
     println!("{:#?}", out);
     //panic!();

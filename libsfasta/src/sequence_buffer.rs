@@ -119,7 +119,7 @@ impl SequenceBuffer {
         Ok(())
     }
 
-    pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<(u32, (u64, u64))>, &'static str> {
+    pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<(u32, (u32, u32))>, &'static str> {
         assert!(self.block_size > 0);
         assert!(self.finalized == false, "SeqBuffer has been finalized.");
         if !self.initialized {
@@ -144,7 +144,7 @@ impl SequenceBuffer {
 
             self.buffer.extend_from_slice(&seq[0..end]);
 
-            locs.push((self.cur_block_id, (len as u64, (len + end) as u64)));
+            locs.push((self.cur_block_id, (len as u32, (len + end) as u32)));
 
             if self.len() >= block_size {
                 self.emit_block();
