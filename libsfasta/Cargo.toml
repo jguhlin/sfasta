@@ -28,6 +28,9 @@ serde-big-array = {version = "0.3.2", features = ["const-generics"]}
 [dev-dependencies]
 criterion = "0.3"
 humansize = "1.1.0"
+generic-array = "0.14.4"
+numeric-array = "0.5.2"
+num-traits = "0.2.14"
 
 [[bench]]
 name = "indexing"
