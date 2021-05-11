@@ -4,8 +4,9 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Directory {
-    pub version: u8,
+    pub version: u64, // I'm going to regret this, but 18,446,744,073,709,551,615 versions should be enough for anybody.
     pub index_loc: u64,
+    pub block_index_loc: u64,
     pub seq_loc: Option<u64>,
     pub scores_loc: Option<u64>,
 }
@@ -15,6 +16,7 @@ impl Default for Directory {
         Directory {
             version: 1,
             index_loc: 0,
+            block_index_loc: 0,
             seq_loc: None,
             scores_loc: None,
         }
@@ -56,6 +58,7 @@ mod tests {
         let mut directory = Directory {
             version: 1,
             index_loc: 0,
+            block_index_loc: 0,
             seq_loc: Some(0),
             scores_loc: None,
         };

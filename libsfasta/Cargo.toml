@@ -24,6 +24,7 @@ lz4_flex = "0.7.5"
 bitpacking = "0.8.4"
 twox-hash = "1.6.0"
 serde-big-array = {version = "0.3.2", features = ["const-generics"]}
+ahash = "0.7.2"
 
 [dev-dependencies]
 criterion = "0.3"

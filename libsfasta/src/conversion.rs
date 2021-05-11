@@ -13,12 +13,11 @@ use crate::format::Sfasta;
 use crate::sequence_buffer::SequenceBuffer;
 use crate::structs::WriteAndSeek;
 use crate::types::*;
-
-// TODO: loc can probably be u32, u32 with block size max at 4GB (which it will never be)
+use crate::index::IDIndexer;
 
 // TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
-// TODO: Will need to generalize this function so it works with FASTA & FASTQ
+// TODO: Will need to generalize this function so it works with FASTA & FASTQ & Masking
 pub fn convert_fasta<W>(in_filename: &str, out_buf: &mut W, block_size: u32, threads: u16)
 where
     W: WriteAndSeek,
@@ -26,7 +25,9 @@ where
     //    let input = generic_open_file(filename);
     //    let input = Box::new(BufReader::with_capacity(512 * 1024, input.2));
 
-    let sfasta = Sfasta::default().block_size(block_size).with_sequences(); // This is a FASTA, so no scores
+    assert!(block_size < u32::MAX, "Block size must be less than u32::MAX (~4Gb)");
+
+    let mut sfasta = Sfasta::default().block_size(block_size).with_sequences(); // This is a FASTA, so no scores
 
     // Output file
     // let out_file = File::create(output_filename.clone()).expect("Unable to write to file");
@@ -108,34 +109,56 @@ where
 
     // TODO: Write out the index
 
-    // Index Directory
-
-    let index_pos = out_fh
+    // Write out the sequence locs...
+    let seq_locs: Vec<(String, Vec<Loc>)> = reader_handle.join().unwrap();
+    
+    let mut indexer = crate::index::Index64::default();
+    let mut pos = out_fh
         .seek(SeekFrom::Current(0))
         .expect("Unable to work with seek API");
 
+    for s in seq_locs {
+        indexer.add(&s.0, pos);
+        bincode::serialize_into(&mut out_fh, &s)
+            .expect("Unable to write Metadata to file");
+        
+        pos = out_fh
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API");
+    }
+
+    let indexer = indexer.finalize();
+
+    // ID Index
+    let id_index_pos = out_fh
+        .seek(SeekFrom::Current(0))
+        .expect("Unable to work with seek API");
+
+    bincode::serialize_into(&mut out_fh, &indexer)
+        .expect("Unable to write directory to file");
+
+    // Block Index
+    let block_index_pos = out_fh
+        .seek(SeekFrom::Current(0))
+        .expect("Unable to work with seek API");
+
+    bincode::serialize_into(&mut out_fh, &block_locs)
+        .expect("Unable to write directory to file");
+
+    // TODO: Scores Block Index
+    
+    // TODO: Masking Block index
+
+    // Go to the beginning, and write the location of the index
+
+    sfasta.directory.index_loc = id_index_pos;
+    sfasta.directory.block_index_loc = block_index_pos;
+    out_fh.seek(SeekFrom::Start(0)).expect("Unable to rewind to start of the file");
+    // Here we re-write the directory information at the start of the file, allowing for
+    // easy hops to important areas while keeping everything in a single file
     bincode::serialize_into(&mut out_fh, &sfasta.directory)
         .expect("Unable to write directory to file");
 
-    // ID Index
-
-    // Block Index
-
-    // Scores Block Index
-
-    // TODO: Go to the beginning, and write the location of the index
-
-    let seq_locs = reader_handle.join().unwrap();
-    let out = seq_locs
-        .into_iter()
-        .map(|(i, j)| {
-            let mut h = XxHash64::with_seed(42);
-            h.write(i.as_bytes());
-            (h.finish(), i, j)
-        })
-        .collect::<Vec<(u64, String, Vec<Loc>)>>();
-
-    println!("{:#?}", out);
     //panic!();
 }
 

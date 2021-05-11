@@ -99,6 +99,10 @@ Goal is to **not** store all of NT (for example) in a hashmap in memory at once.
 
 #### Alternate Index Type
 
+# TODO:
+Multiple types of index. "Fast" is uncompressed. "Packed" is compressed with Zstd, maybe even not hashmapped.
+Also supports hashed at 64-bit and 32-bit, and 16-bit for very small files.
+
 #### Index Directory
 ```
 IndexDirectory {
