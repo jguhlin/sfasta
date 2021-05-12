@@ -1,11 +1,9 @@
 use serde::{Deserialize, Serialize};
-use serde_big_array::BigArray;
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
 use std::hash::Hasher;
 use ahash::{AHasher, RandomState};
 
 extern crate serde;
-extern crate serde_big_array;
 
 #[non_exhaustive]
 enum IndexTypes {

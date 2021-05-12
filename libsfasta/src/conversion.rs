@@ -53,7 +53,7 @@ where
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     let reader_handle = thread::spawn(move || {
         let (_, _, in_buf) = generic_open_file(&in_filename);
-        let fasta = Fasta::from_buffer(BufReader::with_capacity(512 * 1024, in_buf));
+        let fasta = Fasta::from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
 
         let mut seq_locs = Vec::new();
         for i in fasta {
@@ -70,7 +70,7 @@ where
         return seq_locs;
     });
 
-    let mut block_locs = Vec::new();
+    let mut block_locs = Vec::with_capacity(128 * 1024 * 1024);
     let backoff = Backoff::new();
     let mut pos = out_fh
         .seek(SeekFrom::Current(0))

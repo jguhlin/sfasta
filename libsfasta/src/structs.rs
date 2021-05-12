@@ -45,7 +45,7 @@ impl Default for CompressionType {
 
 pub const fn default_compression_level(ct: CompressionType) -> i32 {
     match ct {
-        CompressionType::ZSTD => 19,
+        CompressionType::ZSTD => -3, // 19,
         CompressionType::LZ4 => 9,
         _ => 3,
     }

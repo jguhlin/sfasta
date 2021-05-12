@@ -4,6 +4,9 @@ version = "0.0.1"
 authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
 edition = "2018"
 
+[profile.release]
+debug = true
+
 [dependencies]
 serde = { version = "1.0.125", features = ["derive"] }
 serde_bytes = "0.11.5"
@@ -14,7 +17,7 @@ static_assertions = "1.1.0"
 snap = "1.0.5"
 bincode = "1.3.3"
 bumpalo = { version = "3.6.1", features = ["collections", "boxed"] }
-zstd = {version = "0.8.0", features = [ "experimental", "zstdmt"] }
+zstd = {version = "0.8.0", features = [ "experimental" ] }
 lz4 = "1.23.1"
 hashbrown = { version = "0.11.2", features = ["serde"] }
 rand = "0.8.3"
@@ -23,7 +26,6 @@ rand_chacha = "0.3.0"
 lz4_flex = "0.7.5"
 bitpacking = "0.8.4"
 twox-hash = "1.6.0"
-serde-big-array = {version = "0.3.2", features = ["const-generics"]}
 ahash = "0.7.2"
 
 [dev-dependencies]

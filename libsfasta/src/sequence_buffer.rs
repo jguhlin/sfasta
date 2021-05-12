@@ -127,7 +127,7 @@ impl SequenceBuffer {
             self.initialize();
         }
 
-        let mut locs = Vec::new();
+        let mut locs = Vec::with_capacity(8);
 
         let block_size = self.block_size as usize;
 
@@ -252,6 +252,7 @@ fn _compression_worker_thread(
     }
 }
 
+// This name is a lie. This only sorts the blocks...
 fn _writer_worker_thread(
     write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,

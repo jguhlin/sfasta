@@ -11,8 +11,6 @@ extern crate snap;
 extern crate thincollections;
 extern crate zstd;
 
-extern crate serde_big_array;
-
 mod conversion;
 mod directory;
 mod fasta;
