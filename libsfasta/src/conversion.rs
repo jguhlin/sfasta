@@ -2,6 +2,7 @@
 use std::fs::{metadata, File};
 use std::hash::Hasher;
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom};
+use std::io::Cursor;
 use std::sync::atomic::Ordering;
 use std::thread;
 
@@ -10,22 +11,26 @@ use twox_hash::XxHash64;
 
 use crate::fasta::*;
 use crate::format::Sfasta;
-use crate::sequence_buffer::SequenceBuffer;
-use crate::structs::WriteAndSeek;
-use crate::types::*;
 use crate::index::IDIndexer;
+use crate::sequence_buffer::SequenceBuffer;
+use crate::structs::{WriteAndSeek, ReadAndSeek};
+use crate::types::*;
 
 // TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
 // TODO: Will need to generalize this function so it works with FASTA & FASTQ & Masking
-pub fn convert_fasta<W>(in_filename: &str, out_buf: &mut W, block_size: u32, threads: u16)
+pub fn convert_fasta<W, R: 'static>(in_buf: R, out_buf: &mut W, block_size: u32, threads: u16)
 where
     W: WriteAndSeek,
+    R: Read + Send,
 {
     //    let input = generic_open_file(filename);
     //    let input = Box::new(BufReader::with_capacity(512 * 1024, input.2));
 
-    assert!(block_size < u32::MAX, "Block size must be less than u32::MAX (~4Gb)");
+    assert!(
+        block_size < u32::MAX,
+        "Block size must be less than u32::MAX (~4Gb)"
+    );
 
     let mut sfasta = Sfasta::default().block_size(block_size).with_sequences(); // This is a FASTA, so no scores
 
@@ -48,11 +53,12 @@ where
     let oq = sb.output_queue();
     let shutdown = sb.shutdown_notified();
 
-    let in_filename = in_filename.to_string();
+    // let in_filename = in_filename.to_string();
 
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     let reader_handle = thread::spawn(move || {
-        let (_, _, in_buf) = generic_open_file(&in_filename);
+        // let (_, _, in_buf) = generic_open_file(&in_filename);
+        // let fasta = Fasta::from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
         let fasta = Fasta::from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
 
         let mut seq_locs = Vec::new();
@@ -111,7 +117,7 @@ where
 
     // Write out the sequence locs...
     let seq_locs: Vec<(String, Vec<Loc>)> = reader_handle.join().unwrap();
-    
+
     let mut indexer = crate::index::Index64::default();
     let mut pos = out_fh
         .seek(SeekFrom::Current(0))
@@ -119,9 +125,8 @@ where
 
     for s in seq_locs {
         indexer.add(&s.0, pos);
-        bincode::serialize_into(&mut out_fh, &s)
-            .expect("Unable to write Metadata to file");
-        
+        bincode::serialize_into(&mut out_fh, &s).expect("Unable to write Metadata to file");
+
         pos = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
@@ -134,26 +139,26 @@ where
         .seek(SeekFrom::Current(0))
         .expect("Unable to work with seek API");
 
-    bincode::serialize_into(&mut out_fh, &indexer)
-        .expect("Unable to write directory to file");
+    bincode::serialize_into(&mut out_fh, &indexer).expect("Unable to write directory to file");
 
     // Block Index
     let block_index_pos = out_fh
         .seek(SeekFrom::Current(0))
         .expect("Unable to work with seek API");
 
-    bincode::serialize_into(&mut out_fh, &block_locs)
-        .expect("Unable to write directory to file");
+    bincode::serialize_into(&mut out_fh, &block_locs).expect("Unable to write directory to file");
 
     // TODO: Scores Block Index
-    
+
     // TODO: Masking Block index
 
     // Go to the beginning, and write the location of the index
 
     sfasta.directory.index_loc = id_index_pos;
     sfasta.directory.block_index_loc = block_index_pos;
-    out_fh.seek(SeekFrom::Start(0)).expect("Unable to rewind to start of the file");
+    out_fh
+        .seek(SeekFrom::Start(0))
+        .expect("Unable to rewind to start of the file");
     // Here we re-write the directory information at the start of the file, allowing for
     // easy hops to important areas while keeping everything in a single file
     bincode::serialize_into(&mut out_fh, &sfasta.directory)
@@ -162,7 +167,6 @@ where
     //panic!();
 }
 
-#[inline]
 pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) {
     let filesize = metadata(filename)
         .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
@@ -203,7 +207,9 @@ mod tests {
     pub fn test_create_sfasta() {
         let mut out_buf = Cursor::new(Vec::new());
 
-        convert_fasta("test_data/test_convert.fasta", &mut out_buf, 8 * 1024, 6);
+        let mut in_buf = BufReader::new(File::open("test_data/test_convert.fasta").expect("Unable to open testing file"));
+
+        convert_fasta(in_buf, &mut out_buf, 8 * 1024, 6);
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),

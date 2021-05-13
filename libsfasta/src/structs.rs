@@ -12,8 +12,8 @@ use super::BLOCK_SIZE;
 use crate::io;
 
 // SuperTrait -- needed for pyO3
-pub trait ReadAndSeek: Read + Seek + Send {}
-impl<T: Read + Seek + Send + Sync> ReadAndSeek for T {}
+pub trait ReadAndSeek: Read + Seek {}
+impl<T: Read + Seek> ReadAndSeek for T {}
 
 pub trait WriteAndSeek: Write + Seek + Send + Sync {}
 impl<T: Write + Seek + Send + Sync + Any> WriteAndSeek for T {}

@@ -2,6 +2,8 @@ use std::convert::TryInto;
 use std::io::prelude::*;
 use std::io::{BufRead, BufReader};
 
+use crate::bytelines::ByteLinesReader;
+
 use crate::io::generic_open_file;
 use crate::structs::ReadAndSeek;
 
@@ -110,6 +112,37 @@ impl<R: BufRead> Iterator for Fasta<R> {
     }
 }
 
+pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<usize>) {
+    let mut entries: usize = 0;
+    let mut ids: Vec<String> = Vec::with_capacity(2 * 1024 * 1024);
+    let mut lengths: Vec<usize> = Vec::with_capacity(2 * 1024 * 1024);
+    let mut length: usize = 0;
+
+    let mut lines = fasta_buf.byte_lines();
+    let mut first = true;
+    while let Some(line) = lines.next() {
+        let line = line.expect("Error parsing FASTA file");
+        if line.starts_with(b">") {
+            let id = std::str::from_utf8(&line[1..]).expect("Unable to convert FASTA header to string");
+            ids.push(id.to_string());
+            
+            if first {
+                first = false;
+            } else {
+                lengths.push(length.clone());
+            }
+            
+            entries += 1;
+            length = 0;
+        } else {
+            length += line.len();
+        }
+    }
+    lengths.push(length);
+
+    return (entries, ids, lengths);
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -123,5 +156,20 @@ mod tests {
         let mut fasta = Fasta::from_buffer(BufReader::new(fakefasta_));
         let j = fasta.next();
         let j = fasta.next();
+    }
+
+    #[test]
+    pub fn test_summarize_fasta() {
+        let fakefasta =
+            b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
+        let fakefasta_ = fakefasta.as_slice();
+        let mut buf = BufReader::new(fakefasta_);
+        let j = summarize_fasta(&mut buf);
+        assert!(j.0 == 2);
+        println!("{:#?}", j);
+        assert!(j.1[0] == "Hello");
+        assert!(j.1[1] == "Second");
+        assert!(j.2[0] == 17);
+        assert!(j.2[1] == 26);
     }
 }

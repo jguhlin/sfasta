@@ -1,10 +1,9 @@
 use crate::parameters::Parameters;
 use crate::structs::{default_compression_level, CompressionType};
 use serde::{Deserialize, Serialize};
+use std::io::{Read, Write};
 use std::rc::Rc;
-use std::io::Write;
 use zstd;
-
 
 #[derive(Clone, Debug, Default)]
 pub struct SequenceBlock {
@@ -24,7 +23,7 @@ impl SequenceBlock {
         encoder.include_contentsize(false);
         encoder.write_all(&self.seq[..]);
         let cseq = encoder.finish().unwrap();
-        
+
         //let cseq = match zstd::stream::encode_all(&self.seq[..], level) {
         //    Ok(x) => x,
         //    Err(x) => panic!("{:#?}", x),
@@ -63,13 +62,19 @@ pub struct SequenceBlockCompressed {
 
 impl SequenceBlockCompressed {
     pub fn decompress(&self) -> SequenceBlock {
-        let decompressed = match zstd::stream::decode_all(&self.compressed_seq[..]) {
+        let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
+        // encoder.multithread(1);
+        decoder
+            .include_magicbytes(false)
+            .expect("Unable to disable magicbytes in decoder");
+        let mut seq = Vec::with_capacity(8 * 1024 * 1024);
+        match decoder.read_to_end(&mut seq) {
             Ok(x) => x,
-            Err(y) => panic!("{:#?}", y),
+            Err(y) => panic!("Unable to decompress block: {:#?}", y),
         };
 
         SequenceBlock {
-            seq: decompressed,
+            seq,
             compression_type: self.compression_type,
         }
     }

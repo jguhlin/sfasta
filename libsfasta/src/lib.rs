@@ -10,11 +10,13 @@ extern crate serde_bytes;
 extern crate snap;
 extern crate thincollections;
 extern crate zstd;
+extern crate bytelines;
 
 mod conversion;
 mod directory;
 mod fasta;
 mod format;
+mod index;
 mod index_directory;
 mod index_generator;
 mod io;
@@ -26,7 +28,6 @@ mod sequence_buffer;
 mod structs;
 mod types;
 mod utils;
-mod index;
 
 pub use crate::fasta::*;
 pub use crate::io::*;

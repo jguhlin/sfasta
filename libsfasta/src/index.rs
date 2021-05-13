@@ -1,7 +1,7 @@
-use serde::{Deserialize, Serialize};
-use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
-use std::hash::Hasher;
 use ahash::{AHasher, RandomState};
+use serde::{Deserialize, Serialize};
+use std::hash::Hasher;
+use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
 
 extern crate serde;
 
@@ -59,12 +59,12 @@ impl IDIndexer for Index32 {
 
         let found = match self.hashes.binary_search(&hash) {
             Ok(x) => x,
-            Err(_) => return None
+            Err(_) => return None,
         };
 
         let mut locs = Vec::new();
-        
-        if self.hashes[found-1] != hash && self.hashes[found+1] != hash {
+
+        if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
             locs.push(self.locs[found]);
             return Some(locs);
         }
@@ -72,7 +72,7 @@ impl IDIndexer for Index32 {
         let mut keepexpanding = true;
         let mut start = found;
         let mut end = found;
-        
+
         while self.hashes[start] == hash {
             start = start.saturating_sub(1);
         }
@@ -90,7 +90,11 @@ impl IDIndexer for Index32 {
         // TODO: More memory efficient way...
         // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
 
-        let mut tuples = self.hashes.into_iter().zip(self.locs.into_iter()).collect::<Vec<(u32, u64)>>();
+        let mut tuples = self
+            .hashes
+            .into_iter()
+            .zip(self.locs.into_iter())
+            .collect::<Vec<(u32, u64)>>();
         tuples.sort_by(|a, b| a.0.cmp(&b.0));
         let hashes = tuples.iter().map(|(i, o)| *i).collect::<Vec<u32>>();
         let locs = tuples.iter().map(|(i, o)| *o).collect::<Vec<u64>>();
@@ -163,12 +167,12 @@ impl IDIndexer for Index64 {
 
         let found = match self.hashes.binary_search(&hash) {
             Ok(x) => x,
-            Err(_) => return None
+            Err(_) => return None,
         };
 
         let mut locs = Vec::new();
-        
-        if self.hashes[found-1] != hash && self.hashes[found+1] != hash {
+
+        if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
             locs.push(self.locs[found]);
             return Some(locs);
         }
@@ -176,7 +180,7 @@ impl IDIndexer for Index64 {
         let mut keepexpanding = true;
         let mut start = found;
         let mut end = found;
-        
+
         while self.hashes[start] == hash {
             start = start.saturating_sub(1);
         }
@@ -193,10 +197,18 @@ impl IDIndexer for Index64 {
     fn finalize(self) -> Self {
         // TODO: More memory efficient way...
         // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
-        let mut tuples = self.hashes.into_iter().zip(self.locs.into_iter()).collect::<Vec<(u64, u64)>>();
+        let mut tuples = self
+            .hashes
+            .into_iter()
+            .zip(self.locs.into_iter())
+            .collect::<Vec<(u64, u64)>>();
         tuples.sort_by(|a, b| a.0.cmp(&b.0));
         let hashes = tuples.iter().map(|(i, o)| *i).collect::<Vec<u64>>();
         let locs = tuples.iter().map(|(i, o)| *o).collect::<Vec<u64>>();
-        Index64 { hashes, locs, hash: self.hash }
+        Index64 {
+            hashes,
+            locs,
+            hash: self.hash,
+        }
     }
 }
