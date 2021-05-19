@@ -27,6 +27,8 @@ pub trait IDIndexer {
     fn finalize(self) -> Self;
 
     fn len(&self) -> u64;
+
+    fn with_capacity(capacity: usize) -> Self;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -37,6 +39,14 @@ pub struct Index32 {
 }
 
 impl IDIndexer for Index32 {
+    fn with_capacity(capacity: usize) -> Self {
+        Index32 {
+            hashes: Vec::with_capacity(capacity),
+            locs: Vec::with_capacity(capacity),
+            ids: Vec::with_capacity(capacity),
+        }
+    }
+
     fn add(&mut self, id: &str, loc: u64) -> Result<(), &'static str> {
         let mut hasher = XxHash32::with_seed(42);
         hasher.write(id.as_bytes());
@@ -92,17 +102,24 @@ impl IDIndexer for Index32 {
         // TODO: More memory efficient way...
         // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
 
-        let mut tuples = self
+        let mut tuples: Vec<(u32, u64, String)> = Vec::with_capacity(self.locs.len());
+
+        for i in 0..self.locs.len() {
+            tuples.push((self.hashes[i], self.locs[i], self.ids[i].clone()))
+        }
+
+        /* let mut tuples = self
             .hashes
             .into_iter()
             .zip(self.locs.into_iter())
             // .zip(self.ids.into_iter())
             .collect::<Vec<(u32, u64)>>();
-        tuples.sort_by(|a, b| a.0.cmp(&b.0));
+        tuples.sort_by(|a, b| a.0.cmp(&b.0)); */
         let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u32>>();
         let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
+        let ids = tuples.iter().map(|(_, _, x)| x.clone()).collect::<Vec<String>>();
 
-        Index32 { hashes, locs, }
+        Index32 { hashes, locs, ids }
     }
 
     fn len(&self) -> u64 {
@@ -122,7 +139,7 @@ pub struct Index64 {
     hashes: Vec<u64>,
     locs: Vec<u64>,
     hash: Hashes,
-    // ids: Vec<String>,
+    ids: Vec<String>,
 }
 
 impl Default for Index64 {
@@ -131,6 +148,7 @@ impl Default for Index64 {
             hashes: Vec::new(),
             locs: Vec::new(),
             hash: Hashes::Ahash,
+            ids: Vec::new(),
         }
     }
 }
@@ -159,12 +177,22 @@ impl Index64 {
 }
 
 impl IDIndexer for Index64 {
+
+    fn with_capacity(capacity: usize) -> Self {
+        Index64 {
+            hashes: Vec::with_capacity(capacity),
+            locs: Vec::with_capacity(capacity),
+            hash: Hashes::Ahash,
+            ids: Vec::with_capacity(capacity),
+        }
+    }
+
     fn add(&mut self, id: &str, loc: u64) -> Result<(), &'static str> {
         let hash = self.get_hash(id);
 
         self.hashes.push(hash);
         self.locs.push(loc);
-        // self.ids.push(id.to_string());
+        self.ids.push(id.to_string());
 
         Ok(())
     }
@@ -205,19 +233,20 @@ impl IDIndexer for Index64 {
     fn finalize(self) -> Self {
         // TODO: More memory efficient way...
         // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
-        let mut tuples = self
-            .hashes
-            .into_iter()
-            .zip(self.locs.into_iter())
-            .collect::<Vec<(u64, u64)>>();
-        tuples.sort_by(|a, b| a.0.cmp(&b.0));
-        let hashes = tuples.iter().map(|(i, o)| *i).collect::<Vec<u64>>();
-        let locs = tuples.iter().map(|(i, o)| *o).collect::<Vec<u64>>();
-        Index64 {
-            hashes,
-            locs,
-            hash: self.hash,
+
+        let mut tuples: Vec<(u64, u64, String)> = Vec::with_capacity(self.locs.len());
+
+        for i in 0..self.locs.len() {
+            tuples.push((self.hashes[i], self.locs[i], self.ids[i].clone()))
         }
+
+        let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u64>>();
+        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
+        let ids = tuples.iter().map(|(_, _, x)| x.clone()).collect::<Vec<String>>();
+
+        Index64 { hashes, locs, ids, hash: self.hash }
+
+
     }
 
     fn len(&self) -> u64 {
