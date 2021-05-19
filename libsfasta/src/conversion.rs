@@ -1,7 +1,7 @@
-// Easy conversion functions
+// Easy, high-performance conversion functions
 use std::fs::{metadata, File};
 use std::hash::Hasher;
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::io::Cursor;
 use std::sync::atomic::Ordering;
 use std::thread;
@@ -16,6 +16,8 @@ use crate::sequence_buffer::SequenceBuffer;
 use crate::structs::{WriteAndSeek, ReadAndSeek};
 use crate::types::*;
 
+use bincode::Options;
+
 // TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
 // TODO: Will need to generalize this function so it works with FASTA & FASTQ & Masking
@@ -26,6 +28,10 @@ where
 {
     //    let input = generic_open_file(filename);
     //    let input = Box::new(BufReader::with_capacity(512 * 1024, input.2));
+
+    let bincode = bincode::DefaultOptions::new()
+        .with_fixint_encoding()
+        .allow_trailing_bytes();
 
     assert!(
         block_size < u32::MAX,
@@ -38,12 +44,20 @@ where
     // let out_file = File::create(output_filename.clone()).expect("Unable to write to file");
     let mut out_fh = BufWriter::with_capacity(1024 * 1024, out_buf);
 
+    out_fh.write_all("sfasta".as_bytes());
+
     // Write the directory, parameters, and metadata structs out...
-    bincode::serialize_into(&mut out_fh, &sfasta.directory)
+    bincode.serialize_into(&mut out_fh, &sfasta.version)
         .expect("Unable to write directory to file");
-    bincode::serialize_into(&mut out_fh, &sfasta.parameters)
+
+    let directory_location = out_fh
+        .seek(SeekFrom::Current(0))
+        .expect("Unable to work with seek API");
+    bincode.serialize_into(&mut out_fh, &sfasta.directory)
+        .expect("Unable to write directory to file");
+    bincode.serialize_into(&mut out_fh, &sfasta.parameters)
         .expect("Unable to write Parameters to file");
-    bincode::serialize_into(&mut out_fh, &sfasta.metadata)
+    bincode.serialize_into(&mut out_fh, &sfasta.metadata)
         .expect("Unable to write Metadata to file");
 
     let mut sb = SequenceBuffer::default()
@@ -157,7 +171,7 @@ where
     sfasta.directory.index_loc = id_index_pos;
     sfasta.directory.block_index_loc = block_index_pos;
     out_fh
-        .seek(SeekFrom::Start(0))
+        .seek(SeekFrom::Start(directory_location))
         .expect("Unable to rewind to start of the file");
     // Here we re-write the directory information at the start of the file, allowing for
     // easy hops to important areas while keeping everything in a single file
@@ -205,6 +219,10 @@ mod tests {
 
     #[test]
     pub fn test_create_sfasta() {
+        let bincode = bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .allow_trailing_bytes();
+
         let mut out_buf = Cursor::new(Vec::new());
 
         let mut in_buf = BufReader::new(File::open("test_data/test_convert.fasta").expect("Unable to open testing file"));
@@ -216,9 +234,14 @@ mod tests {
             Ok(_) => (),
         };
 
-        let d: Directory = bincode::deserialize_from(&mut out_buf).unwrap();
-        let p: Parameters = bincode::deserialize_from(&mut out_buf).unwrap();
-        let m: Metadata = bincode::deserialize_from(&mut out_buf).unwrap();
+        let mut sfasta_marker: [u8; 6] = [0; 6];
+        out_buf.read_exact(&mut sfasta_marker).expect("Unable to read SFASTA Marker");
+        assert!(sfasta_marker == "sfasta".as_bytes());
+
+        let v: u64 = bincode.deserialize_from(&mut out_buf).unwrap();
+        let d: Directory = bincode.deserialize_from(&mut out_buf).unwrap();
+        let p: Parameters = bincode.deserialize_from(&mut out_buf).unwrap();
+        let m: Metadata = bincode.deserialize_from(&mut out_buf).unwrap();
 
         let b: SequenceBlockCompressed = bincode::deserialize_from(&mut out_buf).unwrap();
         let b = b.decompress();

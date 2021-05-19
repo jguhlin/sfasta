@@ -20,7 +20,6 @@ use rand_chacha::ChaCha20Rng;
 use clap::{load_yaml, App, ArgMatches};
 use indicatif::{HumanBytes, ProgressBar, ProgressIterator, ProgressStyle};
 
-
 use libsfasta::prelude::*;
 
 fn style_pb(pb: ProgressBar) -> ProgressBar {
@@ -38,6 +37,20 @@ fn main() {
 
     if let Some(matches) = matches.subcommand_matches("convert") {
         convert(&matches);
+    }
+
+    if let Some(matches) = matches.subcommand_matches("stats") {
+        let filename = matches.value_of("input").unwrap();
+        let file = match File::open(filename) {
+            Err(why) => panic!("Couldn't open {}: {}", filename, why.to_string()),
+            Ok(file) => file,
+        };
+    
+        // let mut file = BufReader::with_capacity(8 * 1024 * 1024, file);
+        let sfasta = Sfasta::open_from_buffer(file);
+        println!("Successfully opened SFASTA");
+        println!("Found: {} entries", sfasta.index.unwrap().len());
+
     }
 
     // TODO: Make this faster but putting the decompression into another thread...
@@ -82,7 +95,7 @@ fn convert(matches: &ArgMatches) {
     println!("Total Entries: {}", summary.0);
 
     let path = Path::new(fasta_filename);
-    let output_name = path.clone().with_extension(".sfasta");
+    let output_name = path.clone().with_extension("sfasta");
     let mut output = match File::create(output_name) {
         Err(why) => panic!("couldn't create: {}", why),
         Ok(file) => file,

@@ -25,6 +25,8 @@ pub trait IDIndexer {
     // Finalize (no more additions)
     // This function should handle the sorting (binary search doesn't work without it)
     fn finalize(self) -> Self;
+
+    fn len(&self) -> u64;
 }
 
 #[derive(Serialize, Deserialize)]
@@ -99,6 +101,10 @@ impl IDIndexer for Index32 {
         let hashes = tuples.iter().map(|(i, o)| *i).collect::<Vec<u32>>();
         let locs = tuples.iter().map(|(i, o)| *o).collect::<Vec<u64>>();
         Index32 { hashes, locs }
+    }
+
+    fn len(&self) -> u64 {
+        self.hashes.len() as u64
     }
 }
 
@@ -210,5 +216,9 @@ impl IDIndexer for Index64 {
             locs,
             hash: self.hash,
         }
+    }
+
+    fn len(&self) -> u64 {
+        self.hashes.len() as u64
     }
 }
