@@ -33,7 +33,7 @@ pub trait IDIndexer {
 pub struct Index32 {
     hashes: Vec<u32>,
     locs: Vec<u64>,
-    // ids: Vec<String>,
+    ids: Vec<String>,
 }
 
 impl IDIndexer for Index32 {
@@ -47,7 +47,7 @@ impl IDIndexer for Index32 {
 
         self.hashes.push(hash[1]);
         self.locs.push(loc);
-        // self.ids.push(id.to_string());
+        self.ids.push(id.to_string());
 
         Ok(())
     }
@@ -96,11 +96,13 @@ impl IDIndexer for Index32 {
             .hashes
             .into_iter()
             .zip(self.locs.into_iter())
+            // .zip(self.ids.into_iter())
             .collect::<Vec<(u32, u64)>>();
         tuples.sort_by(|a, b| a.0.cmp(&b.0));
-        let hashes = tuples.iter().map(|(i, o)| *i).collect::<Vec<u32>>();
-        let locs = tuples.iter().map(|(i, o)| *o).collect::<Vec<u64>>();
-        Index32 { hashes, locs }
+        let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u32>>();
+        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
+
+        Index32 { hashes, locs, }
     }
 
     fn len(&self) -> u64 {
