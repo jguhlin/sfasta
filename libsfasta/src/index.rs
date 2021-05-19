@@ -14,6 +14,20 @@ enum IndexTypes {
 // TODO: Implement small hasher (HashMap, HashBrown) for very small datasets
 // TODO: Implement 16-bit hasher
 
+fn zstd_train_dict_ids(ids: &Vec<String>) -> Vec<u8> {
+    let bytes: Vec<u8> = ids.iter().map(|x| x.as_bytes().to_owned()).flatten().collect();
+    // let bytes: Vec<Vec<u8>> = ids.iter().map(|x| x.as_bytes().to_owned()).collect();
+    let lens: Vec<usize> = ids.iter().map(|x| x.len()).collect();
+
+    println!("{:#?}", ids);
+    println!("{:#?}", lens);
+
+    println!("{:#?} {:#?}", bytes.len(), lens.iter().sum::<usize>());
+
+    // zstd::dict::from_samples(&bytes, 256).expect("Unable to create dictionary from IDs")
+    zstd::dict::from_continuous(&bytes, &lens, 512).expect("Unable to create dictionary from IDs")
+}
+
 pub trait IDIndexer {
     fn add(&mut self, id: &str, loc: u64) -> Result<(), &'static str>;
 
@@ -118,6 +132,8 @@ impl IDIndexer for Index32 {
         let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u32>>();
         let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
         let ids = tuples.iter().map(|(_, _, x)| x.clone()).collect::<Vec<String>>();
+
+        let dict = zstd_train_dict_ids(&ids);
 
         Index32 { hashes, locs, ids }
     }
@@ -243,6 +259,8 @@ impl IDIndexer for Index64 {
         let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u64>>();
         let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
         let ids = tuples.iter().map(|(_, _, x)| x.clone()).collect::<Vec<String>>();
+
+        let dict = zstd_train_dict_ids(&ids);
 
         Index64 { hashes, locs, ids, hash: self.hash }
 
