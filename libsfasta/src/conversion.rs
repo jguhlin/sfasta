@@ -149,13 +149,13 @@ where
     for s in seq_locs {
         indexer.add(&s.0, pos);
 
-        let output: Vec<u8> = Vec::with_capacity(1024);
-        let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-        bincode::serialize_into(&mut compressor, &s.1).expect("Unable to write directory to file");       
-        let compressed = compressor.finish().expect("Unable to compress ID stream");
-        bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to write directory to file");       
+        // let output: Vec<u8> = Vec::with_capacity(1024);
+        // let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
+        // bincode::serialize_into(&mut compressor, &s.1).expect("Unable to write directory to file");       
+        // let compressed = compressor.finish().expect("Unable to compress ID stream");
+        // bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to write directory to file");       
 
-        // bincode::serialize_into(&mut out_fh, &s.1).expect("Unable to write Metadata to file");
+        bincode::serialize_into(&mut out_fh, &s.1).expect("Unable to write Metadata to file");
 
         pos = out_fh
             .seek(SeekFrom::Current(0))
