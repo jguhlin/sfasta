@@ -16,7 +16,6 @@ flate2 = { version = "1.0.20", features = ["zlib-ng-compat"], default-features =
 static_assertions = "1.1.0"
 snap = "1.0.5"
 bincode = "1.3.3"
-bumpalo = { version = "3.6.1", features = ["allocator_api"] }
 zstd = {version = "0.8.1", features = [ "experimental" ] }
 lz4 = "1.23.1"
 hashbrown = { version = "0.11.2", features = ["serde"] }

@@ -2,7 +2,6 @@
 
 extern crate bincode;
 extern crate bitpacking;
-extern crate bumpalo;
 extern crate crossbeam;
 extern crate flate2;
 extern crate lz4;
