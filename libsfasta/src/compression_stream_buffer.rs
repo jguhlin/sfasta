@@ -232,7 +232,7 @@ fn _compression_worker_thread(
                 // TODO: Compression level should be passable
                 let sbc = SequenceBlockCompressed { 
                     compression_type: ct,
-                    compressed_seq: compressor.compress(&seq[..], -3).expect("Unable to compress"),
+                    compressed_seq: compressor.compress(&seq[..], 9).expect("Unable to compress"),
                 };
 
                 // let sbc = sb.compress();
