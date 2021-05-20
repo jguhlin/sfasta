@@ -146,6 +146,9 @@ where
     println!("Writing out seqlocs and adding to index...");
     let mut out_fh = BufWriter::with_capacity(64 * 1024 * 1024, out_fh);
     
+    // TODO: Maybe chunk this like IDs?
+    // Instead of u64 for location can just use  u32 in index for which item it is
+    // And use bitpacking!
     for s in seq_locs {
         indexer.add(&s.0, pos);
 

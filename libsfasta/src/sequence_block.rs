@@ -13,19 +13,19 @@ pub struct SequenceBlock {
 
 impl SequenceBlock {
     pub fn compress(self) -> SequenceBlockCompressed {
-        // let level = default_compression_level(self.compression_type);
-        // let orig_size = self.seq.len();
-        // let cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
-        // let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
-        // encoder.multithread(1);
-        // encoder.long_distance_matching(true);
-        // encoder.include_magicbytes(false);
-        // encoder.include_contentsize(false);
-        // encoder.write_all(&self.seq[..]);
-        // let cseq = encoder.finish().unwrap();
+        let level = default_compression_level(self.compression_type);
+        let orig_size = self.seq.len();
+        let cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
+        let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
+        //encoder.multithread(1);
+        encoder.long_distance_matching(true);
+        encoder.include_magicbytes(false);
+        encoder.include_contentsize(false);
+        encoder.write_all(&self.seq[..]);
+        let cseq = encoder.finish().unwrap();
 
-        let mut compressor = zstd::block::Compressor::new();
-        let cseq = compressor.compress(&self.seq[..], -3).expect("Unable to compress");
+        //let mut compressor = zstd::block::Compressor::new();
+        //let cseq = compressor.compress(&self.seq[..], -3).expect("Unable to compress");
 
         //let cseq = match zstd::stream::encode_all(&self.seq[..], level) {
         //    Ok(x) => x,
@@ -65,19 +65,20 @@ pub struct SequenceBlockCompressed {
 
 impl SequenceBlockCompressed {
     pub fn decompress(&self) -> SequenceBlock {
-        let mut decompressor = zstd::block::Decompressor::new();
-        //let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
+        // let mut decompressor = zstd::block::Decompressor::new();
+        let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
         // encoder.multithread(1);
-        //decoder
-        //    .include_magicbytes(false)
-        //    .expect("Unable to disable magicbytes in decoder");
+        decoder
+            .include_magicbytes(false)
+            .expect("Unable to disable magicbytes in decoder");
 
         // TODO: Capacity here should be set by block-size
-        let seq: Vec<u8> = decompressor.decompress(&self.compressed_seq[..], 128 * 1024 * 1024).expect("Unable to decompress block");
-        //match decoder.read_to_end(&mut seq) {
-        //    Ok(x) => x,
-        //    Err(y) => panic!("Unable to decompress block: {:#?}", y),
-        //};
+        //let seq: Vec<u8> = decompressor.decompress(&self.compressed_seq[..], 128 * 1024 * 1024).expect("Unable to decompress block");
+        let mut seq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
+        match decoder.read_to_end(&mut seq) {
+            Ok(x) => x,
+            Err(y) => panic!("Unable to decompress block: {:#?}", y),
+        };
 
         SequenceBlock {
             seq,

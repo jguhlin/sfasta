@@ -227,15 +227,15 @@ fn _compression_worker_thread(
             }
             Some((block_id, sb)) => {
 
-                let SequenceBlock { compression_type: ct, seq } = sb;
+                /*let SequenceBlock { compression_type: ct, seq } = sb;
 
                 // TODO: Compression level should be passable
                 let sbc = SequenceBlockCompressed { 
                     compression_type: ct,
                     compressed_seq: compressor.compress(&seq[..], 9).expect("Unable to compress"),
-                };
+                }; */
 
-                // let sbc = sb.compress();
+                let sbc = sb.compress();
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
                     entry = x;
