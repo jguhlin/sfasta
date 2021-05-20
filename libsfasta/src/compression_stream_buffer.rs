@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
 use std::thread;
-use std::thread::{JoinHandle};
+use std::thread::JoinHandle;
 
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
@@ -226,11 +226,10 @@ fn _compression_worker_thread(
                 }
             }
             Some((block_id, sb)) => {
-
                 /*let SequenceBlock { compression_type: ct, seq } = sb;
 
                 // TODO: Compression level should be passable
-                let sbc = SequenceBlockCompressed { 
+                let sbc = SequenceBlockCompressed {
                     compression_type: ct,
                     compressed_seq: compressor.compress(&seq[..], 9).expect("Unable to compress"),
                 }; */

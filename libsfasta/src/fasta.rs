@@ -1,7 +1,7 @@
+use simdutf8::basic::from_utf8;
 use std::convert::TryInto;
 use std::io::prelude::*;
 use std::io::{BufRead, BufReader};
-use simdutf8::basic::from_utf8;
 
 use crate::bytelines::ByteLinesReader;
 
@@ -77,7 +77,8 @@ impl<R: BufRead> Iterator for Fasta<R> {
                         };
                         //                        let slice_end = bytes_read; //.saturating_sub(1);
                         let next_id = from_utf8(&self.buffer[1..slice_end])
-                            .expect("Invalid UTF-8 encoding...").to_string();
+                            .expect("Invalid UTF-8 encoding...")
+                            .to_string();
                         self.buffer.clear();
                         let next_id = next_id.split(' ').next().unwrap().trim().to_string();
                         let id = self.next_seqid.replace(next_id);
@@ -124,13 +125,13 @@ pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<
         if line.starts_with(b">") {
             let id = from_utf8(&line[1..]).expect("Unable to convert FASTA header to string");
             ids.push(id.to_string());
-            
+
             if first {
                 first = false;
             } else {
                 lengths.push(length.clone());
             }
-            
+
             entries += 1;
             length = 0;
         } else {

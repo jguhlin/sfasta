@@ -1,18 +1,17 @@
-#![feature(allocator_api)]
-
 extern crate bincode;
+extern crate bytelines;
 extern crate crossbeam;
 extern crate flate2;
 extern crate lz4_flex;
 extern crate rand;
+extern crate rayon;
 extern crate serde;
 extern crate serde_bytes;
 extern crate snap;
 extern crate thincollections;
 extern crate zstd;
-extern crate bytelines;
-extern crate rayon;
 
+mod compression_stream_buffer;
 mod conversion;
 mod directory;
 mod fasta;
@@ -25,7 +24,6 @@ mod metadata;
 mod parameters;
 pub mod prelude;
 mod sequence_block;
-mod compression_stream_buffer;
 mod structs;
 mod types;
 mod utils;

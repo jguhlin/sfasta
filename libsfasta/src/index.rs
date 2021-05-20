@@ -1,9 +1,9 @@
 extern crate serde;
 
 use ahash::{AHasher, RandomState};
+use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
-use rayon::prelude::*;
 
 use std::hash::Hasher;
 use std::slice::Chunks;
@@ -26,7 +26,11 @@ enum IndexStored {
 
 // Doesn't work for some reason (input data too small? or too repetitive in my tests?)
 fn zstd_train_dict_ids(ids: &Vec<String>) -> Vec<u8> {
-    let bytes: Vec<u8> = ids.iter().map(|x| x.as_bytes().to_owned()).flatten().collect();
+    let bytes: Vec<u8> = ids
+        .iter()
+        .map(|x| x.as_bytes().to_owned())
+        .flatten()
+        .collect();
     // let bytes: Vec<Vec<u8>> = ids.iter().map(|x| x.as_bytes().to_owned()).collect();
     let lens: Vec<usize> = ids.iter().map(|x| x.len()).collect();
 
@@ -53,7 +57,6 @@ pub trait IDIndexer {
     fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String>;
 
     fn set_ids(&mut self, ids: Vec<String>);
-
 }
 
 #[derive(Serialize, Deserialize)]
@@ -66,7 +69,6 @@ pub struct Index32 {
 }
 
 impl IDIndexer for Index32 {
-
     fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String> {
         self.ids.as_ref().unwrap().chunks(chunk_size)
     }
@@ -137,7 +139,11 @@ impl IDIndexer for Index32 {
         let mut tuples: Vec<(u32, u64, String)> = Vec::with_capacity(self.locs.len());
 
         for i in 0..self.locs.len() {
-            tuples.push((self.hashes[i], self.locs[i], self.ids.as_ref().unwrap()[i].clone()))
+            tuples.push((
+                self.hashes[i],
+                self.locs[i],
+                self.ids.as_ref().unwrap()[i].clone(),
+            ))
         }
 
         tuples.sort_by(|a, b| a.0.cmp(&b.0));
@@ -151,9 +157,16 @@ impl IDIndexer for Index32 {
         tuples.sort_by(|a, b| a.0.cmp(&b.0)); */
         let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u32>>();
         let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
-        let ids = tuples.iter().map(|(_, _, x)| x.clone()).collect::<Vec<String>>();
+        let ids = tuples
+            .iter()
+            .map(|(_, _, x)| x.clone())
+            .collect::<Vec<String>>();
 
-        Index32 { hashes, locs, ids: Some(ids) }
+        Index32 {
+            hashes,
+            locs,
+            ids: Some(ids),
+        }
     }
 
     fn len(&self) -> u64 {
@@ -168,10 +181,10 @@ impl IDIndexer for Index32 {
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 enum Hashes {
-    Ahash, // ahash // On fastq file was...  102.68 secs
+    Ahash,    // ahash // On fastq file was...  102.68 secs
     XxHash64, // On fastq file was... 96.18
     Xxh3Hash64, // This is not a stable hash right now. Here for future-proofing a bit...
-                // On fastq file was... 91.83
+              // On fastq file was... 91.83
 }
 
 #[derive(Serialize, Deserialize)]
@@ -218,7 +231,6 @@ impl Index64 {
 }
 
 impl IDIndexer for Index64 {
-
     fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String> {
         self.ids.as_ref().unwrap().chunks(chunk_size)
     }
@@ -284,7 +296,11 @@ impl IDIndexer for Index64 {
         let mut tuples: Vec<(u64, u64, String)> = Vec::with_capacity(self.locs.len());
 
         for i in 0..self.locs.len() {
-            tuples.push((self.hashes[i], self.locs[i], self.ids.as_ref().unwrap()[i].clone()))
+            tuples.push((
+                self.hashes[i],
+                self.locs[i],
+                self.ids.as_ref().unwrap()[i].clone(),
+            ))
         }
 
         if tuples.len() >= 512 * 1024 {
@@ -297,9 +313,17 @@ impl IDIndexer for Index64 {
         let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
 
         // .into_iter here so we don't borrow it, and we can just move the Strings rather than clone them
-        let ids = tuples.into_iter().map(|(_, _, x)| x).collect::<Vec<String>>();
+        let ids = tuples
+            .into_iter()
+            .map(|(_, _, x)| x)
+            .collect::<Vec<String>>();
 
-        Index64 { hashes, locs, ids: Some(ids), hash: self.hash }
+        Index64 {
+            hashes,
+            locs,
+            ids: Some(ids),
+            hash: self.hash,
+        }
     }
 
     fn len(&self) -> u64 {
@@ -310,5 +334,4 @@ impl IDIndexer for Index64 {
         assert!(ids.len() == self.locs.len());
         self.ids = Some(ids);
     }
-
 }

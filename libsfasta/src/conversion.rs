@@ -1,20 +1,20 @@
 // Easy, high-performance conversion functions
+use std::alloc::{AllocError, Allocator, Layout};
 use std::fs::{metadata, File};
 use std::hash::Hasher;
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::io::Cursor;
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 use std::thread;
-use std::alloc::{AllocError, Allocator, Layout};
 
 use crossbeam::utils::Backoff;
 use twox_hash::XxHash64;
 
+use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
 use crate::format::Sfasta;
 use crate::index::IDIndexer;
-use crate::compression_stream_buffer::CompressionStreamBuffer;
-use crate::structs::{WriteAndSeek, ReadAndSeek};
+use crate::structs::{ReadAndSeek, WriteAndSeek};
 use crate::types::*;
 
 use bincode::Options;
@@ -22,8 +22,13 @@ use bincode::Options;
 // TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
 // TODO: Will need to generalize this function so it works with FASTA & FASTQ & Masking
-pub fn convert_fasta<W, R: 'static>(in_buf: R, out_buf: &mut W, block_size: u32, threads: u16, entry_count: usize)
-where
+pub fn convert_fasta<W, R: 'static>(
+    in_buf: R,
+    out_buf: &mut W,
+    block_size: u32,
+    threads: u16,
+    entry_count: usize,
+) where
     W: WriteAndSeek,
     R: Read + Send,
 {
@@ -49,20 +54,29 @@ where
     out_fh.write_all("sfasta".as_bytes());
 
     // Write the directory, parameters, and metadata structs out...
-    bincode.serialize_into(&mut out_fh, &sfasta.version)
+    bincode
+        .serialize_into(&mut out_fh, &sfasta.version)
         .expect("Unable to write directory to file");
 
     let directory_location = out_fh
         .seek(SeekFrom::Current(0))
         .expect("Unable to work with seek API");
-    bincode.serialize_into(&mut out_fh, &sfasta.directory)
+    bincode
+        .serialize_into(&mut out_fh, &sfasta.directory)
         .expect("Unable to write directory to file");
-    bincode.serialize_into(&mut out_fh, &sfasta.parameters)
+    bincode
+        .serialize_into(&mut out_fh, &sfasta.parameters)
         .expect("Unable to write Parameters to file");
-    bincode.serialize_into(&mut out_fh, &sfasta.metadata)
+    bincode
+        .serialize_into(&mut out_fh, &sfasta.metadata)
         .expect("Unable to write Metadata to file");
 
-    println!("Headers written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
+    println!(
+        "Headers written: {}",
+        out_fh
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API")
+    );
 
     let mut sb = CompressionStreamBuffer::default()
         .with_block_size(block_size)
@@ -126,7 +140,12 @@ where
         }
     }
 
-    println!("Sequence Blocks written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
+    println!(
+        "Sequence Blocks written: {}",
+        out_fh
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API")
+    );
 
     // TODO: Here is where we would write out the scores...
     // ... but this fn is only for FASTA right now...
@@ -145,7 +164,7 @@ where
 
     println!("Writing out seqlocs and adding to index...");
     let mut out_fh = BufWriter::with_capacity(64 * 1024 * 1024, out_fh);
-    
+
     // TODO: Maybe chunk this like IDs?
     // Instead of u64 for location can just use  u32 in index for which item it is
     // And use bitpacking!
@@ -154,9 +173,9 @@ where
 
         // let output: Vec<u8> = Vec::with_capacity(1024);
         // let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-        // bincode::serialize_into(&mut compressor, &s.1).expect("Unable to write directory to file");       
+        // bincode::serialize_into(&mut compressor, &s.1).expect("Unable to write directory to file");
         // let compressed = compressor.finish().expect("Unable to compress ID stream");
-        // bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to write directory to file");       
+        // bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to write directory to file");
 
         bincode::serialize_into(&mut out_fh, &s.1).expect("Unable to write Metadata to file");
 
@@ -165,7 +184,12 @@ where
             .expect("Unable to work with seek API");
     }
 
-    println!("Seqlocs written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
+    println!(
+        "Seqlocs written: {}",
+        out_fh
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API")
+    );
 
     println!("Finalizing index");
 
@@ -187,7 +211,12 @@ where
     let compressed = compressor.finish().unwrap();
 
     bincode::serialize_into(&mut out_fh, &compressed);
-    println!("Index written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
+    println!(
+        "Index written: {}",
+        out_fh
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API")
+    );
 
     // bincode::serialize_into(&mut out_fh, &indexer).expect("Unable to write directory to file");
     println!("Indexer finished...");
@@ -200,16 +229,23 @@ where
     // for chunk in indexer.ids_chunks(2048) {
     for chunk in ids.chunks(8192) {
         let output: Vec<u8> = Vec::with_capacity(8192);
-        
+
         let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-        bincode::serialize_into(&mut compressor, &chunk).expect("Unable to write directory to file");       
-        
+        bincode::serialize_into(&mut compressor, &chunk)
+            .expect("Unable to write directory to file");
+
         let compressed = compressor.finish().expect("Unable to compress ID stream");
 
-        bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to write directory to file");
+        bincode::serialize_into(&mut out_fh, &compressed)
+            .expect("Unable to write directory to file");
     }
 
-    println!("IDs written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
+    println!(
+        "IDs written: {}",
+        out_fh
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API")
+    );
 
     // Block Index
     let block_index_pos = out_fh
@@ -282,7 +318,9 @@ mod tests {
 
         let mut out_buf = Cursor::new(Vec::new());
 
-        let mut in_buf = BufReader::new(File::open("test_data/test_convert.fasta").expect("Unable to open testing file"));
+        let mut in_buf = BufReader::new(
+            File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
+        );
 
         convert_fasta(in_buf, &mut out_buf, 8 * 1024, 6, 10);
 
@@ -292,7 +330,9 @@ mod tests {
         };
 
         let mut sfasta_marker: [u8; 6] = [0; 6];
-        out_buf.read_exact(&mut sfasta_marker).expect("Unable to read SFASTA Marker");
+        out_buf
+            .read_exact(&mut sfasta_marker)
+            .expect("Unable to read SFASTA Marker");
         assert!(sfasta_marker == "sfasta".as_bytes());
 
         let v: u64 = bincode.deserialize_from(&mut out_buf).unwrap();

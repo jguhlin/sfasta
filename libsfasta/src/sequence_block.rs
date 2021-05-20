@@ -7,7 +7,7 @@ use zstd;
 
 #[derive(Clone, Debug, Default)]
 pub struct SequenceBlock {
-//    pub compression_type: CompressionType,
+    //    pub compression_type: CompressionType,
     pub seq: Vec<u8>,
 }
 
@@ -48,7 +48,7 @@ impl SequenceBlock {
     }
 
     // Convenience Function
-/*    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
+    /*    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self.compression_type = compression_type;
         self
     } */
@@ -84,7 +84,7 @@ impl SequenceBlockCompressed {
     }
 
     // Convenience Function
-/*    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
+    /*    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self.compression_type = compression_type;
         self
     } */

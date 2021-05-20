@@ -10,8 +10,8 @@ extern crate rand;
 extern crate rand_chacha;
 
 use std::fs;
-use std::fs::{File, metadata};
-use std::io::{BufReader, BufWriter, Seek, SeekFrom, Write, Read};
+use std::fs::{metadata, File};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::path::Path;
 
 use rand::prelude::*;
@@ -24,7 +24,9 @@ use libsfasta::prelude::*;
 
 fn style_pb(pb: ProgressBar) -> ProgressBar {
     let style = ProgressStyle::default_bar()
-        .template("[{spinner:.green}] {bar:30.green/yellow} {bytes:.cyan}/{total_bytes:.blue} ({eta})")
+        .template(
+            "[{spinner:.green}] {bar:30.green/yellow} {bytes:.cyan}/{total_bytes:.blue} ({eta})",
+        )
         .progress_chars("█▇▆▅▄▃▂▁  ")
         .tick_chars("ACTGN🧬");
     pb.set_style(style);
@@ -45,13 +47,15 @@ fn main() {
             Err(why) => panic!("Couldn't open {}: {}", filename, why.to_string()),
             Ok(file) => file,
         };
-    
+
         // let mut file = BufReader::with_capacity(8 * 1024 * 1024, file);
         let parser = SfastaParser::open_from_buffer(file);
         println!("Successfully opened SFASTA");
-        println!("Found: {} entries", parser.sfasta.index.as_ref().unwrap().len());
+        println!(
+            "Found: {} entries",
+            parser.sfasta.index.as_ref().unwrap().len()
+        );
         println!("{:#?}", parser.sfasta.index.as_ref().unwrap().ids);
-
     }
 
     // TODO: Make this faster but putting the decompression into another thread...
@@ -113,7 +117,10 @@ fn convert(matches: &ArgMatches) {
     convert_fasta(buf, &mut output, 32 * 1024 * 1024, 64, summary);
 }
 
-pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, bool, Box<dyn Read + Send>) {
+pub fn generic_open_file_pb(
+    pb: ProgressBar,
+    filename: &str,
+) -> (usize, bool, Box<dyn Read + Send>) {
     let filesize = metadata(filename)
         .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
         .len();

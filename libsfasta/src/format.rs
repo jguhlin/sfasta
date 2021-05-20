@@ -1,12 +1,12 @@
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Cursor};
+use std::io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom};
 
 use bincode::Options;
 
 use crate::directory::Directory;
+use crate::index::*;
 use crate::index_directory::IndexDirectory;
 use crate::metadata::Metadata;
 use crate::parameters::Parameters;
-use crate::index::*;
 use crate::*;
 
 pub struct Sfasta {
@@ -32,7 +32,6 @@ impl Default for Sfasta {
 }
 
 impl Sfasta {
-
     pub fn with_sequences(mut self) -> Self {
         self.directory = self.directory.with_sequences();
         self
@@ -57,12 +56,11 @@ impl Sfasta {
 
 pub struct SfastaParser<R: 'static + Read + Seek + Send> {
     pub sfasta: Sfasta,
-    in_buf: R
+    in_buf: R,
 }
 
 impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
-    pub fn open_from_buffer(mut in_buf: R) -> Self
-    {
+    pub fn open_from_buffer(mut in_buf: R) -> Self {
         let bincode = bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .allow_trailing_bytes();
@@ -70,14 +68,16 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
         // let mut in_buf = Cursor::new(in_buf);
 
         let mut sfasta_marker: [u8; 6] = [0; 6];
-        in_buf.read_exact(&mut sfasta_marker).expect("Unable to read SFASTA Marker");
+        in_buf
+            .read_exact(&mut sfasta_marker)
+            .expect("Unable to read SFASTA Marker");
         assert!(sfasta_marker == "sfasta".as_bytes());
 
         let mut sfasta = Sfasta::default();
 
         sfasta.version = match bincode::deserialize_from(&mut in_buf) {
             Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA directory: {}", y)
+            Err(y) => panic!("Error reading SFASTA directory: {}", y),
         };
 
         assert!(sfasta.version <= 1); // 1 is the maximum version supported at this stage...
@@ -87,17 +87,17 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
 
         sfasta.directory = match bincode::deserialize_from(&mut in_buf) {
             Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA directory: {}", y)
+            Err(y) => panic!("Error reading SFASTA directory: {}", y),
         };
 
         sfasta.parameters = match bincode::deserialize_from(&mut in_buf) {
             Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA parameters: {}", y)
+            Err(y) => panic!("Error reading SFASTA parameters: {}", y),
         };
 
         sfasta.metadata = match bincode::deserialize_from(&mut in_buf) {
             Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA parameters: {}", y)
+            Err(y) => panic!("Error reading SFASTA parameters: {}", y),
         };
 
         // Next are the sequence blocks, which aren't important right now...
@@ -107,15 +107,16 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
             .seek(SeekFrom::Start(sfasta.directory.index_loc))
             .expect("Unable to work with seek API");
 
-        sfasta.index = Some(bincode.deserialize_from(&mut in_buf).expect("Unable to parse index"));
+        sfasta.index = Some(
+            bincode
+                .deserialize_from(&mut in_buf)
+                .expect("Unable to parse index"),
+        );
 
-        let mut parser = SfastaParser {
-            sfasta,
-            in_buf
-        };
+        let mut parser = SfastaParser { sfasta, in_buf };
 
         // If there are few enough IDs, let's decompress it and store it in the index...
-        if parser.sfasta.index.as_ref().unwrap().len() <= 8192*2 {
+        if parser.sfasta.index.as_ref().unwrap().len() <= 8192 * 2 {
             parser.decompress_all_ids();
         }
 
@@ -142,7 +143,5 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
         }
 
         self.sfasta.index.as_mut().unwrap().set_ids(ids);
-        
     }
-
 }
