@@ -73,7 +73,7 @@ impl IDIndexer for Index32 {
 
     fn with_capacity(capacity: usize) -> Self {
         Index32 {
-            hashes: Vec::with_capacity(capacity),
+            hashes: Vec::new(),
             locs: Vec::with_capacity(capacity),
             ids: Some(Vec::with_capacity(capacity)),
         }
@@ -121,7 +121,7 @@ impl IDIndexer for Index32 {
             start = start.saturating_sub(1);
         }
 
-        let len = self.hashes.len();
+        let len = self.locs.len();
 
         while self.hashes[end] == hash && end < len {
             start = start.saturating_add(1);
@@ -157,7 +157,7 @@ impl IDIndexer for Index32 {
     }
 
     fn len(&self) -> u64 {
-        self.hashes.len() as u64
+        self.locs.len() as u64
     }
 
     fn set_ids(&mut self, ids: Vec<String>) {
@@ -197,25 +197,23 @@ impl Default for Index64 {
 
 impl Index64 {
     #[inline]
-    fn get_hash(&mut self, id: &str) -> u64 {
+    fn get_hash(&self, id: &str) -> u64 {
         // TODO: Pretty sure this code could be simplified with dyn Hasher trait...
         // Not sure if a Box<> overhead would be worth it though...
 
-        let hash;
         if self.hash == Hashes::Ahash {
             let mut hasher = AHasher::new_with_keys(42, 1010);
             hasher.write(id.as_bytes());
-            hash = hasher.finish();
+            hasher.finish()
         } else if self.hash == Hashes::Xxh3Hash64 {
             let mut hasher = Xxh3Hash64::with_seed(42);
             hasher.write(id.as_bytes());
-            hash = hasher.finish();
+            hasher.finish()
         } else {
             let mut hasher = XxHash64::with_seed(42);
             hasher.write(id.as_bytes());
-            hash = hasher.finish();
+            hasher.finish()
         }
-        hash
     }
 }
 
@@ -235,9 +233,9 @@ impl IDIndexer for Index64 {
     }
 
     fn add(&mut self, id: &str, loc: u64) -> Result<(), &'static str> {
-        let hash = self.get_hash(id);
+        //let hash = self.get_hash(id);
 
-        self.hashes.push(hash);
+        //self.hashes.push(hash);
         self.locs.push(loc);
         self.ids.as_mut().unwrap().push(id.to_string());
 
@@ -268,7 +266,7 @@ impl IDIndexer for Index64 {
             start = start.saturating_sub(1);
         }
 
-        let len = self.hashes.len();
+        let len = self.locs.len();
 
         while self.hashes[end] == hash && end < len {
             start = start.saturating_add(1);
@@ -281,10 +279,12 @@ impl IDIndexer for Index64 {
         // TODO: More memory efficient way...
         // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
 
+        let hashes: Vec<u64> = self.ids.as_ref().unwrap().par_iter().map(|x| self.get_hash(x)).collect();
+
         let mut tuples: Vec<(u64, u64, String)> = Vec::with_capacity(self.locs.len());
 
         for i in 0..self.locs.len() {
-            tuples.push((self.hashes[i], self.locs[i], self.ids.as_ref().unwrap()[i].clone()))
+            tuples.push((hashes[i], self.locs[i], self.ids.as_ref().unwrap()[i].clone()))
         }
 
         if tuples.len() >= 512 * 1024 {
@@ -295,13 +295,15 @@ impl IDIndexer for Index64 {
 
         let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u64>>();
         let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
-        let ids = tuples.iter().map(|(_, _, x)| x.clone()).collect::<Vec<String>>();
+
+        // .into_iter here so we don't borrow it, and we can just move the Strings rather than clone them
+        let ids = tuples.into_iter().map(|(_, _, x)| x).collect::<Vec<String>>();
 
         Index64 { hashes, locs, ids: Some(ids), hash: self.hash }
     }
 
     fn len(&self) -> u64 {
-        self.hashes.len() as u64
+        self.locs.len() as u64
     }
 
     fn set_ids(&mut self, ids: Vec<String>) {
