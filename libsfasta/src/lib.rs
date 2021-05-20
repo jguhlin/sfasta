@@ -1,10 +1,9 @@
 #![feature(allocator_api)]
 
 extern crate bincode;
-extern crate bitpacking;
 extern crate crossbeam;
 extern crate flate2;
-extern crate lz4;
+extern crate lz4_flex;
 extern crate rand;
 extern crate serde;
 extern crate serde_bytes;

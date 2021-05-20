@@ -140,7 +140,7 @@ where
         .expect("Unable to work with seek API");
 
     println!("Writing out seqlocs and adding to index...");
-    let mut out_fh = BufWriter::with_capacity(16 * 1024 * 1024, out_fh);
+    let mut out_fh = BufWriter::with_capacity(64 * 1024 * 1024, out_fh);
     
     for s in seq_locs {
         indexer.add(&s.0, pos);

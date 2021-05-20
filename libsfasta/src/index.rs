@@ -233,9 +233,9 @@ impl IDIndexer for Index64 {
     }
 
     fn add(&mut self, id: &str, loc: u64) -> Result<(), &'static str> {
-        //let hash = self.get_hash(id);
+        let hash = self.get_hash(id);
 
-        //self.hashes.push(hash);
+        self.hashes.push(hash);
         self.locs.push(loc);
         self.ids.as_mut().unwrap().push(id.to_string());
 
@@ -279,12 +279,12 @@ impl IDIndexer for Index64 {
         // TODO: More memory efficient way...
         // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
 
-        let hashes: Vec<u64> = self.ids.as_ref().unwrap().par_iter().map(|x| self.get_hash(x)).collect();
+        //let hashes: Vec<u64> = self.ids.as_ref().unwrap().par_iter().map(|x| self.get_hash(x)).collect();
 
         let mut tuples: Vec<(u64, u64, String)> = Vec::with_capacity(self.locs.len());
 
         for i in 0..self.locs.len() {
-            tuples.push((hashes[i], self.locs[i], self.ids.as_ref().unwrap()[i].clone()))
+            tuples.push((self.hashes[i], self.locs[i], self.ids.as_ref().unwrap()[i].clone()))
         }
 
         if tuples.len() >= 512 * 1024 {
