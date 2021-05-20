@@ -62,6 +62,8 @@ where
     bincode.serialize_into(&mut out_fh, &sfasta.metadata)
         .expect("Unable to write Metadata to file");
 
+    println!("Headers written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
+
     let mut sb = CompressionStreamBuffer::default()
         .with_block_size(block_size)
         .with_threads(threads); // Effectively # of compression threads
@@ -124,6 +126,8 @@ where
         }
     }
 
+    println!("Sequence Blocks written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
+
     // TODO: Here is where we would write out the scores...
     // ... but this fn is only for FASTA right now...
 
@@ -158,6 +162,8 @@ where
             .expect("Unable to work with seek API");
     }
 
+    println!("Seqlocs written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
+
     println!("Finalizing index");
 
     let mut indexer = indexer.finalize();
@@ -175,9 +181,10 @@ where
 
     bincode::serialize_into(&mut compressor, &indexer);
 
-    let compressed = &compressor.finish().unwrap();
+    let compressed = compressor.finish().unwrap();
 
     bincode::serialize_into(&mut out_fh, &compressed);
+    println!("Index written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
 
     // bincode::serialize_into(&mut out_fh, &indexer).expect("Unable to write directory to file");
     println!("Indexer finished...");
@@ -198,6 +205,8 @@ where
 
         bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to write directory to file");
     }
+
+    println!("IDs written: {}", out_fh.seek(SeekFrom::Current(0)).expect("Unable to work with seek API"));
 
     // Block Index
     let block_index_pos = out_fh
