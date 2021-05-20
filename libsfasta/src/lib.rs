@@ -1,3 +1,5 @@
+#![feature(allocator_api)]
+
 extern crate bincode;
 extern crate bitpacking;
 extern crate bumpalo;
@@ -11,6 +13,8 @@ extern crate snap;
 extern crate thincollections;
 extern crate zstd;
 extern crate bytelines;
+extern crate rayon;
+extern crate bumpalo;
 
 mod conversion;
 mod directory;
@@ -24,7 +28,7 @@ mod metadata;
 mod parameters;
 pub mod prelude;
 mod sequence_block;
-mod sequence_buffer;
+mod compression_stream_buffer;
 mod structs;
 mod types;
 mod utils;

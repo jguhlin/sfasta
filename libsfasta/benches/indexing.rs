@@ -17,12 +17,8 @@ extern crate numeric_array;
 use generic_array::typenum::consts::U256;
 use std::ops::Sub;
 extern crate serde;
-#[macro_use]
-extern crate serde_big_array;
 
 use serde::{Deserialize, Serialize};
-
-use serde_big_array::BigArray;
 
 use numeric_array::{NumericArray, NumericConstant};
 
@@ -82,10 +78,7 @@ fn criterion_benchmark(c: &mut Criterion) {
         .into_iter()
         .map(|y| {
             let x: [u8; 8] = unsafe { transmute(y.to_be()) };
-            let mut h: Box<dyn Hasher> = Box::new(match hashtype {
-                HashType::H32 => XxHash32::with_seed(42),
-                HashType::H64 => XxHash64::with_seed(42),
-            });
+            let mut h: Box<dyn Hasher> = Box::new(XxHash64::with_seed(42));
 
             h.write(&x);
             (h.finish(), y + 10000)

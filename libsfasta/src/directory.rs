@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Directory {
     pub index_loc: u64,
+    pub ids_loc: u64,
     pub block_index_loc: u64,
     pub seq_loc: Option<u64>,
     pub scores_loc: Option<u64>,
@@ -14,6 +15,7 @@ impl Default for Directory {
     fn default() -> Self {
         Directory {
             index_loc: 0,
+            ids_loc: 0,
             block_index_loc: 0,
             seq_loc: None,
             scores_loc: None,
@@ -55,6 +57,7 @@ mod tests {
     pub fn bincode_size_directory_struct() {
         let mut directory = Directory {
             index_loc: 0,
+            ids_loc: 0,
             block_index_loc: 0,
             seq_loc: Some(0),
             scores_loc: None,

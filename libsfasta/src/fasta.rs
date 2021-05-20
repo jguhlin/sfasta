@@ -1,6 +1,7 @@
 use std::convert::TryInto;
 use std::io::prelude::*;
 use std::io::{BufRead, BufReader};
+use simdutf8::basic::from_utf8;
 
 use crate::bytelines::ByteLinesReader;
 
@@ -22,7 +23,7 @@ pub struct Fasta<R> {
 }
 
 impl<R: BufRead> Fasta<R> {
-    pub fn from_buffer(mut in_buf: R) -> Fasta<R> {
+    pub fn from_buffer(in_buf: R) -> Fasta<R> {
         // let reader = BufReader::with_capacity(512 * 1024, in_buf);
 
         Fasta {
@@ -56,8 +57,6 @@ impl<R: BufRead> Iterator for Fasta<R> {
         while let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
             if bytes_read == 0 {
                 if self.seqlen > 0 {
-                    // println!("{:#?}",
-                    // std::str::from_utf8(&self.seqbuffer[..self.seqlen]).unwrap());
                     let seq = Sequence {
                         seq: self.seqbuffer[..self.seqlen].to_vec(),
                         id: self.next_seqid.clone().unwrap(),
@@ -77,8 +76,8 @@ impl<R: BufRead> Iterator for Fasta<R> {
                             bytes_read
                         };
                         //                        let slice_end = bytes_read; //.saturating_sub(1);
-                        let next_id = String::from_utf8(self.buffer[1..slice_end].to_vec())
-                            .expect("Invalid UTF-8 encoding...");
+                        let next_id = from_utf8(&self.buffer[1..slice_end])
+                            .expect("Invalid UTF-8 encoding...").to_string();
                         self.buffer.clear();
                         let next_id = next_id.split(' ').next().unwrap().trim().to_string();
                         let id = self.next_seqid.replace(next_id);
@@ -123,7 +122,7 @@ pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<
     while let Some(line) = lines.next() {
         let line = line.expect("Error parsing FASTA file");
         if line.starts_with(b">") {
-            let id = std::str::from_utf8(&line[1..]).expect("Unable to convert FASTA header to string");
+            let id = from_utf8(&line[1..]).expect("Unable to convert FASTA header to string");
             ids.push(id.to_string());
             
             if first {
@@ -141,6 +140,24 @@ pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<
     lengths.push(length);
 
     return (entries, ids, lengths);
+}
+
+pub fn count_fasta_entries(fasta_buf: &mut dyn BufRead) -> usize {
+    let mut entries: usize = 0;
+    let mut ids: Vec<String> = Vec::with_capacity(2 * 1024 * 1024);
+    let mut lengths: Vec<usize> = Vec::with_capacity(2 * 1024 * 1024);
+    let mut length: usize = 0;
+
+    let mut lines = fasta_buf.byte_lines();
+    let mut first = true;
+    while let Some(line) = lines.next() {
+        let line = line.expect("Error parsing FASTA file");
+        if line.starts_with(b">") {
+            entries += 1;
+        }
+    }
+
+    return entries;
 }
 
 #[cfg(test)]

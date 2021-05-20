@@ -1,9 +1,12 @@
+extern crate serde;
+
 use ahash::{AHasher, RandomState};
 use serde::{Deserialize, Serialize};
-use std::hash::Hasher;
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
+use rayon::prelude::*;
 
-extern crate serde;
+use std::hash::Hasher;
+use std::slice::Chunks;
 
 #[non_exhaustive]
 enum IndexTypes {
@@ -11,21 +14,24 @@ enum IndexTypes {
     Index64,
 }
 
+#[non_exhaustive]
+#[derive(Serialize, Deserialize)]
+enum IndexStored {
+    Index32(Index32),
+    Index64(Index64),
+}
+
 // TODO: Implement small hasher (HashMap, HashBrown) for very small datasets
 // TODO: Implement 16-bit hasher
 
+// Doesn't work for some reason (input data too small? or too repetitive in my tests?)
 fn zstd_train_dict_ids(ids: &Vec<String>) -> Vec<u8> {
     let bytes: Vec<u8> = ids.iter().map(|x| x.as_bytes().to_owned()).flatten().collect();
     // let bytes: Vec<Vec<u8>> = ids.iter().map(|x| x.as_bytes().to_owned()).collect();
     let lens: Vec<usize> = ids.iter().map(|x| x.len()).collect();
 
-    println!("{:#?}", ids);
-    println!("{:#?}", lens);
-
-    println!("{:#?} {:#?}", bytes.len(), lens.iter().sum::<usize>());
-
     // zstd::dict::from_samples(&bytes, 256).expect("Unable to create dictionary from IDs")
-    zstd::dict::from_continuous(&bytes, &lens, 512).expect("Unable to create dictionary from IDs")
+    zstd::dict::from_continuous(&bytes, &lens, 1024).expect("Unable to create dictionary from IDs")
 }
 
 pub trait IDIndexer {
@@ -43,21 +49,33 @@ pub trait IDIndexer {
     fn len(&self) -> u64;
 
     fn with_capacity(capacity: usize) -> Self;
+
+    fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String>;
+
+    fn set_ids(&mut self, ids: Vec<String>);
+
 }
 
 #[derive(Serialize, Deserialize)]
 pub struct Index32 {
     hashes: Vec<u32>,
     locs: Vec<u64>,
-    ids: Vec<String>,
+
+    #[serde(skip)]
+    pub ids: Option<Vec<String>>,
 }
 
 impl IDIndexer for Index32 {
+
+    fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String> {
+        self.ids.as_ref().unwrap().chunks(chunk_size)
+    }
+
     fn with_capacity(capacity: usize) -> Self {
         Index32 {
             hashes: Vec::with_capacity(capacity),
             locs: Vec::with_capacity(capacity),
-            ids: Vec::with_capacity(capacity),
+            ids: Some(Vec::with_capacity(capacity)),
         }
     }
 
@@ -71,7 +89,7 @@ impl IDIndexer for Index32 {
 
         self.hashes.push(hash[1]);
         self.locs.push(loc);
-        self.ids.push(id.to_string());
+        self.ids.as_mut().unwrap().push(id.to_string());
 
         Ok(())
     }
@@ -119,8 +137,10 @@ impl IDIndexer for Index32 {
         let mut tuples: Vec<(u32, u64, String)> = Vec::with_capacity(self.locs.len());
 
         for i in 0..self.locs.len() {
-            tuples.push((self.hashes[i], self.locs[i], self.ids[i].clone()))
+            tuples.push((self.hashes[i], self.locs[i], self.ids.as_ref().unwrap()[i].clone()))
         }
+
+        tuples.sort_by(|a, b| a.0.cmp(&b.0));
 
         /* let mut tuples = self
             .hashes
@@ -133,21 +153,25 @@ impl IDIndexer for Index32 {
         let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
         let ids = tuples.iter().map(|(_, _, x)| x.clone()).collect::<Vec<String>>();
 
-        let dict = zstd_train_dict_ids(&ids);
-
-        Index32 { hashes, locs, ids }
+        Index32 { hashes, locs, ids: Some(ids) }
     }
 
     fn len(&self) -> u64 {
         self.hashes.len() as u64
     }
+
+    fn set_ids(&mut self, ids: Vec<String>) {
+        assert!(ids.len() == self.locs.len());
+        self.ids = Some(ids);
+    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
 enum Hashes {
-    Ahash, // ahash
-    XxHash64,
+    Ahash, // ahash // On fastq file was...  102.68 secs
+    XxHash64, // On fastq file was... 96.18
     Xxh3Hash64, // This is not a stable hash right now. Here for future-proofing a bit...
+                // On fastq file was... 91.83
 }
 
 #[derive(Serialize, Deserialize)]
@@ -155,7 +179,9 @@ pub struct Index64 {
     hashes: Vec<u64>,
     locs: Vec<u64>,
     hash: Hashes,
-    ids: Vec<String>,
+
+    #[serde(skip)]
+    pub ids: Option<Vec<String>>,
 }
 
 impl Default for Index64 {
@@ -163,13 +189,14 @@ impl Default for Index64 {
         Index64 {
             hashes: Vec::new(),
             locs: Vec::new(),
-            hash: Hashes::Ahash,
-            ids: Vec::new(),
+            hash: Hashes::XxHash64,
+            ids: Some(Vec::new()),
         }
     }
 }
 
 impl Index64 {
+    #[inline]
     fn get_hash(&mut self, id: &str) -> u64 {
         // TODO: Pretty sure this code could be simplified with dyn Hasher trait...
         // Not sure if a Box<> overhead would be worth it though...
@@ -184,7 +211,7 @@ impl Index64 {
             hasher.write(id.as_bytes());
             hash = hasher.finish();
         } else {
-            let mut hasher = XxHash64::with_seed(1010);
+            let mut hasher = XxHash64::with_seed(42);
             hasher.write(id.as_bytes());
             hash = hasher.finish();
         }
@@ -194,12 +221,16 @@ impl Index64 {
 
 impl IDIndexer for Index64 {
 
+    fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String> {
+        self.ids.as_ref().unwrap().chunks(chunk_size)
+    }
+
     fn with_capacity(capacity: usize) -> Self {
         Index64 {
             hashes: Vec::with_capacity(capacity),
             locs: Vec::with_capacity(capacity),
             hash: Hashes::Ahash,
-            ids: Vec::with_capacity(capacity),
+            ids: Some(Vec::with_capacity(capacity)),
         }
     }
 
@@ -208,7 +239,7 @@ impl IDIndexer for Index64 {
 
         self.hashes.push(hash);
         self.locs.push(loc);
-        self.ids.push(id.to_string());
+        self.ids.as_mut().unwrap().push(id.to_string());
 
         Ok(())
     }
@@ -253,21 +284,29 @@ impl IDIndexer for Index64 {
         let mut tuples: Vec<(u64, u64, String)> = Vec::with_capacity(self.locs.len());
 
         for i in 0..self.locs.len() {
-            tuples.push((self.hashes[i], self.locs[i], self.ids[i].clone()))
+            tuples.push((self.hashes[i], self.locs[i], self.ids.as_ref().unwrap()[i].clone()))
+        }
+
+        if tuples.len() >= 512 * 1024 {
+            tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        } else {
+            tuples.sort_by(|a, b| a.0.cmp(&b.0));
         }
 
         let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u64>>();
         let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
         let ids = tuples.iter().map(|(_, _, x)| x.clone()).collect::<Vec<String>>();
 
-        let dict = zstd_train_dict_ids(&ids);
-
-        Index64 { hashes, locs, ids, hash: self.hash }
-
-
+        Index64 { hashes, locs, ids: Some(ids), hash: self.hash }
     }
 
     fn len(&self) -> u64 {
         self.hashes.len() as u64
     }
+
+    fn set_ids(&mut self, ids: Vec<String>) {
+        assert!(ids.len() == self.locs.len());
+        self.ids = Some(ids);
+    }
+
 }

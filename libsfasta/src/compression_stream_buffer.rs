@@ -4,7 +4,7 @@ use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
 use std::thread;
-use std::thread::{park, JoinHandle};
+use std::thread::{JoinHandle};
 
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
@@ -13,7 +13,7 @@ use crate::sequence_block::*;
 use crate::structs::{ReadAndSeek, WriteAndSeek};
 use crate::types::*;
 
-pub struct SequenceBuffer {
+pub struct CompressionStreamBuffer {
     block_size: u32,
     cur_block_id: u32,
     buffer: Vec<u8>,
@@ -30,9 +30,9 @@ pub struct SequenceBuffer {
     finalized: bool,
 }
 
-impl Default for SequenceBuffer {
+impl Default for CompressionStreamBuffer {
     fn default() -> Self {
-        SequenceBuffer {
+        CompressionStreamBuffer {
             block_size: 2 * 1024 * 1024,
             cur_block_id: 0,
             buffer: Vec::with_capacity(2 * 1024 * 1024),
@@ -51,7 +51,7 @@ impl Default for SequenceBuffer {
     }
 }
 
-impl Drop for SequenceBuffer {
+impl Drop for CompressionStreamBuffer {
     fn drop(&mut self) {
         assert!(
             self.buffer.len() == 0,
@@ -60,22 +60,14 @@ impl Drop for SequenceBuffer {
     }
 }
 
-impl SequenceBuffer {
-    pub fn unpark(&mut self) {
-        for j in &self.workers {
-            j.thread().unpark();
-        }
-
-        self.write_worker.as_ref().unwrap().thread().unpark();
-    }
-
+impl CompressionStreamBuffer {
     pub fn initialize(&mut self) {
         for i in 0..self.threads {
             let shutdown_copy = Arc::clone(&self.shutdown);
             let cq = Arc::clone(&self.compress_queue);
             let wq = Arc::clone(&self.write_queue);
-            let handle = thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy));
 
+            let handle = thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy));
             self.workers.push(handle);
         }
 
@@ -95,7 +87,6 @@ impl SequenceBuffer {
     pub fn finalize(&mut self) -> Result<(), &'static str> {
         // Emit the final block...
         self.emit_block();
-        self.unpark();
         self.finalized = true;
 
         let backoff = Backoff::new();
@@ -103,12 +94,10 @@ impl SequenceBuffer {
         while self.written_entries.load(Ordering::Relaxed)
             < self.total_entries.load(Ordering::Relaxed)
         {
-            self.unpark();
             backoff.snooze();
         }
 
         self.shutdown.store(true, Ordering::Relaxed);
-        self.unpark();
 
         for i in self.workers.drain(..) {
             i.join().unwrap();
@@ -154,8 +143,6 @@ impl SequenceBuffer {
             seq = &seq[end..];
         }
 
-        self.unpark();
-
         Ok(locs)
     }
 
@@ -168,8 +155,6 @@ impl SequenceBuffer {
             ..Default::default()
         };
 
-        self.unpark();
-
         if x.len() == 0 {
             return;
         }
@@ -179,7 +164,6 @@ impl SequenceBuffer {
         let mut entry = (self.cur_block_id, x);
         while let Err(x) = self.compress_queue.push(entry) {
             entry = x;
-            self.unpark();
         }
         self.cur_block_id += 1;
     }
@@ -207,8 +191,8 @@ impl SequenceBuffer {
     pub fn with_threads(mut self, threads: u16) -> Self {
         self._check_initialized();
         self.threads = threads;
-        self.compress_queue = Arc::new(ArrayQueue::new(threads as usize * 16));
-        self.write_queue = Arc::new(ArrayQueue::new(threads as usize * 4));
+        self.compress_queue = Arc::new(ArrayQueue::new(threads as usize * 8));
+        self.write_queue = Arc::new(ArrayQueue::new(threads as usize * 2));
         self
     }
 
@@ -228,6 +212,9 @@ fn _compression_worker_thread(
 ) {
     let mut result;
     let backoff = Backoff::new();
+
+    let mut compressor = zstd::block::Compressor::new();
+
     loop {
         result = compress_queue.pop();
 
@@ -237,15 +224,23 @@ fn _compression_worker_thread(
                 if shutdown.load(Ordering::Relaxed) {
                     return;
                 }
-                park();
             }
             Some((block_id, sb)) => {
-                let sbc = sb.compress();
+
+                let SequenceBlock { compression_type: ct, seq } = sb;
+
+                // TODO: Compression level should be passable
+                let sbc = SequenceBlockCompressed { 
+                    compression_type: ct,
+                    compressed_seq: compressor.compress(&seq[..], -3).expect("Unable to compress"),
+                };
+
+                // let sbc = sb.compress();
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
                     entry = x;
                     println!("Queue Full!");
-                    park(); // Queue is full, park the thread...
+                    backoff.snooze();
                 }
             }
         }
@@ -287,7 +282,6 @@ fn _writer_worker_thread(
                 if shutdown.load(Ordering::Relaxed) {
                     return;
                 }
-                park();
             }
             Some((block_id, sbc)) => {
                 queue.insert(block_id, sbc);
@@ -311,7 +305,7 @@ mod tests {
         let temp_out: Cursor<Vec<u8>> = Cursor::new(Vec::with_capacity(512 * 1024 * 2));
         // let temp_out = RwLock::new(temp_out);
 
-        let mut sb = SequenceBuffer::default().with_block_size(test_block_size);
+        let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
 
         let oq = sb.output_queue();
 
@@ -380,7 +374,7 @@ mod tests {
 
         let test_block_size = 512 * 1024;
 
-        let mut sb = SequenceBuffer::default().with_block_size(test_block_size);
+        let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
 
         sb.add_sequence(&myseq[..]).expect("Error adding sequence");
     }

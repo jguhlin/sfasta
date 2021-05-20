@@ -47,9 +47,10 @@ fn main() {
         };
     
         // let mut file = BufReader::with_capacity(8 * 1024 * 1024, file);
-        let sfasta = Sfasta::open_from_buffer(file);
+        let parser = SfastaParser::open_from_buffer(file);
         println!("Successfully opened SFASTA");
-        println!("Found: {} entries", sfasta.index.unwrap().len());
+        println!("Found: {} entries", parser.sfasta.index.as_ref().unwrap().len());
+        println!("{:#?}", parser.sfasta.index.as_ref().unwrap().ids);
 
     }
 
@@ -90,9 +91,9 @@ fn convert(matches: &ArgMatches) {
 
     let buf = generic_open_file_pb(pb, fasta_filename);
     // let buf = pb.wrap_read(buf.2);
-    let summary = summarize_fasta(&mut BufReader::with_capacity(16 * 1024 * 1024, buf.2));
+    let summary = count_fasta_entries(&mut BufReader::with_capacity(16 * 1024 * 1024, buf.2));
     println!("File: {}", fasta_filename);
-    println!("Total Entries: {}", summary.0);
+    println!("Total Entries: {}", summary);
 
     let path = Path::new(fasta_filename);
     let output_name = path.clone().with_extension("sfasta");
@@ -107,9 +108,9 @@ fn convert(matches: &ArgMatches) {
     let pb = style_pb(pb);
 
     let buf = generic_open_file_pb(pb, fasta_filename);
-    let buf = BufReader::with_capacity(4 * 1024 * 1024, buf.2);
+    let buf = BufReader::with_capacity(32 * 1024 * 1024, buf.2);
 
-    convert_fasta(buf, &mut output, 4 * 1024 * 1024, 32);
+    convert_fasta(buf, &mut output, 16 * 1024 * 1024, 64, summary);
 }
 
 pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, bool, Box<dyn Read + Send>) {
@@ -122,7 +123,7 @@ pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, bool, Bo
         Ok(file) => file,
     };
 
-    let file = BufReader::with_capacity(8 * 1024 * 1024, file);
+    let file = BufReader::with_capacity(32 * 1024 * 1024, file);
     let mut compressed: bool = false;
     let file = pb.wrap_read(file);
 
