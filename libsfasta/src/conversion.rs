@@ -1,5 +1,4 @@
 // Easy, high-performance conversion functions
-use std::alloc::{AllocError, Allocator, Layout};
 use std::fs::{metadata, File};
 use std::hash::Hasher;
 use std::io::Cursor;
@@ -42,6 +41,11 @@ pub fn convert_fasta<W, R: 'static>(
     assert!(
         block_size < u32::MAX,
         "Block size must be less than u32::MAX (~4Gb)"
+    );
+
+    assert!(
+        entry_count <= u32::MAX as usize,
+        "Maximum number of sequences to be stored is limited to u32::MAX, Please e-mail Joseph and we can fix this for you"
     );
 
     let mut sfasta = Sfasta::default().block_size(block_size).with_sequences(); // This is a FASTA, so no scores
@@ -152,8 +156,6 @@ pub fn convert_fasta<W, R: 'static>(
 
     // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
-    // TODO: Write out the index
-
     // Write out the sequence locs...
     let seq_locs: Vec<(String, Vec<Loc>)> = reader_handle.join().unwrap();
 
@@ -163,13 +165,21 @@ pub fn convert_fasta<W, R: 'static>(
         .expect("Unable to work with seek API");
 
     println!("Writing out seqlocs and adding to index...");
-    let mut out_fh = BufWriter::with_capacity(64 * 1024 * 1024, out_fh);
+
+    let mut out_fh = BufWriter::with_capacity(256 * 1024 * 1024, &mut out_fh);
 
     // TODO: Maybe chunk this like IDs?
     // Instead of u64 for location can just use  u32 in index for which item it is
     // And use bitpacking!
-    for s in seq_locs {
-        indexer.add(&s.0, pos);
+    for s in seq_locs
+        .iter()
+        .enumerate()
+        .collect::<Vec<(usize, &(String, Vec<Loc>))>>()
+        .chunks(64 * 1024)
+    {
+        for (i, (id, locs)) in s {
+            indexer.add(&id, *i as u32);
+        }
 
         // let output: Vec<u8> = Vec::with_capacity(1024);
         // let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
@@ -177,7 +187,18 @@ pub fn convert_fasta<W, R: 'static>(
         // let compressed = compressor.finish().expect("Unable to compress ID stream");
         // bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to write directory to file");
 
-        bincode::serialize_into(&mut out_fh, &s.1).expect("Unable to write Metadata to file");
+        let locs: Vec<_> = s.iter().map(|(_, (_, l))| l).collect();
+
+        let mut compressed: Vec<u8> = Vec::new();
+        let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
+
+        bincode::serialize_into(&mut compressor, &locs);
+        let compressed = compressor.finish().unwrap();
+
+        bincode::serialize_into(&mut out_fh, &compressed)
+            .expect("Unable to write Metadata to file");
+
+        // bincode::serialize_into(&mut out_fh, &s.1).expect("Unable to write Metadata to file");
 
         pos = out_fh
             .seek(SeekFrom::Current(0))
@@ -227,8 +248,8 @@ pub fn convert_fasta<W, R: 'static>(
 
     // Write out the IDs vector...
     // for chunk in indexer.ids_chunks(2048) {
-    for chunk in ids.chunks(8192) {
-        let output: Vec<u8> = Vec::with_capacity(8192);
+    for chunk in ids.chunks(4 * 1024) {
+        let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
 
         let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
         bincode::serialize_into(&mut compressor, &chunk)

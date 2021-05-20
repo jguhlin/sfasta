@@ -39,12 +39,12 @@ fn zstd_train_dict_ids(ids: &Vec<String>) -> Vec<u8> {
 }
 
 pub trait IDIndexer {
-    fn add(&mut self, id: &str, loc: u64) -> Result<(), &'static str>;
+    fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str>;
 
     // We return a vector of possible matches
     // We deal with collisions by not-dealing with collisions
     // It's fast enough to take the list of candidates, and query them directly...
-    fn find(&mut self, id: &str) -> Option<Vec<u64>>;
+    fn find(&mut self, id: &str) -> Option<Vec<u32>>;
 
     // Finalize (no more additions)
     // This function should handle the sorting (binary search doesn't work without it)
@@ -62,7 +62,7 @@ pub trait IDIndexer {
 #[derive(Serialize, Deserialize)]
 pub struct Index32 {
     hashes: Vec<u32>,
-    locs: Vec<u64>,
+    locs: Vec<u32>,
 
     #[serde(skip)]
     pub ids: Option<Vec<String>>,
@@ -81,7 +81,7 @@ impl IDIndexer for Index32 {
         }
     }
 
-    fn add(&mut self, id: &str, loc: u64) -> Result<(), &'static str> {
+    fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
         let mut hasher = XxHash32::with_seed(42);
         hasher.write(id.as_bytes());
         let hash = hasher.finish();
@@ -96,7 +96,7 @@ impl IDIndexer for Index32 {
         Ok(())
     }
 
-    fn find(&mut self, id: &str) -> Option<Vec<u64>> {
+    fn find(&mut self, id: &str) -> Option<Vec<u32>> {
         let mut hasher = XxHash32::with_seed(42);
         hasher.write(id.as_bytes());
         let hash = hasher.finish();
@@ -136,7 +136,7 @@ impl IDIndexer for Index32 {
         // TODO: More memory efficient way...
         // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
 
-        let mut tuples: Vec<(u32, u64, String)> = Vec::with_capacity(self.locs.len());
+        let mut tuples: Vec<(u32, u32, String)> = Vec::with_capacity(self.locs.len());
 
         for i in 0..self.locs.len() {
             tuples.push((
@@ -156,7 +156,7 @@ impl IDIndexer for Index32 {
             .collect::<Vec<(u32, u64)>>();
         tuples.sort_by(|a, b| a.0.cmp(&b.0)); */
         let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u32>>();
-        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
+        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u32>>();
         let ids = tuples
             .iter()
             .map(|(_, _, x)| x.clone())
@@ -190,7 +190,7 @@ enum Hashes {
 #[derive(Serialize, Deserialize)]
 pub struct Index64 {
     hashes: Vec<u64>,
-    locs: Vec<u64>,
+    locs: Vec<u32>,
     hash: Hashes,
 
     #[serde(skip)]
@@ -244,7 +244,7 @@ impl IDIndexer for Index64 {
         }
     }
 
-    fn add(&mut self, id: &str, loc: u64) -> Result<(), &'static str> {
+    fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
         let hash = self.get_hash(id);
 
         self.hashes.push(hash);
@@ -255,7 +255,7 @@ impl IDIndexer for Index64 {
     }
 
     // TODO: Dedupe this code with above...
-    fn find(&mut self, id: &str) -> Option<Vec<u64>> {
+    fn find(&mut self, id: &str) -> Option<Vec<u32>> {
         let hash = self.get_hash(id);
 
         let found = match self.hashes.binary_search(&hash) {
@@ -293,7 +293,7 @@ impl IDIndexer for Index64 {
 
         //let hashes: Vec<u64> = self.ids.as_ref().unwrap().par_iter().map(|x| self.get_hash(x)).collect();
 
-        let mut tuples: Vec<(u64, u64, String)> = Vec::with_capacity(self.locs.len());
+        let mut tuples: Vec<(u64, u32, String)> = Vec::with_capacity(self.locs.len());
 
         for i in 0..self.locs.len() {
             tuples.push((
@@ -310,7 +310,7 @@ impl IDIndexer for Index64 {
         }
 
         let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u64>>();
-        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u64>>();
+        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u32>>();
 
         // .into_iter here so we don't borrow it, and we can just move the Strings rather than clone them
         let ids = tuples
