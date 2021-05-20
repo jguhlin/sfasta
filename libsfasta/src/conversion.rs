@@ -5,6 +5,7 @@ use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::io::Cursor;
 use std::sync::atomic::Ordering;
 use std::thread;
+use std::alloc::{AllocError, Allocator, Layout};
 
 use crossbeam::utils::Backoff;
 use twox_hash::XxHash64;

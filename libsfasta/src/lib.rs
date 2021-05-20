@@ -1,3 +1,5 @@
+#![feature(allocator_api)]
+
 extern crate bincode;
 extern crate bitpacking;
 extern crate bumpalo;
