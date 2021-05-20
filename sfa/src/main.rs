@@ -108,9 +108,9 @@ fn convert(matches: &ArgMatches) {
     let pb = style_pb(pb);
 
     let buf = generic_open_file_pb(pb, fasta_filename);
-    let buf = BufReader::with_capacity(32 * 1024 * 1024, buf.2);
+    let buf = BufReader::with_capacity(8 * 1024 * 1024, buf.2);
 
-    convert_fasta(buf, &mut output, 16 * 1024 * 1024, 64, summary);
+    convert_fasta(buf, &mut output, 32 * 1024 * 1024, 64, summary);
 }
 
 pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, bool, Box<dyn Read + Send>) {

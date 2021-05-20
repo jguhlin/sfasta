@@ -7,17 +7,17 @@ use zstd;
 
 #[derive(Clone, Debug, Default)]
 pub struct SequenceBlock {
-    pub compression_type: CompressionType,
+//    pub compression_type: CompressionType,
     pub seq: Vec<u8>,
 }
 
 impl SequenceBlock {
     pub fn compress(self) -> SequenceBlockCompressed {
-        let level = default_compression_level(self.compression_type);
+        let level = default_compression_level(CompressionType::ZSTD);
         let orig_size = self.seq.len();
         let cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
         let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
-        //encoder.multithread(1);
+        //encoder.multithread(8);
         encoder.long_distance_matching(true);
         encoder.include_magicbytes(false);
         encoder.include_contentsize(false);
@@ -38,7 +38,7 @@ impl SequenceBlock {
         // println!("Compressed: {}", ratio);
 
         SequenceBlockCompressed {
-            compression_type: self.compression_type,
+            // compression_type: self.compression_type,
             compressed_seq: cseq,
         }
     }
@@ -48,19 +48,16 @@ impl SequenceBlock {
     }
 
     // Convenience Function
-    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
+/*    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self.compression_type = compression_type;
         self
-    }
+    } */
 }
 
 #[derive(Clone, Deserialize, Serialize, Debug, Default)]
 pub struct SequenceBlockCompressed {
     #[serde(with = "serde_bytes")]
     pub compressed_seq: Vec<u8>,
-
-    #[serde(skip)] // This is serialized in the parameters field already... Here for convenience...
-    pub compression_type: CompressionType,
 }
 
 impl SequenceBlockCompressed {
@@ -82,15 +79,15 @@ impl SequenceBlockCompressed {
 
         SequenceBlock {
             seq,
-            compression_type: self.compression_type,
+            // compression_type: self.compression_type,
         }
     }
 
     // Convenience Function
-    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
+/*    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self.compression_type = compression_type;
         self
-    }
+    } */
 }
 
 #[cfg(test)]
