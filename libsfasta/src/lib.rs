@@ -1,5 +1,3 @@
-#![feature(allocator_api)]
-
 extern crate bincode;
 extern crate bitpacking;
 extern crate bumpalo;
@@ -14,7 +12,6 @@ extern crate thincollections;
 extern crate zstd;
 extern crate bytelines;
 extern crate rayon;
-extern crate bumpalo;
 
 mod conversion;
 mod directory;

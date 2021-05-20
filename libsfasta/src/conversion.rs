@@ -8,7 +8,6 @@ use std::thread;
 
 use crossbeam::utils::Backoff;
 use twox_hash::XxHash64;
-use bumpalo::Bump;
 
 use crate::fasta::*;
 use crate::format::Sfasta;
@@ -142,12 +141,10 @@ where
     println!("Writing out seqlocs and adding to index...");
     let mut out_fh = BufWriter::with_capacity(16 * 1024 * 1024, out_fh);
     
-    let mut bump = Bump::new();
-
     for s in seq_locs {
         indexer.add(&s.0, pos);
 
-        let output: Vec<u8> = Vec::new_in(&bump);
+        let output: Vec<u8> = Vec::with_capacity(1024);
         let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
         bincode::serialize_into(&mut compressor, &s.1).expect("Unable to write directory to file");       
         let compressed = compressor.finish().expect("Unable to compress ID stream");
