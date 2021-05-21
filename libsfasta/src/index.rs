@@ -46,7 +46,7 @@ pub trait IDIndexer {
     // We return a vector of possible matches
     // We deal with collisions by not-dealing with collisions
     // It's fast enough to take the list of candidates, and query them directly...
-    fn find(&mut self, id: &str) -> Option<Vec<u32>>;
+    fn find(&self, id: &str) -> Option<Vec<u32>>;
 
     // Finalize (no more additions)
     // This function should handle the sorting (binary search doesn't work without it)
@@ -99,7 +99,7 @@ impl IDIndexer for Index32 {
         Ok(())
     }
 
-    fn find(&mut self, id: &str) -> Option<Vec<u32>> {
+    fn find(&self, id: &str) -> Option<Vec<u32>> {
         let mut hasher = XxHash32::with_seed(42);
         hasher.write(id.as_bytes());
         let hash = hasher.finish();
@@ -125,11 +125,15 @@ impl IDIndexer for Index32 {
             start = start.saturating_sub(1);
         }
 
+        start = start.saturating_add(1);
+
         let len = self.locs.len();
 
         while self.hashes[end] == hash && end < len {
             end = end.saturating_add(1);
         }
+
+        end = end.saturating_sub(1);
 
         Some(self.locs[start..=end].to_vec())
     }
@@ -261,7 +265,7 @@ impl IDIndexer for Index64 {
     }
 
     // TODO: Dedupe this code with above...
-    fn find(&mut self, id: &str) -> Option<Vec<u32>> {
+    fn find(&self, id: &str) -> Option<Vec<u32>> {
         let hash = self.get_hash(id);
 
         let found = match self.hashes.binary_search(&hash) {
@@ -282,12 +286,15 @@ impl IDIndexer for Index64 {
         while self.hashes[start] == hash {
             start = start.saturating_sub(1);
         }
+        start = start.saturating_add(1);
 
         let len = self.locs.len();
 
         while self.hashes[end] == hash && end < len {
             end = end.saturating_add(1);
         }
+
+        end = end.saturating_sub(1);
 
         Some(self.locs[start..=end].to_vec())
     }
@@ -342,5 +349,43 @@ impl IDIndexer for Index64 {
     fn set_ids(&mut self, ids: Vec<String>) {
         assert!(ids.len() == self.locs.len());
         self.ids = Some(ids);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    pub fn test_index64() {
+
+        let mut i64 = Index64::with_capacity(64);
+        for n in 0..256 {
+            let id = format!("test{}", n);
+            i64.add(&id, n).expect("Unable to add to index");
+        }
+
+        i64.add("duplicate", 1001).expect("Unable to add to index");
+        i64.add("duplicate", 1002).expect("Unable to add to index");;
+        i64.add("duplicate", 1003).expect("Unable to add to index");;
+        i64.add("duplicate", 1004).expect("Unable to add to index");;
+        i64.add("duplicate", 1005).expect("Unable to add to index");;
+
+        let i64 = i64.finalize();
+        let y = i64.find("test32");
+        assert!(y == Some([32].to_vec()));
+        let y = i64.find("not-in-the-index");
+        assert!(y == None);
+
+        let y = i64.find("duplicate");
+        println!("{:#?}", y);
+        let y = y.expect("Index did not find correctly.");
+        assert!(y.len() == 5);
+        assert!(y.contains(&1001));
+        assert!(y.contains(&1002));
+        assert!(y.contains(&1003));
+        assert!(y.contains(&1004));
+        assert!(y.contains(&1005));
+
     }
 }

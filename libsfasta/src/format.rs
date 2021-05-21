@@ -78,10 +78,31 @@ impl Sfasta {
         self.index.as_mut().unwrap().set_ids(ids);
     }
 
-    pub fn find(&mut self, x: &str) -> String {
-        let possibilities = self.index.unwrap().find(x);
+    pub fn find(&mut self, x: &str) { //-> Result<Vec<String>, &str> {
+        let possibilities = self.index.as_ref().unwrap().find(x);
         if possibilities.is_some() {
+            let possibilities = possibilities.unwrap();
+
+            let mut matches = Vec::with_capacity(possibilities.len());
+            
+            if self.index.as_ref().unwrap().ids.is_some() {
+                // Index is already decompressed, just search it appropriately...
+                
+                let idx_ref = self.index.as_ref().unwrap().ids.as_ref().unwrap();
+
+                for loc in possibilities {
+                    if idx_ref[loc as usize] == x {
+                        matches.push(idx_ref[loc as usize].clone());
+                    }
+                }
+            } else {
+                for loc in possibilities {
+                    // let block = loc / 
+                }
+
+            }
             // Start opening up blocks and try to find...
+
         }
     }
 }
@@ -164,5 +185,53 @@ impl SfastaParser {
         sfasta.buf = Some(Box::new(in_buf));
 
         sfasta
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::BufReader;
+    use crate::directory::Directory;
+    use crate::metadata::Metadata;
+    use crate::parameters::Parameters;
+    use crate::sequence_block::SequenceBlockCompressed;
+    use std::io::Cursor;
+    use std::fs::File;
+
+    #[test]
+    pub fn test_sfasta_find() {
+        let bincode = bincode::DefaultOptions::new()
+            .with_fixint_encoding()
+            .allow_trailing_bytes();
+
+        let mut out_buf = Cursor::new(Vec::new());
+
+        let in_buf = BufReader::new(
+            File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
+        );
+
+        crate::conversion::convert_fasta(in_buf, &mut out_buf, 8 * 1024, 6, 10);
+
+        match out_buf.seek(SeekFrom::Start(0)) {
+            Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
+            Ok(_) => (),
+        };
+
+        let mut sfasta_marker: [u8; 6] = [0; 6];
+        out_buf
+            .read_exact(&mut sfasta_marker)
+            .expect("Unable to read SFASTA Marker");
+        assert!(sfasta_marker == "sfasta".as_bytes());
+
+        let _v: u64 = bincode.deserialize_from(&mut out_buf).unwrap();
+        let _d: Directory = bincode.deserialize_from(&mut out_buf).unwrap();
+        let _p: Parameters = bincode.deserialize_from(&mut out_buf).unwrap();
+        let _m: Metadata = bincode.deserialize_from(&mut out_buf).unwrap();
+
+        let b: SequenceBlockCompressed = bincode::deserialize_from(&mut out_buf).unwrap();
+        let b = b.decompress();
+
+        assert!(b.len() == 8192);
     }
 }
