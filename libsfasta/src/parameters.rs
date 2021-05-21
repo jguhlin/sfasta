@@ -1,7 +1,6 @@
 use crate::*;
 
 use super::structs::CompressionType;
-use bincode;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

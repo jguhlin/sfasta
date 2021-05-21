@@ -1,6 +1,6 @@
 extern crate serde;
 
-use ahash::{AHasher, RandomState};
+use ahash::AHasher;
 use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
@@ -25,6 +25,8 @@ enum IndexStored {
 // TODO: Implement 16-bit hasher
 
 // Doesn't work for some reason (input data too small? or too repetitive in my tests?)
+// Keeping in case of future attempts...
+/*
 fn zstd_train_dict_ids(ids: &Vec<String>) -> Vec<u8> {
     let bytes: Vec<u8> = ids
         .iter()
@@ -36,7 +38,7 @@ fn zstd_train_dict_ids(ids: &Vec<String>) -> Vec<u8> {
 
     // zstd::dict::from_samples(&bytes, 256).expect("Unable to create dictionary from IDs")
     zstd::dict::from_continuous(&bytes, &lens, 1024).expect("Unable to create dictionary from IDs")
-}
+} */
 
 pub trait IDIndexer {
     fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str>;
@@ -51,6 +53,7 @@ pub trait IDIndexer {
     fn finalize(self) -> Self;
 
     fn len(&self) -> u64;
+    fn is_empty(&self) -> bool;
 
     fn with_capacity(capacity: usize) -> Self;
 
@@ -115,7 +118,6 @@ impl IDIndexer for Index32 {
             return Some(locs);
         }
 
-        let mut keepexpanding = true;
         let mut start = found;
         let mut end = found;
 
@@ -126,7 +128,7 @@ impl IDIndexer for Index32 {
         let len = self.locs.len();
 
         while self.hashes[end] == hash && end < len {
-            start = start.saturating_add(1);
+            end = end.saturating_add(1);
         }
 
         Some(self.locs[start..=end].to_vec())
@@ -171,6 +173,10 @@ impl IDIndexer for Index32 {
 
     fn len(&self) -> u64 {
         self.locs.len() as u64
+    }
+
+    fn is_empty(&self) -> bool {
+        self.locs.len() == 0
     }
 
     fn set_ids(&mut self, ids: Vec<String>) {
@@ -270,7 +276,6 @@ impl IDIndexer for Index64 {
             return Some(locs);
         }
 
-        let mut keepexpanding = true;
         let mut start = found;
         let mut end = found;
 
@@ -281,7 +286,7 @@ impl IDIndexer for Index64 {
         let len = self.locs.len();
 
         while self.hashes[end] == hash && end < len {
-            start = start.saturating_add(1);
+            end = end.saturating_add(1);
         }
 
         Some(self.locs[start..=end].to_vec())
@@ -328,6 +333,10 @@ impl IDIndexer for Index64 {
 
     fn len(&self) -> u64 {
         self.locs.len() as u64
+    }
+
+    fn is_empty(&self) -> bool {
+        self.locs.len() == 0
     }
 
     fn set_ids(&mut self, ids: Vec<String>) {

@@ -11,14 +11,11 @@ extern crate rand_chacha;
 
 use std::fs;
 use std::fs::{metadata, File};
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, Read};
 use std::path::Path;
 
-use rand::prelude::*;
-use rand_chacha::ChaCha20Rng;
-
 use clap::{load_yaml, App, ArgMatches};
-use indicatif::{HumanBytes, ProgressBar, ProgressIterator, ProgressStyle};
+use indicatif::{ProgressBar, ProgressStyle};
 
 use libsfasta::prelude::*;
 
@@ -48,7 +45,7 @@ fn main() {
             Ok(file) => file,
         };
 
-        // let mut file = BufReader::with_capacity(8 * 1024 * 1024, file);
+        let file = BufReader::with_capacity(8 * 1024 * 1024, file);
         let parser = SfastaParser::open_from_buffer(file);
         println!("Successfully opened SFASTA");
         println!(
@@ -100,7 +97,7 @@ fn convert(matches: &ArgMatches) {
     println!("Total Entries: {}", summary);
 
     let path = Path::new(fasta_filename);
-    let output_name = path.clone().with_extension("sfasta");
+    let output_name = path.with_extension("sfasta");
     let mut output = match File::create(output_name) {
         Err(why) => panic!("couldn't create: {}", why),
         Ok(file) => file,
@@ -130,7 +127,7 @@ pub fn generic_open_file_pb(
         Ok(file) => file,
     };
 
-    let file = BufReader::with_capacity(32 * 1024 * 1024, file);
+    // let file = BufReader::with_capacity(8 * 1024 * 1024, file);
     let mut compressed: bool = false;
     let file = pb.wrap_read(file);
 

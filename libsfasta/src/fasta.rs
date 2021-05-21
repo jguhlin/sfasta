@@ -1,12 +1,7 @@
 use simdutf8::basic::from_utf8;
-use std::convert::TryInto;
-use std::io::prelude::*;
-use std::io::{BufRead, BufReader};
+use std::io::BufRead;
 
 use crate::bytelines::ByteLinesReader;
-
-use crate::io::generic_open_file;
-use crate::structs::ReadAndSeek;
 
 #[derive(Debug)]
 pub struct Sequence {
@@ -129,7 +124,7 @@ pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<
             if first {
                 first = false;
             } else {
-                lengths.push(length.clone());
+                lengths.push(length);
             }
 
             entries += 1;
@@ -140,17 +135,13 @@ pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<
     }
     lengths.push(length);
 
-    return (entries, ids, lengths);
+    (entries, ids, lengths)
 }
 
 pub fn count_fasta_entries(fasta_buf: &mut dyn BufRead) -> usize {
     let mut entries: usize = 0;
-    let mut ids: Vec<String> = Vec::with_capacity(2 * 1024 * 1024);
-    let mut lengths: Vec<usize> = Vec::with_capacity(2 * 1024 * 1024);
-    let mut length: usize = 0;
 
     let mut lines = fasta_buf.byte_lines();
-    let mut first = true;
     while let Some(line) = lines.next() {
         let line = line.expect("Error parsing FASTA file");
         if line.starts_with(b">") {
@@ -158,7 +149,7 @@ pub fn count_fasta_entries(fasta_buf: &mut dyn BufRead) -> usize {
         }
     }
 
-    return entries;
+    entries
 }
 
 #[cfg(test)]
@@ -172,8 +163,8 @@ mod tests {
             b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
         let mut fasta = Fasta::from_buffer(BufReader::new(fakefasta_));
-        let j = fasta.next();
-        let j = fasta.next();
+        let _j = fasta.next();
+        let _j = fasta.next();
     }
 
     #[test]

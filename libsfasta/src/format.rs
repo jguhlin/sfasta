@@ -1,4 +1,4 @@
-use std::io::{BufReader, BufWriter, Cursor, Read, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom};
 
 use bincode::Options;
 
@@ -65,8 +65,6 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
             .with_fixint_encoding()
             .allow_trailing_bytes();
 
-        // let mut in_buf = Cursor::new(in_buf);
-
         let mut sfasta_marker: [u8; 6] = [0; 6];
         in_buf
             .read_exact(&mut sfasta_marker)
@@ -74,6 +72,8 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
         assert!(sfasta_marker == "sfasta".as_bytes());
 
         let mut sfasta = Sfasta::default();
+
+        println!("Got header, reading directory and metadata...");
 
         sfasta.version = match bincode::deserialize_from(&mut in_buf) {
             Ok(x) => x,
@@ -107,11 +107,29 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
             .seek(SeekFrom::Start(sfasta.directory.index_loc))
             .expect("Unable to work with seek API");
 
+        println!("Reading index...");
+
+        let index_compressed: Vec<u8> = bincode
+            .deserialize_from(&mut in_buf)
+            .expect("Unable to parse index");
+
+        println!("Got compressed index, decompressing...");
+
+        let mut decompressor = lz4_flex::frame::FrameDecoder::new(&index_compressed[..]);
+        let mut index_bincoded = Vec::with_capacity(32 * 1024 * 1024);
+        decompressor
+            .read_to_end(&mut index_bincoded)
+            .expect("Unable to parse index");
+
+        println!("Parsing index");
+
         sfasta.index = Some(
             bincode
-                .deserialize_from(&mut in_buf)
+                .deserialize_from(&index_bincoded[..])
                 .expect("Unable to parse index"),
         );
+
+        println!("Index loaded");
 
         let mut parser = SfastaParser { sfasta, in_buf };
 

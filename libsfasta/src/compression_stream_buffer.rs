@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::{BufReader, BufWriter, Cursor, SeekFrom};
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
@@ -10,7 +9,6 @@ use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
 use crate::sequence_block::*;
-use crate::structs::{ReadAndSeek, WriteAndSeek};
 use crate::types::*;
 
 pub struct CompressionStreamBuffer {
@@ -54,7 +52,7 @@ impl Default for CompressionStreamBuffer {
 impl Drop for CompressionStreamBuffer {
     fn drop(&mut self) {
         assert!(
-            self.buffer.len() == 0,
+            self.buffer.is_empty(),
             "SequenceBuffer was not empty. Finalize the buffer to emit the final block."
         );
     }
@@ -62,7 +60,7 @@ impl Drop for CompressionStreamBuffer {
 
 impl CompressionStreamBuffer {
     pub fn initialize(&mut self) {
-        for i in 0..self.threads {
+        for _ in 0..self.threads {
             let shutdown_copy = Arc::clone(&self.shutdown);
             let cq = Arc::clone(&self.compress_queue);
             let wq = Arc::clone(&self.write_queue);
@@ -111,7 +109,7 @@ impl CompressionStreamBuffer {
 
     pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<Loc>, &'static str> {
         assert!(self.block_size > 0);
-        assert!(self.finalized == false, "SeqBuffer has been finalized.");
+        assert!(!self.finalized, "SeqBuffer has been finalized.");
         if !self.initialized {
             self.initialize();
         }
@@ -120,9 +118,9 @@ impl CompressionStreamBuffer {
 
         let block_size = self.block_size as usize;
 
-        let mut seq = &x[..];
+        let mut seq = x;
 
-        while seq.len() > 0 {
+        while !seq.is_empty() {
             let len = self.len();
 
             let mut end = seq.len();
@@ -150,10 +148,7 @@ impl CompressionStreamBuffer {
         let newbuf = Vec::with_capacity(self.block_size as usize);
         let seq = std::mem::replace(&mut self.buffer, newbuf);
 
-        let x = SequenceBlock {
-            seq,
-            ..Default::default()
-        };
+        let x = SequenceBlock { seq };
 
         if x.len() == 0 {
             return;
@@ -175,10 +170,7 @@ impl CompressionStreamBuffer {
     }
 
     fn _check_initialized(&mut self) {
-        assert!(
-            self.initialized == false,
-            "SeqBuffer already initialized..."
-        )
+        assert!(!self.initialized, "SeqBuffer already initialized...")
     }
 
     pub fn with_block_size(mut self, block_size: u32) -> Self {
@@ -213,8 +205,6 @@ fn _compression_worker_thread(
     let mut result;
     let backoff = Backoff::new();
 
-    let mut compressor = zstd::block::Compressor::new();
-
     loop {
         result = compress_queue.pop();
 
@@ -226,14 +216,6 @@ fn _compression_worker_thread(
                 }
             }
             Some((block_id, sb)) => {
-                /*let SequenceBlock { compression_type: ct, seq } = sb;
-
-                // TODO: Compression level should be passable
-                let sbc = SequenceBlockCompressed {
-                    compression_type: ct,
-                    compressed_seq: compressor.compress(&seq[..], 9).expect("Unable to compress"),
-                }; */
-
                 let sbc = sb.compress();
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
@@ -255,7 +237,6 @@ fn _writer_worker_thread(
 ) {
     let mut expected_block: u32 = 0;
     let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::new();
-    let mut block_index: Vec<(u32, u64)> = Vec::new();
     let mut result;
     let backoff = Backoff::new();
 
@@ -292,17 +273,12 @@ fn _writer_worker_thread(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::any::Any;
-    use std::io::Seek;
-    use std::sync::RwLock;
 
     #[test]
     pub fn test_add_sequence() {
         let myseq = b"ACTGGGGGGGG".to_vec();
 
         let test_block_size = 512 * 1024;
-        let temp_out: Cursor<Vec<u8>> = Cursor::new(Vec::with_capacity(512 * 1024 * 2));
-        // let temp_out = RwLock::new(temp_out);
 
         let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
 

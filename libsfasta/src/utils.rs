@@ -1,9 +1,5 @@
 /// Opens files, including compressed files (gzip or snappy)
-use std::fs::{metadata, File};
-use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
-
-use crate::structs::*;
 
 pub fn get_index_filename(filename: &str) -> String {
     let filenamepath = Path::new(&filename);
@@ -21,48 +17,6 @@ pub fn get_index_filename(filename: &str) -> String {
     }
 
     path + &filename
-}
-
-/// Get all IDs from an SFASTA file
-/// Really a debugging function...
-pub fn test_sfasta(filename: String) {
-    let file = match File::open(&filename) {
-        Err(why) => panic!("Couldn't open {}: {}", filename, why.to_string()),
-        Ok(file) => file,
-    };
-
-    let filesize = metadata(&filename).expect("Unable to open file").len();
-
-    let mut reader = BufReader::with_capacity(512 * 1024, file);
-
-    let mut seqnum: usize = 0;
-
-    let header: Header = match bincode::deserialize_from(&mut reader) {
-        Ok(x) => x,
-        Err(_) => panic!("Header missing or malformed in SFASTA file"),
-    };
-
-    let mut pos = 0;
-
-    loop {
-        pos = reader
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
-
-        if pos == filesize {
-            break;
-        }
-
-        seqnum += 1;
-        let entry: EntryCompressedHeader = match bincode::deserialize_from(&mut reader) {
-            Ok(x) => x,
-            Err(x) => panic!("Found error: {}", x),
-        };
-
-        for _i in 0..entry.block_count as usize {
-            let _x: EntryCompressedBlock = bincode::deserialize_from(&mut reader).unwrap();
-        }
-    }
 }
 
 /// Checks that the file extension ends in .sfasta or adds it if necessary

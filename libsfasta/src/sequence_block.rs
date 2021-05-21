@@ -1,9 +1,6 @@
-use crate::parameters::Parameters;
 use crate::structs::{default_compression_level, CompressionType};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
-use std::rc::Rc;
-use zstd;
 
 #[derive(Clone, Debug, Default)]
 pub struct SequenceBlock {
@@ -14,14 +11,21 @@ pub struct SequenceBlock {
 impl SequenceBlock {
     pub fn compress(self) -> SequenceBlockCompressed {
         let level = default_compression_level(CompressionType::ZSTD);
-        let orig_size = self.seq.len();
         let cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
         let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
         //encoder.multithread(8);
-        encoder.long_distance_matching(true);
-        encoder.include_magicbytes(false);
-        encoder.include_contentsize(false);
-        encoder.write_all(&self.seq[..]);
+        encoder
+            .long_distance_matching(true)
+            .expect("Unable to set ZSTD Long Distance Matching");
+        encoder
+            .include_magicbytes(false)
+            .expect("Unable to set ZSTD MagicBytes");
+        encoder
+            .include_contentsize(false)
+            .expect("Unable to set ZSTD Content Size Flag");
+        encoder
+            .write_all(&self.seq[..])
+            .expect("Unable to write sequence to ZSTD compressor");
         let cseq = encoder.finish().unwrap();
 
         //let mut compressor = zstd::block::Compressor::new();

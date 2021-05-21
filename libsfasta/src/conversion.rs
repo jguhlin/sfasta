@@ -1,19 +1,16 @@
 // Easy, high-performance conversion functions
 use std::fs::{metadata, File};
-use std::hash::Hasher;
-use std::io::Cursor;
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom};
 use std::sync::atomic::Ordering;
 use std::thread;
 
 use crossbeam::utils::Backoff;
-use twox_hash::XxHash64;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
 use crate::format::Sfasta;
 use crate::index::IDIndexer;
-use crate::structs::{ReadAndSeek, WriteAndSeek};
+use crate::structs::WriteAndSeek;
 use crate::types::*;
 
 use bincode::Options;
@@ -29,7 +26,7 @@ pub fn convert_fasta<W, R: 'static>(
     entry_count: usize,
 ) where
     W: WriteAndSeek,
-    R: Read + Send,
+    R: BufRead + Read + Send,
 {
     //    let input = generic_open_file(filename);
     //    let input = Box::new(BufReader::with_capacity(512 * 1024, input.2));
@@ -55,7 +52,9 @@ pub fn convert_fasta<W, R: 'static>(
     //let mut out_fh = BufWriter::with_capacity(1024 * 1024, out_buf);
     let mut out_fh = out_buf;
 
-    out_fh.write_all("sfasta".as_bytes());
+    out_fh
+        .write_all("sfasta".as_bytes())
+        .expect("Unable to write 'sfasta' to output");
 
     // Write the directory, parameters, and metadata structs out...
     bincode
@@ -95,7 +94,8 @@ pub fn convert_fasta<W, R: 'static>(
     let reader_handle = thread::spawn(move || {
         // let (_, _, in_buf) = generic_open_file(&in_filename);
         // let fasta = Fasta::from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
-        let fasta = Fasta::from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
+        let fasta = Fasta::from_buffer(in_buf);
+        // let fasta = Fasta::from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
 
         let mut seq_locs = Vec::new();
         for i in fasta {
@@ -109,7 +109,7 @@ pub fn convert_fasta<W, R: 'static>(
             Err(x) => panic!("Unable to finalize sequence buffer, {:#?}", x),
         };
 
-        return seq_locs;
+        seq_locs
     });
 
     let mut block_locs = Vec::with_capacity(128 * 1024 * 1024);
@@ -160,9 +160,9 @@ pub fn convert_fasta<W, R: 'static>(
     let seq_locs: Vec<(String, Vec<Loc>)> = reader_handle.join().unwrap();
 
     let mut indexer = crate::index::Index64::with_capacity(entry_count);
-    let mut pos = out_fh
-        .seek(SeekFrom::Current(0))
-        .expect("Unable to work with seek API");
+    /*let mut pos = out_fh
+    .seek(SeekFrom::Current(0))
+    .expect("Unable to work with seek API");*/
 
     println!("Writing out seqlocs and adding to index...");
 
@@ -177,8 +177,8 @@ pub fn convert_fasta<W, R: 'static>(
         .collect::<Vec<(usize, &(String, Vec<Loc>))>>()
         .chunks(64 * 1024)
     {
-        for (i, (id, locs)) in s {
-            indexer.add(&id, *i as u32);
+        for (i, (id, _)) in s {
+            indexer.add(&id, *i as u32).expect("Unable to add to index");
         }
 
         // let output: Vec<u8> = Vec::with_capacity(1024);
@@ -189,20 +189,21 @@ pub fn convert_fasta<W, R: 'static>(
 
         let locs: Vec<_> = s.iter().map(|(_, (_, l))| l).collect();
 
-        let mut compressed: Vec<u8> = Vec::new();
+        let compressed: Vec<u8> = Vec::new();
         let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
 
-        bincode::serialize_into(&mut compressor, &locs);
+        bincode::serialize_into(&mut compressor, &locs)
+            .expect("Unable to bincode locs into compressor");
         let compressed = compressor.finish().unwrap();
 
         bincode::serialize_into(&mut out_fh, &compressed)
             .expect("Unable to write Metadata to file");
 
-        // bincode::serialize_into(&mut out_fh, &s.1).expect("Unable to write Metadata to file");
-
+        /*
         pos = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
+        */
     }
 
     println!(
@@ -224,14 +225,15 @@ pub fn convert_fasta<W, R: 'static>(
 
     let ids = indexer.ids.take().unwrap();
 
-    let mut compressed: Vec<u8> = Vec::new();
+    let compressed: Vec<u8> = Vec::new();
     let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
 
-    bincode::serialize_into(&mut compressor, &indexer);
+    bincode::serialize_into(&mut compressor, &indexer)
+        .expect("Unable to bincode index to compressor");
 
     let compressed = compressor.finish().unwrap();
 
-    bincode::serialize_into(&mut out_fh, &compressed);
+    bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to bincode compressed index");
     println!(
         "Index written: {}",
         out_fh
@@ -328,7 +330,7 @@ mod tests {
     use crate::directory::Directory;
     use crate::metadata::Metadata;
     use crate::parameters::Parameters;
-    use crate::sequence_block::{SequenceBlock, SequenceBlockCompressed};
+    use crate::sequence_block::SequenceBlockCompressed;
     use std::io::Cursor;
 
     #[test]
@@ -339,7 +341,7 @@ mod tests {
 
         let mut out_buf = Cursor::new(Vec::new());
 
-        let mut in_buf = BufReader::new(
+        let in_buf = BufReader::new(
             File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
@@ -356,10 +358,10 @@ mod tests {
             .expect("Unable to read SFASTA Marker");
         assert!(sfasta_marker == "sfasta".as_bytes());
 
-        let v: u64 = bincode.deserialize_from(&mut out_buf).unwrap();
-        let d: Directory = bincode.deserialize_from(&mut out_buf).unwrap();
-        let p: Parameters = bincode.deserialize_from(&mut out_buf).unwrap();
-        let m: Metadata = bincode.deserialize_from(&mut out_buf).unwrap();
+        let _v: u64 = bincode.deserialize_from(&mut out_buf).unwrap();
+        let _d: Directory = bincode.deserialize_from(&mut out_buf).unwrap();
+        let _p: Parameters = bincode.deserialize_from(&mut out_buf).unwrap();
+        let _m: Metadata = bincode.deserialize_from(&mut out_buf).unwrap();
 
         let b: SequenceBlockCompressed = bincode::deserialize_from(&mut out_buf).unwrap();
         let b = b.decompress();
