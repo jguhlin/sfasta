@@ -7,6 +7,8 @@ edition = "2018"
 [profile.release]
 debug = true
 
+# Add in xz compression support
+
 [dependencies]
 serde = { version = "1.0.126", features = ["derive"] }
 serde_bytes = "0.11.5"
