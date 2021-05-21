@@ -46,13 +46,13 @@ fn main() {
         };
 
         let file = BufReader::with_capacity(8 * 1024 * 1024, file);
-        let parser = SfastaParser::open_from_buffer(file);
+        let sfasta = SfastaParser::open_from_buffer(file);
         println!("Successfully opened SFASTA");
         println!(
             "Found: {} entries",
-            parser.sfasta.index.as_ref().unwrap().len()
+            sfasta.index.as_ref().unwrap().len()
         );
-        println!("{:#?}", parser.sfasta.index.as_ref().unwrap().ids);
+        println!("{:#?}", sfasta.index.as_ref().unwrap().ids);
     }
 
     // TODO: Make this faster but putting the decompression into another thread...

@@ -16,6 +16,7 @@ pub struct Sfasta {
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
     pub index: Option<Index64>,
+    buf: Option<Box<dyn ReadAndSeek>>,
 }
 
 impl Default for Sfasta {
@@ -27,6 +28,7 @@ impl Default for Sfasta {
             metadata: Metadata::default(),
             index_directory: IndexDirectory::default().with_blocks().with_ids(),
             index: None,
+            buf: None,
         }
     }
 }
@@ -52,15 +54,46 @@ impl Sfasta {
         self.parameters.compression_type = compression;
         self
     }
+
+    pub fn decompress_all_ids(&mut self) {
+        assert!(self.buf.is_some(), "Sfasta buffer not yet present -- Are you creating a file?");
+        let len = self.index.as_ref().unwrap().len();
+        let blocks = (len as f64 / 8192_f64).ceil() as usize;
+
+        self.buf
+            .as_deref_mut().unwrap().seek(SeekFrom::Start(self.directory.ids_loc))
+            .expect("Unable to work with seek API");
+
+        let mut ids: Vec<String> = Vec::with_capacity(len as usize);
+
+        for _ in 0..blocks {
+            let compressed: Vec<u8>;
+            compressed = bincode::deserialize_from(self.buf.as_deref_mut().unwrap()).unwrap();
+            let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
+            let chunk_ids: Vec<String>;
+            chunk_ids = bincode::deserialize_from(&mut decompressed).unwrap();
+            ids.extend(chunk_ids);
+        }
+
+        self.index.as_mut().unwrap().set_ids(ids);
+    }
+
+    pub fn find(&mut self, x: &str) -> String {
+        let possibilities = self.index.unwrap().find(x);
+        if possibilities.is_some() {
+            // Start opening up blocks and try to find...
+        }
+    }
 }
 
-pub struct SfastaParser<R: 'static + Read + Seek + Send> {
+pub struct SfastaParser {
     pub sfasta: Sfasta,
-    in_buf: R,
 }
 
-impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
-    pub fn open_from_buffer(mut in_buf: R) -> Self {
+impl SfastaParser {
+    pub fn open_from_buffer<R>(mut in_buf: R) -> Sfasta 
+    where R: 'static + Read + Seek + Send
+    {
         let bincode = bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .allow_trailing_bytes();
@@ -72,8 +105,6 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
         assert!(sfasta_marker == "sfasta".as_bytes());
 
         let mut sfasta = Sfasta::default();
-
-        println!("Got header, reading directory and metadata...");
 
         sfasta.version = match bincode::deserialize_from(&mut in_buf) {
             Ok(x) => x,
@@ -107,13 +138,9 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
             .seek(SeekFrom::Start(sfasta.directory.index_loc))
             .expect("Unable to work with seek API");
 
-        println!("Reading index...");
-
         let index_compressed: Vec<u8> = bincode
             .deserialize_from(&mut in_buf)
             .expect("Unable to parse index");
-
-        println!("Got compressed index, decompressing...");
 
         let mut decompressor = lz4_flex::frame::FrameDecoder::new(&index_compressed[..]);
         let mut index_bincoded = Vec::with_capacity(32 * 1024 * 1024);
@@ -121,45 +148,21 @@ impl<R: 'static + Read + Seek + Send> SfastaParser<R> {
             .read_to_end(&mut index_bincoded)
             .expect("Unable to parse index");
 
-        println!("Parsing index");
-
         sfasta.index = Some(
             bincode
                 .deserialize_from(&index_bincoded[..])
                 .expect("Unable to parse index"),
         );
 
-        println!("Index loaded");
-
-        let mut parser = SfastaParser { sfasta, in_buf };
+        // let mut parser = SfastaParser { sfasta, in_buf };
 
         // If there are few enough IDs, let's decompress it and store it in the index...
-        if parser.sfasta.index.as_ref().unwrap().len() <= 8192 * 2 {
-            parser.decompress_all_ids();
-        }
+        // if parser.sfasta.index.as_ref().unwrap().len() <= 8192 * 2 {
+        //    parser.decompress_all_ids();
+        // }
 
-        parser
-    }
+        sfasta.buf = Some(Box::new(in_buf));
 
-    pub fn decompress_all_ids(&mut self) {
-        let len = self.sfasta.index.as_ref().unwrap().len();
-        let blocks = (len as f64 / 8192_f64).ceil() as usize;
-
-        self.in_buf
-            .seek(SeekFrom::Start(self.sfasta.directory.ids_loc))
-            .expect("Unable to work with seek API");
-
-        let mut ids: Vec<String> = Vec::with_capacity(len as usize);
-
-        for _ in 0..blocks {
-            let compressed: Vec<u8>;
-            compressed = bincode::deserialize_from(&mut self.in_buf).unwrap();
-            let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
-            let chunk_ids: Vec<String>;
-            chunk_ids = bincode::deserialize_from(&mut decompressed).unwrap();
-            ids.extend(chunk_ids);
-        }
-
-        self.sfasta.index.as_mut().unwrap().set_ids(ids);
+        sfasta
     }
 }
