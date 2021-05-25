@@ -1,6 +1,7 @@
 use crate::structs::{default_compression_level, CompressionType};
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
+use xz::read::{XzDecoder, XzEncoder};
 
 #[derive(Clone, Debug, Default)]
 pub struct SequenceBlock {
@@ -9,40 +10,45 @@ pub struct SequenceBlock {
 }
 
 impl SequenceBlock {
-    pub fn compress(self) -> SequenceBlockCompressed {
-        let level = default_compression_level(CompressionType::ZSTD);
-        let cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
-        let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
-        //encoder.multithread(8);
-        encoder
-            .long_distance_matching(true)
-            .expect("Unable to set ZSTD Long Distance Matching");
-        encoder
-            .include_magicbytes(false)
-            .expect("Unable to set ZSTD MagicBytes");
-        encoder
-            .include_contentsize(false)
-            .expect("Unable to set ZSTD Content Size Flag");
-        encoder
-            .write_all(&self.seq[..])
-            .expect("Unable to write sequence to ZSTD compressor");
-        let cseq = encoder.finish().unwrap();
+    pub fn compress(self, compression_type: CompressionType) -> SequenceBlockCompressed {
+        let level = default_compression_level(compression_type);
+        let mut cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
 
-        //let mut compressor = zstd::block::Compressor::new();
-        //let cseq = compressor.compress(&self.seq[..], -3).expect("Unable to compress");
-
-        //let cseq = match zstd::stream::encode_all(&self.seq[..], level) {
-        //    Ok(x) => x,
-        //    Err(x) => panic!("{:#?}", x),
-        //};
-
-        // let compressed_size = cseq.len();
-
-        // let ratio = compressed_size as f64 / orig_size as f64;
-        // println!("Compressed: {}", ratio);
+        match compression_type {
+            CompressionType::ZSTD => {
+                let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
+                encoder
+                    .long_distance_matching(true)
+                    .expect("Unable to set ZSTD Long Distance Matching");
+                encoder
+                    .include_magicbytes(false)
+                    .expect("Unable to set ZSTD MagicBytes");
+                encoder
+                    .include_contentsize(false)
+                    .expect("Unable to set ZSTD Content Size Flag");
+                encoder
+                    .write_all(&self.seq[..])
+                    .expect("Unable to write sequence to ZSTD compressor");
+                cseq = encoder.finish().unwrap();
+            }
+            CompressionType::LZ4 => { 
+                let mut compressor = lz4_flex::frame::FrameEncoder::new(cseq);
+                compressor.write_all(&self.seq[..]).expect("Unable to compress with LZ4");
+                cseq = compressor.finish().unwrap();
+            }
+            CompressionType::SNAPPY => { unimplemented!(); }
+            CompressionType::GZIP => { unimplemented!(); }
+            CompressionType::NAF => { unimplemented!(); }
+            CompressionType::NONE => { unimplemented!(); }
+            CompressionType::XZ => {
+                let mut compressor = XzEncoder::new(&self.seq[..], level as u32);
+                compressor
+                    .read_to_end(&mut cseq)
+                    .expect("Unable to XZ compress");
+            }
+        }
 
         SequenceBlockCompressed {
-            // compression_type: self.compression_type,
             compressed_seq: cseq,
         }
     }
@@ -120,7 +126,7 @@ mod tests {
             ..Default::default()
         };
 
-        let y = x.compress();
+        let y = x.compress(CompressionType::ZSTD);
         let z = y.decompress();
         assert!(z.seq == test_bytes);
     }

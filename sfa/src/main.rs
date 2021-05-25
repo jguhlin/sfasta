@@ -19,6 +19,8 @@ use indicatif::{ProgressBar, ProgressStyle};
 
 use libsfasta::prelude::*;
 
+use libsfasta::CompressionType;
+
 fn style_pb(pb: ProgressBar) -> ProgressBar {
     let style = ProgressStyle::default_bar()
         .template(
@@ -108,7 +110,26 @@ fn convert(matches: &ArgMatches) {
     let buf = generic_open_file_pb(pb, fasta_filename);
     let buf = BufReader::with_capacity(8 * 1024 * 1024, buf.2);
 
-    convert_fasta(buf, &mut output, 32 * 1024 * 1024, 64, summary);
+    let mut compression_type = CompressionType::default();
+    if matches.is_present("zstd") {
+        compression_type = CompressionType::ZSTD;
+    } else if matches.is_present("lz4") {
+        compression_type = CompressionType::LZ4;
+    } else if matches.is_present("xz") {
+        compression_type = CompressionType::XZ;
+    }
+
+    let index = matches.is_present("index");
+
+    convert_fasta(
+        buf,
+        &mut output,
+        32 * 1024 * 1024,
+        64,
+        summary,
+        compression_type,
+        index,
+    );
 }
 
 pub fn generic_open_file_pb(

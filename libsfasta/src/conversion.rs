@@ -12,6 +12,7 @@ use crate::format::Sfasta;
 use crate::index::IDIndexer;
 use crate::structs::WriteAndSeek;
 use crate::types::*;
+use crate::CompressionType;
 
 use bincode::Options;
 
@@ -24,6 +25,8 @@ pub fn convert_fasta<W, R: 'static>(
     block_size: u32,
     threads: u16,
     entry_count: usize,
+    compression_type: CompressionType,
+    index: bool,
 ) where
     W: WriteAndSeek,
     R: BufRead + Read + Send,
@@ -83,6 +86,7 @@ pub fn convert_fasta<W, R: 'static>(
 
     let mut sb = CompressionStreamBuffer::default()
         .with_block_size(block_size)
+        .with_compression_type(compression_type)
         .with_threads(threads); // Effectively # of compression threads
 
     let oq = sb.output_queue();
@@ -177,8 +181,10 @@ pub fn convert_fasta<W, R: 'static>(
         .collect::<Vec<(usize, &(String, Vec<Loc>))>>()
         .chunks(64 * 1024)
     {
-        for (i, (id, _)) in s {
-            indexer.add(&id, *i as u32).expect("Unable to add to index");
+        if index {
+            for (i, (id, _)) in s {
+                indexer.add(&id, *i as u32).expect("Unable to add to index");
+            }
         }
 
         // let output: Vec<u8> = Vec::with_capacity(1024);
@@ -233,42 +239,47 @@ pub fn convert_fasta<W, R: 'static>(
 
     let compressed = compressor.finish().unwrap();
 
-    bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to bincode compressed index");
-    println!(
-        "Index written: {}",
-        out_fh
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API")
-    );
-
-    // bincode::serialize_into(&mut out_fh, &indexer).expect("Unable to write directory to file");
-    println!("Indexer finished...");
-
-    let ids_loc = out_fh
-        .seek(SeekFrom::Current(0))
-        .expect("Unable to work with seek API");
-
-    // Write out the IDs vector...
-    // for chunk in indexer.ids_chunks(2048) {
-    for chunk in ids.chunks(4 * 1024) {
-        let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
-
-        let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-        bincode::serialize_into(&mut compressor, &chunk)
-            .expect("Unable to write directory to file");
-
-        let compressed = compressor.finish().expect("Unable to compress ID stream");
-
+    if index {
         bincode::serialize_into(&mut out_fh, &compressed)
-            .expect("Unable to write directory to file");
-    }
+            .expect("Unable to bincode compressed index");
+        println!(
+            "Index written: {}",
+            out_fh
+                .seek(SeekFrom::Current(0))
+                .expect("Unable to work with seek API")
+        );
 
-    println!(
-        "IDs written: {}",
-        out_fh
+        // bincode::serialize_into(&mut out_fh, &indexer).expect("Unable to write directory to file");
+        println!("Indexer finished...");
+
+        let ids_loc = out_fh
             .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API")
-    );
+            .expect("Unable to work with seek API");
+
+        // Write out the IDs vector...
+        // for chunk in indexer.ids_chunks(2048) {
+        for chunk in ids.chunks(4 * 1024) {
+            let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
+
+            let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
+            bincode::serialize_into(&mut compressor, &chunk)
+                .expect("Unable to write directory to file");
+
+            let compressed = compressor.finish().expect("Unable to compress ID stream");
+
+            bincode::serialize_into(&mut out_fh, &compressed)
+                .expect("Unable to write directory to file");
+        }
+
+        println!(
+            "IDs written: {}",
+            out_fh
+                .seek(SeekFrom::Current(0))
+                .expect("Unable to work with seek API")
+        );
+
+        sfasta.directory.ids_loc = ids_loc;
+    }
 
     // Block Index
     let block_index_pos = out_fh
@@ -285,7 +296,7 @@ pub fn convert_fasta<W, R: 'static>(
 
     sfasta.directory.index_loc = id_index_pos;
     sfasta.directory.block_index_loc = block_index_pos;
-    sfasta.directory.ids_loc = ids_loc;
+
     out_fh
         .seek(SeekFrom::Start(directory_location))
         .expect("Unable to rewind to start of the file");
@@ -345,7 +356,15 @@ mod tests {
             File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
-        convert_fasta(in_buf, &mut out_buf, 8 * 1024, 6, 10);
+        convert_fasta(
+            in_buf,
+            &mut out_buf,
+            8 * 1024,
+            6,
+            10,
+            CompressionType::ZSTD,
+            true,
+        );
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),

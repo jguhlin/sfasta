@@ -10,6 +10,7 @@ use crossbeam::utils::Backoff;
 
 use crate::sequence_block::*;
 use crate::types::*;
+use crate::CompressionType;
 
 pub struct CompressionStreamBuffer {
     block_size: u32,
@@ -26,6 +27,7 @@ pub struct CompressionStreamBuffer {
     total_entries: Arc<AtomicUsize>,
     written_entries: Arc<AtomicUsize>,
     finalized: bool,
+    compression_type: CompressionType,
 }
 
 impl Default for CompressionStreamBuffer {
@@ -45,6 +47,7 @@ impl Default for CompressionStreamBuffer {
             finalized: false,
             total_entries: Arc::new(AtomicUsize::new(0)),
             written_entries: Arc::new(AtomicUsize::new(0)),
+            compression_type: CompressionType::ZSTD,
         }
     }
 }
@@ -65,7 +68,10 @@ impl CompressionStreamBuffer {
             let cq = Arc::clone(&self.compress_queue);
             let wq = Arc::clone(&self.write_queue);
 
-            let handle = thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy));
+            let ct = self.compression_type.clone();
+
+            let handle =
+                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct));
             self.workers.push(handle);
         }
 
@@ -188,6 +194,12 @@ impl CompressionStreamBuffer {
         self
     }
 
+    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
+        self._check_initialized();
+        self.compression_type = compression_type;
+        self
+    }
+
     pub fn output_queue(&self) -> Arc<ArrayQueue<(u32, SequenceBlockCompressed)>> {
         Arc::clone(&self.output_queue)
     }
@@ -201,6 +213,7 @@ fn _compression_worker_thread(
     compress_queue: Arc<ArrayQueue<(u32, SequenceBlock)>>,
     write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     shutdown: Arc<AtomicBool>,
+    compression_type: CompressionType,
 ) {
     let mut result;
     let backoff = Backoff::new();
@@ -216,7 +229,7 @@ fn _compression_worker_thread(
                 }
             }
             Some((block_id, sb)) => {
-                let sbc = sb.compress();
+                let sbc = sb.compress(compression_type);
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
                     entry = x;

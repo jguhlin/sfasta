@@ -10,6 +10,40 @@ subcommands:
                 about: Input FASTA file (.fasta, .fna, .faa)
                 index: 1
                 required: true
+            - index: 
+                long: index
+                help: Index the file
+            - zstd:
+                long: zstd
+                help: Compress with ZSTD
+                conflicts_with:
+                    - lz4
+                    - snappy
+                    - gzip
+                    - naf
+                    - none
+                    - xz
+            - lz4:
+                long: lz4
+                help: Compress with LZ4
+                conflicts_with:
+                    - zstd
+                    - snappy
+                    - gzip
+                    - naf
+                    - none
+                    - xz
+            - xz:
+                long: xz
+                help: Compress with XZ
+                conflicts_with:
+                    - zstd
+                    - snappy
+                    - gzip
+                    - naf
+                    - none
+                    - lz4
+
     - summarize:
         about: "Summarize a FASTA file"
         args: 

@@ -245,7 +245,15 @@ mod tests {
             File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
-        crate::conversion::convert_fasta(in_buf, &mut out_buf, 8 * 1024, 6, 10);
+        crate::conversion::convert_fasta(
+            in_buf,
+            &mut out_buf,
+            8 * 1024,
+            6,
+            10,
+            CompressionType::ZSTD,
+            true,
+        );
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
