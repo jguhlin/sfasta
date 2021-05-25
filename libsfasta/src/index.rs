@@ -46,7 +46,12 @@ pub trait IDIndexer {
     // We return a vector of possible matches
     // We deal with collisions by not-dealing with collisions
     // It's fast enough to take the list of candidates, and query them directly...
-    fn find(&self, id: &str) -> Option<Vec<u32>>;
+    /// Return a vector of possible matches
+    /// The match is the usize index location of the appropriate fields.
+    /// So the ID will be index.ids[result]
+    /// and the location will be index.locs[result]
+
+    fn find(&self, id: &str) -> Option<Vec<usize>>;
 
     // Finalize (no more additions)
     // This function should handle the sorting (binary search doesn't work without it)
@@ -99,7 +104,7 @@ impl IDIndexer for Index32 {
         Ok(())
     }
 
-    fn find(&self, id: &str) -> Option<Vec<u32>> {
+    fn find(&self, id: &str) -> Option<Vec<usize>> {
         let mut hasher = XxHash32::with_seed(42);
         hasher.write(id.as_bytes());
         let hash = hasher.finish();
@@ -114,7 +119,8 @@ impl IDIndexer for Index32 {
         let mut locs = Vec::new();
 
         if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
-            locs.push(self.locs[found]);
+            // locs.push(self.locs[found]);
+            locs.push(found);
             return Some(locs);
         }
 
@@ -135,7 +141,7 @@ impl IDIndexer for Index32 {
 
         end = end.saturating_sub(1);
 
-        Some(self.locs[start..=end].to_vec())
+        Some((start..=end).collect())
     }
 
     fn finalize(self) -> Self {
@@ -197,10 +203,27 @@ enum Hashes {
               // On fastq file was... 91.83
 }
 
+/// ```
+///  // Generate an index and search on it
+///  use libsfasta::prelude::*;
+///  let mut i64 = Index64::with_capacity(64);
+///  for n in 0..512 {
+///      let id = format!("test{}", n);
+///      i64.add(&id, n).expect("Unable to add to index");
+///  }
+///  i64.add("TestA", 42);
+///  i64.add("TestZ", 84);
+///  let mut i64 = i64.finalize(); // Finalize the index
+///  let j = i64.find("TestA");
+///  let j = j.unwrap()[0];
+///  println!("Index location: {} id: {} Location: {}", j, i64.ids.as_ref().unwrap()[j], i64.locs[64]);
+///
+///  
+/// ```
 #[derive(Serialize, Deserialize)]
 pub struct Index64 {
     hashes: Vec<u64>,
-    locs: Vec<u32>,
+    pub locs: Vec<u32>,
     hash: Hashes,
 
     #[serde(skip)]
@@ -265,7 +288,7 @@ impl IDIndexer for Index64 {
     }
 
     // TODO: Dedupe this code with above...
-    fn find(&self, id: &str) -> Option<Vec<u32>> {
+    fn find(&self, id: &str) -> Option<Vec<usize>> {
         let hash = self.get_hash(id);
 
         let found = match self.hashes.binary_search(&hash) {
@@ -276,7 +299,8 @@ impl IDIndexer for Index64 {
         let mut locs = Vec::new();
 
         if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
-            locs.push(self.locs[found]);
+            //locs.push(self.locs[found]);
+            locs.push(found);
             return Some(locs);
         }
 
@@ -296,7 +320,7 @@ impl IDIndexer for Index64 {
 
         end = end.saturating_sub(1);
 
-        Some(self.locs[start..=end].to_vec())
+        Some((start..=end).collect())
     }
 
     fn finalize(self) -> Self {
@@ -358,7 +382,6 @@ mod tests {
 
     #[test]
     pub fn test_index64() {
-
         let mut i64 = Index64::with_capacity(64);
         for n in 0..256 {
             let id = format!("test{}", n);
@@ -366,26 +389,48 @@ mod tests {
         }
 
         i64.add("duplicate", 1001).expect("Unable to add to index");
-        i64.add("duplicate", 1002).expect("Unable to add to index");;
-        i64.add("duplicate", 1003).expect("Unable to add to index");;
-        i64.add("duplicate", 1004).expect("Unable to add to index");;
-        i64.add("duplicate", 1005).expect("Unable to add to index");;
+        i64.add("duplicate", 1002).expect("Unable to add to index");
+        i64.add("duplicate", 1003).expect("Unable to add to index");
+        i64.add("duplicate", 1004).expect("Unable to add to index");
+        i64.add("duplicate", 1005).expect("Unable to add to index");
 
-        let i64 = i64.finalize();
-        let y = i64.find("test32");
-        assert!(y == Some([32].to_vec()));
+        let mut i64 = i64.finalize();
+        let ids = i64.ids.take().unwrap();
+
+        let y = i64.find("test32").unwrap();
+        assert!(i64.locs[y[0]] == 32);
+
+        assert!(ids[y[0]] == "test32");
+
         let y = i64.find("not-in-the-index");
         assert!(y == None);
 
         let y = i64.find("duplicate");
         println!("{:#?}", y);
         let y = y.expect("Index did not find correctly.");
+        let y = y.iter().map(|&x| i64.locs[x]).collect::<Vec<u32>>();
         assert!(y.len() == 5);
         assert!(y.contains(&1001));
         assert!(y.contains(&1002));
         assert!(y.contains(&1003));
         assert!(y.contains(&1004));
         assert!(y.contains(&1005));
+    }
 
+    #[test]
+    pub fn test_index64_len() {
+        let mut i64 = Index64::with_capacity(64);
+        for n in 0..512 {
+            let id = format!("test{}", n);
+            i64.add(&id, n).expect("Unable to add to index");
+        }
+
+        for n in 0..512 {
+            let id = "test";
+            i64.add(&id, n).expect("Unable to add to index");
+        }
+
+        let i64 = i64.finalize();
+        assert!(i64.len() == 1024);
     }
 }

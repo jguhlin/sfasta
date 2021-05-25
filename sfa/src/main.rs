@@ -48,10 +48,7 @@ fn main() {
         let file = BufReader::with_capacity(8 * 1024 * 1024, file);
         let sfasta = SfastaParser::open_from_buffer(file);
         println!("Successfully opened SFASTA");
-        println!(
-            "Found: {} entries",
-            sfasta.index.as_ref().unwrap().len()
-        );
+        println!("Found: {} entries", sfasta.index.as_ref().unwrap().len());
         println!("{:#?}", sfasta.index.as_ref().unwrap().ids);
     }
 
