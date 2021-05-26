@@ -5,7 +5,11 @@ authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
 edition = "2018"
 
 [profile.release]
-debug = true
+opt-level = 3
+lto = "fat"
+panic = "abort"
+codegen-units = 1
+# debug = true
 
 [dependencies]
 indicatif = "0.16.0"
