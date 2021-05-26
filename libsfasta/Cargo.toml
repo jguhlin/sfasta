@@ -4,6 +4,9 @@ version = "0.0.1"
 authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
 edition = "2018"
 
+[lib]
+crate-type = ["rlib", "dylib"]
+
 [profile.release]
 debug = true
 

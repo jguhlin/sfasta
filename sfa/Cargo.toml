@@ -7,7 +7,7 @@ edition = "2018"
 [profile.release]
 opt-level = 3
 lto = "fat"
-panic = "abort"
+# panic = "abort"
 codegen-units = 1
 # debug = true
 
@@ -29,3 +29,8 @@ bytelines = "2.2.2"
 [dependencies.clap]
 version = "3.0.0-beta.2"
 features = [ "suggestions", "color", "yaml", "wrap_help"]
+
+[[bin]]
+name = "sfa"
+test = true
+bench = true
