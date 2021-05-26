@@ -1,4 +1,3 @@
-use bitpacking::{BitPacker, BitPacker8x};
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use humansize::{file_size_opts as options, FileSize};
 use std::hash::Hasher;
