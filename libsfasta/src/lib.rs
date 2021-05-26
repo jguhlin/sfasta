@@ -1,14 +1,14 @@
 extern crate bincode;
 extern crate bytelines;
 extern crate crossbeam;
-extern crate flate2;
-extern crate lz4_flex;
 extern crate rand;
 extern crate rayon;
 extern crate serde;
 extern crate serde_bytes;
+
+extern crate flate2;
+extern crate lz4_flex;
 extern crate snap;
-extern crate thincollections;
 extern crate zstd;
 
 mod compression_stream_buffer;

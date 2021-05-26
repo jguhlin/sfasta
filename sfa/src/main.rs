@@ -101,7 +101,6 @@ fn convert(matches: &ArgMatches) {
         Err(why) => panic!("couldn't create: {}", why),
         Ok(file) => file,
     };
-    // let mut output = BufWriter::with_capacity(64 * 1024 * 1024, output);
 
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());

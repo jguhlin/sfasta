@@ -24,7 +24,7 @@ impl<R: BufRead> Fasta<R> {
         Fasta {
             reader: in_buf,
             buffer: Vec::with_capacity(1024),
-            seqbuffer: Vec::with_capacity(32 * 1024 * 1024),
+            seqbuffer: Vec::with_capacity(1 * 1024 * 1024),
             next_seqid: None,
             seqlen: 0,
         }
@@ -70,7 +70,7 @@ impl<R: BufRead> Iterator for Fasta<R> {
                         } else {
                             bytes_read
                         };
-                        //                        let slice_end = bytes_read; //.saturating_sub(1);
+
                         let next_id = from_utf8(&self.buffer[1..slice_end])
                             .expect("Invalid UTF-8 encoding...")
                             .to_string();

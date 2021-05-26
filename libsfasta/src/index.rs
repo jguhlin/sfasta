@@ -339,7 +339,7 @@ impl IDIndexer for Index64 {
             ))
         }
 
-        if tuples.len() >= 512 * 1024 {
+        if tuples.len() >= 2 * 1024 {
             tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
         } else {
             tuples.sort_by(|a, b| a.0.cmp(&b.0));

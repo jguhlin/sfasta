@@ -40,9 +40,9 @@ impl Default for CompressionStreamBuffer {
             initialized: false,
             workers: Vec::<JoinHandle<()>>::new(),
             write_worker: None,
-            write_queue: Arc::new(ArrayQueue::new(16)),
-            compress_queue: Arc::new(ArrayQueue::new(64)),
-            output_queue: Arc::new(ArrayQueue::new(16)),
+            write_queue: Arc::new(ArrayQueue::new(128)),
+            compress_queue: Arc::new(ArrayQueue::new(256)),
+            output_queue: Arc::new(ArrayQueue::new(64)),
             shutdown: Arc::new(AtomicBool::new(false)),
             finalized: false,
             total_entries: Arc::new(AtomicUsize::new(0)),
@@ -219,22 +219,23 @@ fn _compression_worker_thread(
     let backoff = Backoff::new();
 
     loop {
+        backoff.reset();
         result = compress_queue.pop();
 
         match result {
             None => {
-                backoff.snooze();
+                backoff.spin();
                 if shutdown.load(Ordering::Relaxed) {
                     return;
                 }
             }
+           
             Some((block_id, sb)) => {
                 let sbc = sb.compress(compression_type);
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
                     entry = x;
-                    println!("Queue Full!");
-                    backoff.snooze();
+                    backoff.spin();
                 }
             }
         }
@@ -254,12 +255,13 @@ fn _writer_worker_thread(
     let backoff = Backoff::new();
 
     loop {
+        backoff.reset();
         while queue.contains_key(&expected_block) {
             let sbc = queue.remove(&expected_block).unwrap();
 
             let mut entry = (expected_block, sbc);
             while let Err(x) = output_queue.push(entry) {
-                backoff.snooze();
+                backoff.spin();
                 entry = x;
             }
 
@@ -271,13 +273,22 @@ fn _writer_worker_thread(
 
         match result {
             None => {
-                backoff.snooze();
                 if shutdown.load(Ordering::Relaxed) {
                     return;
                 }
             }
             Some((block_id, sbc)) => {
-                queue.insert(block_id, sbc);
+                if block_id == expected_block {
+                    let mut entry = (expected_block, sbc);
+                    while let Err(x) = output_queue.push(entry) {
+                        backoff.spin();
+                        entry = x;
+                    }
+                    expected_block += 1;
+                    written_entries.fetch_add(1, Ordering::SeqCst);
+                } else {
+                    queue.insert(block_id, sbc);
+                }
             }
         }
     }
