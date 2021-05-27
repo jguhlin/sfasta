@@ -4,33 +4,38 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Directory {
-    pub index_loc: u64,
+    pub index_loc: Option<u64>,
     pub ids_loc: u64,
     pub block_index_loc: u64,
-    pub seq_loc: Option<u64>,
+    pub seqlocs_loc: u64,
     pub scores_loc: Option<u64>,
 }
 
 impl Default for Directory {
     fn default() -> Self {
         Directory {
-            index_loc: 0,
+            index_loc: Some(0),
             ids_loc: 0,
             block_index_loc: 0,
-            seq_loc: None,
+            seqlocs_loc: 0,
             scores_loc: None,
         }
     }
 }
 
 impl Directory {
-    pub fn with_sequences(mut self) -> Self {
-        self.seq_loc = Some(0);
+    /* pub fn with_sequences(mut self) -> Self {
+        self.seqlocs_loc = Some(0);
         self
-    }
+    } */
 
     pub fn with_scores(mut self) -> Self {
         self.scores_loc = Some(0);
+        self
+    }
+
+    pub fn with_index(mut self) -> Self {
+        self.index_loc = Some(0);
         self
     }
 }
@@ -56,16 +61,16 @@ mod tests {
     #[test]
     pub fn bincode_size_directory_struct() {
         let mut directory = Directory {
-            index_loc: 0,
+            index_loc: Some(0),
             ids_loc: 0,
             block_index_loc: 0,
-            seq_loc: Some(0),
+            seqlocs_loc: 0,
             scores_loc: None,
         };
 
         let encoded_0: Vec<u8> = bincode::serialize(&directory).unwrap();
 
-        directory.index_loc = std::u64::MAX;
+        directory.index_loc = Some(std::u64::MAX);
         let encoded_1: Vec<u8> = bincode::serialize(&directory).unwrap();
 
         directory.scores_loc = Some(std::u64::MAX);

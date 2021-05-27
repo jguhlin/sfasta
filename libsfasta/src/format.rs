@@ -36,7 +36,7 @@ impl Default for Sfasta {
 
 impl Sfasta {
     pub fn with_sequences(mut self) -> Self {
-        self.directory = self.directory.with_sequences();
+        // self.directory = self.directory.with_sequences();
         self
     }
 
@@ -84,12 +84,13 @@ impl Sfasta {
         self.index.as_mut().unwrap().set_ids(ids);
     }
 
-    pub fn find(&mut self, x: &str) -> Result<Option<Vec<String>>, &str> {
+    pub fn find(&mut self, x: &str) -> Result<Option<Vec<(String, usize, u32)>>, &str> {
         let possibilities = self.index.as_ref().unwrap().find(x);
         if possibilities.is_some() {
             let possibilities = possibilities.unwrap();
 
-            let mut matches = Vec::with_capacity(possibilities.len());
+            let mut matches: Vec<(String, usize, u32)> = Vec::with_capacity(possibilities.len());
+            let locs = &self.index.as_ref().unwrap().locs;
 
             if self.index.as_ref().unwrap().ids.is_some() {
                 // Index is already decompressed, just search it appropriately...
@@ -98,7 +99,7 @@ impl Sfasta {
 
                 for loc in possibilities {
                     if idx_ref[loc as usize] == x {
-                        matches.push(idx_ref[loc as usize].clone());
+                        matches.push((idx_ref[loc as usize].clone(), loc as usize, locs[loc as usize]));
                     }
                 }
             } else {
@@ -123,7 +124,7 @@ impl Sfasta {
                     let ids: Vec<String> = bincode::deserialize_from(&mut decompressed).unwrap();
 
                     if ids[loc as usize % IDX_CHUNK_SIZE] == x {
-                        matches.push(ids[loc as usize].clone());
+                        matches.push((ids[loc as usize].clone(), loc as usize, locs[loc as usize]));
                     }
                 }
             }
@@ -195,8 +196,9 @@ impl SfastaParser {
         // Next are the sequence blocks, which aren't important right now...
         // The index is much more important to us...
 
+        // TODO: Fix for when no index
         in_buf
-            .seek(SeekFrom::Start(sfasta.directory.index_loc))
+            .seek(SeekFrom::Start(sfasta.directory.index_loc.unwrap()))
             .expect("Unable to work with seek API");
 
         let index_compressed: Vec<u8> = bincode
@@ -266,9 +268,11 @@ mod tests {
         assert!(output == Ok(None));
 
         let output = &sfasta.find("needle").unwrap().unwrap()[0];
-        assert!(output == "needle");
+        assert!(output.0 == "needle");
 
         let output = &sfasta.find("needle_last").unwrap().unwrap()[0];
-        assert!(output == "needle_last");
+        assert!(output.0 == "needle_last");
+        println!("{:#?}", output);
+        panic!();
     }
 }

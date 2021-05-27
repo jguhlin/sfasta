@@ -229,7 +229,7 @@ fn _compression_worker_thread(
                     return;
                 }
             }
-           
+
             Some((block_id, sb)) => {
                 let sbc = sb.compress(compression_type);
                 let mut entry = (block_id, sbc);

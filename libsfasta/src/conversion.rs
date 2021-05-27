@@ -4,8 +4,8 @@ use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom};
 use std::sync::atomic::Ordering;
 use std::thread;
 
-use crossbeam::utils::Backoff;
 use bincode::Options;
+use crossbeam::utils::Backoff;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
@@ -48,7 +48,7 @@ pub fn convert_fasta<W, R: 'static>(
         .with_fixint_encoding()
         .allow_trailing_bytes();
 
-    let mut sfasta = Sfasta::default().block_size(block_size).with_sequences(); // This is a FASTA, so no scores
+    let mut sfasta = Sfasta::default().block_size(block_size); //.with_sequences(); // This is a FASTA, so no scores
 
     // Output file
     let mut out_fh = out_buf;
@@ -145,11 +145,11 @@ pub fn convert_fasta<W, R: 'static>(
     .seek(SeekFrom::Current(0))
     .expect("Unable to work with seek API");*/
 
+    let seqlocs_loc = out_fh
+        .seek(SeekFrom::Current(0))
+        .expect("Unable to work with seek API");
+    sfasta.directory.seqlocs_loc = seqlocs_loc;
     let mut out_fh = BufWriter::with_capacity(8 * 1024 * 1024, &mut out_fh);
-
-    // TODO: Maybe chunk this like IDs?
-    // Instead of u64 for location can just use  u32 in index for which item it is
-    // And use bitpacking!
 
     let mut compressed: Vec<u8> = Vec::with_capacity(8 * 1024 * 1024);
     for s in seq_locs
@@ -165,7 +165,6 @@ pub fn convert_fasta<W, R: 'static>(
         }
 
         let locs: Vec<_> = s.iter().map(|(_, (_, l))| l).collect();
-
 
         let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
 
@@ -184,24 +183,23 @@ pub fn convert_fasta<W, R: 'static>(
             .expect("Unable to work with seek API");
         */
     }
-
+    
     if index {
-
         let mut indexer = indexer.finalize();
 
         // ID Index
         let id_index_pos = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
-    
+
         let ids = indexer.ids.take().unwrap();
-    
+
         let compressed: Vec<u8> = Vec::with_capacity(8 * 1024 * 1024);
         let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
-    
+
         bincode::serialize_into(&mut compressor, &indexer)
             .expect("Unable to bincode index to compressor");
-    
+
         let compressed = compressor.finish().unwrap();
 
         bincode::serialize_into(&mut out_fh, &compressed)
@@ -227,7 +225,7 @@ pub fn convert_fasta<W, R: 'static>(
                 .expect("Unable to write directory to file");
         }
 
-        sfasta.directory.index_loc = id_index_pos;
+        sfasta.directory.index_loc = Some(id_index_pos);
         sfasta.directory.ids_loc = ids_loc;
     }
 
@@ -254,7 +252,6 @@ pub fn convert_fasta<W, R: 'static>(
     // easy hops to important areas while keeping everything in a single file
     bincode::serialize_into(&mut out_fh, &sfasta.directory)
         .expect("Unable to write directory to file");
-
 }
 
 pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) {

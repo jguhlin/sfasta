@@ -31,22 +31,34 @@ impl SequenceBlock {
                     .expect("Unable to write sequence to ZSTD compressor");
                 cseq = encoder.finish().unwrap();
             }
-            CompressionType::LZ4 => { 
+            CompressionType::LZ4 => {
                 let mut compressor = lz4_flex::frame::FrameEncoder::new(cseq);
-                compressor.write_all(&self.seq[..]).expect("Unable to compress with LZ4");
+                compressor
+                    .write_all(&self.seq[..])
+                    .expect("Unable to compress with LZ4");
                 cseq = compressor.finish().unwrap();
             }
-            CompressionType::SNAPPY => { unimplemented!(); }
-            CompressionType::GZIP => { unimplemented!(); }
-            CompressionType::NAF => { unimplemented!(); }
-            CompressionType::NONE => { unimplemented!(); }
+            CompressionType::SNAPPY => {
+                unimplemented!();
+            }
+            CompressionType::GZIP => {
+                unimplemented!();
+            }
+            CompressionType::NAF => {
+                unimplemented!();
+            }
+            CompressionType::NONE => {
+                unimplemented!();
+            }
             CompressionType::XZ => {
                 let mut compressor = XzEncoder::new(&self.seq[..], level as u32);
                 compressor
                     .read_to_end(&mut cseq)
                     .expect("Unable to XZ compress");
-            },
-            CompressionType::BROTLI => { unimplemented!(); },
+            }
+            CompressionType::BROTLI => {
+                unimplemented!();
+            }
         }
 
         SequenceBlockCompressed {
