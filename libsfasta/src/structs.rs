@@ -28,6 +28,7 @@ pub enum CompressionType {
     NAF,    // Not yet supported -- IMPLEMENT
     NONE,   // No Compression -- IMPLEMENT
     XZ,     // Implemented, 6 is default ratio
+    BROTLI, // Implemented, 6 is default
 }
 
 impl Default for CompressionType {
@@ -41,6 +42,7 @@ pub const fn default_compression_level(ct: CompressionType) -> i32 {
         CompressionType::ZSTD => 9, // 19,
         CompressionType::LZ4 => 9,
         CompressionType::XZ => 6,
+        CompressionType::BROTLI => 6,
         _ => 3,
     }
 }

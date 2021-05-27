@@ -18,6 +18,7 @@ extern crate numeric_array;
 use generic_array::typenum::consts::U256;
 use std::ops::Sub;
 extern crate serde;
+extern crate brotli;
 
 use serde::{Deserialize, Serialize};
 
@@ -79,7 +80,6 @@ fn convert_nucleotides_u4(n: &[u8]) -> Vec<u4> {
 }
 
 fn serialize_as_smallints_bincode(seq: &str) -> usize {
-
     let converted = convert_nucleotides(seq.as_bytes());
     let converted: Vec<u32> = unsafe {
         std::mem::transmute(converted)
@@ -110,7 +110,6 @@ fn serialize_as_smallints_bincode(seq: &str) -> usize {
 }
 
 fn serialize_u4(seq: &str) -> usize {
-
     let converted = convert_nucleotides_u4(seq.as_bytes());
     let converted: Vec<u8> = unsafe {
         std::mem::transmute(converted)
@@ -127,7 +126,6 @@ fn serialize_u4(seq: &str) -> usize {
 }
 
 fn serialize_u4_bincoded(seq: &str) -> usize {
-
     let converted = convert_nucleotides_u4(seq.as_bytes());
     let converted: Vec<u32> = unsafe {
         std::mem::transmute(converted)
@@ -145,7 +143,6 @@ fn serialize_u4_bincoded(seq: &str) -> usize {
         compressed_all.extend_from_slice(&compressed[..]);
     }
 
-
     let mut buf_compressed = Vec::new();
     let mut encoder = zstd::stream::write::Encoder::new(&mut buf_compressed, 6).unwrap();
     encoder.multithread(8);
@@ -155,7 +152,6 @@ fn serialize_u4_bincoded(seq: &str) -> usize {
     let j = encoder.finish().unwrap();
 
     j.len()
-
 }
 
 fn compression_benchmark(c: &mut Criterion) {
@@ -164,17 +160,25 @@ fn compression_benchmark(c: &mut Criterion) {
 
     let size = serialize_as_smallints_bincode(seq);
 
+    // ZSTD
     let mut buf_compressed = Vec::new();
     let mut encoder = zstd::stream::write::Encoder::new(&mut buf_compressed, 6).unwrap();
     encoder.long_distance_matching(true);
     encoder.include_magicbytes(false);
     encoder.write_all(&seq.as_bytes()).unwrap();
-    let j = encoder.finish().unwrap();
+    let zstd = encoder.finish().unwrap();
+
+    // BROTLI
+    let mut buf_compressed = Vec::new();
+    let mut compressor = brotli::Compressor::new(&mut buf_compressed, 8 * 1024 * 1024, 6, 22);
+    compressor.write_all(&seq.as_bytes()).unwrap();
+    let brotli = compressor.finish().unwrap();
 
     let u4serializezstd = serialize_u4(seq);
     let u4bincodedzstd = serialize_u4_bincoded(seq);
 
-    println!("Original: {} Compressed: {} Compressed Bitpacked: {} Zstd U4: {} U4 Bincoded Zstd: {}", seq.len(), j.len(), size, u4serializezstd, u4bincodedzstd);
+    println!("Original: {} Compressed: {} Compressed Bitpacked: {} Zstd U4: {} U4 Bincoded Zstd: {}", seq.len(), zstd.len(), size, u4serializezstd, u4bincodedzstd);
+  
     
     // c.bench_function("unserialize_to_vec_zstd -1", |b| b.iter_with_large_drop(|| unserialize_to_vec_zstd(black_box(&buf_compressed))));
 

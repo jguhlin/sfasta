@@ -127,7 +127,6 @@ impl Sfasta {
                     }
                 }
             }
-            // Start opening up blocks and try to find...
 
             let return_val;
             if matches.len() > 0 {

@@ -45,7 +45,8 @@ impl SequenceBlock {
                 compressor
                     .read_to_end(&mut cseq)
                     .expect("Unable to XZ compress");
-            }
+            },
+            CompressionType::BROTLI => { unimplemented!(); },
         }
 
         SequenceBlockCompressed {
