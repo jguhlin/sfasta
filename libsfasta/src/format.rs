@@ -7,9 +7,13 @@ use crate::index::*;
 use crate::index_directory::IndexDirectory;
 use crate::metadata::Metadata;
 use crate::parameters::Parameters;
+use crate::sequence_block::*;
+use crate::types::*;
 use crate::*;
 
-const IDX_CHUNK_SIZE: usize = 64 * 1024;
+pub const IDX_CHUNK_SIZE: usize = 64 * 1024;
+pub const SEQLOCS_CHUNK_SIZE: usize = 64 * 1024;
+
 pub struct Sfasta {
     pub version: u64, // I'm going to regret this, but 18,446,744,073,709,551,615 versions should be enough for anybody.
     pub directory: Directory,
@@ -17,7 +21,8 @@ pub struct Sfasta {
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
     pub index: Option<Index64>,
-    buf: Option<Box<dyn ReadAndSeek>>,
+    buf: Option<Box<dyn ReadAndSeek>>, // TODO: Needs to be behind RwLock to support better multi-threading...
+    pub block_locs: Option<Vec<u64>>,
 }
 
 impl Default for Sfasta {
@@ -30,12 +35,13 @@ impl Default for Sfasta {
             index_directory: IndexDirectory::default().with_blocks().with_ids(),
             index: None,
             buf: None,
+            block_locs: None,
         }
     }
 }
 
 impl Sfasta {
-    pub fn with_sequences(mut self) -> Self {
+    pub fn with_sequences(self) -> Self {
         // self.directory = self.directory.with_sequences();
         self
     }
@@ -84,8 +90,8 @@ impl Sfasta {
         self.index.as_mut().unwrap().set_ids(ids);
     }
 
-    pub fn find(&mut self, x: &str) -> Result<Option<Vec<(String, usize, u32)>>, &str> {
-        let possibilities = self.index.as_ref().unwrap().find(x);
+    pub fn find(&mut self, x: &str) -> Result<Option<Vec<(String, usize, u32, Vec<Loc>)>>, &str> {
+        let possibilities = self.index.as_ref().unwrap().find(&x);
         if possibilities.is_some() {
             let possibilities = possibilities.unwrap();
 
@@ -99,7 +105,11 @@ impl Sfasta {
 
                 for loc in possibilities {
                     if idx_ref[loc as usize] == x {
-                        matches.push((idx_ref[loc as usize].clone(), loc as usize, locs[loc as usize]));
+                        matches.push((
+                            idx_ref[loc as usize].clone(),
+                            loc as usize,
+                            locs[loc as usize],
+                        ));
                     }
                 }
             } else {
@@ -130,8 +140,32 @@ impl Sfasta {
             }
 
             let return_val;
+            let mut matches_with_loc: Vec<(String, usize, u32, Vec<Loc>)> = Vec::new();
             if matches.len() > 0 {
-                return_val = Some(matches);
+                for (id, idxloc, loc) in matches {
+                    self.buf
+                        .as_deref_mut()
+                        .unwrap()
+                        .seek(SeekFrom::Start(self.directory.seqlocs_loc))
+                        .expect("Unable to work with seek API");
+                    let block = loc as usize / SEQLOCS_CHUNK_SIZE;
+
+                    let mut cur: isize = -1;
+                    let mut compressed: Vec<u8> = Vec::new();
+                    while cur < block as isize {
+                        cur += 1;
+                        compressed =
+                            bincode::deserialize_from(self.buf.as_deref_mut().unwrap()).unwrap();
+                    }
+
+                    let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
+                    let seqlocs: Vec<Vec<Loc>> =
+                        bincode::deserialize_from(&mut decompressed).unwrap();
+
+                    let thisloc = seqlocs[loc as usize % SEQLOCS_CHUNK_SIZE].clone();
+                    matches_with_loc.push((id, idxloc, loc, thisloc));
+                }
+                return_val = Some(matches_with_loc);
             } else {
                 return_val = None;
             }
@@ -140,6 +174,39 @@ impl Sfasta {
         } else {
             Ok(None)
         }
+    }
+
+    pub fn get_sequence(&mut self, locs: &Vec<Loc>) -> Result<Vec<u8>, &'static str> {
+        let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024); // TODO: We can calculate this
+
+        if locs.len() == 0 {
+            return Err("No locations passed, Vec<Loc> is empty");
+        }
+
+        // Basic sanity checks
+        for (i, _) in locs {
+            if *i as usize >= self.block_locs.as_ref().unwrap().len() {
+                return Err("Requested block number is larger than the total number of blocks");
+            }
+        }
+
+        for loc in locs {
+            let byte_loc = self.block_locs.as_ref().unwrap()[loc.0 as usize];
+            self.buf
+                .as_deref_mut()
+                .unwrap()
+                .seek(SeekFrom::Start(byte_loc))
+                .expect("Unable to work with seek API");
+
+            let sbc: SequenceBlockCompressed =
+                bincode::deserialize_from(&mut self.buf.as_deref_mut().unwrap())
+                    .expect("Unable to parse SequenceBlockCompressed");
+            let sb = sbc.decompress(self.parameters.compression_type);
+
+            seq.extend_from_slice(&sb.seq[loc.1 .0 as usize..loc.1 .1 as usize]);
+        }
+
+        Ok(seq)
     }
 
     pub fn index_len(&self) -> usize {
@@ -207,6 +274,7 @@ impl SfastaParser {
 
         let mut decompressor = lz4_flex::frame::FrameDecoder::new(&index_compressed[..]);
         let mut index_bincoded = Vec::with_capacity(32 * 1024 * 1024);
+
         decompressor
             .read_to_end(&mut index_bincoded)
             .expect("Unable to parse index");
@@ -214,6 +282,25 @@ impl SfastaParser {
         sfasta.index = Some(
             bincode
                 .deserialize_from(&index_bincoded[..])
+                .expect("Unable to parse index"),
+        );
+
+        in_buf
+            .seek(SeekFrom::Start(sfasta.directory.block_index_loc))
+            .expect("Unable to work with seek API");
+
+        let block_locs_compressed: Vec<u8> =
+            bincode::deserialize_from(&mut in_buf).expect("Unable to parse block locs index");
+        let mut decompressor = lz4_flex::frame::FrameDecoder::new(&block_locs_compressed[..]);
+        let mut block_locs_bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
+
+        decompressor
+            .read_to_end(&mut block_locs_bincoded)
+            .expect("Unable to parse index");
+
+        sfasta.block_locs = Some(
+            bincode
+                .deserialize_from(&block_locs_bincoded[..])
                 .expect("Unable to parse index"),
         );
 
@@ -239,7 +326,7 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
-    pub fn test_sfasta_find() {
+    pub fn test_sfasta_find_and_retrieve_sequence() {
         let mut out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
@@ -251,7 +338,7 @@ mod tests {
             &mut out_buf,
             8 * 1024,
             6,
-            10,
+            3001,
             CompressionType::ZSTD,
             true,
         );
@@ -272,7 +359,81 @@ mod tests {
 
         let output = &sfasta.find("needle_last").unwrap().unwrap()[0];
         assert!(output.0 == "needle_last");
-        println!("{:#?}", output);
-        panic!();
+
+        let sequence = sfasta.get_sequence(&output.3).unwrap();
+        let sequence = std::str::from_utf8(&sequence).unwrap();
+        assert!("ACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATA" == sequence);
+    }
+
+    #[test]
+    pub fn test_parse_multiple_blocks() {
+        let mut out_buf = Cursor::new(Vec::new());
+
+        let in_buf = BufReader::new(
+            File::open("test_data/test_sequence_conversion.fasta").expect("Unable to open testing file"),
+        );
+
+        crate::conversion::convert_fasta(
+            in_buf,
+            &mut out_buf,
+            512, // Ridiculously small to test...
+            8,
+            10,
+            CompressionType::ZSTD,
+            true,
+        );
+
+        match out_buf.seek(SeekFrom::Start(0)) {
+            Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
+            Ok(_) => (),
+        };
+
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf);
+        assert!(sfasta.index_len() == 10);
+
+        let output = &sfasta.find("test3").unwrap().unwrap()[0];
+        assert!(output.0 == "test3");
+        
+        let sequence = sfasta.get_sequence(&output.3).unwrap();
+        let sequence = std::str::from_utf8(&sequence).unwrap();
+        
+        assert!(sequence.len() == 48598);
+        assert!(&sequence[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
+        assert!(&sequence[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
+    }
+
+    #[test]
+    pub fn test_find_does_not_trigger_infinite_loops() {
+        let mut out_buf = Cursor::new(Vec::new());
+
+        let in_buf = BufReader::new(
+            File::open("test_data/test_sequence_conversion.fasta").expect("Unable to open testing file"),
+        );
+
+        crate::conversion::convert_fasta(
+            in_buf,
+            &mut out_buf,
+            512, // Ridiculously small to test...
+            8,
+            10,
+            CompressionType::ZSTD,
+            true,
+        );
+
+        match out_buf.seek(SeekFrom::Start(0)) {
+            Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
+            Ok(_) => (),
+        };
+
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf);
+        assert!(sfasta.index_len() == 10);
+
+        let output = &sfasta.find("test3").unwrap().unwrap()[0];
+        assert!(output.0 == "test3");
+        &sfasta.find("test").unwrap().unwrap()[0];
+        &sfasta.find("test2").unwrap().unwrap()[0];
+        &sfasta.find("test3").unwrap().unwrap()[0];
+        &sfasta.find("test4").unwrap().unwrap()[0];
+        &sfasta.find("test5").unwrap().unwrap()[0];
     }
 }

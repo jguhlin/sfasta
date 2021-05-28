@@ -21,6 +21,7 @@ Bincoded, using serde.
 * Scores stream
 * Masking Stream
 * Index struct
+* Order Struct
 
 # TODO: Add masking stream...
 

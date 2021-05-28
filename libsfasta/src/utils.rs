@@ -134,6 +134,8 @@ pub fn complement_nucleotides(slice: &mut [u8]) {
     }
 }
 
+
+
 #[cfg(test)]
 mod tests {
     use super::*;

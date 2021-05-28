@@ -169,20 +169,25 @@ fn compression_benchmark(c: &mut Criterion) {
 
     // BROTLI
     let mut buf_compressed = Vec::new();
-    let mut compressor = brotli::Compressor::new(&mut buf_compressed, 8 * 1024 * 1024, 6, 22);
+    let mut compressor =
+        brotli::CompressorWriter::new(&mut buf_compressed, 2 * 1024 * 1024, 11, 22);
     compressor.write_all(&seq.as_bytes()).unwrap();
-    let brotli = compressor.finish().unwrap();
+    compressor.flush().unwrap();
+    let buf_compressed = compressor.into_inner();
+    let brotli = buf_compressed.len();
+    //let brotli = compressor.finish().unwrap();
 
     let u4serializezstd = serialize_u4(seq);
     let u4bincodedzstd = serialize_u4_bincoded(seq);
 
     println!(
-        "Original: {} Compressed: {} Compressed Bitpacked: {} Zstd U4: {} U4 Bincoded Zstd: {}",
+        "Original: {} Compressed: {} Compressed Bitpacked: {} Zstd U4: {} U4 Bincoded Zstd: {} Brotli: {}",
         seq.len(),
         zstd.len(),
         size,
         u4serializezstd,
-        u4bincodedzstd
+        u4bincodedzstd,
+        brotli,
     );
 
     // c.bench_function("unserialize_to_vec_zstd -1", |b| b.iter_with_large_drop(|| unserialize_to_vec_zstd(black_box(&buf_compressed))));

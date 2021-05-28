@@ -57,7 +57,9 @@ impl SequenceBlock {
                     .expect("Unable to XZ compress");
             }
             CompressionType::BROTLI => {
-                unimplemented!();
+                let mut compressor =
+                    brotli::CompressorReader::new(&self.seq[..], 2 * 1024 * 1024, level as u32, 22);
+                compressor.read_to_end(&mut cseq).unwrap();
             }
         }
 
@@ -84,25 +86,28 @@ pub struct SequenceBlockCompressed {
 }
 
 impl SequenceBlockCompressed {
-    pub fn decompress(&self) -> SequenceBlock {
-        // let mut decompressor = zstd::block::Decompressor::new();
-        let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
-        // encoder.multithread(1);
-        decoder
-            .include_magicbytes(false)
-            .expect("Unable to disable magicbytes in decoder");
+    pub fn decompress(self, compression_type: CompressionType) -> SequenceBlock {
 
         // TODO: Capacity here should be set by block-size
-        //let seq: Vec<u8> = decompressor.decompress(&self.compressed_seq[..], 128 * 1024 * 1024).expect("Unable to decompress block");
         let mut seq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
-        match decoder.read_to_end(&mut seq) {
-            Ok(x) => x,
-            Err(y) => panic!("Unable to decompress block: {:#?}", y),
+
+        match compression_type {
+            CompressionType::ZSTD => {
+                let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
+                decoder
+                    .include_magicbytes(false)
+                    .expect("Unable to disable magicbytes in decoder");
+
+                match decoder.read_to_end(&mut seq) {
+                    Ok(x) => x,
+                    Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                };
+            },
+            _ => { unimplemented!() },
         };
 
         SequenceBlock {
             seq,
-            // compression_type: self.compression_type,
         }
     }
 
@@ -140,7 +145,7 @@ mod tests {
         };
 
         let y = x.compress(CompressionType::ZSTD);
-        let z = y.decompress();
+        let z = y.decompress(CompressionType::ZSTD);
         assert!(z.seq == test_bytes);
     }
 }

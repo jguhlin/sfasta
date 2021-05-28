@@ -30,9 +30,13 @@ fn bench_conversion(c: &mut Criterion) {
     let zstd = create_sfasta(seq, CompressionType::ZSTD, true);
     let xz = create_sfasta(seq, CompressionType::XZ, true);
     let lz4 = create_sfasta(seq, CompressionType::LZ4, true);
+    let brotli = create_sfasta(seq, CompressionType::BROTLI, true);
 
     println!("Uncompressed Size (no index): {}", seq.len());
-    println!("With Index, sizes: ZSTD: {} XZ: {} LZ4: {}", zstd, xz, lz4);
+    println!(
+        "With Index, sizes: ZSTD: {} XZ: {} LZ4: {} BROTLI: {}",
+        zstd, xz, lz4, brotli
+    );
 
     let mut group = c.benchmark_group("Compression Types");
     group.bench_function("create_sfasta zstd index", |b| {
@@ -52,6 +56,12 @@ fn bench_conversion(c: &mut Criterion) {
     });
     group.bench_function("create_sfasta lz4 noindex", |b| {
         b.iter_with_large_drop(|| create_sfasta(black_box(seq), CompressionType::LZ4, false))
+    });
+    group.bench_function("create_sfasta brotli index", |b| {
+        b.iter_with_large_drop(|| create_sfasta(black_box(seq), CompressionType::BROTLI, true))
+    });
+    group.bench_function("create_sfasta brotli noindex", |b| {
+        b.iter_with_large_drop(|| create_sfasta(black_box(seq), CompressionType::BROTLI, false))
     });
 }
 

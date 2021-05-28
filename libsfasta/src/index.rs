@@ -90,6 +90,8 @@ impl IDIndexer for Index32 {
     }
 
     fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
+
+        // TODO: Hasing fn, lowercase stuff...
         let mut hasher = XxHash32::with_seed(42);
         hasher.write(id.as_bytes());
         let hash = hasher.finish();
@@ -247,6 +249,8 @@ impl Index64 {
         // TODO: Pretty sure this code could be simplified with dyn Hasher trait...
         // Not sure if a Box<> overhead would be worth it though...
 
+        let id = id.to_lowercase();
+
         if self.hash == Hashes::Ahash {
             let mut hasher = AHasher::new_with_keys(42, 1010);
             hasher.write(id.as_bytes());
@@ -308,13 +312,17 @@ impl IDIndexer for Index64 {
         let mut end = found;
 
         while self.hashes[start] == hash {
+            // Prevent infinte loops
+            if start == 0 {
+                break;
+            }
             start = start.saturating_sub(1);
         }
         start = start.saturating_add(1);
 
         let len = self.locs.len();
 
-        while self.hashes[end] == hash && end < len {
+        while end < len && self.hashes[end] == hash {
             end = end.saturating_add(1);
         }
 

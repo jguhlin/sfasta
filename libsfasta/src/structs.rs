@@ -42,7 +42,7 @@ pub const fn default_compression_level(ct: CompressionType) -> i32 {
         CompressionType::ZSTD => 9, // 19,
         CompressionType::LZ4 => 9,
         CompressionType::XZ => 6,
-        CompressionType::BROTLI => 6,
+        CompressionType::BROTLI => 9,
         _ => 3,
     }
 }

@@ -116,6 +116,9 @@ fn convert(matches: &ArgMatches) {
         compression_type = CompressionType::LZ4;
     } else if matches.is_present("xz") {
         compression_type = CompressionType::XZ;
+    } else if matches.is_present("gzip") {
+        println!("🤨");
+        compression_type = CompressionType::GZIP;
     }
 
     let index = matches.is_present("index");

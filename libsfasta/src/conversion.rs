@@ -5,11 +5,10 @@ use std::sync::atomic::Ordering;
 use std::thread;
 
 use bincode::Options;
-use crossbeam::utils::Backoff;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
-use crate::format::Sfasta;
+use crate::format::{Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
 use crate::index::IDIndexer;
 use crate::structs::WriteAndSeek;
 use crate::types::*;
@@ -156,7 +155,7 @@ pub fn convert_fasta<W, R: 'static>(
         .iter()
         .enumerate()
         .collect::<Vec<(usize, &(String, Vec<Loc>))>>()
-        .chunks(64 * 1024)
+        .chunks(SEQLOCS_CHUNK_SIZE)
     {
         if index {
             for (i, (id, _)) in s {
@@ -183,7 +182,7 @@ pub fn convert_fasta<W, R: 'static>(
             .expect("Unable to work with seek API");
         */
     }
-    
+
     if index {
         let mut indexer = indexer.finalize();
 
@@ -212,7 +211,7 @@ pub fn convert_fasta<W, R: 'static>(
 
         // Write out the IDs vector...
         // for chunk in indexer.ids_chunks(2048) {
-        for chunk in ids.chunks(4 * 1024) {
+        for chunk in ids.chunks(IDX_CHUNK_SIZE) {
             let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
 
             let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
@@ -234,7 +233,21 @@ pub fn convert_fasta<W, R: 'static>(
         .seek(SeekFrom::Current(0))
         .expect("Unable to work with seek API");
 
-    bincode::serialize_into(&mut out_fh, &block_locs).expect("Unable to write directory to file");
+    let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
+
+    let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
+
+    let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
+    bincode::serialize_into(&mut compressor, &block_locs)
+        .expect("Unable to write block locs to file");
+
+    let compressed = compressor
+        .finish()
+        .expect("Unable to compress Block Locs stream");
+
+    bincode::serialize_into(&mut out_fh, &compressed).expect("Unable to write directory to file");
+
+    //bincode::serialize_into(&mut out_fh, &block_locs).expect("Unable to write directory to file");
 
     // TODO: Scores Block Index
 
@@ -329,7 +342,7 @@ mod tests {
         let _m: Metadata = bincode.deserialize_from(&mut out_buf).unwrap();
 
         let b: SequenceBlockCompressed = bincode::deserialize_from(&mut out_buf).unwrap();
-        let b = b.decompress();
+        let b = b.decompress(CompressionType::ZSTD);
 
         assert!(b.len() == 8192);
     }

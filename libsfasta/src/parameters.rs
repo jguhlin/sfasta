@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 pub struct Parameters {
     pub block_size: u32,
     pub compression_type: CompressionType,
+    pub index_compression_type: CompressionType,
 }
 
 impl Default for Parameters {
@@ -14,6 +15,7 @@ impl Default for Parameters {
         Parameters {
             block_size: 4 * 1024 * 1024, // 4 Mb
             compression_type: CompressionType::ZSTD,
+            index_compression_type: CompressionType::LZ4,
         }
     }
 }

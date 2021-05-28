@@ -1,0 +1,2 @@
+* IDs are indexed as lowercase
+If you really have need of Chr1 being a different chromosome than chr1 please email me and let me know. (No, seriously, this is an easy change and can be a opt-in feature).
