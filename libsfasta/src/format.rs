@@ -3,6 +3,7 @@ use std::sync::RwLock;
 use std::time::{Duration, Instant};
 use std::thread;
 
+use serde_bytes::ByteBuf;
 use bincode::Options;
 
 use crate::directory::Directory;
@@ -296,7 +297,6 @@ impl SfastaParser {
 
         println!("Headers Processed: {}", now.elapsed().as_millis());
 
-
         // Next are the sequence blocks, which aren't important right now...
         // The index is much more important to us...
 
@@ -307,7 +307,7 @@ impl SfastaParser {
             .seek(SeekFrom::Start(sfasta.directory.index_loc.unwrap()))
             .expect("Unable to work with seek API");
 
-        let index_compressed: Vec<u8> = bincode
+        let index_compressed: ByteBuf = bincode
             .deserialize_from(&mut in_buf)
             .expect("Unable to parse index");
 
