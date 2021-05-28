@@ -67,7 +67,7 @@ fn bench_conversion(c: &mut Criterion) {
 
 criterion_group! {
     name = conversion_benchmarks;
-    config = Criterion::default().measurement_time(Duration::from_secs(64)).sample_size(250);
+    config = Criterion::default().measurement_time(Duration::from_secs(360)).sample_size(500);
     targets = bench_conversion
 }
 

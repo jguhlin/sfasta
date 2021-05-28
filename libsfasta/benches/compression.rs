@@ -195,7 +195,7 @@ fn compression_benchmark(c: &mut Criterion) {
 
 criterion_group! {
     name = compression_benches;
-    config = Criterion::default().measurement_time(Duration::from_secs(240));
+    config = Criterion::default().measurement_time(Duration::from_secs(360));
     targets = compression_benchmark
 }
 
