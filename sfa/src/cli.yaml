@@ -15,15 +15,21 @@ subcommands:
                 multiple: true
                 required: true
     - convert:
-        about: "Convert a fasta file to SFASTA"
+        about: "Convert a fasta file to SFASTA and index (by default)"
         args: 
             - input: 
                 about: Input FASTA file (.fasta, .fna, .faa)
                 index: 1
                 required: true
             - index: 
-                long: index
-                help: Index the file
+                long: noindex
+                help: Do not index the file
+            - threads:
+                long: threads
+                short: t
+                help: Threads to use for compression
+                takes_value: true
+                default_value: "4"
             - zstd:
                 long: zstd
                 help: Compress with ZSTD

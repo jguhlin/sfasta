@@ -140,7 +140,7 @@ impl Sfasta {
                     let ids: Vec<String> = bincode::deserialize_from(&mut decompressed).unwrap();
 
                     if ids[loc as usize % IDX_CHUNK_SIZE] == x {
-                        matches.push((ids[loc as usize].clone(), loc as usize, locs[loc as usize]));
+                        matches.push((ids[loc as usize % IDX_CHUNK_SIZE].clone(), loc as usize, locs[loc as usize % IDX_CHUNK_SIZE]));
                     }
                 }
             }

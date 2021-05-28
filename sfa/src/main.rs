@@ -14,6 +14,8 @@ use std::fs::{metadata, File};
 use std::io::{BufReader, Read};
 use std::path::Path;
 
+use simdutf8::basic::from_utf8;
+
 use clap::{load_yaml, App, ArgMatches};
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -72,9 +74,19 @@ fn main() {
 
     if let Some(matches) = matches.subcommand_matches("faidx") {
         let sfasta_filename = matches.value_of("input").unwrap();
+
+        let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+        let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
+
         let ids = matches.values_of("ids").unwrap();
         for i in ids {
-            println!("{}", i);
+            let results = sfasta.find(i).expect(&format!("Unable to find {} in file {}", i, sfasta_filename)).unwrap();
+            for result in results {
+                println!(">{}", i);
+                let sequence = sfasta.get_sequence(&result.3).expect("Unable to fetch sequence");
+                println!("{}", from_utf8(&sequence).unwrap());
+            }
+
         }
     }
 
@@ -90,8 +102,12 @@ fn main() {
     } */
 }
 
+// TODO: Set metadata
+// TODO: Set masking option
+// TODO: Block sizes, index compression type, etc...
 fn convert(matches: &ArgMatches) {
     let fasta_filename = matches.value_of("input").unwrap();
+    let threads: u16 = matches.value_of_t("threads").unwrap_or(4);
 
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());
@@ -131,13 +147,13 @@ fn convert(matches: &ArgMatches) {
         compression_type = CompressionType::GZIP;
     }
 
-    let index = matches.is_present("index");
+    let index = !matches.is_present("noindex");
 
     convert_fasta(
         buf,
         &mut output,
         32 * 1024 * 1024,
-        64,
+        threads as u16,
         summary,
         compression_type,
         index,
