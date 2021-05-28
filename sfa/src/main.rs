@@ -13,6 +13,7 @@ use std::fs;
 use std::fs::{metadata, File};
 use std::io::{BufReader, Read};
 use std::path::Path;
+use std::time::{Duration, Instant};
 
 use simdutf8::basic::from_utf8;
 
@@ -73,17 +74,24 @@ fn main() {
     }
 
     if let Some(matches) = matches.subcommand_matches("faidx") {
+        let mut now = Instant::now();
+
         let sfasta_filename = matches.value_of("input").unwrap();
 
         let in_buf = File::open(sfasta_filename).expect("Unable to open file");
         let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
+        println!("Opened file: {}", now.elapsed().as_millis());
 
         let ids = matches.values_of("ids").unwrap();
         for i in ids {
+            let mut now = Instant::now();
             let results = sfasta.find(i).expect(&format!("Unable to find {} in file {}", i, sfasta_filename)).unwrap();
+            println!("Found ID: {}", now.elapsed().as_millis());
             for result in results {
-                println!(">{}", i);
+                let mut now = Instant::now();
                 let sequence = sfasta.get_sequence(&result.3).expect("Unable to fetch sequence");
+                println!("Got Sequence: {}", now.elapsed().as_millis());
+                println!(">{}", i);
                 println!("{}", from_utf8(&sequence).unwrap());
             }
 
@@ -107,7 +115,7 @@ fn main() {
 // TODO: Block sizes, index compression type, etc...
 fn convert(matches: &ArgMatches) {
     let fasta_filename = matches.value_of("input").unwrap();
-    let threads: u16 = matches.value_of_t("threads").unwrap_or(4);
+    let threads: usize = matches.value_of_t("threads").unwrap_or(4);
 
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());
@@ -131,7 +139,7 @@ fn convert(matches: &ArgMatches) {
     let pb = style_pb(pb);
 
     let buf = generic_open_file_pb(pb, fasta_filename);
-    let buf = BufReader::with_capacity(8 * 1024 * 1024, buf.2);
+    let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
 
     let mut compression_type = CompressionType::default();
     if matches.is_present("zstd") {
@@ -147,16 +155,30 @@ fn convert(matches: &ArgMatches) {
         compression_type = CompressionType::GZIP;
     }
 
-    let index = !matches.is_present("noindex");
+    let mut converter = Converter::default().with_threads(threads);
+    if matches.is_present("noindex") {
+        converter = converter.without_index();
+    }
 
-    convert_fasta(
+    if matches.is_present("block_size") {
+        let block_size: usize = matches.value_of_t("block_size").unwrap_or(8 * 1024);
+        converter = converter.with_block_size(block_size * 1024);
+    }
+
+    if matches.is_present("index_chunk_size") {
+        let chunk_size: usize = matches.value_of_t("index_chunk_size").unwrap_or(64 * 1024);
+        converter = converter.with_index_chunk_size(chunk_size);
+    }
+
+    if matches.is_present("seqlocs_chunk_size") {
+        let chunk_size: usize = matches.value_of_t("seqlocs_chunk_size").unwrap_or(64 * 1024);
+        converter = converter.with_seqlocs_chunk_size(chunk_size);
+    }
+    
+    converter.convert_fasta(
         buf,
         &mut output,
-        32 * 1024 * 1024,
-        threads as u16,
         summary,
-        compression_type,
-        index,
     );
 }
 
@@ -173,7 +195,6 @@ pub fn generic_open_file_pb(
         Ok(file) => file,
     };
 
-    // let file = BufReader::with_capacity(8 * 1024 * 1024, file);
     let mut compressed: bool = false;
     let file = pb.wrap_read(file);
 

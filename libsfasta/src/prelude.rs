@@ -1,4 +1,4 @@
-pub use crate::conversion::{convert_fasta, generic_open_file};
+pub use crate::conversion::{generic_open_file, Converter};
 pub use crate::fasta::{count_fasta_entries, summarize_fasta};
 pub use crate::format::{Sfasta, SfastaParser};
 pub use crate::index::{IDIndexer, Index32, Index64};

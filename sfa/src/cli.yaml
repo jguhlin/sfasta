@@ -24,6 +24,21 @@ subcommands:
             - index: 
                 long: noindex
                 help: Do not index the file
+            - block_size:
+                long: block-size
+                about: Block size (in kb)
+                takes_value: true
+                default_value: "8192"
+            - index_chunk_size:
+                long: index-chunk-size
+                about: Index chunk size
+                takes_value: true
+                default_value: "65536"
+            - seqlocs_chunk_size:
+                long: seqlocs-chunk-size
+                about: SeqLocs chunk size
+                takes_value: true
+                default_value: "65536"
             - threads:
                 long: threads
                 short: t
