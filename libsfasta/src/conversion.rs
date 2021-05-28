@@ -7,6 +7,7 @@ use std::borrow::Cow;
 
 use bincode::Options;
 use serde_bytes::ByteBuf;
+use bumpalo::Bump;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
@@ -244,6 +245,8 @@ impl Converter {
 
         let mut seqlocs_blocks_locs: Vec<u64> =
             Vec::with_capacity(seq_locs.len() / SEQLOCS_CHUNK_SIZE);
+
+        let bump = Bump::new();
 
         for s in seq_locs
             .iter()

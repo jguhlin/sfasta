@@ -333,6 +333,7 @@ mod tests {
         assert!(oq.len() == 9);
         let g = oq.pop().unwrap();
         let g = g.1.decompress(CompressionType::ZSTD);
+        println!("{:#?}", g.len());
         assert!(g.len() == 524288);
         let seq = std::str::from_utf8(&g.seq[0..100]).unwrap();
         //println!("{:#?}", seq);

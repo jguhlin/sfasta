@@ -1,10 +1,11 @@
 use crate::structs::{default_compression_level, CompressionType};
 
-use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
+
+use serde::{Deserialize, Serialize};
 use xz::read::{XzDecoder, XzEncoder};
 use serde_bytes::ByteBuf;
-
+use bumpalo::Bump;
 
 #[derive(Clone, Debug, Default)]
 pub struct SequenceBlock {
@@ -16,6 +17,8 @@ impl SequenceBlock {
     pub fn compress(self, compression_type: CompressionType) -> SequenceBlockCompressed {
         let level = default_compression_level(compression_type);
         let mut cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
+
+        let bump = Bump::new();
 
         match compression_type {
             CompressionType::ZSTD => {
@@ -33,6 +36,7 @@ impl SequenceBlock {
                     .write_all(&self.seq[..])
                     .expect("Unable to write sequence to ZSTD compressor");
                 cseq = encoder.finish().unwrap();
+                // zstd::block::compress_to_buffer(&self.seq[..], &mut cseq, level).expect("Unable to compress to buffer ZSTD");
             }
             CompressionType::LZ4 => {
                 let mut compressor = lz4_flex::frame::FrameEncoder::new(cseq);
@@ -90,7 +94,7 @@ pub struct SequenceBlockCompressed {
 impl SequenceBlockCompressed {
     pub fn decompress(self, compression_type: CompressionType) -> SequenceBlock {
         // TODO: Capacity here should be set by block-size
-        let mut seq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
+        let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
 
         match compression_type {
             CompressionType::ZSTD => {
@@ -103,6 +107,7 @@ impl SequenceBlockCompressed {
                     Ok(x) => x,
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
+                // zstd::block::decompress_to_buffer(&self.compressed_seq[..], &mut seq).expect("Unable to decompress");
             }
             _ => {
                 unimplemented!()

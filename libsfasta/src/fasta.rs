@@ -9,6 +9,7 @@ use crate::bytelines::ByteLinesReader;
 pub struct Sequence {
     pub seq: Vec<u8>,
     pub id: String,
+    pub header: String,
 }
 
 pub struct Fasta<R> {
@@ -16,18 +17,18 @@ pub struct Fasta<R> {
     buffer: Vec<u8>,
     seqbuffer: Vec<u8>,
     next_seqid: Option<String>,
+    next_header: Option<String>,
     seqlen: usize,
 }
 
 impl<R: BufRead> Fasta<R> {
     pub fn from_buffer(in_buf: R) -> Fasta<R> {
-        // let reader = BufReader::with_capacity(512 * 1024, in_buf);
-
         Fasta {
             reader: in_buf,
             buffer: Vec::with_capacity(1024),
             seqbuffer: Vec::with_capacity(1 * 1024 * 1024),
             next_seqid: None,
+            next_header: None,
             seqlen: 0,
         }
     }
@@ -56,7 +57,8 @@ impl<R: BufRead> Iterator for Fasta<R> {
                 if self.seqlen > 0 {
                     let seq = Sequence {
                         seq: self.seqbuffer[..self.seqlen].to_vec(),
-                        id: self.next_seqid.clone().unwrap(),
+                        id: self.next_seqid.take().unwrap(),
+                        header: self.next_header.take().unwrap(),
                     };
                     self.seqlen = 0;
                     return Some(seq);
@@ -76,15 +78,33 @@ impl<R: BufRead> Iterator for Fasta<R> {
                         let next_id = from_utf8(&self.buffer[1..slice_end])
                             .expect("Invalid UTF-8 encoding...")
                             .to_string();
-                        self.buffer.clear();
-                        let next_id = next_id.split(' ').next().unwrap().trim().to_string();
-                        let id = self.next_seqid.replace(next_id);
 
+                        self.buffer.clear();
+                        let split: Vec<&str> = next_id.splitn(2, ' ').collect();
+                        // let next_id = next_id.split(' ').next().unwrap().trim().to_string();
+                        let next_id = split[0].trim().to_string();
+                        let next_header = 
+                            if split.len() == 2 {
+                                split[1].trim().to_string()
+                            } else {
+                                "".to_string()
+                            };
+
+                        let id = self.next_seqid.replace(next_id);
+                        let header = self.next_header.replace(next_header);
+                       
                         if self.seqlen > 0 {
                             assert!(id.is_some());
+                            
+                            let seqbuf = Vec::with_capacity(self.seqlen);
+
+                            let seq: Vec<u8> = std::mem::replace(&mut self.seqbuffer, seqbuf);
+
                             let seq = Sequence {
-                                seq: self.seqbuffer[..self.seqlen].to_vec(),
+                                //seq: self.seqbuffer[..self.seqlen].to_vec(),
+                                seq,
                                 id: id.unwrap(),
+                                header: header.unwrap_or("".to_string()),
                             };
                             self.seqbuffer.clear();
                             self.seqlen = 0;
@@ -167,6 +187,17 @@ mod tests {
         let mut fasta = Fasta::from_buffer(BufReader::new(fakefasta_));
         let _j = fasta.next();
         let _j = fasta.next();
+    }
+
+    #[test]
+    pub fn test_fasta_parse_rest_of_the_header() {
+        let fakefasta =
+            b">Hello I have more information in the rest of the FASTA header\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
+        let fakefasta_ = fakefasta.as_slice();
+        let mut fasta = Fasta::from_buffer(BufReader::new(fakefasta_));
+        let s = fasta.next().unwrap();
+        println!("{:#?}", s.header);
+        assert!(&s.header == "I have more information in the rest of the FASTA header");
     }
 
     #[test]
