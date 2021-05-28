@@ -5,6 +5,7 @@ use std::sync::atomic::Ordering;
 use std::thread;
 
 use bincode::Options;
+use serde_bytes::ByteBuf;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
@@ -236,7 +237,6 @@ impl Converter {
         let mut seqlocs_blocks_locs: Vec<u64> =
             Vec::with_capacity(seq_locs.len() / SEQLOCS_CHUNK_SIZE);
 
-        let mut compressed: Vec<u8> = Vec::with_capacity(8 * 1024 * 1024);
         for s in seq_locs
             .iter()
             .enumerate()
@@ -248,6 +248,8 @@ impl Converter {
                     indexer.add(&id, *i as u32).expect("Unable to add to index");
                 }
             }
+
+            let mut compressed: Vec<u8> = Vec::with_capacity(8 * 1024 * 1024);
 
             seqlocs_blocks_locs.push(
                 out_fh
@@ -261,12 +263,10 @@ impl Converter {
 
             bincode::serialize_into(&mut compressor, &locs)
                 .expect("Unable to bincode locs into compressor");
-            compressed = compressor.finish().unwrap();
+            let compressed = ByteBuf::from(compressor.finish().unwrap());
 
             bincode::serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write Metadata to file");
-
-            compressed.clear();
         }
 
         if self.index {
@@ -285,7 +285,7 @@ impl Converter {
             bincode::serialize_into(&mut compressor, &indexer)
                 .expect("Unable to bincode index to compressor");
 
-            let compressed = compressor.finish().unwrap();
+            let compressed = ByteBuf::from(compressor.finish().unwrap());
 
             bincode::serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to bincode compressed index");
@@ -309,7 +309,7 @@ impl Converter {
                 bincode::serialize_into(&mut compressor, &chunk)
                     .expect("Unable to write directory to file");
 
-                let compressed = compressor.finish().expect("Unable to compress ID stream");
+                let compressed = ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
 
                 bincode::serialize_into(&mut out_fh, &compressed)
                     .expect("Unable to write directory to file");
@@ -329,7 +329,7 @@ impl Converter {
             bincode::serialize_into(&mut compressor, &ids_blocks_locs)
                 .expect("Unable to write directory to file");
 
-            let compressed = compressor.finish().expect("Unable to compress ID stream");
+            let compressed = ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
 
             bincode::serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write directory to file");
@@ -349,7 +349,7 @@ impl Converter {
             bincode::serialize_into(&mut compressor, &seqlocs_blocks_locs)
                 .expect("Unable to write directory to file");
 
-            let compressed = compressor.finish().expect("Unable to compress ID stream");
+            let compressed = ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
 
             bincode::serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write directory to file");

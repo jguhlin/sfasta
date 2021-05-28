@@ -97,7 +97,7 @@ impl Sfasta {
         let mut ids: Vec<String> = Vec::with_capacity(len as usize);
 
         for _ in 0..blocks {
-            let compressed: Vec<u8>;
+            let compressed: ByteBuf;
             compressed = bincode::deserialize_from(&mut *buf).unwrap();
             let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
             let chunk_ids: Vec<String>;
@@ -146,8 +146,7 @@ impl Sfasta {
                     ))
                     .expect("Unable to work with SEEK API");
 
-                    let mut compressed: Vec<u8> = Vec::new();
-                    compressed = bincode::deserialize_from(&mut *buf).unwrap();
+                    let mut compressed: ByteBuf = bincode::deserialize_from(&mut *buf).unwrap();
 
                     let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
                     let ids: Vec<String> = bincode::deserialize_from(&mut decompressed).unwrap();
@@ -176,12 +175,11 @@ impl Sfasta {
                         .expect("Unable to work with seek API");
                     let block = loc as usize / SEQLOCS_CHUNK_SIZE;
 
-                    let mut compressed: Vec<u8> = Vec::new();
                     buf.seek(SeekFrom::Start(
                         self.seqlocs_blocks_locs.as_ref().unwrap()[block],
                     ))
                     .expect("Unable to work with SEEK API");
-                    compressed = bincode::deserialize_from(&mut *buf).unwrap();
+                    let compressed: ByteBuf = bincode::deserialize_from(&mut *buf).unwrap();
 
                     let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
                     let seqlocs: Vec<Vec<Loc>> =
@@ -252,15 +250,9 @@ impl SfastaParser {
     where
         R: 'static + Read + Seek + Send,
     {
-        let now = Instant::now();
-
         let bincode = bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .allow_trailing_bytes();
-
-        println!("Bincode config: {}", now.elapsed().as_millis());
-
-        let now = Instant::now();
 
         let mut sfasta_marker: [u8; 6] = [0; 6];
         in_buf
@@ -295,12 +287,8 @@ impl SfastaParser {
             Err(y) => panic!("Error reading SFASTA parameters: {}", y),
         };
 
-        println!("Headers Processed: {}", now.elapsed().as_millis());
-
         // Next are the sequence blocks, which aren't important right now...
         // The index is much more important to us...
-
-        let now = Instant::now();
 
         // TODO: Fix for when no index
         in_buf
@@ -311,9 +299,6 @@ impl SfastaParser {
             .deserialize_from(&mut in_buf)
             .expect("Unable to parse index");
 
-        println!("Index Compressed Loaded to Memory: {}", now.elapsed().as_millis());
-
-        let now = Instant::now();
         // Parse and decompress in the index in another thread
         let index_handle = thread::spawn(move || {
             let mut decompressor = lz4_flex::frame::FrameDecoder::new(&index_compressed[..]);
@@ -330,21 +315,16 @@ impl SfastaParser {
             idx
         });
 
-        println!("Index Thread Launched: {}", now.elapsed().as_millis());
-
-
-        let now = Instant::now();
-
         in_buf
             .seek(SeekFrom::Start(sfasta.directory.block_index_loc))
             .expect("Unable to work with seek API");
 
-        let block_locs_compressed: Vec<u8> =
+        let block_locs_compressed: ByteBuf =
             bincode::deserialize_from(&mut in_buf).expect("Unable to parse block locs index");
 
         let block_locs_handle = thread::spawn(move || {
             let mut decompressor = lz4_flex::frame::FrameDecoder::new(&block_locs_compressed[..]);
-            let mut block_locs_bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
+            let mut block_locs_bincoded: ByteBuf = ByteBuf::new(); //Vec::with_capacity(2 * 1024 * 1024);
 
             decompressor
                 .read_to_end(&mut block_locs_bincoded)
@@ -356,10 +336,7 @@ impl SfastaParser {
 
             block_locs
         });
-        println!("Block Locs Loaded and Thread Launched: {}", now.elapsed().as_millis());
 
-
-        let now = Instant::now();
         let mut id_blocks_index_handle = None;
 
         if sfasta.directory.id_blocks_index_loc.is_some() {
@@ -369,7 +346,7 @@ impl SfastaParser {
                 ))
                 .expect("Unable to work with seek API");
 
-            let id_blocks_locs_compressed: Vec<u8> =
+            let id_blocks_locs_compressed: ByteBuf =
                 bincode::deserialize_from(&mut in_buf).expect("Unable to parse block locs index");
             
             let ids_loc = sfasta.directory.ids_loc;
@@ -394,10 +371,7 @@ impl SfastaParser {
                 id_blocks_locs
             }));
         }
-        println!("Idx Locs Loaded and Thread Launched: {}", now.elapsed().as_millis());
 
-
-        let now = Instant::now();
         let mut seqloc_blocks_handle = None;
 
         if sfasta.directory.seqloc_blocks_index_loc.is_some() {
@@ -407,7 +381,7 @@ impl SfastaParser {
                 ))
                 .expect("Unable to work with seek API");
 
-            let seqlocs_blocks_locs_compressed: Vec<u8> =
+            let seqlocs_blocks_locs_compressed: ByteBuf =
                 bincode::deserialize_from(&mut in_buf).expect("Unable to parse block locs index");
 
             let seqlocs_loc = sfasta.directory.seqlocs_loc;
@@ -432,8 +406,6 @@ impl SfastaParser {
                 seqlocs_blocks_locs
             }));
         }
-        println!("SeqLocs Locs Loaded and Thread Launched: {}", now.elapsed().as_millis());
-
 
         // let mut parser = SfastaParser { sfasta, in_buf };
 
@@ -442,7 +414,6 @@ impl SfastaParser {
         // if parser.sfasta.index.as_ref().unwrap().len() <= 8192 * 2 {
         //    parser.decompress_all_ids();
         // }
-        let now = Instant::now();
 
         sfasta.index = Some(index_handle.join().unwrap());
         sfasta.block_locs = Some(block_locs_handle.join().unwrap());
@@ -455,8 +426,6 @@ impl SfastaParser {
         if seqloc_blocks_handle.is_some() {
             sfasta.seqlocs_blocks_locs = Some(seqloc_blocks_handle.unwrap().join().unwrap());
         }
-        println!("Threads joined: {}", now.elapsed().as_millis());
-
 
         sfasta
     }

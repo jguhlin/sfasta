@@ -1,7 +1,10 @@
 use crate::structs::{default_compression_level, CompressionType};
+
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 use xz::read::{XzDecoder, XzEncoder};
+use serde_bytes::ByteBuf;
+
 
 #[derive(Clone, Debug, Default)]
 pub struct SequenceBlock {
@@ -64,7 +67,7 @@ impl SequenceBlock {
         }
 
         SequenceBlockCompressed {
-            compressed_seq: cseq,
+            compressed_seq: ByteBuf::from(cseq),
         }
     }
 
@@ -81,8 +84,7 @@ impl SequenceBlock {
 
 #[derive(Clone, Deserialize, Serialize, Debug, Default)]
 pub struct SequenceBlockCompressed {
-    #[serde(with = "serde_bytes")]
-    pub compressed_seq: Vec<u8>,
+    pub compressed_seq: ByteBuf,
 }
 
 impl SequenceBlockCompressed {
@@ -125,7 +127,7 @@ mod tests {
     pub fn test_encode_and_decode() {
         let test_bytes = b"abatcacgactac".to_vec();
         let x = SequenceBlockCompressed {
-            compressed_seq: test_bytes.clone(),
+            compressed_seq: ByteBuf::from(test_bytes.clone()),
             ..Default::default()
         };
 
