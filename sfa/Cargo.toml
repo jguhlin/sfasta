@@ -25,6 +25,7 @@ mimalloc = { version = "*", default-features = false }
 snap = "1.0.5"
 crossbeam = "0.8.0"
 bytelines = "2.2.2"
+toml = "0.5.8"
 
 [dependencies.clap]
 version = "3.0.0-beta.2"

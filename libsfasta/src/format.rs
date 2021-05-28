@@ -11,6 +11,7 @@ use crate::sequence_block::*;
 use crate::types::*;
 use crate::*;
 
+// TODO: Move these into parameters
 pub const IDX_CHUNK_SIZE: usize = 64 * 1024;
 pub const SEQLOCS_CHUNK_SIZE: usize = 64 * 1024;
 
@@ -48,6 +49,11 @@ impl Sfasta {
 
     pub fn with_scores(mut self) -> Self {
         self.directory = self.directory.with_scores();
+        self
+    }
+
+    pub fn with_masking(mut self) -> Self {
+        self.directory = self.directory.with_masking();
         self
     }
 

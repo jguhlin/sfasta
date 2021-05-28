@@ -9,6 +9,7 @@ pub struct Directory {
     pub block_index_loc: u64,
     pub seqlocs_loc: u64,
     pub scores_loc: Option<u64>,
+    pub masking_loc: Option<u64>,
 }
 
 impl Default for Directory {
@@ -19,6 +20,7 @@ impl Default for Directory {
             block_index_loc: 0,
             seqlocs_loc: 0,
             scores_loc: None,
+            masking_loc: None,
         }
     }
 }
@@ -36,6 +38,11 @@ impl Directory {
 
     pub fn with_index(mut self) -> Self {
         self.index_loc = Some(0);
+        self
+    }
+
+    pub fn with_masking(mut self) -> Self {
+        self.masking_loc = Some(0);
         self
     }
 }
@@ -66,6 +73,7 @@ mod tests {
             block_index_loc: 0,
             seqlocs_loc: 0,
             scores_loc: None,
+            masking_loc: None,
         };
 
         let encoded_0: Vec<u8> = bincode::serialize(&directory).unwrap();
