@@ -128,9 +128,9 @@ fn convert(matches: &ArgMatches) {
 
     let buf = generic_open_file_pb(pb, fasta_filename);
     // let buf = pb.wrap_read(buf.2);
-    let summary = count_fasta_entries(&mut BufReader::with_capacity(32 * 1024 * 1024, buf.2));
+    /*let summary = count_fasta_entries(&mut BufReader::with_capacity(32 * 1024 * 1024, buf.2));
     println!("File: {}", fasta_filename);
-    println!("Total Entries: {}", summary);
+    println!("Total Entries: {}", summary); */
 
     let path = Path::new(fasta_filename);
     let output_name = path.with_extension("sfasta");
@@ -182,7 +182,7 @@ fn convert(matches: &ArgMatches) {
         converter = converter.with_seqlocs_chunk_size(chunk_size);
     }
 
-    converter.convert_fasta(buf, &mut output, summary);
+    converter.convert_fasta(buf, &mut output);
 }
 
 pub fn generic_open_file_pb(

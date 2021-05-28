@@ -3,6 +3,7 @@ use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom};
 use std::sync::atomic::Ordering;
 use std::thread;
+use std::borrow::Cow;
 
 use bincode::Options;
 use serde_bytes::ByteBuf;
@@ -105,15 +106,16 @@ impl Converter {
     }
 
     // Functions to do conversions
-    pub fn convert_fasta<W, R: 'static>(self, in_buf: R, out_buf: &mut W, entry_count: usize)
+    pub fn convert_fasta<W, R: 'static>(self, in_buf: R, out_buf: &mut W)
     where
         W: WriteAndSeek,
         R: BufRead + Read + Send,
     {
+        /*
         assert!(
             entry_count <= u32::MAX as usize,
             "Maximum number of sequences to be stored is limited to u32::MAX, Please e-mail Joseph and I will fix this for you"
-        );
+        ); */
 
         let bincode = bincode::DefaultOptions::new()
             .with_fixint_encoding()
@@ -171,8 +173,9 @@ impl Converter {
             let fasta = Fasta::from_buffer(in_buf);
 
             let mut seq_locs = Vec::with_capacity(512 * 1024);
-            for i in fasta {
-                let loc = sb.add_sequence(&i.seq[..].to_ascii_uppercase()).unwrap();
+            for mut i in fasta.into_iter() {
+                i.seq[..].make_ascii_uppercase();
+                let loc = sb.add_sequence(&i.seq[..]).unwrap();
                 seq_locs.push((i.id, loc));
             }
 
@@ -224,7 +227,7 @@ impl Converter {
         let seq_locs: Vec<(String, Vec<Loc>)> = reader_handle.join().unwrap();
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
-        let mut indexer = crate::index::Index64::with_capacity(entry_count);
+        let mut indexer = crate::index::Index64::with_capacity(2 * 1024 * 1024);
 
         let seqlocs_loc = out_fh
             .seek(SeekFrom::Current(0))
@@ -455,7 +458,7 @@ mod tests {
 
         let converter = Converter::default().with_threads(6).with_block_size(8192);
 
-        converter.convert_fasta(in_buf, &mut out_buf, 10);
+        converter.convert_fasta(in_buf, &mut out_buf);
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),

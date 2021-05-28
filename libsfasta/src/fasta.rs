@@ -1,5 +1,7 @@
 use simdutf8::basic::from_utf8;
+
 use std::io::BufRead;
+use std::borrow::Cow;
 
 use crate::bytelines::ByteLinesReader;
 

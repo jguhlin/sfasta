@@ -452,7 +452,7 @@ mod tests {
             .with_block_size(8 * 1024)
             .with_index();
 
-        converter.convert_fasta(in_buf, &mut out_buf, 3001);
+        converter.convert_fasta(in_buf, &mut out_buf);
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
@@ -490,7 +490,7 @@ mod tests {
             .with_block_size(512)
             .with_index();
 
-        converter.convert_fasta(in_buf, &mut out_buf, 10);
+        converter.convert_fasta(in_buf, &mut out_buf);
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
@@ -527,7 +527,7 @@ mod tests {
             .with_block_size(512)
             .with_threads(8);
 
-        converter.convert_fasta(in_buf, &mut out_buf, 10);
+        converter.convert_fasta(in_buf, &mut out_buf);
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
