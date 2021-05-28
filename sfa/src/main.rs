@@ -70,6 +70,14 @@ fn main() {
         println!("Total Sequence: {}", summary.2.iter().sum::<usize>());
     }
 
+    if let Some(matches) = matches.subcommand_matches("faidx") {
+        let sfasta_filename = matches.value_of("input").unwrap();
+        let ids = matches.values_of("ids").unwrap();
+        for i in ids {
+            println!("{}", i);
+        }
+    }
+
     /*
     if let Some(matches) = matches.subcommand_matches("stats") {
         stats(&matches);
@@ -91,7 +99,7 @@ fn convert(matches: &ArgMatches) {
 
     let buf = generic_open_file_pb(pb, fasta_filename);
     // let buf = pb.wrap_read(buf.2);
-    let summary = count_fasta_entries(&mut BufReader::with_capacity(16 * 1024 * 1024, buf.2));
+    let summary = count_fasta_entries(&mut BufReader::with_capacity(32 * 1024 * 1024, buf.2));
     println!("File: {}", fasta_filename);
     println!("Total Entries: {}", summary);
 
@@ -116,6 +124,8 @@ fn convert(matches: &ArgMatches) {
         compression_type = CompressionType::LZ4;
     } else if matches.is_present("xz") {
         compression_type = CompressionType::XZ;
+    } else if matches.is_present("brotli") {
+        compression_type = CompressionType::BROTLI;
     } else if matches.is_present("gzip") {
         println!("🤨");
         compression_type = CompressionType::GZIP;

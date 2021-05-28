@@ -3,6 +3,17 @@ version: "0.0.1"
 author: Joseph Guhlin <joseph.guhlin@gmail.com>
 about: Tool for working with .sfasta files
 subcommands:
+    - faidx:
+        about: Extract sequence(s) from an SFASTA file as FASTA format
+        args:
+            - input: 
+                index: 1
+                about: Input SFASTA file (.sfa, .sfasta, .sfna, .sfaa)
+                required: true
+            - ids:
+                index: 2
+                multiple: true
+                required: true
     - convert:
         about: "Convert a fasta file to SFASTA"
         args: 
@@ -23,6 +34,7 @@ subcommands:
                     - naf
                     - none
                     - xz
+                    - brotli
             - lz4:
                 long: lz4
                 help: Compress with LZ4
@@ -33,6 +45,7 @@ subcommands:
                     - naf
                     - none
                     - xz
+                    - brotli
             - xz:
                 long: xz
                 help: Compress with XZ
@@ -43,6 +56,18 @@ subcommands:
                     - naf
                     - none
                     - lz4
+                    - brotli
+            - brotli:
+                long: brotli
+                help: Compress with Brotli
+                conflicts_with:
+                    - zstd
+                    - snappy
+                    - gzip
+                    - naf
+                    - none
+                    - lz4
+                    - xz
 
     - summarize:
         about: "Summarize a FASTA file"
