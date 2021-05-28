@@ -139,8 +139,6 @@ pub fn get_masking(seq: &[u8]) -> Vec<bool> {
     seq.iter().map(|&x| x > 96).collect()
 }
 
-
-
 #[cfg(test)]
 mod tests {
     use super::*;

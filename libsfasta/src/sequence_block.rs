@@ -87,7 +87,6 @@ pub struct SequenceBlockCompressed {
 
 impl SequenceBlockCompressed {
     pub fn decompress(self, compression_type: CompressionType) -> SequenceBlock {
-
         // TODO: Capacity here should be set by block-size
         let mut seq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
 
@@ -102,13 +101,13 @@ impl SequenceBlockCompressed {
                     Ok(x) => x,
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
-            },
-            _ => { unimplemented!() },
+            }
+            _ => {
+                unimplemented!()
+            }
         };
 
-        SequenceBlock {
-            seq,
-        }
+        SequenceBlock { seq }
     }
 
     // Convenience Function

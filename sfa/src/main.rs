@@ -79,22 +79,27 @@ fn main() {
         let sfasta_filename = matches.value_of("input").unwrap();
 
         let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-        let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
+        let mut sfasta =
+            SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
         println!("Opened file: {}", now.elapsed().as_millis());
 
         let ids = matches.values_of("ids").unwrap();
         for i in ids {
             let mut now = Instant::now();
-            let results = sfasta.find(i).expect(&format!("Unable to find {} in file {}", i, sfasta_filename)).unwrap();
+            let results = sfasta
+                .find(i)
+                .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
+                .unwrap();
             println!("Found ID: {}", now.elapsed().as_millis());
             for result in results {
                 let mut now = Instant::now();
-                let sequence = sfasta.get_sequence(&result.3).expect("Unable to fetch sequence");
+                let sequence = sfasta
+                    .get_sequence(&result.3)
+                    .expect("Unable to fetch sequence");
                 println!("Got Sequence: {}", now.elapsed().as_millis());
                 println!(">{}", i);
                 println!("{}", from_utf8(&sequence).unwrap());
             }
-
         }
     }
 
@@ -171,15 +176,13 @@ fn convert(matches: &ArgMatches) {
     }
 
     if matches.is_present("seqlocs_chunk_size") {
-        let chunk_size: usize = matches.value_of_t("seqlocs_chunk_size").unwrap_or(64 * 1024);
+        let chunk_size: usize = matches
+            .value_of_t("seqlocs_chunk_size")
+            .unwrap_or(64 * 1024);
         converter = converter.with_seqlocs_chunk_size(chunk_size);
     }
-    
-    converter.convert_fasta(
-        buf,
-        &mut output,
-        summary,
-    );
+
+    converter.convert_fasta(buf, &mut output, summary);
 }
 
 pub fn generic_open_file_pb(

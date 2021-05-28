@@ -24,7 +24,7 @@ impl Default for Directory {
             scores_loc: None,
             masking_loc: None,
             id_blocks_index_loc: Some(0),
-            seqloc_blocks_index_loc: Some(0)
+            seqloc_blocks_index_loc: Some(0),
         }
     }
 }

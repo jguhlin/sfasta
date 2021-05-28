@@ -90,7 +90,6 @@ impl IDIndexer for Index32 {
     }
 
     fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
-
         // TODO: Hasing fn, lowercase stuff...
         let mut hasher = XxHash32::with_seed(42);
         hasher.write(id.as_bytes());
