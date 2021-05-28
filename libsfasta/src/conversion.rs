@@ -105,6 +105,11 @@ impl Converter {
         self
     }
 
+    pub fn with_compression_type(mut self, ct: CompressionType) -> Self {
+        self.compression_type = ct;
+        self
+    }
+
     // Functions to do conversions
     pub fn convert_fasta<W, R: 'static>(self, in_buf: R, out_buf: &mut W)
     where

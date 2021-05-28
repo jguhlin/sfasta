@@ -11,14 +11,14 @@ fn create_sfasta(seq: &'static str, ct: CompressionType, index: bool) -> usize {
     let in_buf = BufReader::new(seq.as_bytes());
     let mut out_buf = Cursor::new(Vec::new());
 
-    convert_fasta(
+    let mut converter = Converter::default().with_threads(16).with_block_size(32 * 1024).with_compression_type(ct);
+    if !index {
+        converter = converter.without_index();
+    }
+
+    converter.convert_fasta(
         in_buf,
         &mut out_buf,
-        32 * 1024, // Very small for testing reasons
-        16,        // Threads
-        10,        // Entry Count
-        ct,        // Compression type
-        index,     // create index?
     );
 
     out_buf.into_inner().len()
