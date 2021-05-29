@@ -5,6 +5,7 @@ use std::thread;
 
 use serde_bytes::ByteBuf;
 use bincode::Options;
+use bumpalo::Bump;
 
 use crate::directory::Directory;
 use crate::index::*;
@@ -132,6 +133,7 @@ impl Sfasta {
                     }
                 }
             } else {
+                let mut bump = Bump::new();
                 for loc in possibilities {
                     let block = loc as usize / IDX_CHUNK_SIZE;
 
@@ -141,15 +143,16 @@ impl Sfasta {
                     .unwrap()
                     .seek(SeekFrom::Start(self.directory.ids_loc))
                     .expect("Unable to work with seek API"); */
+
                     buf.seek(SeekFrom::Start(
                         self.id_blocks_locs.as_ref().unwrap()[block],
                     ))
                     .expect("Unable to work with SEEK API");
 
-                    let mut compressed: ByteBuf = bincode::deserialize_from(&mut *buf).unwrap();
+                    let mut compressed: &mut ByteBuf = bump.alloc(bincode::deserialize_from(&mut *buf).unwrap());
 
-                    let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
-                    let ids: Vec<String> = bincode::deserialize_from(&mut decompressed).unwrap();
+                    let mut decompressed = bump.alloc(lz4_flex::frame::FrameDecoder::new(&compressed[..]));
+                    let ids: &mut Vec<String> = bump.alloc(bincode::deserialize_from(&mut decompressed).unwrap());
 
                     if ids[loc as usize % IDX_CHUNK_SIZE] == x {
                         matches.push((
@@ -158,7 +161,9 @@ impl Sfasta {
                             locs[loc as usize % IDX_CHUNK_SIZE],
                         ));
                     }
+                    bump.reset();
                 }
+
             }
 
             let return_val;
@@ -213,6 +218,9 @@ impl Sfasta {
             }
         }
 
+        // TODO: Probably no benefit here...
+        let mut bump = Bump::new();
+
         for loc in locs {
             let byte_loc = self.block_locs.as_ref().unwrap()[loc.0 as usize];
             let mut buf = self.buf.as_ref().unwrap().write().unwrap();
@@ -226,10 +234,12 @@ impl Sfasta {
 
             let sbc: SequenceBlockCompressed = bincode::deserialize_from(&mut *buf)
                 .expect("Unable to parse SequenceBlockCompressed");
-            drop(buf);
-            let sb = sbc.decompress(self.parameters.compression_type);
+
+            drop(buf); // Open it up for other threads...
+            let sb = bump.alloc(sbc.decompress(self.parameters.compression_type));
 
             seq.extend_from_slice(&sb.seq[loc.1 .0 as usize..loc.1 .1 as usize]);
+            bump.reset();
         }
 
         Ok(seq)

@@ -7,7 +7,7 @@ use xz::read::{XzDecoder, XzEncoder};
 use serde_bytes::ByteBuf;
 use bumpalo::Bump;
 
-#[derive(Clone, Debug, Default)]
+#[derive(Debug, Default)]
 pub struct SequenceBlock {
     //    pub compression_type: CompressionType,
     pub seq: Vec<u8>,
@@ -86,7 +86,7 @@ impl SequenceBlock {
     } */
 }
 
-#[derive(Clone, Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 pub struct SequenceBlockCompressed {
     pub compressed_seq: ByteBuf,
 }

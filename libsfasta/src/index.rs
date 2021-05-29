@@ -276,7 +276,7 @@ impl IDIndexer for Index64 {
         Index64 {
             hashes: Vec::with_capacity(capacity),
             locs: Vec::with_capacity(capacity),
-            hash: Hashes::Ahash,
+            hash: Hashes::XxHash64,
             ids: Some(Vec::with_capacity(capacity)),
         }
     }
@@ -337,22 +337,11 @@ impl IDIndexer for Index64 {
 
         //let hashes: Vec<u64> = self.ids.as_ref().unwrap().par_iter().map(|x| self.get_hash(x)).collect();
 
-        let mut tuples: Vec<(u64, u32, String)> = Vec::with_capacity(self.locs.len());
-
         let ids = self.ids.take().unwrap();
 
-        /*
-        for i in 0..self.locs.len() {
-            tuples.push((
-                self.hashes[i],
-                self.locs[i],
-                // self.ids.as_ref().unwrap()[i].clone(),
-                i, // &ids[i],
-            ))
-        } */
-        tuples = izip!(self.hashes, self.locs, ids).collect();
+        let mut tuples: Vec<(u64, u32, String)> = izip!(self.hashes, self.locs, ids).collect();
 
-        if tuples.len() >= 2 * 1024 {
+        if tuples.len() >= 16 * 1024 {
             tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
         } else {
             tuples.sort_by(|a, b| a.0.cmp(&b.0));
