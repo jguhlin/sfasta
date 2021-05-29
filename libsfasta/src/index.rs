@@ -302,8 +302,23 @@ impl IDIndexer for Index64 {
 
         let mut locs = Vec::new();
 
+        if self.hashes.len() == 1 {
+            locs.push(found);
+            return Some(locs);
+        } else
+        if found == 0 {
+            if self.hashes[found + 1] != hash {
+                locs.push(found);
+                return Some(locs);
+            }
+        } else 
+        if found == self.hashes.len() - 1 {
+            if self.hashes[found - 1] != hash {
+                locs.push(found);
+                return Some(locs);
+            }
+        } else
         if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
-            //locs.push(self.locs[found]);
             locs.push(found);
             return Some(locs);
         }
