@@ -5,6 +5,7 @@ extern crate rand;
 extern crate rayon;
 extern crate serde;
 extern crate serde_bytes;
+#[macro_use] extern crate itertools;
 
 extern crate flate2;
 extern crate lz4_flex;

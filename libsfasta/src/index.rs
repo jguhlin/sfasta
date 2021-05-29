@@ -6,6 +6,7 @@ use serde::{Deserialize, Serialize};
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
 
 use std::hash::Hasher;
+use std::borrow::Cow;
 use std::slice::Chunks;
 
 #[non_exhaustive]
@@ -330,7 +331,7 @@ impl IDIndexer for Index64 {
         Some((start..=end).collect())
     }
 
-    fn finalize(self) -> Self {
+    fn finalize(mut self) -> Self {
         // TODO: More memory efficient way...
         // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
 
@@ -338,13 +339,18 @@ impl IDIndexer for Index64 {
 
         let mut tuples: Vec<(u64, u32, String)> = Vec::with_capacity(self.locs.len());
 
+        let ids = self.ids.take().unwrap();
+
+        /*
         for i in 0..self.locs.len() {
             tuples.push((
                 self.hashes[i],
                 self.locs[i],
-                self.ids.as_ref().unwrap()[i].clone(),
+                // self.ids.as_ref().unwrap()[i].clone(),
+                i, // &ids[i],
             ))
-        }
+        } */
+        tuples = izip!(self.hashes, self.locs, ids).collect();
 
         if tuples.len() >= 2 * 1024 {
             tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
@@ -352,14 +358,25 @@ impl IDIndexer for Index64 {
             tuples.sort_by(|a, b| a.0.cmp(&b.0));
         }
 
-        let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u64>>();
-        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u32>>();
+        let mut hashes: Vec<u64> = Vec::with_capacity(tuples.len());
+        let mut locs: Vec<u32> = Vec::with_capacity(tuples.len());
+        let mut ids: Vec<String> = Vec::with_capacity(tuples.len());
+
+        for (hash, loc, id) in tuples.drain(..) {
+            hashes.push(hash);
+            locs.push(loc);
+            ids.push(id);
+        }
+
+        // let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u64>>();
+        // let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u32>>();
 
         // .into_iter here so we don't borrow it, and we can just move the Strings rather than clone them
+/*        let ids = ids.into_boxed_slice();
         let ids = tuples
             .into_iter()
-            .map(|(_, _, x)| x)
-            .collect::<Vec<String>>();
+            .map(|(_, _, x)| ids[x])
+            .collect::<Vec<String>>(); */
 
         Index64 {
             hashes,
