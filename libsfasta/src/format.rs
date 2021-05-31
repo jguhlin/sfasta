@@ -1,11 +1,11 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::RwLock;
-use std::time::{Duration, Instant};
 use std::thread;
+use std::time::{Duration, Instant};
 
-use serde_bytes::ByteBuf;
 use bincode::Options;
 use bumpalo::Bump;
+use serde_bytes::ByteBuf;
 
 use crate::directory::Directory;
 use crate::index::*;
@@ -149,10 +149,13 @@ impl Sfasta {
                     ))
                     .expect("Unable to work with SEEK API");
 
-                    let mut compressed: &mut ByteBuf = bump.alloc(bincode::deserialize_from(&mut *buf).unwrap());
+                    let mut compressed: &mut ByteBuf =
+                        bump.alloc(bincode::deserialize_from(&mut *buf).unwrap());
 
-                    let mut decompressed = bump.alloc(lz4_flex::frame::FrameDecoder::new(&compressed[..]));
-                    let ids: &mut Vec<String> = bump.alloc(bincode::deserialize_from(&mut decompressed).unwrap());
+                    let mut decompressed =
+                        bump.alloc(lz4_flex::frame::FrameDecoder::new(&compressed[..]));
+                    let ids: &mut Vec<String> =
+                        bump.alloc(bincode::deserialize_from(&mut decompressed).unwrap());
 
                     if ids[loc as usize % IDX_CHUNK_SIZE] == x {
                         matches.push((
@@ -163,7 +166,6 @@ impl Sfasta {
                     }
                     bump.reset();
                 }
-
             }
 
             let return_val;
@@ -317,7 +319,7 @@ impl SfastaParser {
             decompressor
                 .read_to_end(&mut index_bincoded)
                 .expect("Unable to parse index");
-            
+
             let idx: Index64 = bincode
                 .deserialize_from(&index_bincoded[..])
                 .expect("Unable to parse index");
@@ -341,8 +343,8 @@ impl SfastaParser {
                 .expect("Unable to parse index");
 
             let block_locs: Vec<u64> = bincode
-                    .deserialize_from(&block_locs_bincoded[..])
-                    .expect("Unable to parse index");
+                .deserialize_from(&block_locs_bincoded[..])
+                .expect("Unable to parse index");
 
             block_locs
         });
@@ -358,7 +360,7 @@ impl SfastaParser {
 
             let id_blocks_locs_compressed: ByteBuf =
                 bincode::deserialize_from(&mut in_buf).expect("Unable to parse block locs index");
-            
+
             let ids_loc = sfasta.directory.ids_loc;
             id_blocks_index_handle = Some(thread::spawn(move || {
                 let mut decompressor =
@@ -373,11 +375,9 @@ impl SfastaParser {
                     .deserialize_from(&id_blocks_locs_bincoded[..])
                     .expect("Unable to parse index");
 
-                let id_blocks_locs: Vec<u64> = id_blocks_locs
-                    .into_iter()
-                    .map(|x| x + ids_loc)
-                    .collect();
-                
+                let id_blocks_locs: Vec<u64> =
+                    id_blocks_locs.into_iter().map(|x| x + ids_loc).collect();
+
                 id_blocks_locs
             }));
         }
@@ -412,7 +412,7 @@ impl SfastaParser {
                     .into_iter()
                     .map(|x| x + seqlocs_loc)
                     .collect();
-                
+
                 seqlocs_blocks_locs
             }));
         }
@@ -518,7 +518,7 @@ mod tests {
 
         println!("{:#?}", sequence.len());
 
-        assert!(sequence.len() == 48599);
+        assert!(sequence.len() == 48598);
         assert!(&sequence[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
         assert!(&sequence[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
     }

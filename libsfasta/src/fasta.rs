@@ -1,7 +1,7 @@
 use simdutf8::basic::from_utf8;
 
-use std::io::BufRead;
 use std::borrow::Cow;
+use std::io::BufRead;
 
 use crate::bytelines::ByteLinesReader;
 
@@ -83,19 +83,18 @@ impl<R: BufRead> Iterator for Fasta<R> {
                         let split: Vec<&str> = next_id.splitn(2, ' ').collect();
                         // let next_id = next_id.split(' ').next().unwrap().trim().to_string();
                         let next_id = split[0].trim().to_string();
-                        let next_header = 
-                            if split.len() == 2 {
-                                split[1].trim().to_string()
-                            } else {
-                                "".to_string()
-                            };
+                        let next_header = if split.len() == 2 {
+                            split[1].trim().to_string()
+                        } else {
+                            "".to_string()
+                        };
 
                         let id = self.next_seqid.replace(next_id);
                         let header = self.next_header.replace(next_header);
-                       
+
                         if self.seqlen > 0 {
                             assert!(id.is_some());
-                            
+
                             let seqbuf = Vec::with_capacity(self.seqlen);
 
                             let seq: Vec<u8> = std::mem::replace(&mut self.seqbuffer, seqbuf);

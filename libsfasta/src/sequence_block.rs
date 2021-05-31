@@ -2,10 +2,10 @@ use crate::structs::{default_compression_level, CompressionType};
 
 use std::io::{Read, Write};
 
-use serde::{Deserialize, Serialize};
-use xz::read::{XzDecoder, XzEncoder};
-use serde_bytes::ByteBuf;
 use bumpalo::Bump;
+use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
+use xz::read::{XzDecoder, XzEncoder};
 
 #[derive(Debug, Default)]
 pub struct SequenceBlock {
