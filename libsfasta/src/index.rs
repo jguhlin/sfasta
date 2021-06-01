@@ -5,9 +5,10 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
 
-use std::hash::Hasher;
 use std::borrow::Cow;
+use std::hash::Hasher;
 use std::slice::Chunks;
+use std::time::{Duration, Instant};
 
 #[non_exhaustive]
 enum IndexTypes {
@@ -62,6 +63,7 @@ pub trait IDIndexer {
     fn is_empty(&self) -> bool;
 
     fn with_capacity(capacity: usize) -> Self;
+    fn new() -> Self;
 
     fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String>;
 
@@ -87,6 +89,14 @@ impl IDIndexer for Index32 {
             hashes: Vec::new(),
             locs: Vec::with_capacity(capacity),
             ids: Some(Vec::with_capacity(capacity)),
+        }
+    }
+
+    fn new() -> Self {
+        Index32 {
+            hashes: Vec::new(),
+            locs: Vec::new(),
+            ids: Some(Vec::new()),
         }
     }
 
@@ -265,6 +275,12 @@ impl Index64 {
             hasher.finish()
         }
     }
+
+    pub fn reserve(&mut self, capacity: usize) {
+        self.hashes.reserve(capacity);
+        self.locs.reserve(capacity);
+        self.ids.as_mut().unwrap().reserve(capacity);
+    }
 }
 
 impl IDIndexer for Index64 {
@@ -278,6 +294,15 @@ impl IDIndexer for Index64 {
             locs: Vec::with_capacity(capacity),
             hash: Hashes::XxHash64,
             ids: Some(Vec::with_capacity(capacity)),
+        }
+    }
+
+    fn new() -> Self {
+        Index64 {
+            hashes: Vec::new(),
+            locs: Vec::new(),
+            hash: Hashes::XxHash64,
+            ids: Some(Vec::new()),
         }
     }
 
@@ -305,20 +330,17 @@ impl IDIndexer for Index64 {
         if self.hashes.len() == 1 {
             locs.push(found);
             return Some(locs);
-        } else
-        if found == 0 {
+        } else if found == 0 {
             if self.hashes[found + 1] != hash {
                 locs.push(found);
                 return Some(locs);
             }
-        } else 
-        if found == self.hashes.len() - 1 {
+        } else if found == self.hashes.len() - 1 {
             if self.hashes[found - 1] != hash {
                 locs.push(found);
                 return Some(locs);
             }
-        } else
-        if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
+        } else if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
             locs.push(found);
             return Some(locs);
         }
@@ -376,7 +398,7 @@ impl IDIndexer for Index64 {
         // let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u32>>();
 
         // .into_iter here so we don't borrow it, and we can just move the Strings rather than clone them
-/*        let ids = ids.into_boxed_slice();
+        /*        let ids = ids.into_boxed_slice();
         let ids = tuples
             .into_iter()
             .map(|(_, _, x)| ids[x])

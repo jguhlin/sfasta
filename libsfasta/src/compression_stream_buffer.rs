@@ -250,13 +250,13 @@ fn _writer_worker_thread(
     written_entries: Arc<AtomicUsize>,
 ) {
     let mut expected_block: u32 = 0;
-    let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::new();
+    let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::with_capacity(8 * 1024 * 1024);
     let mut result;
     let backoff = Backoff::new();
 
     loop {
         backoff.reset();
-        while queue.contains_key(&expected_block) {
+        while !queue.is_empty() && queue.contains_key(&expected_block) {
             let sbc = queue.remove(&expected_block).unwrap();
 
             let mut entry = (expected_block, sbc);
@@ -267,6 +267,14 @@ fn _writer_worker_thread(
 
             expected_block += 1;
             written_entries.fetch_add(1, Ordering::SeqCst);
+        }
+
+        while write_queue.is_empty() {
+            backoff.spin();
+
+            if shutdown.load(Ordering::Relaxed) {
+                return;
+            }
         }
 
         result = write_queue.pop();

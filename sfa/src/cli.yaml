@@ -52,8 +52,6 @@ subcommands:
                     - lz4
                     - snappy
                     - gzip
-                    - naf
-                    - none
                     - xz
                     - brotli
             - lz4:
@@ -63,8 +61,6 @@ subcommands:
                     - zstd
                     - snappy
                     - gzip
-                    - naf
-                    - none
                     - xz
                     - brotli
             - xz:
@@ -74,8 +70,6 @@ subcommands:
                     - zstd
                     - snappy
                     - gzip
-                    - naf
-                    - none
                     - lz4
                     - brotli
             - brotli:
@@ -85,8 +79,24 @@ subcommands:
                     - zstd
                     - snappy
                     - gzip
-                    - naf
-                    - none
+                    - lz4
+                    - xz
+            - snappy:
+                long: snappy
+                help: Compress with snappy compression
+                conflicts_with:
+                    - zstd
+                    - brotli
+                    - gzip
+                    - lz4
+                    - xz
+            - gzip:
+                long: gzip
+                help: Compress with gzip compression
+                conflicts_with:
+                    - zstd
+                    - brotli
+                    - snappy
                     - lz4
                     - xz
 

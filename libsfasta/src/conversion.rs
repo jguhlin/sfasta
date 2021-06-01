@@ -1,13 +1,15 @@
 // Easy, high-performance conversion functions
+use std::borrow::Cow;
 use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom};
 use std::sync::atomic::Ordering;
 use std::thread;
-use std::borrow::Cow;
+use std::time::{Duration, Instant};
 
 use bincode::Options;
-use serde_bytes::ByteBuf;
 use bumpalo::Bump;
+use rayon::prelude::*;
+use serde_bytes::ByteBuf;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
@@ -16,6 +18,25 @@ use crate::index::IDIndexer;
 use crate::structs::WriteAndSeek;
 use crate::types::*;
 use crate::CompressionType;
+
+/*
+For a set of reads, this is the timing breakdown most recently...
+
+FASTA parser thread started: 0
+Output thread finished: 22608
+Seq Locs starting: 22617
+Seq Locs Finished: 28775  <--- Can optimize, but...
+Seq Locs Indexing completed in: 8673 <--- Have to wait for this to finish too...
+Seq Locs Indexer Thread joined: 32526
+Finalizing Index: 32526
+Index Finalized: 34945
+Index Written: 36315
+ID Blocks written: 37158
+ID Block Locs written: 37158
+SeqLocBlockLocs written: 37158
+Index written: 39336
+Block Index written: 39336
+*/
 
 pub struct Converter {
     masking: bool,
@@ -141,6 +162,8 @@ impl Converter {
         // Output file
         let mut out_fh = out_buf;
 
+        let now = Instant::now();
+
         out_fh
             .write_all("sfasta".as_bytes())
             .expect("Unable to write 'sfasta' to output");
@@ -207,7 +230,7 @@ impl Converter {
 
             match result {
                 None => {
-                    if oq.len() == 0 && shutdown.load(Ordering::Relaxed) {
+                    if oq.is_empty() && shutdown.load(Ordering::Relaxed) {
                         break;
                     }
                 }
@@ -246,7 +269,25 @@ impl Converter {
         let mut seqlocs_blocks_locs: Vec<u64> =
             Vec::with_capacity(seq_locs.len() / SEQLOCS_CHUNK_SIZE);
 
-        let bump = Bump::new();
+        // TODO: Optional index can probably be handled better...
+        let mut index_handle: Option<_> = None;
+        if self.index {
+            let to_index = seq_locs
+                .iter()
+                .enumerate()
+                .map(|(i, (id, _))| (i, id.clone()))
+                .collect::<Vec<(usize, String)>>();
+
+            index_handle = Some(thread::spawn(move || {
+                indexer.reserve(to_index.len());
+                
+                for (i, id) in to_index {
+                    indexer.add(&id, i as u32).expect("Unable to add to index");
+                }
+
+                indexer
+            }));
+        }
 
         for s in seq_locs
             .iter()
@@ -254,13 +295,7 @@ impl Converter {
             .collect::<Vec<(usize, &(String, Vec<Loc>))>>()
             .chunks(SEQLOCS_CHUNK_SIZE)
         {
-            if self.index {
-                for (i, (id, _)) in s {
-                    indexer.add(&id, *i as u32).expect("Unable to add to index");
-                }
-            }
-
-            let mut compressed: Vec<u8> = Vec::with_capacity(8 * 1024 * 1024);
+            let compressed: Vec<u8> = Vec::with_capacity(8 * 1024 * 1024);
 
             seqlocs_blocks_locs.push(
                 out_fh
@@ -278,6 +313,13 @@ impl Converter {
 
             bincode::serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write Metadata to file");
+        }
+
+        if index_handle.is_some() {
+            indexer = index_handle.unwrap().join().unwrap();
+        } else {
+            // TODO: This should never be called... it's here to make the compiler happy
+            indexer = crate::index::Index64::with_capacity(1);
         }
 
         if self.index {
@@ -308,23 +350,42 @@ impl Converter {
 
             let mut ids_blocks_locs: Vec<u64> = Vec::with_capacity(ids.len() / IDX_CHUNK_SIZE);
 
+            let compressed_blocks = ids.chunks(IDX_CHUNK_SIZE)
+                .collect::<Vec<&[String]>>()
+                .par_iter()
+                .map(|&chunk| {
+                    let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
+                    let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
+                    bincode::serialize_into(&mut compressor, &chunk)
+                        .expect("Unable to write directory to file");
+
+                    let compressed =
+                        ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
+                    compressed
+                }).collect::<Vec<ByteBuf>>();
+
+                for block in compressed_blocks.into_iter() {
+                    let pos = out_fh
+                        .seek(SeekFrom::Current(0))
+                        .expect("Unable to work with seek API");
+
+                    ids_blocks_locs.push(pos);
+    
+                    bincode::serialize_into(&mut out_fh, &block)
+                        .expect("Unable to write directory to file");
+                }
+
             // Write out the IDs vector...
-            for chunk in ids.chunks(IDX_CHUNK_SIZE) {
+/*            for chunk in ids.chunks(IDX_CHUNK_SIZE) {
                 let pos = out_fh
                     .seek(SeekFrom::Current(0))
                     .expect("Unable to work with seek API");
                 ids_blocks_locs.push(pos);
 
-                let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
-                let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-                bincode::serialize_into(&mut compressor, &chunk)
-                    .expect("Unable to write directory to file");
-
-                let compressed = ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
-
                 bincode::serialize_into(&mut out_fh, &compressed)
                     .expect("Unable to write directory to file");
-            }
+            } */
+
 
             // ID Block Locs
 
@@ -340,7 +401,8 @@ impl Converter {
             bincode::serialize_into(&mut compressor, &ids_blocks_locs)
                 .expect("Unable to write directory to file");
 
-            let compressed = ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
+            let compressed =
+                ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
 
             bincode::serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write directory to file");
@@ -360,7 +422,8 @@ impl Converter {
             bincode::serialize_into(&mut compressor, &seqlocs_blocks_locs)
                 .expect("Unable to write directory to file");
 
-            let compressed = ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
+            let compressed =
+                ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
 
             bincode::serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write directory to file");
@@ -370,7 +433,6 @@ impl Converter {
             sfasta.directory.index_loc = Some(id_index_pos);
             sfasta.directory.ids_loc = ids_loc;
         }
-
         // Block Index
         let block_index_pos = out_fh
             .seek(SeekFrom::Current(0))

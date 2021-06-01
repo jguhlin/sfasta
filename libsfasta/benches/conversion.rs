@@ -11,15 +11,15 @@ fn create_sfasta(seq: &'static str, ct: CompressionType, index: bool) -> usize {
     let in_buf = BufReader::new(seq.as_bytes());
     let mut out_buf = Cursor::new(Vec::new());
 
-    let mut converter = Converter::default().with_threads(16).with_block_size(32 * 1024).with_compression_type(ct);
+    let mut converter = Converter::default()
+        .with_threads(16)
+        .with_block_size(32 * 1024)
+        .with_compression_type(ct);
     if !index {
         converter = converter.without_index();
     }
 
-    converter.convert_fasta(
-        in_buf,
-        &mut out_buf,
-    );
+    converter.convert_fasta(in_buf, &mut out_buf);
 
     out_buf.into_inner().len()
 }
