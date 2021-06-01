@@ -21,7 +21,7 @@ subcommands:
                 about: Input FASTA file (.fasta, .fna, .faa)
                 index: 1
                 required: true
-            - index: 
+            - noindex: 
                 long: noindex
                 help: Do not index the file
             - block_size:

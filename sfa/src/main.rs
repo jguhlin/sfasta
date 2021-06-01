@@ -161,9 +161,6 @@ fn convert(matches: &ArgMatches) {
     }
 
     let mut converter = Converter::default().with_threads(threads);
-    if matches.is_present("noindex") {
-        converter = converter.without_index();
-    }
 
     if matches.is_present("block_size") {
         let block_size: usize = matches.value_of_t("block_size").unwrap_or(8 * 1024);
@@ -180,6 +177,11 @@ fn convert(matches: &ArgMatches) {
             .value_of_t("seqlocs_chunk_size")
             .unwrap_or(64 * 1024);
         converter = converter.with_seqlocs_chunk_size(chunk_size);
+    }
+
+    if matches.is_present("noindex") {
+        println!("Noindex received");
+        converter = converter.without_index();
     }
 
     converter.convert_fasta(buf, &mut output);

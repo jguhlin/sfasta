@@ -100,9 +100,22 @@ impl Sfasta {
         for _ in 0..blocks {
             let compressed: ByteBuf;
             compressed = bincode::deserialize_from(&mut *buf).unwrap();
-            let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
+            // let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
+            let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
+
+            let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
+
+            decoder
+                    .include_magicbytes(false)
+                    .expect("Unable to disable magicbytes in decoder");
+
+            match decoder.read_to_end(&mut decompressed) {
+                Ok(x) => x,
+                Err(y) => panic!("Unable to decompress block: {:#?}", y),
+            };
+
             let chunk_ids: Vec<String>;
-            chunk_ids = bincode::deserialize_from(&mut decompressed).unwrap();
+            chunk_ids = bincode::deserialize_from(&decompressed[..]).unwrap();
             ids.extend(chunk_ids);
         }
 
@@ -148,14 +161,22 @@ impl Sfasta {
                         self.id_blocks_locs.as_ref().unwrap()[block],
                     ))
                     .expect("Unable to work with SEEK API");
-
-                    let mut compressed: &mut ByteBuf =
+                    
+                    let mut decompressed: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
+                    
+                    let compressed: &mut ByteBuf =
                         bump.alloc(bincode::deserialize_from(&mut *buf).unwrap());
+                    let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
+                    
+                    match decoder.read_to_end(&mut decompressed) {
+                        Ok(x) => x,
+                        Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                    };
 
-                    let mut decompressed =
-                        bump.alloc(lz4_flex::frame::FrameDecoder::new(&compressed[..]));
+                    // let mut decompressed =
+                    //     bump.alloc(lz4_flex::frame::FrameDecoder::new(&compressed[..]));
                     let ids: &mut Vec<String> =
-                        bump.alloc(bincode::deserialize_from(&mut decompressed).unwrap());
+                        bump.alloc(bincode::deserialize_from(&decompressed[..]).unwrap());
 
                     if ids[loc as usize % IDX_CHUNK_SIZE] == x {
                         matches.push((
@@ -188,9 +209,17 @@ impl Sfasta {
                     .expect("Unable to work with SEEK API");
                     let compressed: ByteBuf = bincode::deserialize_from(&mut *buf).unwrap();
 
-                    let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
+                    let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
+                    let mut decompressed = Vec::with_capacity(2 * 1024 * 1024);
+
+                    match decoder.read_to_end(&mut decompressed) {
+                        Ok(x) => x,
+                        Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                    };
+
+                    //let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
                     let seqlocs: Vec<Vec<Loc>> =
-                        bincode::deserialize_from(&mut decompressed).unwrap();
+                        bincode::deserialize_from(&decompressed[..]).unwrap();
 
                     let thisloc = seqlocs[loc as usize % SEQLOCS_CHUNK_SIZE].clone();
                     matches_with_loc.push((id, idxloc, loc, thisloc));
@@ -313,7 +342,8 @@ impl SfastaParser {
 
         // Parse and decompress in the index in another thread
         let index_handle = thread::spawn(move || {
-            let mut decompressor = lz4_flex::frame::FrameDecoder::new(&index_compressed[..]);
+            // let mut decompressor = lz4_flex::frame::FrameDecoder::new(&index_compressed[..]);
+            let mut decompressor = zstd::stream::Decoder::new(&index_compressed[..]).unwrap();
             let mut index_bincoded = Vec::with_capacity(32 * 1024 * 1024);
 
             decompressor
@@ -335,7 +365,8 @@ impl SfastaParser {
             bincode::deserialize_from(&mut in_buf).expect("Unable to parse block locs index");
 
         let block_locs_handle = thread::spawn(move || {
-            let mut decompressor = lz4_flex::frame::FrameDecoder::new(&block_locs_compressed[..]);
+            // let mut decompressor = lz4_flex::frame::FrameDecoder::new(&block_locs_compressed[..]);
+            let mut decompressor = zstd::stream::Decoder::new(&block_locs_compressed[..]).unwrap();
             let mut block_locs_bincoded: ByteBuf = ByteBuf::new(); //Vec::with_capacity(2 * 1024 * 1024);
 
             decompressor
@@ -363,8 +394,10 @@ impl SfastaParser {
 
             let ids_loc = sfasta.directory.ids_loc;
             id_blocks_index_handle = Some(thread::spawn(move || {
-                let mut decompressor =
-                    lz4_flex::frame::FrameDecoder::new(&id_blocks_locs_compressed[..]);
+                //let mut decompressor =
+                //    lz4_flex::frame::FrameDecoder::new(&id_blocks_locs_compressed[..]);
+                let mut decompressor = zstd::stream::Decoder::new(&id_blocks_locs_compressed[..]).unwrap();
+
                 let mut id_blocks_locs_bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
 
                 decompressor
@@ -396,8 +429,9 @@ impl SfastaParser {
 
             let seqlocs_loc = sfasta.directory.seqlocs_loc;
             seqloc_blocks_handle = Some(thread::spawn(move || {
-                let mut decompressor =
-                    lz4_flex::frame::FrameDecoder::new(&seqlocs_blocks_locs_compressed[..]);
+                //let mut decompressor =
+                //    lz4_flex::frame::FrameDecoder::new(&seqlocs_blocks_locs_compressed[..]);
+                let mut decompressor = zstd::stream::Decoder::new(&seqlocs_blocks_locs_compressed[..]).unwrap();
                 let mut seqlocs_blocks_locs_bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
 
                 decompressor
