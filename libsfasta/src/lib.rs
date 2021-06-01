@@ -16,6 +16,7 @@ mod compression_stream_buffer;
 mod conversion;
 mod directory;
 mod fasta;
+mod fastq;
 mod format;
 mod index;
 mod index_directory;
