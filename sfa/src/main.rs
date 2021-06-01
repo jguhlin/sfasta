@@ -163,12 +163,12 @@ fn convert(matches: &ArgMatches) {
     let mut converter = Converter::default().with_threads(threads);
 
     if matches.is_present("block_size") {
-        let block_size: usize = matches.value_of_t("block_size").unwrap_or(8 * 1024);
+        let block_size: usize = matches.value_of_t("block_size").unwrap();
         converter = converter.with_block_size(block_size * 1024);
     }
 
     if matches.is_present("index_chunk_size") {
-        let chunk_size: usize = matches.value_of_t("index_chunk_size").unwrap_or(64 * 1024);
+        let chunk_size: usize = matches.value_of_t("index_chunk_size").unwrap();
         converter = converter.with_index_chunk_size(chunk_size);
     }
 

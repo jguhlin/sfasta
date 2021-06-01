@@ -55,7 +55,7 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 4 * 1024 * 1024,   // 4Mb
+            block_size: 8 * 1024 * 1024,   // 4Mb
             index_chunk_size: 64 * 1024,   // 64k
             seqlocs_chunk_size: 64 * 1024, // 64k
             index_compression_type: CompressionType::ZSTD,
@@ -174,6 +174,8 @@ impl Converter {
         W: WriteAndSeek,
         R: BufRead + Read + Send,
     {
+
+        println!("Block Size: {}", self.block_size);
         /*
         assert!(
             entry_count <= u32::MAX as usize,

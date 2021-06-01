@@ -18,14 +18,13 @@ impl SequenceBlock {
         let level = default_compression_level(compression_type);
         let mut cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
 
-        let bump = Bump::new();
-
         match compression_type {
             CompressionType::ZSTD => {
                 let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
                 encoder
                     .long_distance_matching(true)
                     .expect("Unable to set ZSTD Long Distance Matching");
+                encoder.window_log(27).expect("Unable to set ZSTD Window Log");
                 encoder
                     .include_magicbytes(false)
                     .expect("Unable to set ZSTD MagicBytes");

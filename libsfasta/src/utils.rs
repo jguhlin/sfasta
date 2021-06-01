@@ -1,6 +1,10 @@
 /// Opens files, including compressed files (gzip or snappy)
 use std::path::Path;
 
+/* pub fn compress(ct: CompressionType, data: &[u8]) -> Vec<u8> {
+
+} */
+
 pub fn get_index_filename(filename: &str) -> String {
     let filenamepath = Path::new(&filename);
     let filename = Path::new(filenamepath.file_name().unwrap())

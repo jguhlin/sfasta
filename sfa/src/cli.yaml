@@ -28,7 +28,6 @@ subcommands:
                 long: block-size
                 about: Block size (in kb)
                 takes_value: true
-                default_value: "8192"
             - index_chunk_size:
                 long: index-chunk-size
                 about: Index chunk size
