@@ -3,6 +3,13 @@ version: "0.0.1"
 author: Joseph Guhlin <joseph.guhlin@gmail.com>
 about: Tool for working with .sfasta files
 subcommands:
+    - list:
+        about: List sequences contained within SFASTA file
+        args:
+            - input:
+                index: 1
+                about: Input SFASTA file (.sfa, .sfasta, .sfna, .sfaa)
+                required: true
     - faidx:
         about: Extract sequence(s) from an SFASTA file as FASTA format
         args:

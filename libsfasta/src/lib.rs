@@ -15,6 +15,7 @@ extern crate zstd;
 
 mod compression_stream_buffer;
 mod conversion;
+mod dict;
 mod directory;
 mod fasta;
 mod fastq;
@@ -26,7 +27,7 @@ mod metadata;
 mod parameters;
 pub mod prelude;
 mod sequence_block;
-mod structs;
+pub mod structs;
 mod types;
 mod utils;
 

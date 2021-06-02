@@ -5,10 +5,10 @@ use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
 
-use std::borrow::Cow;
 use std::hash::Hasher;
 use std::slice::Chunks;
-use std::time::{Duration, Instant};
+
+use crate::utils::*;
 
 #[non_exhaustive]
 enum IndexTypes {
@@ -208,7 +208,7 @@ impl IDIndexer for Index32 {
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq)]
-enum Hashes {
+pub enum Hashes {
     Ahash,    // ahash // On fastq file was...  102.68 secs
     XxHash64, // On fastq file was... 96.18
     Xxh3Hash64, // This is not a stable hash right now. Here for future-proofing a bit...
@@ -280,6 +280,27 @@ impl Index64 {
         self.hashes.reserve(capacity);
         self.locs.reserve(capacity);
         self.ids.as_mut().unwrap().reserve(capacity);
+    }
+
+    pub fn into_parts(self) -> (Vec<u64>, Vec<Bitpacked>, Hashes, u32) {
+        let hashes = self.hashes;
+        let mut locs = self.locs;
+        let min_size = locs.iter().min().unwrap().clone();
+
+        locs = locs.into_iter().map(|x| x.saturating_sub(min_size)).collect();
+
+        let bitpacked = bitpack_u32(&locs);
+       
+        (hashes, bitpacked, self.hash, min_size)
+    }
+
+    pub fn from_parts(hashes: Vec<u64>, locs: Vec<u32>, hash: Hashes) -> Index64 {
+        Index64 {
+            hashes,
+            locs,
+            hash,
+            ids: None
+        }
     }
 }
 

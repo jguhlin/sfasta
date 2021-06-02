@@ -7,6 +7,9 @@ use serde::{Deserialize, Serialize};
 pub trait ReadAndSeek: Read + Seek {}
 impl<T: Read + Seek> ReadAndSeek for T {}
 
+pub trait ReadAndSeekAndSend: Read + Seek + Send {}
+impl<T: Read + Seek + Send> ReadAndSeekAndSend for T {}
+
 pub trait WriteAndSeek: Write + Seek + Send + Sync {}
 impl<T: Write + Seek + Send + Sync + Any> WriteAndSeek for T {}
 
@@ -39,7 +42,7 @@ impl Default for CompressionType {
 
 pub const fn default_compression_level(ct: CompressionType) -> i32 {
     match ct {
-        CompressionType::ZSTD => 9, // 19,
+        CompressionType::ZSTD => -3, // 19,
         CompressionType::LZ4 => 9,
         CompressionType::XZ => 6,
         CompressionType::BROTLI => 9,

@@ -1,6 +1,76 @@
 /// Opens files, including compressed files (gzip or snappy)
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
+use serde_bytes::ByteBuf;
+use bitpacking::{BitPacker8x, BitPacker};
+
+#[derive(Serialize, Deserialize)]
+pub enum Packed {
+    Packed(ByteBuf),
+    Remainder(Vec<u32>),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Bitpacked {
+    num_bits: u8,
+    packed: Packed,
+}
+
+pub fn unbitpack_u32(packed: Vec<Bitpacked>) -> Vec<u32> {
+
+    let mut unpacked: Vec<u32> = Vec::with_capacity(packed.len() * BitPacker8x::BLOCK_LEN);
+
+    let bitpacker = BitPacker8x::new();
+
+
+    for i in packed {
+        let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
+
+        match i.packed {
+            Packed::Packed(x) => {
+                    bitpacker.decompress(&x, &mut decompressed[..], i.num_bits);
+                    unpacked.extend(decompressed);
+            },
+            Packed::Remainder(y) => {
+                unpacked.extend(y);
+            },
+        };
+    }
+    unpacked
+}
+
+pub fn bitpack_u32(to_pack: &[u32]) -> Vec<Bitpacked> {
+    let bitpacker = BitPacker8x::new();
+
+        let chunks = to_pack.chunks_exact(BitPacker8x::BLOCK_LEN);
+        
+        let mut bitpacked = Vec::new();
+
+        let remainder = chunks.remainder();
+
+        for i in chunks {
+            let num_bits: u8 = bitpacker.num_bits(&i);
+            let mut packed = vec![0u8; 4 * BitPacker8x::BLOCK_LEN];
+            bitpacker.compress(&i, &mut packed[..], num_bits);
+            bitpacked.push({
+                Bitpacked {
+                    num_bits,
+                    packed: Packed::Packed(ByteBuf::from(packed)), // TODO: Ew, gross...
+                }
+            });
+        }
+
+        if remainder.len() > 0 {
+            bitpacked.push(Bitpacked {
+                num_bits: 0,
+                packed: Packed::Remainder(remainder.to_vec()),
+            });
+        }
+
+        bitpacked
+}
+
 /* pub fn compress(ct: CompressionType, data: &[u8]) -> Vec<u8> {
 
 } */

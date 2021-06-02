@@ -1,11 +1,12 @@
 // Easy, high-performance conversion functions
 use std::borrow::Cow;
 use std::fs::{metadata, File};
-use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write, Cursor};
+use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+use std::convert::TryFrom;
 
 use bincode::Options;
 use bumpalo::Bump;
@@ -16,9 +17,10 @@ use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
 use crate::format::{Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
 use crate::index::IDIndexer;
-use crate::structs::{WriteAndSeek};
+use crate::structs::WriteAndSeek;
 use crate::types::*;
 use crate::CompressionType;
+use crate::utils::*;
 
 /*
 For a set of reads, this is the timing breakdown most recently...
@@ -49,26 +51,33 @@ pub struct Converter {
     quality_scores: bool,
     compression_type: CompressionType,
     index_compression_type: CompressionType,
+    dict: Option<Vec<u8>>,
 }
 
 impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 8 * 1024 * 1024,   // 4Mb
-            index_chunk_size: 64 * 1024,   // 64k
-            seqlocs_chunk_size: 64 * 1024, // 64k
+            block_size: 8 * 1024 * 1024,  // 8Mb
+            index_chunk_size: 128 * 1024,   // 128k
+            seqlocs_chunk_size: 128 * 1024, // 128k
             index_compression_type: CompressionType::ZSTD,
             index: true,
             masking: false,
             quality_scores: false,
             compression_type: CompressionType::ZSTD,
+            dict: None,
         }
     }
 }
 
 impl Converter {
     // Builder configuration functions...
+    pub fn with_dict(mut self, dict: Vec<u8>) -> Self {
+        self.dict = Some(dict);
+        self
+    }
+
     pub fn with_masking(mut self) -> Self {
         self.masking = true;
         self
@@ -124,7 +133,6 @@ impl Converter {
             "Chunk size must be less than u32::MAX (~4Gb)"
         );
 
-        self.seqlocs_chunk_size = chunk_size;
         self
     }
 
@@ -134,7 +142,8 @@ impl Converter {
     }
 
     pub fn write_headers<W>(&self, mut out_fh: &mut W, sfasta: &Sfasta) -> u64
-        where W: Write + Seek,
+    where
+        W: Write + Seek,
     {
         let bincode = bincode::DefaultOptions::new()
             .with_fixint_encoding()
@@ -172,10 +181,8 @@ impl Converter {
     pub fn convert_fasta<W, R: 'static>(self, in_buf: R, out_buf: &mut W)
     where
         W: WriteAndSeek,
-        R: BufRead + Read + Send,
+        R: Read + Send,
     {
-
-        println!("Block Size: {}", self.block_size);
         /*
         assert!(
             entry_count <= u32::MAX as usize,
@@ -202,18 +209,27 @@ impl Converter {
 
         let directory_location = self.write_headers(&mut out_fh, &sfasta);
 
+        // let mut in_buf = fasta.into_inner();
+
         // Write sequences
+        // in_buf.seek(SeekFrom::Start(0));
 
         let mut sb = CompressionStreamBuffer::default()
             .with_block_size(self.block_size as u32)
             .with_compression_type(self.compression_type)
             .with_threads(self.threads as u16); // Effectively # of compression threads
 
+        if self.dict.is_some() {
+            sb = sb.with_dict(self.dict.unwrap());
+        }
+
         let oq = sb.output_queue();
         let shutdown = sb.shutdown_notified();
 
         // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
         let reader_handle = thread::spawn(move || {
+            let in_buf = BufReader::with_capacity(16 * 1024 * 1024, in_buf);
+
             let fasta = Fasta::from_buffer(in_buf);
 
             let mut seq_locs = Vec::with_capacity(512 * 1024);
@@ -250,7 +266,8 @@ impl Converter {
                     }
                 }
                 Some((block_id, sb)) => {
-                    bincode::serialize_into(&mut out_fh, &sb)
+                    bincode
+                        .serialize_into(&mut out_fh, &sb)
                         .expect("Unable to write to bincode output");
 
                     block_locs.push((block_id, pos));
@@ -308,7 +325,6 @@ impl Converter {
             .collect::<Vec<(usize, &(Arc<String>, Vec<Loc>))>>()
             .chunks(SEQLOCS_CHUNK_SIZE)
         {
-
             seqlocs_blocks_locs.push(
                 out_fh
                     .seek(SeekFrom::Current(0))
@@ -317,14 +333,16 @@ impl Converter {
 
             let locs: Vec<_> = s.iter().map(|(_, (_, l))| l).collect();
 
-            // let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
+            let mut compressor =
+                zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), 3).unwrap();
 
-            bincode::serialize_into(&mut compressor, &locs)
+            bincode
+                .serialize_into(&mut compressor, &locs)
                 .expect("Unable to bincode locs into compressor");
             let compressed = ByteBuf::from(compressor.finish().unwrap());
 
-            bincode::serialize_into(&mut out_fh, &compressed)
+            bincode
+                .serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write Metadata to file");
         }
 
@@ -345,17 +363,39 @@ impl Converter {
 
             let ids = indexer.ids.take().unwrap();
 
-            let compressed: Vec<u8> = Vec::with_capacity(8 * 1024 * 1024);
-            // let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
+            let (hashes, bitpacked, hash_type, min_size) = indexer.into_parts();
 
-            bincode::serialize_into(&mut compressor, &indexer)
+            bincode.serialize_into(&mut out_fh, &hash_type)
+                .expect("Unable to bincode index hash type");
+
+            bincode.serialize_into(&mut out_fh, &min_size)
+                .expect("Unable to bincode index hash type");
+
+            let mut compressor =
+                zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -9).unwrap();
+            bincode
+                .serialize_into(&mut compressor, &hashes)
+                .expect("Unable to bincode index to compressor");
+            let compressed = ByteBuf::from(compressor.finish().unwrap());
+
+            bincode::serialize_into(&mut out_fh, &compressed)
+                .expect("Unable to bincode compressed index");
+
+            bincode::serialize_into(&mut out_fh, &bitpacked)
+                .expect("Unable to bincode index hash type");
+
+/*            // let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
+            let mut compressor =
+                zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), 3).unwrap();
+
+            bincode
+                .serialize_into(&mut compressor, &indexer)
                 .expect("Unable to bincode index to compressor");
 
             let compressed = ByteBuf::from(compressor.finish().unwrap());
 
             bincode::serialize_into(&mut out_fh, &compressed)
-                .expect("Unable to bincode compressed index");
+                .expect("Unable to bincode compressed index"); */
 
             // bincode::serialize_into(&mut out_fh, &indexer).expect("Unable to write directory to file");
             let ids_loc = out_fh
@@ -364,13 +404,16 @@ impl Converter {
 
             let mut ids_blocks_locs: Vec<u64> = Vec::with_capacity(ids.len() / IDX_CHUNK_SIZE);
 
-            let compressed_blocks = ids.chunks(IDX_CHUNK_SIZE)
+            let compressed_blocks = ids
+                .chunks(IDX_CHUNK_SIZE)
                 .collect::<Vec<&[String]>>()
                 .par_iter()
                 .map(|&chunk| {
                     // let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
                     // let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-                    let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), -3).unwrap();
+                    let mut compressor =
+                        zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 11)
+                            .unwrap();
 
                     bincode::serialize_into(&mut compressor, &chunk)
                         .expect("Unable to write directory to file");
@@ -378,21 +421,22 @@ impl Converter {
                     let compressed =
                         ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
                     compressed
-                }).collect::<Vec<ByteBuf>>();
+                })
+                .collect::<Vec<ByteBuf>>();
 
-                for block in compressed_blocks.into_iter() {
-                    let pos = out_fh
-                        .seek(SeekFrom::Current(0))
-                        .expect("Unable to work with seek API");
+            for block in compressed_blocks.into_iter() {
+                let pos = out_fh
+                    .seek(SeekFrom::Current(0))
+                    .expect("Unable to work with seek API");
 
-                    ids_blocks_locs.push(pos);
-    
-                    bincode::serialize_into(&mut out_fh, &block)
-                        .expect("Unable to write directory to file");
-                }
+                ids_blocks_locs.push(pos);
+
+                bincode::serialize_into(&mut out_fh, &block)
+                    .expect("Unable to write directory to file");
+            }
 
             // Write out the IDs vector...
-/*            for chunk in ids.chunks(IDX_CHUNK_SIZE) {
+            /*            for chunk in ids.chunks(IDX_CHUNK_SIZE) {
                 let pos = out_fh
                     .seek(SeekFrom::Current(0))
                     .expect("Unable to work with seek API");
@@ -401,7 +445,6 @@ impl Converter {
                 bincode::serialize_into(&mut out_fh, &compressed)
                     .expect("Unable to write directory to file");
             } */
-
 
             // ID Block Locs
 
@@ -412,17 +455,30 @@ impl Converter {
             let ids_blocks_locs: Vec<u64> =
                 ids_blocks_locs.into_iter().map(|x| x - ids_loc).collect();
 
-            let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
-            // let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), -3).unwrap();
-            bincode::serialize_into(&mut compressor, &ids_blocks_locs)
+            // TODO: Handle this pre-emptively with a flag or something...
+            assert!(ids_blocks_locs.iter().max().unwrap() <= &(u32::MAX as u64), "Edge case, too many IDs... please e-mail Joseph and we can fix this in the next release");
+            let ids_blocks_locs: Vec<u32> = ids_blocks_locs.into_iter().map(|x| u32::try_from(x).unwrap()).collect();
+
+            let bitpacked = bitpack_u32(&ids_blocks_locs);
+
+            bincode
+                .serialize_into(&mut out_fh, &bitpacked)
+                .expect("Unable to write directory to file");
+
+            /*
+            let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
+            let mut compressor =
+                zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 3).unwrap();
+            bincode
+                .serialize_into(&mut compressor, &ids_blocks_locs)
                 .expect("Unable to write directory to file");
 
             let compressed =
-                ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
+               ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
 
-            bincode::serialize_into(&mut out_fh, &compressed)
-                .expect("Unable to write directory to file");
+            bincode
+                .serialize_into(&mut out_fh, &compressed)
+                .expect("Unable to write directory to file"); */
 
             // SeqLoc Blocks Locs
             let seqloc_blocks_index_loc = out_fh
@@ -436,14 +492,17 @@ impl Converter {
 
             // let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
             // let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), -3).unwrap();
-            bincode::serialize_into(&mut compressor, &seqlocs_blocks_locs)
+            let mut compressor =
+                zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 3).unwrap();
+            bincode
+                .serialize_into(&mut compressor, &seqlocs_blocks_locs)
                 .expect("Unable to write directory to file");
 
             let compressed =
                 ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
 
-            bincode::serialize_into(&mut out_fh, &compressed)
+            bincode
+                .serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write directory to file");
 
             sfasta.directory.seqloc_blocks_index_loc = Some(seqloc_blocks_index_loc);
@@ -462,8 +521,10 @@ impl Converter {
         // let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
 
         //let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-        let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), -3).unwrap();
-        bincode::serialize_into(&mut compressor, &block_locs)
+        let mut compressor =
+            zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 3).unwrap();
+        bincode
+            .serialize_into(&mut compressor, &block_locs)
             .expect("Unable to write block locs to file");
 
         let compressed = compressor
@@ -489,7 +550,8 @@ impl Converter {
 
         // Here we re-write the directory information at the start of the file, allowing for
         // easy hops to important areas while keeping everything in a single file
-        bincode::serialize_into(&mut out_fh, &sfasta.directory)
+        bincode
+            .serialize_into(&mut out_fh, &sfasta.directory)
             .expect("Unable to write directory to file");
     }
 }

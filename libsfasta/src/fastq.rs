@@ -1,8 +1,8 @@
-use simdutf8::basic::from_utf8;
 use bytelines::ByteLines;
+use simdutf8::basic::from_utf8;
 
-use std::io::BufRead;
 use std::borrow::Cow;
+use std::io::BufRead;
 
 use crate::bytelines::ByteLinesReader;
 
@@ -31,44 +31,54 @@ impl<R: BufRead> Iterator for Fastq<R> {
     type Item = Sequence;
 
     fn next(&mut self) -> Option<Sequence> {
-
         let id;
         let seq;
         let plus;
         let scores;
 
         if let Some(line) = self.reader.next() {
-            id = from_utf8(&line.expect("Unable to read FASTQ line")[1..]).expect("Unable to parse FASTQ ID").to_string();
-        } else { return None }
+            id = from_utf8(&line.expect("Unable to read FASTQ line")[1..])
+                .expect("Unable to parse FASTQ ID")
+                .to_string();
+        } else {
+            return None;
+        }
 
         if let Some(line) = self.reader.next() {
             seq = line.expect("Unable to read FASTQ line").to_vec();
-        } else { panic!("Malformed/truncated FASTQ file"); }
+        } else {
+            panic!("Malformed/truncated FASTQ file");
+        }
 
         if let Some(line) = self.reader.next() {
-            plus = from_utf8(&line.expect("Unable to read FASTQ line")[1..]).expect("Unable to parse Plus line").to_string();
-        } else { panic!("Malformed/truncated FASTQ file"); }
+            plus = from_utf8(&line.expect("Unable to read FASTQ line")[1..])
+                .expect("Unable to parse Plus line")
+                .to_string();
+        } else {
+            panic!("Malformed/truncated FASTQ file");
+        }
 
         if let Some(line) = self.reader.next() {
             scores = line.expect("Unable to read FASTQ line").to_vec();
-        } else { panic!("Malformed/truncated FASTQ file"); }
+        } else {
+            panic!("Malformed/truncated FASTQ file");
+        }
 
         let split: Vec<&str> = id.splitn(2, ' ').collect();
         let id = split[0].trim().to_string();
         let header = if split.len() == 2 {
-                split[1].trim().to_string()
-            } else {
-                "".to_string()
-            };
+            split[1].trim().to_string()
+        } else {
+            "".to_string()
+        };
 
         Some(Sequence {
-            id, 
-            seq: seq.to_vec(), 
-            plus: plus.to_string(), 
-            scores: scores.to_vec(), 
-            header: header.to_string()
+            id,
+            seq: seq.to_vec(),
+            plus: plus.to_string(),
+            scores: scores.to_vec(),
+            header: header.to_string(),
         })
-
     }
 }
 

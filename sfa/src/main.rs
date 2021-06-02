@@ -13,7 +13,6 @@ use std::fs;
 use std::fs::{metadata, File};
 use std::io::{BufReader, Read};
 use std::path::Path;
-use std::time::{Duration, Instant};
 
 use simdutf8::basic::from_utf8;
 
@@ -74,33 +73,41 @@ fn main() {
     }
 
     if let Some(matches) = matches.subcommand_matches("faidx") {
-        let mut now = Instant::now();
-
         let sfasta_filename = matches.value_of("input").unwrap();
 
         let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-        let mut sfasta =
+        let sfasta =
             SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
-        println!("Opened file: {}", now.elapsed().as_millis());
 
         let ids = matches.values_of("ids").unwrap();
         for i in ids {
-            let mut now = Instant::now();
             let results = sfasta
                 .find(i)
                 .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
                 .unwrap();
-            println!("Found ID: {}", now.elapsed().as_millis());
             for result in results {
-                let mut now = Instant::now();
                 let sequence = sfasta
                     .get_sequence(&result.3)
                     .expect("Unable to fetch sequence");
-                println!("Got Sequence: {}", now.elapsed().as_millis());
                 println!(">{}", i);
                 println!("{}", from_utf8(&sequence).unwrap());
             }
         }
+    }
+
+    if let Some(matches) = matches.subcommand_matches("list") {
+        let sfasta_filename = matches.value_of("input").unwrap();
+
+        let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+        let mut sfasta =
+            SfastaParser::open_from_buffer(BufReader::with_capacity(32 * 1024 * 1024, in_buf));
+
+        sfasta.decompress_all_ids();
+
+        for i in sfasta.index.as_ref().unwrap().ids.as_ref().unwrap().iter() {
+            println!("{}", i);          
+        }
+
     }
 
     /*
@@ -144,7 +151,19 @@ fn convert(matches: &ArgMatches) {
     let pb = style_pb(pb);
 
     let buf = generic_open_file_pb(pb, fasta_filename);
-    let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
+    // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
+    let buf = buf.2;
+
+    // Disabled for now: No improvement
+    // let dict = build_dict(buf);
+
+    let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
+    let pb = ProgressBar::new(metadata.len());
+    let pb = style_pb(pb);
+
+    let buf = generic_open_file_pb(pb, fasta_filename);
+    // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
+    let buf = buf.2;
 
     let mut compression_type = CompressionType::default();
     if matches.is_present("zstd") {
@@ -161,6 +180,9 @@ fn convert(matches: &ArgMatches) {
     }
 
     let mut converter = Converter::default().with_threads(threads);
+
+    // Disabled for now, no improvement
+    // converter = converter.with_dict(dict);
 
     if matches.is_present("block_size") {
         let block_size: usize = matches.value_of_t("block_size").unwrap();

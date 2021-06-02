@@ -28,6 +28,7 @@ pub struct CompressionStreamBuffer {
     written_entries: Arc<AtomicUsize>,
     finalized: bool,
     compression_type: CompressionType,
+    dict: Option<Vec<u8>>,
 }
 
 impl Default for CompressionStreamBuffer {
@@ -48,6 +49,7 @@ impl Default for CompressionStreamBuffer {
             total_entries: Arc::new(AtomicUsize::new(0)),
             written_entries: Arc::new(AtomicUsize::new(0)),
             compression_type: CompressionType::ZSTD,
+            dict: None,
         }
     }
 }
@@ -70,8 +72,10 @@ impl CompressionStreamBuffer {
 
             let ct = self.compression_type.clone();
 
+            let dict = self.dict.clone();
+
             let handle =
-                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct));
+                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct, dict));
             self.workers.push(handle);
         }
 
@@ -86,6 +90,11 @@ impl CompressionStreamBuffer {
         }
 
         self.initialized = true;
+    }
+
+    pub fn with_dict(mut self, dict: Vec<u8>) -> Self {
+        self.dict = Some(dict);
+        self
     }
 
     pub fn finalize(&mut self) -> Result<(), &'static str> {
@@ -214,6 +223,7 @@ fn _compression_worker_thread(
     write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     shutdown: Arc<AtomicBool>,
     compression_type: CompressionType,
+    dict: Option<Vec<u8>>,
 ) {
     let mut result;
     let backoff = Backoff::new();
@@ -231,7 +241,12 @@ fn _compression_worker_thread(
             }
 
             Some((block_id, sb)) => {
-                let sbc = sb.compress(compression_type);
+                let sbc = if dict.is_some() {
+                        sb.compress_with_dict(compression_type, &dict.as_ref().unwrap())
+                    } else {
+                        sb.compress(compression_type)
+                    };
+                 
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
                     entry = x;

@@ -42,6 +42,7 @@ xz = "0.1.0"
 flate2 = { version = "1.0.20", features = ["zlib-ng-compat"], default-features = false }
 snap = "1.0.5"
 brotli = "3.3.0"
+bitpacking = "0.8.4"
 
 [dev-dependencies]
 criterion = "0.3"
@@ -50,7 +51,6 @@ generic-array = "0.14.4"
 numeric-array = "0.5.2"
 num-traits = "0.2.14"
 ux_serde = "0.2.0"
-bitpacking = "0.8.4"
 
 [[bench]]
 name = "indexing"
