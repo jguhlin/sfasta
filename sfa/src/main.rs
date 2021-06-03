@@ -179,7 +179,7 @@ fn convert(matches: &ArgMatches) {
         compression_type = CompressionType::GZIP;
     }
 
-    let mut converter = Converter::default().with_threads(threads);
+    let mut converter = Converter::default().with_threads(threads).with_compression_type(compression_type);;
 
     // Disabled for now, no improvement
     // converter = converter.with_dict(dict);

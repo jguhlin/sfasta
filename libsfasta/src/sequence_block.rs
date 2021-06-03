@@ -175,7 +175,13 @@ impl SequenceBlockCompressed {
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
                 // zstd::block::decompress_to_buffer(&self.compressed_seq[..], &mut seq).expect("Unable to decompress");
-            }
+            },
+            CompressionType::XZ => {
+                let mut decompressor = XzDecoder::new(&self.compressed_seq[..]);
+                decompressor
+                    .read_to_end(&mut seq)
+                    .expect("Unable to XZ compress");
+            },
             _ => {
                 unimplemented!()
             }
