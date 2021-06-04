@@ -95,6 +95,24 @@ fn main() {
         }
     }
 
+    if let Some(matches) = matches.subcommand_matches("view") {
+        let sfasta_filename = matches.value_of("input").unwrap();
+
+        let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+        let mut sfasta =
+            SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
+        
+        sfasta.decompress_all_ids();
+
+        for result in results {
+            let sequence = sfasta
+                .get_sequence(&result.3)
+                .expect("Unable to fetch sequence");
+            println!(">{}", i);
+            println!("{}", from_utf8(&sequence).unwrap());
+        }
+    }
+
     if let Some(matches) = matches.subcommand_matches("list") {
         let sfasta_filename = matches.value_of("input").unwrap();
 
