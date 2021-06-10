@@ -101,10 +101,10 @@ fn main() {
         let in_buf = File::open(sfasta_filename).expect("Unable to open file");
         let mut sfasta =
             SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
-        
-        /*
-        sfasta.decompress_all_ids();
 
+        // sfasta.decompress_all_ids();
+       
+        /*
         for result in results {
             let sequence = sfasta
                 .get_sequence(&result.3)
