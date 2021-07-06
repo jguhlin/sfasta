@@ -1,0 +1,203 @@
+desc: (none)
+cmd: /home/josephguhlin/development/oracular/target/release/sfa view /mnt/data/nt/nt.sfasta
+time_unit: i
+#-----------
+snapshot=0
+#-----------
+time=0
+mem_heap_B=0
+mem_heap_extra_B=0
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=1
+#-----------
+time=472325
+mem_heap_B=472
+mem_heap_extra_B=16
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=2
+#-----------
+time=472878
+mem_heap_B=592
+mem_heap_extra_B=32
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=3
+#-----------
+time=473054
+mem_heap_B=1616
+mem_heap_extra_B=40
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=4
+#-----------
+time=474147
+mem_heap_B=1736
+mem_heap_extra_B=32
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=5
+#-----------
+time=629723
+mem_heap_B=1736
+mem_heap_extra_B=32
+mem_stacks_B=0
+heap_tree=peak
+n4: 1736 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 1024 0x4C8F2D3: _IO_file_doallocate (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 1024 0x4C9F02F: _IO_doallocbuf (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n1: 1024 0x4C9DDFB: _IO_file_underflow (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+    n1: 1024 0x4C90CC7: getdelim (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+     n1: 1024 0x4CA2331: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+      n0: 1024 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 472 0x4C8FEDD: fopen (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 472 0x4CA21F2: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n0: 472 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 240 0x4C90B4D: getdelim (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 240 0x4CA2331: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n0: 240 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n0: 0 in 1 place, below massif's threshold (1.00%)
+#-----------
+snapshot=6
+#-----------
+time=629723
+mem_heap_B=1496
+mem_heap_extra_B=24
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=7
+#-----------
+time=629948
+mem_heap_B=472
+mem_heap_extra_B=16
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=8
+#-----------
+time=630077
+mem_heap_B=0
+mem_heap_extra_B=0
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=9
+#-----------
+time=630881
+mem_heap_B=32
+mem_heap_extra_B=8
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=10
+#-----------
+time=631879
+mem_heap_B=184
+mem_heap_extra_B=24
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=11
+#-----------
+time=631943
+mem_heap_B=216
+mem_heap_extra_B=32
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=12
+#-----------
+time=632017
+mem_heap_B=184
+mem_heap_extra_B=24
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=13
+#-----------
+time=632095
+mem_heap_B=152
+mem_heap_extra_B=16
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=14
+#-----------
+time=632126
+mem_heap_B=0
+mem_heap_extra_B=0
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=15
+#-----------
+time=643167
+mem_heap_B=32
+mem_heap_extra_B=8
+mem_stacks_B=0
+heap_tree=detailed
+n8: 32 (heap allocation functions) malloc/new/new[], --alloc-fns, etc.
+ n1: 32 0x4C55A82: __cxa_thread_atexit_impl (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 32 0x1F4933: try_register_dtor<core::cell::RefCell<core::option::Option<std::sys_common::thread_info::ThreadInfo>>> (local.rs:490)
+   n1: 32 0x1F4933: std::thread::local::fast::Key<T>::try_initialize (local.rs:471)
+    n1: 32 0x216250: get<core::cell::RefCell<core::option::Option<std::sys_common::thread_info::ThreadInfo>>,fn() -> core::cell::RefCell<core::option::Option<std::sys_common::thread_info::ThreadInfo>>> (local.rs:456)
+     n1: 32 0x216250: __getit (local.rs:183)
+      n1: 32 0x216250: try_with<core::cell::RefCell<core::option::Option<std::sys_common::thread_info::ThreadInfo>>,closure-0,()> (local.rs:271)
+       n1: 32 0x216250: with<core::cell::RefCell<core::option::Option<std::sys_common::thread_info::ThreadInfo>>,closure-0,()> (local.rs:248)
+        n1: 32 0x216250: std::sys_common::thread_info::set (thread_info.rs:40)
+         n0: 32 0x12DBBB: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 0 0x4C8F2D3: _IO_file_doallocate (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 0 0x4C9F02F: _IO_doallocbuf (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n1: 0 0x4C9DDFB: _IO_file_underflow (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+    n1: 0 0x4C90CC7: getdelim (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+     n1: 0 0x4CA2331: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+      n0: 0 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 0 0x4C8FEDD: fopen (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 0 0x4CA21F2: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n0: 0 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 0 0x4C90AF3: getdelim (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 0 0x4CA2331: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n0: 0 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 0 0x4C90B4D: getdelim (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 0 0x4CA2331: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n0: 0 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 0 0x4CA19B2: ??? (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 0 0x4CA1B4F: pthread_attr_setaffinity_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n1: 0 0x4CA21A5: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+    n0: 0 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 0 0x4CA1B6B: pthread_attr_setaffinity_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n1: 0 0x4CA21A5: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+   n0: 0 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+ n1: 0 0x4CA2109: pthread_getattr_np (in /usr/lib/x86_64-linux-gnu/libc-2.33.so)
+  n0: 0 0x12D9F4: main (in /home/josephguhlin/development/oracular/target/release/sfa)
+#-----------
+snapshot=16
+#-----------
+time=648188
+mem_heap_B=64
+mem_heap_extra_B=16
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=17
+#-----------
+time=1367571
+mem_heap_B=32
+mem_heap_extra_B=8
+mem_stacks_B=0
+heap_tree=empty
+#-----------
+snapshot=18
+#-----------
+time=1384367
+mem_heap_B=0
+mem_heap_extra_B=0
+mem_stacks_B=0
+heap_tree=empty

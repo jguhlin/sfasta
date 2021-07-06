@@ -53,6 +53,7 @@ impl Default for Sfasta {
 
 impl Sfasta {
     pub fn with_sequences(self) -> Self {
+        // TODO: Should we really have SFASTA without sequences?!
         // self.directory = self.directory.with_sequences();
         self
     }
@@ -85,9 +86,8 @@ impl Sfasta {
         );
         let len = self.index.as_ref().unwrap().len();
         let blocks = (len as f64 / IDX_CHUNK_SIZE as f64).ceil() as usize;
-        // println!("{:#?} {:#?}", len, blocks);
 
-        /*        self.buf
+        /* self.buf
         .as_deref_mut()
         .unwrap()
         .seek(SeekFrom::Start(self.directory.ids_loc))
@@ -172,7 +172,7 @@ impl Sfasta {
                     }
                 }
             } else {
-                let mut bump = Bump::new();
+                // let mut bump = Bump::new();
                 for loc in possibilities {
                     let block = loc as usize / IDX_CHUNK_SIZE;
 
@@ -190,8 +190,10 @@ impl Sfasta {
 
                     let mut decompressed: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
 
-                    let compressed: &mut ByteBuf =
-                        bump.alloc(bincode::deserialize_from(&mut *buf).unwrap());
+                    //let compressed: &mut ByteBuf =
+                    //    bump.alloc(bincode::deserialize_from(&mut *buf).unwrap());
+                    let compressed: ByteBuf =
+                        bincode::deserialize_from(&mut *buf).unwrap();
                     let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
 
                     match decoder.read_to_end(&mut decompressed) {
@@ -201,8 +203,10 @@ impl Sfasta {
 
                     // let mut decompressed =
                     //     bump.alloc(lz4_flex::frame::FrameDecoder::new(&compressed[..]));
-                    let ids: &mut Vec<String> =
-                        bump.alloc(bincode::deserialize_from(&decompressed[..]).unwrap());
+                    //let ids: &mut Vec<String> =
+                        //bump.alloc(bincode::deserialize_from(&decompressed[..]).unwrap());
+                    let ids: Vec<String> =
+                        bincode::deserialize_from(&decompressed[..]).unwrap();
 
                     if ids[loc as usize % IDX_CHUNK_SIZE] == x {
                         matches.push((
@@ -211,7 +215,7 @@ impl Sfasta {
                             locs[loc as usize % IDX_CHUNK_SIZE],
                         ));
                     }
-                    bump.reset();
+                    // bump.reset();
                 }
             }
 
@@ -232,7 +236,7 @@ impl Sfasta {
                     buf.seek(SeekFrom::Start(
                         self.seqlocs_blocks_locs.as_ref().unwrap()[block],
                     ))
-                    .expect("Unable to work with SEEK API");
+                    .expect("Unable to work with seek API");
                     let compressed: ByteBuf = bincode::deserialize_from(&mut *buf).unwrap();
 
                     let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
@@ -275,8 +279,8 @@ impl Sfasta {
             }
         }
 
-        // TODO: Probably no benefit here...
-        let mut bump = Bump::new();
+        // TODO: Probably no benefit here......
+        // let mut bump = Bump::new();
 
         for loc in locs {
             let byte_loc = self.block_locs.as_ref().unwrap()[loc.0 as usize];
@@ -293,10 +297,11 @@ impl Sfasta {
                 .expect("Unable to parse SequenceBlockCompressed");
 
             drop(buf); // Open it up for other threads...
-            let sb = bump.alloc(sbc.decompress(self.parameters.compression_type));
+            // let sb = bump.alloc(sbc.decompress(self.parameters.compression_type));
+            let sb = sbc.decompress(self.parameters.compression_type);
 
             seq.extend_from_slice(&sb.seq[loc.1 .0 as usize..loc.1 .1 as usize]);
-            bump.reset();
+            // bump.reset();
         }
 
         Ok(seq)

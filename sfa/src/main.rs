@@ -1,13 +1,14 @@
-extern crate mimalloc;
+/*extern crate mimalloc;
 use mimalloc::MiMalloc;
 
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: MiMalloc = MiMalloc;*/
 
 extern crate clap;
 extern crate indicatif;
 extern crate rand;
 extern crate rand_chacha;
+extern crate bumpalo;
 
 use std::fs;
 use std::fs::{metadata, File};
@@ -16,6 +17,7 @@ use std::path::Path;
 
 use simdutf8::basic::from_utf8;
 
+use bumpalo::Bump;
 use clap::{load_yaml, App, ArgMatches};
 use indicatif::{ProgressBar, ProgressStyle};
 
@@ -96,22 +98,37 @@ fn main() {
     }
 
     if let Some(matches) = matches.subcommand_matches("view") {
+        // TODO: Add ability to store sequences in order, to reorder sequences, and
+        // to identify when sequences are in order and display them that way...
+
         let sfasta_filename = matches.value_of("input").unwrap();
 
         let in_buf = File::open(sfasta_filename).expect("Unable to open file");
         let mut sfasta =
             SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
 
-        // sfasta.decompress_all_ids();
+        // TODO: We could process this in blocks to be more memory efficient...
+        sfasta.decompress_all_ids();
 
-        /*
-        for result in results {
-            let sequence = sfasta
-                .get_sequence(&result.3)
-                .expect("Unable to fetch sequence");
-            println!(">{}", i);
-            println!("{}", from_utf8(&sequence).unwrap());
-        } */
+        let mut bump = Bump::new();
+
+        for seqid in sfasta.index.as_ref().unwrap().ids.as_ref().unwrap() {
+
+            let results = bump.alloc(sfasta
+                .find(&seqid)
+                .expect(&format!("Unable to find {} in file {}, even though it is in the index! File is likely corrupt, or this is a serious bug.", &seqid, sfasta_filename))
+                .unwrap());
+
+            for result in results {
+                let sequence = bump.alloc(sfasta
+                    .get_sequence(&result.3)
+                    .expect("Unable to fetch sequence"));
+                println!(">{}", seqid);
+                println!("{}", from_utf8(&sequence).unwrap());
+            }
+
+            bump.reset();
+        }
     }
 
     if let Some(matches) = matches.subcommand_matches("list") {
