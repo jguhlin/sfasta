@@ -1,12 +1,12 @@
 // Easy, high-performance conversion functions
 use std::borrow::Cow;
+use std::convert::TryFrom;
 use std::fs::{metadata, File};
 use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
-use std::convert::TryFrom;
 
 use bincode::Options;
 use bumpalo::Bump;
@@ -19,8 +19,8 @@ use crate::format::{Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
 use crate::index::IDIndexer;
 use crate::structs::WriteAndSeek;
 use crate::types::*;
-use crate::CompressionType;
 use crate::utils::*;
+use crate::CompressionType;
 
 /*
 For a set of reads, this is the timing breakdown most recently...
@@ -58,7 +58,7 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 8 * 1024 * 1024,  // 8Mb
+            block_size: 8 * 1024 * 1024,    // 8Mb
             index_chunk_size: 128 * 1024,   // 128k
             seqlocs_chunk_size: 128 * 1024, // 128k
             index_compression_type: CompressionType::ZSTD,
@@ -365,10 +365,12 @@ impl Converter {
 
             let (hashes, bitpacked, hash_type, min_size) = indexer.into_parts();
 
-            bincode.serialize_into(&mut out_fh, &hash_type)
+            bincode
+                .serialize_into(&mut out_fh, &hash_type)
                 .expect("Unable to bincode index hash type");
 
-            bincode.serialize_into(&mut out_fh, &min_size)
+            bincode
+                .serialize_into(&mut out_fh, &min_size)
                 .expect("Unable to bincode index hash type");
 
             let mut compressor =
@@ -384,7 +386,7 @@ impl Converter {
             bincode::serialize_into(&mut out_fh, &bitpacked)
                 .expect("Unable to bincode index hash type");
 
-/*            // let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
+            /*            // let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
             let mut compressor =
                 zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), 3).unwrap();
 
@@ -457,7 +459,10 @@ impl Converter {
 
             // TODO: Handle this pre-emptively with a flag or something...
             assert!(ids_blocks_locs.iter().max().unwrap() <= &(u32::MAX as u64), "Edge case, too many IDs... please e-mail Joseph and we can fix this in the next release");
-            let ids_blocks_locs: Vec<u32> = ids_blocks_locs.into_iter().map(|x| u32::try_from(x).unwrap()).collect();
+            let ids_blocks_locs: Vec<u32> = ids_blocks_locs
+                .into_iter()
+                .map(|x| u32::try_from(x).unwrap())
+                .collect();
 
             let bitpacked = bitpack_u32(&ids_blocks_locs);
 

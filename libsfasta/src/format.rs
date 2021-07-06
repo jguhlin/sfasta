@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use bincode::Options;
 use bumpalo::Bump;
-use serde_bytes::ByteBuf;
 use rayon::prelude::*;
+use serde_bytes::ByteBuf;
 
 use crate::directory::Directory;
 use crate::index::*;
@@ -106,18 +106,21 @@ impl Sfasta {
             // println!("Processed block {}", i);
         }
 
-        let output: Vec<Vec<String>> = compressed_blocks.par_iter().map(|x| {
-            let mut decoder = zstd::stream::Decoder::new(&x[..]).unwrap();
+        let output: Vec<Vec<String>> = compressed_blocks
+            .par_iter()
+            .map(|x| {
+                let mut decoder = zstd::stream::Decoder::new(&x[..]).unwrap();
 
-            let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
+                let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
 
-            match decoder.read_to_end(&mut decompressed) {
-                Ok(x) => x,
-                Err(y) => panic!("Unable to decompress block: {:#?}", y),
-            };
+                match decoder.read_to_end(&mut decompressed) {
+                    Ok(x) => x,
+                    Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                };
 
-            bincode::deserialize_from(&decompressed[..]).unwrap()
-        }).collect();
+                bincode::deserialize_from(&decompressed[..]).unwrap()
+            })
+            .collect();
 
         output.into_iter().for_each(|x| ids.extend(x));
 
@@ -359,14 +362,20 @@ impl SfastaParser {
             .seek(SeekFrom::Start(sfasta.directory.index_loc.unwrap()))
             .expect("Unable to work with seek API");
 
-        let hash_type: Hashes = bincode.deserialize_from(&mut in_buf).expect("Unable to get Hash Type of Index");
-        let min_size: u32 = bincode.deserialize_from(&mut in_buf).expect("Unable to get Index Min Size");
+        let hash_type: Hashes = bincode
+            .deserialize_from(&mut in_buf)
+            .expect("Unable to get Hash Type of Index");
+        let min_size: u32 = bincode
+            .deserialize_from(&mut in_buf)
+            .expect("Unable to get Index Min Size");
 
         let hashes_compressed: ByteBuf = bincode
             .deserialize_from(&mut in_buf)
             .expect("Unable to parse index");
 
-        let bitpacked: Vec<Bitpacked> = bincode.deserialize_from(&mut in_buf).expect("Unable to get Bitpacked Index");
+        let bitpacked: Vec<Bitpacked> = bincode
+            .deserialize_from(&mut in_buf)
+            .expect("Unable to get Bitpacked Index");
 
         // Parse and decompress in the index in another thread
         let index_handle = thread::spawn(move || {
@@ -383,7 +392,10 @@ impl SfastaParser {
                 .deserialize_from(&index_bincoded[..])
                 .expect("Unable to parse index");
 
-            let locs: Vec<u32> = unbitpack_u32(bitpacked).into_iter().map(|x| x + min_size).collect();
+            let locs: Vec<u32> = unbitpack_u32(bitpacked)
+                .into_iter()
+                .map(|x| x + min_size)
+                .collect();
 
             let idx = Index64::from_parts(hashes, locs, hash_type);
 
@@ -441,11 +453,13 @@ impl SfastaParser {
                 let id_blocks_locs: Vec<u64> = bincode
                     .deserialize_from(&id_blocks_locs_bincoded[..])
                     .expect("Unable to parse index"); */
-                
+
                 let id_blocks_locs: Vec<u32> = unbitpack_u32(id_blocks_locs_compressed);
 
-                let id_blocks_locs: Vec<u64> =
-                    id_blocks_locs.into_iter().map(|x| x as u64 + ids_loc).collect();
+                let id_blocks_locs: Vec<u64> = id_blocks_locs
+                    .into_iter()
+                    .map(|x| x as u64 + ids_loc)
+                    .collect();
 
                 id_blocks_locs
             }));

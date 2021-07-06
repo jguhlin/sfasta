@@ -287,10 +287,13 @@ impl Index64 {
         let mut locs = self.locs;
         let min_size = locs.iter().min().unwrap().clone();
 
-        locs = locs.into_iter().map(|x| x.saturating_sub(min_size)).collect();
+        locs = locs
+            .into_iter()
+            .map(|x| x.saturating_sub(min_size))
+            .collect();
 
         let bitpacked = bitpack_u32(&locs);
-       
+
         (hashes, bitpacked, self.hash, min_size)
     }
 
@@ -299,7 +302,7 @@ impl Index64 {
             hashes,
             locs,
             hash,
-            ids: None
+            ids: None,
         }
     }
 }

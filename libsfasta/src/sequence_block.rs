@@ -21,9 +21,13 @@ impl SequenceBlock {
         match compression_type {
             CompressionType::ZSTD => {
                 let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
-                encoder.set_parameter(zstd::stream::raw::CParameter::SrcSizeHint(self.seq.len() as u32));
+                encoder.set_parameter(zstd::stream::raw::CParameter::SrcSizeHint(
+                    self.seq.len() as u32
+                ));
                 encoder.set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false));
-                encoder.set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(true));
+                encoder.set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
+                    true,
+                ));
 
                 encoder
                     .long_distance_matching(true)
@@ -80,13 +84,18 @@ impl SequenceBlock {
         }
     }
 
-    pub fn compress_with_dict(self, compression_type: CompressionType, dict: &[u8]) -> SequenceBlockCompressed {
+    pub fn compress_with_dict(
+        self,
+        compression_type: CompressionType,
+        dict: &[u8],
+    ) -> SequenceBlockCompressed {
         let level = default_compression_level(compression_type);
         let mut cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
 
         match compression_type {
             CompressionType::ZSTD => {
-                let mut encoder = zstd::stream::Encoder::with_dictionary(cseq, level, dict).unwrap();
+                let mut encoder =
+                    zstd::stream::Encoder::with_dictionary(cseq, level, dict).unwrap();
                 encoder
                     .long_distance_matching(true)
                     .expect("Unable to set ZSTD Long Distance Matching");
@@ -175,13 +184,13 @@ impl SequenceBlockCompressed {
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
                 // zstd::block::decompress_to_buffer(&self.compressed_seq[..], &mut seq).expect("Unable to decompress");
-            },
+            }
             CompressionType::XZ => {
                 let mut decompressor = XzDecoder::new(&self.compressed_seq[..]);
                 decompressor
                     .read_to_end(&mut seq)
                     .expect("Unable to XZ compress");
-            },
+            }
             _ => {
                 unimplemented!()
             }

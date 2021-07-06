@@ -103,7 +103,7 @@ fn main() {
             SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
 
         // sfasta.decompress_all_ids();
-       
+
         /*
         for result in results {
             let sequence = sfasta
@@ -124,9 +124,8 @@ fn main() {
         sfasta.decompress_all_ids();
 
         for i in sfasta.index.as_ref().unwrap().ids.as_ref().unwrap().iter() {
-            println!("{}", i);          
+            println!("{}", i);
         }
-
     }
 
     /*
@@ -198,7 +197,9 @@ fn convert(matches: &ArgMatches) {
         compression_type = CompressionType::GZIP;
     }
 
-    let mut converter = Converter::default().with_threads(threads).with_compression_type(compression_type);
+    let mut converter = Converter::default()
+        .with_threads(threads)
+        .with_compression_type(compression_type);
 
     // Disabled for now, no improvement
     // converter = converter.with_dict(dict);

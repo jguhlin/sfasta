@@ -242,11 +242,11 @@ fn _compression_worker_thread(
 
             Some((block_id, sb)) => {
                 let sbc = if dict.is_some() {
-                        sb.compress_with_dict(compression_type, &dict.as_ref().unwrap())
-                    } else {
-                        sb.compress(compression_type)
-                    };
-                 
+                    sb.compress_with_dict(compression_type, &dict.as_ref().unwrap())
+                } else {
+                    sb.compress(compression_type)
+                };
+
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
                     entry = x;

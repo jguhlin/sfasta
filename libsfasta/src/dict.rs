@@ -20,10 +20,11 @@ where
         }
     }
 
-    let result = zstd::dict::from_continuous(&dict_buffer, &lens, 2 * 1024 * 1024).expect("Unable to build dict");
+    let result = zstd::dict::from_continuous(&dict_buffer, &lens, 2 * 1024 * 1024)
+        .expect("Unable to build dict");
     println!("Dict created: {:#?}", result.len());
     println!();
     println!();
-    
+
     result
 }
