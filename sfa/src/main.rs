@@ -97,6 +97,10 @@ fn main() {
         }
     }
 
+    // TODO: Store sequence IDs in insertion order at the end of the file
+    // insertion-order output should be a custom function
+    // (Decompress entire block, output sequences appropriately)
+    // So don't need this more random (and slower) method anymore...
     if let Some(matches) = matches.subcommand_matches("view") {
         // TODO: Add ability to store sequences in order, to reorder sequences, and
         // to identify when sequences are in order and display them that way...
@@ -114,15 +118,16 @@ fn main() {
 
         for seqid in sfasta.index.as_ref().unwrap().ids.as_ref().unwrap() {
 
-            let results = bump.alloc(sfasta
+            let results = sfasta
                 .find(&seqid)
                 .expect(&format!("Unable to find {} in file {}, even though it is in the index! File is likely corrupt, or this is a serious bug.", &seqid, sfasta_filename))
-                .unwrap());
+                .unwrap();
 
+                // TODO: Disabled bumpalo... for now...
             for result in results {
-                let sequence = bump.alloc(sfasta
+                let sequence = sfasta
                     .get_sequence(&result.3)
-                    .expect("Unable to fetch sequence"));
+                    .expect("Unable to fetch sequence");
                 println!(">{}", seqid);
                 println!("{}", from_utf8(&sequence).unwrap());
             }
