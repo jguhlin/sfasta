@@ -12,6 +12,8 @@ pub struct Directory {
     pub masking_loc: Option<u64>,
     pub id_blocks_index_loc: Option<u64>,
     pub seqloc_blocks_index_loc: Option<u64>,
+    pub index_plan_loc: Option<u64>,
+    pub index_bitpacked_loc: Option<u64>,
 }
 
 impl Default for Directory {

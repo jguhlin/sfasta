@@ -192,8 +192,7 @@ impl Sfasta {
 
                     //let compressed: &mut ByteBuf =
                     //    bump.alloc(bincode::deserialize_from(&mut *buf).unwrap());
-                    let compressed: ByteBuf =
-                        bincode::deserialize_from(&mut *buf).unwrap();
+                    let compressed: ByteBuf = bincode::deserialize_from(&mut *buf).unwrap();
                     let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
 
                     match decoder.read_to_end(&mut decompressed) {
@@ -204,9 +203,8 @@ impl Sfasta {
                     // let mut decompressed =
                     //     bump.alloc(lz4_flex::frame::FrameDecoder::new(&compressed[..]));
                     //let ids: &mut Vec<String> =
-                        //bump.alloc(bincode::deserialize_from(&decompressed[..]).unwrap());
-                    let ids: Vec<String> =
-                        bincode::deserialize_from(&decompressed[..]).unwrap();
+                    //bump.alloc(bincode::deserialize_from(&decompressed[..]).unwrap());
+                    let ids: Vec<String> = bincode::deserialize_from(&decompressed[..]).unwrap();
 
                     if ids[loc as usize % IDX_CHUNK_SIZE] == x {
                         matches.push((
@@ -297,7 +295,7 @@ impl Sfasta {
                 .expect("Unable to parse SequenceBlockCompressed");
 
             drop(buf); // Open it up for other threads...
-            // let sb = bump.alloc(sbc.decompress(self.parameters.compression_type));
+                       // let sb = bump.alloc(sbc.decompress(self.parameters.compression_type));
             let sb = sbc.decompress(self.parameters.compression_type);
 
             seq.extend_from_slice(&sb.seq[loc.1 .0 as usize..loc.1 .1 as usize]);
@@ -370,6 +368,7 @@ impl SfastaParser {
         let hash_type: Hashes = bincode
             .deserialize_from(&mut in_buf)
             .expect("Unable to get Hash Type of Index");
+
         let min_size: u32 = bincode
             .deserialize_from(&mut in_buf)
             .expect("Unable to get Index Min Size");

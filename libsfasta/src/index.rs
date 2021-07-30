@@ -207,7 +207,7 @@ impl IDIndexer for Index32 {
     }
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
 pub enum Hashes {
     Ahash,    // ahash // On fastq file was...  102.68 secs
     XxHash64, // On fastq file was... 96.18

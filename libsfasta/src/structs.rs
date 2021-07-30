@@ -3,6 +3,9 @@ use std::io::prelude::*;
 
 use serde::{Deserialize, Serialize};
 
+use crate::index::Hashes;
+use crate::utils::Bitpacked;
+
 // SuperTrait -- needed for pyO3
 pub trait ReadAndSeek: Read + Seek {}
 impl<T: Read + Seek> ReadAndSeek for T {}
@@ -56,4 +59,75 @@ pub struct Header {
     pub comment: Option<String>,
     pub citation: Option<String>,
     pub compression_type: CompressionType,
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct StoredIndexPlan {
+    pub parts: u8,
+    pub index: Vec<(u64, u64)>,
+    pub min_size: u32,
+    pub hash_type: Hashes,
+    pub chunk_size: u32,
+}
+
+const MINIMUM_CHUNK_SIZE: u32 = 16 * 1024 * 1024;
+
+impl StoredIndexPlan {
+    pub fn plan_from_parts<'a>(
+        hashes: &'a Vec<u64>,
+        _locs: &Vec<Bitpacked>,
+        hash_type: Hashes,
+        min_size: u32,
+    ) -> (StoredIndexPlan, Vec<&'a [u64]>) {
+        assert!(
+            hashes[..].is_sorted(),
+            "Hashes Vector must be sorted. Did you forget to finalize the index?"
+        );
+
+        assert!(hashes.len() <= u64::MAX as usize, "Hashes Vector must be smaller than 2^64... Contact Joseph to Discuss options or split into multiple files...");
+
+        let hashes_count = hashes.len();
+        let mut parts = 64;
+        let mut chunk_size = (hashes_count as f64 / parts as f64).ceil() as u32;
+
+        if hashes.len() < MINIMUM_CHUNK_SIZE as usize {
+            parts = 1;
+            chunk_size = MINIMUM_CHUNK_SIZE;
+        } else {
+            while chunk_size < MINIMUM_CHUNK_SIZE {
+                parts -= 1;
+                chunk_size = (hashes_count as f64 / parts as f64).ceil() as u32;
+                if parts == 1 {
+                    chunk_size = MINIMUM_CHUNK_SIZE;
+                    break;
+                }
+            }
+        }
+
+        let mut index = Vec::new();
+        let mut hash_splits = Vec::new();
+
+        for i in 0..parts {
+            let start = i as usize * chunk_size as usize;
+            let mut end = (i as usize + 1) * chunk_size as usize;
+            end = std::cmp::min(end, hashes.len());
+
+            index.push((hashes[start], 0));
+            hash_splits.push(&hashes[start..end]);
+        }
+
+        // TODO: Split the Hashes
+        // Bitpacked locs are already split into small chunks, so we can process that in the format.rs file
+
+        (
+            StoredIndexPlan {
+                parts,
+                index,
+                min_size,
+                hash_type,
+                chunk_size,
+            },
+            hash_splits,
+        )
+    }
 }

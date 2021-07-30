@@ -4,11 +4,11 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;*/
 
+extern crate bumpalo;
 extern crate clap;
 extern crate indicatif;
 extern crate rand;
 extern crate rand_chacha;
-extern crate bumpalo;
 
 use std::fs;
 use std::fs::{metadata, File};
@@ -79,7 +79,7 @@ fn main() {
 
         let in_buf = File::open(sfasta_filename).expect("Unable to open file");
         let sfasta =
-            SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
+            SfastaParser::open_from_buffer(BufReader::with_capacity(4 * 1024 * 1024, in_buf));
 
         let ids = matches.values_of("ids").unwrap();
         for i in ids {
@@ -117,13 +117,12 @@ fn main() {
         let mut bump = Bump::new();
 
         for seqid in sfasta.index.as_ref().unwrap().ids.as_ref().unwrap() {
-
             let results = sfasta
                 .find(&seqid)
                 .expect(&format!("Unable to find {} in file {}, even though it is in the index! File is likely corrupt, or this is a serious bug.", &seqid, sfasta_filename))
                 .unwrap();
 
-                // TODO: Disabled bumpalo... for now...
+            // TODO: Disabled bumpalo... for now...
             for result in results {
                 let sequence = sfasta
                     .get_sequence(&result.3)

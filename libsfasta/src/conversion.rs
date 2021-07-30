@@ -17,7 +17,7 @@ use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
 use crate::format::{Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
 use crate::index::IDIndexer;
-use crate::structs::WriteAndSeek;
+use crate::structs::{StoredIndexPlan, WriteAndSeek};
 use crate::types::*;
 use crate::utils::*;
 use crate::CompressionType;
@@ -365,23 +365,56 @@ impl Converter {
 
             let (hashes, bitpacked, hash_type, min_size) = indexer.into_parts();
 
+            let (mut plan, parts) =
+                StoredIndexPlan::plan_from_parts(&hashes, &bitpacked, hash_type, min_size);
+
+            let plan_loc = out_fh
+                .seek(SeekFrom::Current(0))
+                .expect("Unable to work with seek API");
+
+            bincode.serialize_into(&mut out_fh, &plan);
+
+            /* bincode
+                .serialize_into(&mut out_fh, &hash_type)
+                .expect("Unable to bincode index hash type");
+
             bincode
                 .serialize_into(&mut out_fh, &hash_type)
                 .expect("Unable to bincode index hash type");
 
             bincode
                 .serialize_into(&mut out_fh, &min_size)
-                .expect("Unable to bincode index hash type");
+                .expect("Unable to bincode index hash type"); */
 
-            let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -9).unwrap();
-            bincode
-                .serialize_into(&mut compressor, &hashes)
-                .expect("Unable to bincode index to compressor");
-            let compressed = ByteBuf::from(compressor.finish().unwrap());
+            for (n, part) in parts.into_iter().enumerate() {
+                plan.index[n].1 = out_fh
+                    .seek(SeekFrom::Current(0))
+                    .expect("Unable to work with seek API");
 
-            bincode::serialize_into(&mut out_fh, &compressed)
-                .expect("Unable to bincode compressed index");
+                let mut compressor =
+                    zstd::stream::Encoder::new(Vec::with_capacity(16 * 1024 * 1024), -9).unwrap();
+
+                let part = part.to_vec();
+
+                bincode
+                    .serialize_into(&mut compressor, &part)
+                    .expect("Unable to bincode index to compressor");
+                let compressed = ByteBuf::from(compressor.finish().unwrap());
+
+                bincode::serialize_into(&mut out_fh, &compressed)
+                    .expect("Unable to bincode compressed index");
+            }
+
+            let bitpacked_pos = out_fh
+                .seek(SeekFrom::Current(0))
+                .expect("Unable to work with seek API");
+
+            // Re-write Plan since it now has indexes...
+            out_fh.seek(SeekFrom::Start(plan_loc));
+            bincode.serialize_into(&mut out_fh, &plan);
+
+            // TODO: Don't write bitpacked as a single Vec, but split it up into each block
+            // And output the total # of blocks so we can quickly iterate through...
 
             bincode::serialize_into(&mut out_fh, &bitpacked)
                 .expect("Unable to bincode index hash type");

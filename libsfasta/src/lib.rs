@@ -1,3 +1,5 @@
+#![feature(is_sorted)]
+
 extern crate bincode;
 extern crate bytelines;
 extern crate crossbeam;
