@@ -35,7 +35,7 @@ itertools = "0.10.1"
 bumpalo = {version = "3.7.0", features = ["collections"]}
 
 # Hashers
-twox-hash = "1.6.0"
+twox-hash = "1.6.1"
 ahash = "0.7.3"
 
 # Compression algorithms

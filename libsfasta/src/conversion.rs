@@ -128,10 +128,13 @@ impl Converter {
     }
 
     pub fn with_seqlocs_chunk_size(mut self, chunk_size: usize) -> Self {
+        unimplemented!();
         assert!(
             chunk_size < u32::MAX as usize,
             "Chunk size must be less than u32::MAX (~4Gb)"
         );
+
+        // self.chunk_size =
 
         self
     }
@@ -177,7 +180,7 @@ impl Converter {
         directory_location
     }
 
-    // Functions to do conversions
+    /// Main conversion function
     pub fn convert_fasta<W, R: 'static>(self, in_buf: R, out_buf: &mut W)
     where
         W: WriteAndSeek,
@@ -195,6 +198,8 @@ impl Converter {
 
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
 
+        /// Store masks as series of 0s and 1s...
+        /// TODO
         if self.masking {
             sfasta = sfasta.with_masking();
         }
@@ -372,7 +377,9 @@ impl Converter {
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API");
 
-            bincode.serialize_into(&mut out_fh, &plan);
+            bincode
+                .serialize_into(&mut out_fh, &plan)
+                .expect("Unable to bincode Index Plan");
 
             /* bincode
                 .serialize_into(&mut out_fh, &hash_type)
@@ -405,13 +412,17 @@ impl Converter {
                     .expect("Unable to bincode compressed index");
             }
 
-            let bitpacked_pos = out_fh
+            let bitpacked_loc = out_fh
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API");
 
             // Re-write Plan since it now has indexes...
-            out_fh.seek(SeekFrom::Start(plan_loc));
-            bincode.serialize_into(&mut out_fh, &plan);
+            out_fh
+                .seek(SeekFrom::Start(plan_loc))
+                .expect("Unable to seek to plan loc");
+            bincode
+                .serialize_into(&mut out_fh, &plan)
+                .expect("Unable to bincode plan");
 
             // TODO: Don't write bitpacked as a single Vec, but split it up into each block
             // And output the total # of blocks so we can quickly iterate through...
@@ -547,6 +558,8 @@ impl Converter {
             sfasta.directory.id_blocks_index_loc = Some(id_blocks_index_loc);
             sfasta.directory.index_loc = Some(id_index_pos);
             sfasta.directory.ids_loc = ids_loc;
+            sfasta.directory.index_plan_loc = Some(plan_loc);
+            sfasta.directory.index_bitpacked_loc = Some(bitpacked_loc);
         }
 
         // Block Index

@@ -27,6 +27,8 @@ impl Default for Directory {
             masking_loc: None,
             id_blocks_index_loc: Some(0),
             seqloc_blocks_index_loc: Some(0),
+            index_bitpacked_loc: None,
+            index_plan_loc: None,
         }
     }
 }
@@ -83,6 +85,8 @@ mod tests {
             masking_loc: None,
             id_blocks_index_loc: Some(0),
             seqloc_blocks_index_loc: Some(0),
+            index_bitpacked_loc: None,
+            index_plan_loc: None,
         };
 
         let encoded_0: Vec<u8> = bincode::serialize(&directory).unwrap();

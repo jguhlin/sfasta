@@ -70,7 +70,7 @@ pub struct StoredIndexPlan {
     pub chunk_size: u32,
 }
 
-const MINIMUM_CHUNK_SIZE: u32 = 16 * 1024 * 1024;
+const MINIMUM_CHUNK_SIZE: u32 = 8 * 1024 * 1024;
 
 impl StoredIndexPlan {
     pub fn plan_from_parts<'a>(
