@@ -30,7 +30,7 @@ simdutf8 = "0.1.3"
 bumpalo = {version = "3.7.0", features = ["collections"]}
 
 [dependencies.clap]
-version = "3.0.0-beta.2"
+version = "3.0.0-beta.4"
 features = [ "suggestions", "color", "yaml", "wrap_help"]
 
 [[bin]]
