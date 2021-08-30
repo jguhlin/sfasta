@@ -26,7 +26,7 @@ subcommands:
                 required: true
             - ids:
                 index: 2
-                multiple: true
+                multiple_values: true
                 required: true
     - convert:
         about: "Convert a fasta file to SFASTA and index (by default)"
@@ -37,7 +37,7 @@ subcommands:
                 required: true
             - noindex: 
                 long: noindex
-                help: Do not index the file
+                about: Do not index the file
             - block_size:
                 long: block-size
                 about: Block size (in kb)
@@ -55,12 +55,12 @@ subcommands:
             - threads:
                 long: threads
                 short: t
-                help: Threads to use for compression
+                about: Threads to use for compression
                 takes_value: true
                 default_value: "4"
             - zstd:
                 long: zstd
-                help: Compress with ZSTD
+                about: Compress with ZSTD
                 conflicts_with:
                     - lz4
                     - snappy
@@ -69,7 +69,7 @@ subcommands:
                     - brotli
             - lz4:
                 long: lz4
-                help: Compress with LZ4
+                about: Compress with LZ4
                 conflicts_with:
                     - zstd
                     - snappy
@@ -78,7 +78,7 @@ subcommands:
                     - brotli
             - xz:
                 long: xz
-                help: Compress with XZ
+                about: Compress with XZ
                 conflicts_with:
                     - zstd
                     - snappy
@@ -87,7 +87,7 @@ subcommands:
                     - brotli
             - brotli:
                 long: brotli
-                help: Compress with Brotli
+                about: Compress with Brotli
                 conflicts_with:
                     - zstd
                     - snappy
@@ -96,7 +96,7 @@ subcommands:
                     - xz
             - snappy:
                 long: snappy
-                help: Compress with snappy compression
+                about: Compress with snappy compression
                 conflicts_with:
                     - zstd
                     - brotli
@@ -105,7 +105,7 @@ subcommands:
                     - xz
             - gzip:
                 long: gzip
-                help: Compress with gzip compression
+                about: Compress with gzip compression
                 conflicts_with:
                     - zstd
                     - brotli
@@ -144,26 +144,26 @@ subcommands:
         args:
             - input:
                 index: 1
-                help: Input SFASTA file (should end in .sfasta)
+                about: Input SFASTA file (should end in .sfasta)
                 required: true
                 takes_value: true
             - output:
-                help: Output filename prefix (files will be PREFIX_train.sfasta and PREFIX_validation.sfasta)
+                about: Output filename prefix (files will be PREFIX_train.sfasta and PREFIX_validation.sfasta)
                 required: true
                 takes_value: true
                 index: 2
             - training:
                 short: t
-                help: 0 - 1, training amount to keep. 0.9 would keep 90% of all samples
+                about: 0 - 1, training amount to keep. 0.9 would keep 90% of all samples
                 default_value: "0.5"
                 takes_value: true
                 long: training-split
             - length_mode:
                 short: l
-                help: Split by length of sequence rather than number of samples. Prefer this one.
+                about: Split by length of sequence rather than number of samples. Prefer this one.
                 long: length
             - seed:
                 short: s
                 long: seed
-                help: Random seed (for reproducible results)
+                about: Random seed (for reproducible results)
                 default_value: "1010"
