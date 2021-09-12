@@ -14,8 +14,8 @@ codegen-units = 1
 [dependencies]
 indicatif = "0.16.0"
 libsfasta = { path = "../libsfasta/" }
-serde = { version = "1.0.126", features = ["derive"] }
-flate2 = { version = "1.0.20", features = ["zlib-ng-compat"], default-features = false }
+# serde = { version = "1.0.126", features = ["derive"] }
+flate2 = { version = "1.0.21", features = ["zlib-ng-compat"], default-features = false }
 hashbrown = { version = "0.11.2", features = ["serde"] }
 rand = "0.8.4"
 rand_core = "0.6.3"

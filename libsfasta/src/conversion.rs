@@ -186,12 +186,6 @@ impl Converter {
         W: WriteAndSeek,
         R: Read + Send,
     {
-        /*
-        assert!(
-            entry_count <= u32::MAX as usize,
-            "Maximum number of sequences to be stored is limited to u32::MAX, Please e-mail Joseph and I will fix this for you"
-        ); */
-
         let bincode = bincode::DefaultOptions::new()
             .with_fixint_encoding()
             .allow_trailing_bytes();
@@ -212,13 +206,11 @@ impl Converter {
         // Output file
         let mut out_fh = out_buf;
 
+        // Store the location of the directory so we can update it later...
+        // (It's probably 0... or a little after the SFASTA identifier)
         let directory_location = self.write_headers(&mut out_fh, &sfasta);
 
-        // let mut in_buf = fasta.into_inner();
-
         // Write sequences
-        // in_buf.seek(SeekFrom::Start(0));
-
         let mut sb = CompressionStreamBuffer::default()
             .with_block_size(self.block_size as u32)
             .with_compression_type(self.compression_type)
@@ -381,18 +373,6 @@ impl Converter {
                 .serialize_into(&mut out_fh, &plan)
                 .expect("Unable to bincode Index Plan");
 
-            /* bincode
-                .serialize_into(&mut out_fh, &hash_type)
-                .expect("Unable to bincode index hash type");
-
-            bincode
-                .serialize_into(&mut out_fh, &hash_type)
-                .expect("Unable to bincode index hash type");
-
-            bincode
-                .serialize_into(&mut out_fh, &min_size)
-                .expect("Unable to bincode index hash type"); */
-
             for (n, part) in parts.into_iter().enumerate() {
                 plan.index[n].1 = out_fh
                     .seek(SeekFrom::Current(0))
@@ -430,20 +410,6 @@ impl Converter {
             bincode::serialize_into(&mut out_fh, &bitpacked)
                 .expect("Unable to bincode index hash type");
 
-            /*            // let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
-            let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), 3).unwrap();
-
-            bincode
-                .serialize_into(&mut compressor, &indexer)
-                .expect("Unable to bincode index to compressor");
-
-            let compressed = ByteBuf::from(compressor.finish().unwrap());
-
-            bincode::serialize_into(&mut out_fh, &compressed)
-                .expect("Unable to bincode compressed index"); */
-
-            // bincode::serialize_into(&mut out_fh, &indexer).expect("Unable to write directory to file");
             let ids_loc = out_fh
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API");
@@ -464,9 +430,7 @@ impl Converter {
                     bincode::serialize_into(&mut compressor, &chunk)
                         .expect("Unable to write directory to file");
 
-                    let compressed =
-                        ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
-                    compressed
+                    ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"))
                 })
                 .collect::<Vec<ByteBuf>>();
 
@@ -480,17 +444,6 @@ impl Converter {
                 bincode::serialize_into(&mut out_fh, &block)
                     .expect("Unable to write directory to file");
             }
-
-            // Write out the IDs vector...
-            /*            for chunk in ids.chunks(IDX_CHUNK_SIZE) {
-                let pos = out_fh
-                    .seek(SeekFrom::Current(0))
-                    .expect("Unable to work with seek API");
-                ids_blocks_locs.push(pos);
-
-                bincode::serialize_into(&mut out_fh, &compressed)
-                    .expect("Unable to write directory to file");
-            } */
 
             // ID Block Locs
 
@@ -514,21 +467,6 @@ impl Converter {
                 .serialize_into(&mut out_fh, &bitpacked)
                 .expect("Unable to write directory to file");
 
-            /*
-            let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-            let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 3).unwrap();
-            bincode
-                .serialize_into(&mut compressor, &ids_blocks_locs)
-                .expect("Unable to write directory to file");
-
-            let compressed =
-               ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
-
-            bincode
-                .serialize_into(&mut out_fh, &compressed)
-                .expect("Unable to write directory to file"); */
-
             // SeqLoc Blocks Locs
             let seqloc_blocks_index_loc = out_fh
                 .seek(SeekFrom::Current(0))
@@ -539,8 +477,6 @@ impl Converter {
                 .map(|x| x - seqlocs_loc)
                 .collect();
 
-            // let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
-            // let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
             let mut compressor =
                 zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 3).unwrap();
             bincode
@@ -569,9 +505,6 @@ impl Converter {
 
         let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
 
-        // let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 24);
-
-        //let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
         let mut compressor =
             zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 3).unwrap();
         bincode
@@ -584,8 +517,6 @@ impl Converter {
 
         bincode::serialize_into(&mut out_fh, &compressed)
             .expect("Unable to write directory to file");
-
-        //bincode::serialize_into(&mut out_fh, &block_locs).expect("Unable to write directory to file");
 
         // TODO: Scores Block Index
 
@@ -600,7 +531,7 @@ impl Converter {
             .expect("Unable to rewind to start of the file");
 
         // Here we re-write the directory information at the start of the file, allowing for
-        // easy hops to important areas while keeping everything in a single file
+        // easy jumps to important areas while keeping everything in a single file
         bincode
             .serialize_into(&mut out_fh, &sfasta.directory)
             .expect("Unable to write directory to file");

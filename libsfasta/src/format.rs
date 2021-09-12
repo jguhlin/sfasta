@@ -483,8 +483,6 @@ impl SfastaParser {
 
             let seqlocs_loc = sfasta.directory.seqlocs_loc;
             seqloc_blocks_handle = Some(thread::spawn(move || {
-                //let mut decompressor =
-                //    lz4_flex::frame::FrameDecoder::new(&seqlocs_blocks_locs_compressed[..]);
                 let mut decompressor =
                     zstd::stream::Decoder::new(&seqlocs_blocks_locs_compressed[..]).unwrap();
                 let mut seqlocs_blocks_locs_bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
@@ -505,8 +503,6 @@ impl SfastaParser {
                 seqlocs_blocks_locs
             }));
         }
-
-        // let mut parser = SfastaParser { sfasta, in_buf };
 
         // TODO: Disabled for testing...
         // If there are few enough IDs, let's decompress it and store it in the index...
