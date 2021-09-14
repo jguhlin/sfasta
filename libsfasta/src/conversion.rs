@@ -192,8 +192,8 @@ impl Converter {
 
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
 
-        /// Store masks as series of 0s and 1s...
-        /// TODO
+        // Store masks as series of 0s and 1s...
+        // TODO
         if self.masking {
             sfasta = sfasta.with_masking();
         }
@@ -205,6 +205,14 @@ impl Converter {
 
         // Output file
         let mut out_fh = out_buf;
+
+        // Dummy values...
+        sfasta.directory.seqloc_blocks_index_loc = Some(std::u64::MAX);
+        sfasta.directory.id_blocks_index_loc = Some(std::u64::MAX);
+        sfasta.directory.index_loc = Some(std::u64::MAX);
+        sfasta.directory.ids_loc = std::u64::MAX;
+        sfasta.directory.index_plan_loc = Some(std::u64::MAX);
+        sfasta.directory.index_bitpacked_loc = Some(std::u64::MAX);
 
         // Store the location of the directory so we can update it later...
         // (It's probably 0... or a little after the SFASTA identifier)
@@ -233,7 +241,7 @@ impl Converter {
             for mut i in fasta.into_iter() {
                 i.seq[..].make_ascii_uppercase();
                 let loc = sb.add_sequence(&i.seq[..]).unwrap();
-                seq_locs.push((Arc::new(i.id), loc));
+                seq_locs.push((Cow::from(i.id), loc));
             }
 
             // Finalize pushes the last block, which is likely smaller than the complete block size
@@ -253,6 +261,7 @@ impl Converter {
         let mut result;
 
         // For each entry processed by the sequence buffer, pop it out, write the block, and write the block id
+        // FORMAT: Write each sequence block to file
         loop {
             result = oq.pop();
 
@@ -281,11 +290,11 @@ impl Converter {
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
-        // Write out the sequence locs...
-        let seq_locs: Vec<(Arc<String>, Vec<Loc>)> = reader_handle.join().unwrap();
-
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer = crate::index::Index64::new();
+
+        // Write out the sequence locs...
+        let seq_locs: Vec<(Cow<str>, Vec<Loc>)> = reader_handle.join().unwrap();
 
         let seqlocs_loc = out_fh
             .seek(SeekFrom::Current(0))
@@ -316,10 +325,10 @@ impl Converter {
             }));
         }
 
+        // FORMAT: Write sequence blocks
         for s in seq_locs
             .iter()
-            .enumerate()
-            .collect::<Vec<(usize, &(Arc<String>, Vec<Loc>))>>()
+            .collect::<Vec<&(Cow<str>, Vec<Loc>)>>()
             .chunks(SEQLOCS_CHUNK_SIZE)
         {
             seqlocs_blocks_locs.push(
@@ -328,7 +337,7 @@ impl Converter {
                     .expect("Unable to work with seek API"),
             );
 
-            let locs: Vec<_> = s.iter().map(|(_, (_, l))| l).collect();
+            let locs: Vec<_> = s.iter().map(|(_, l)| l).collect();
 
             let mut compressor =
                 zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), 3).unwrap();
@@ -340,15 +349,16 @@ impl Converter {
 
             bincode
                 .serialize_into(&mut out_fh, &compressed)
-                .expect("Unable to write Metadata to file");
+                .expect("Unable to write Sequence Blocks to file");
         }
 
         if self.index {
-            if index_handle.is_some() {
-                indexer = index_handle.unwrap().join().unwrap();
+            if let Some(indexerh) = index_handle {
+                indexer = indexerh.join().unwrap();
             } else {
                 // TODO: This should never be called... it's here to make the compiler happy
-                indexer = crate::index::Index64::with_capacity(1);
+                // indexer = crate::index::Index64::with_capacity(1);
+                unreachable!();
             }
 
             let mut indexer = indexer.finalize();
@@ -364,6 +374,8 @@ impl Converter {
 
             let (mut plan, parts) =
                 StoredIndexPlan::plan_from_parts(&hashes, &bitpacked, hash_type, min_size);
+
+            // FORMAT: Index Plan
 
             let plan_loc = out_fh
                 .seek(SeekFrom::Current(0))

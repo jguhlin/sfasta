@@ -27,7 +27,7 @@ pub struct Sfasta {
     pub parameters: Parameters,
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
-    pub index: Option<Index64>,
+    pub index: Option<StoredIndexPlan>,
     buf: Option<RwLock<Box<dyn ReadAndSeek>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
     pub block_locs: Option<Vec<u64>>,
     pub id_blocks_locs: Option<Vec<u64>>,
@@ -306,7 +306,7 @@ impl Sfasta {
     }
 
     pub fn index_len(&self) -> usize {
-        self.index.as_ref().unwrap().len() as usize
+        self.index.as_ref().unwrap().index_len as usize
     }
 }
 
@@ -354,7 +354,7 @@ impl SfastaParser {
 
         sfasta.metadata = match bincode::deserialize_from(&mut in_buf) {
             Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA parameters: {}", y),
+            Err(y) => panic!("Error reading SFASTA metadata: {}", y),
         };
 
         // Next are the sequence blocks, which aren't important right now...
@@ -365,13 +365,14 @@ impl SfastaParser {
             .seek(SeekFrom::Start(sfasta.directory.index_loc.unwrap()))
             .expect("Unable to work with seek API");
 
-        let hash_type: Hashes = bincode
+        // TODO: Parse index plan here...
+        // Currently working on...
+
+        let plan: StoredIndexPlan = bincode
             .deserialize_from(&mut in_buf)
             .expect("Unable to get Hash Type of Index");
 
-        let min_size: u32 = bincode
-            .deserialize_from(&mut in_buf)
-            .expect("Unable to get Index Min Size");
+        /*
 
         let hashes_compressed: ByteBuf = bincode
             .deserialize_from(&mut in_buf)
@@ -401,10 +402,10 @@ impl SfastaParser {
                 .map(|x| x + min_size)
                 .collect();
 
-            let idx = Index64::from_parts(hashes, locs, hash_type);
-
-            idx
+            Index64::from_parts(hashes, locs, hash_type)
         });
+
+        */
 
         in_buf
             .seek(SeekFrom::Start(sfasta.directory.block_index_loc))
@@ -510,7 +511,7 @@ impl SfastaParser {
         //    parser.decompress_all_ids();
         // }
 
-        sfasta.index = Some(index_handle.join().unwrap());
+        // sfasta.index = Some(index_handle.join().unwrap());
         sfasta.block_locs = Some(block_locs_handle.join().unwrap());
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 

@@ -25,7 +25,7 @@
 
 
 # How the Index works
-IDs are hashed and stored as Vec\<u64\>, locs are stored as Vec\<u32\> and point to the location of the seqloc data. 
+IDs are hashed and stored as Vec\<u64\>, locs are stored as Vec\<u32\> and point to the location of the seqloc data. Index.add(id, loc) -> loc is the # of the SeqLoc. SeqLocs are then divided in SEQLOCS_CHUNK_SIZE and stored.
 
 IDs are stored as Vec\<u64\> and binary search is performed to quickly find the position, opposed to a HashMap which is more memory intensive and slower. This also means hashes are **not restricted to be unique**. So the find function can return multiple locations.
 

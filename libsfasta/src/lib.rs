@@ -28,6 +28,7 @@ mod io;
 mod metadata;
 mod parameters;
 pub mod prelude;
+mod seqloc_block;
 mod sequence_block;
 pub mod structs;
 mod types;
