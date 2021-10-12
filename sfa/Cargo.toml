@@ -28,6 +28,7 @@ bytelines = "2.2.2"
 toml = "0.5.8"
 simdutf8 = "0.1.3"
 bumpalo = {version = "3.7.0", features = ["collections"]}
+core_affinity = "0.5.10" # Not used yet...
 
 [dependencies.clap]
 version = "3.0.0-beta.4"
