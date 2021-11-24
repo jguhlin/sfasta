@@ -16,31 +16,18 @@ enum IndexTypes {
     Index64,
 }
 
-#[non_exhaustive]
-#[derive(Serialize, Deserialize)]
-enum IndexStored {
-    Index32(Index32),
-    Index64(Index64),
-}
-
 // TODO: Implement small hasher (HashMap, HashBrown) for very small datasets
 // TODO: Implement 16-bit hasher
 
-// Doesn't work for some reason (input data too small? or too repetitive in my tests?)
-// Keeping in case of future attempts...
-/*
-fn zstd_train_dict_ids(ids: &Vec<String>) -> Vec<u8> {
-    let bytes: Vec<u8> = ids
-        .iter()
-        .map(|x| x.as_bytes().to_owned())
-        .flatten()
-        .collect();
-    // let bytes: Vec<Vec<u8>> = ids.iter().map(|x| x.as_bytes().to_owned()).collect();
-    let lens: Vec<usize> = ids.iter().map(|x| x.len()).collect();
-
-    // zstd::dict::from_samples(&bytes, 256).expect("Unable to create dictionary from IDs")
-    zstd::dict::from_continuous(&bytes, &lens, 1024).expect("Unable to create dictionary from IDs")
-} */
+// Index has morphed into something else now...
+// So Index has 3 forms
+// Trait supports most of it, but not all
+// Index (In-Memory) --> Fastest, but can take awhile to decompress
+// Index (as parts, for serialization) --> Not for actual usage...
+// Index (on-disk) --> Returns the part of the index that contains the header, then has fn's to decompress
+//                 that part...
+// Index must convert between all 3
+// And handle edge cases (only a few sequences, etc...)
 
 pub trait IDIndexer {
     fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str>;
@@ -68,143 +55,6 @@ pub trait IDIndexer {
     fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String>;
 
     fn set_ids(&mut self, ids: Vec<String>);
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Index32 {
-    hashes: Vec<u32>,
-    locs: Vec<u32>,
-
-    #[serde(skip)]
-    pub ids: Option<Vec<String>>,
-}
-
-impl IDIndexer for Index32 {
-    fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String> {
-        self.ids.as_ref().unwrap().chunks(chunk_size)
-    }
-
-    fn with_capacity(capacity: usize) -> Self {
-        Index32 {
-            hashes: Vec::new(),
-            locs: Vec::with_capacity(capacity),
-            ids: Some(Vec::with_capacity(capacity)),
-        }
-    }
-
-    fn new() -> Self {
-        Index32 {
-            hashes: Vec::new(),
-            locs: Vec::new(),
-            ids: Some(Vec::new()),
-        }
-    }
-
-    fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
-        // TODO: Hasing fn, lowercase stuff...
-        let mut hasher = XxHash32::with_seed(42);
-        hasher.write(id.as_bytes());
-        let hash = hasher.finish();
-        // XxHash32 outputs a 64 bit, with the first 32 bits being 0
-        // So this transmute is just fine... we just want to drop those first bits...
-        let hash: [u32; 2] = unsafe { std::mem::transmute(hash) };
-
-        self.hashes.push(hash[1]);
-        self.locs.push(loc);
-        self.ids.as_mut().unwrap().push(id.to_string());
-
-        Ok(())
-    }
-
-    fn find(&self, id: &str) -> Option<Vec<usize>> {
-        let mut hasher = XxHash32::with_seed(42);
-        hasher.write(id.as_bytes());
-        let hash = hasher.finish();
-        let hash: [u32; 2] = unsafe { std::mem::transmute(hash) };
-        let hash = hash[1];
-
-        let found = match self.hashes.binary_search(&hash) {
-            Ok(x) => x,
-            Err(_) => return None,
-        };
-
-        let mut locs = Vec::new();
-
-        if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
-            // locs.push(self.locs[found]);
-            locs.push(found);
-            return Some(locs);
-        }
-
-        let mut start = found;
-        let mut end = found;
-
-        while self.hashes[start] == hash {
-            start = start.saturating_sub(1);
-        }
-
-        start = start.saturating_add(1);
-
-        let len = self.locs.len();
-
-        while self.hashes[end] == hash && end < len {
-            end = end.saturating_add(1);
-        }
-
-        end = end.saturating_sub(1);
-
-        Some((start..=end).collect())
-    }
-
-    fn finalize(self) -> Self {
-        // TODO: More memory efficient way...
-        // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
-
-        let mut tuples: Vec<(u32, u32, String)> = Vec::with_capacity(self.locs.len());
-
-        for i in 0..self.locs.len() {
-            tuples.push((
-                self.hashes[i],
-                self.locs[i],
-                self.ids.as_ref().unwrap()[i].clone(),
-            ))
-        }
-
-        tuples.sort_by(|a, b| a.0.cmp(&b.0));
-
-        /* let mut tuples = self
-            .hashes
-            .into_iter()
-            .zip(self.locs.into_iter())
-            // .zip(self.ids.into_iter())
-            .collect::<Vec<(u32, u64)>>();
-        tuples.sort_by(|a, b| a.0.cmp(&b.0)); */
-        let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u32>>();
-        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u32>>();
-        let ids = tuples
-            .iter()
-            .map(|(_, _, x)| x.clone())
-            .collect::<Vec<String>>();
-
-        Index32 {
-            hashes,
-            locs,
-            ids: Some(ids),
-        }
-    }
-
-    fn len(&self) -> u64 {
-        self.locs.len() as u64
-    }
-
-    fn is_empty(&self) -> bool {
-        self.locs.len() == 0
-    }
-
-    fn set_ids(&mut self, ids: Vec<String>) {
-        assert!(ids.len() == self.locs.len());
-        self.ids = Some(ids);
-    }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
@@ -449,6 +299,98 @@ impl IDIndexer for Index64 {
         self.ids = Some(ids);
     }
 }
+const MINIMUM_CHUNK_SIZE: u32 = 8 * 1024 * 1024;
+
+#[derive(Serialize, Deserialize)]
+pub struct StoredIndexPlan {
+    pub parts: u16,
+    pub index: Vec<(u64, u64)>,
+    pub min_size: u32,
+    pub hash_type: Hashes,
+    pub chunk_size: u32,
+    pub index_len: u32,
+}
+
+impl StoredIndex64 {
+    pub fn plan_from_parts<'a>(
+        hashes: &'a [u64],
+        _locs: &[Bitpacked],
+        hash_type: Hashes,
+        min_size: u32,
+    ) -> (StoredIndexPlan, Vec<&'a [u64]>) {
+        assert!(
+            hashes[..].is_sorted(),
+            "Hashes Vector must be sorted. Did you forget to finalize the index?"
+        );
+
+        assert!(hashes.len() <= u64::MAX as usize, "Hashes Vector must be smaller than 2^64... Contact Joseph to Discuss options or split into multiple files...");
+
+        let hashes_count = hashes.len();
+        let mut parts = 64;
+        let mut chunk_size = (hashes_count as f64 / parts as f64).ceil() as u32;
+
+        if hashes.len() < MINIMUM_CHUNK_SIZE as usize {
+            parts = 1;
+            chunk_size = MINIMUM_CHUNK_SIZE;
+        } else {
+            while chunk_size < MINIMUM_CHUNK_SIZE {
+                parts -= 1;
+                chunk_size = (hashes_count as f64 / parts as f64).ceil() as u32;
+                if parts == 1 {
+                    chunk_size = MINIMUM_CHUNK_SIZE;
+                    break;
+                }
+            }
+        }
+
+        let mut index = Vec::new();
+        let mut hash_splits = Vec::new();
+
+        for i in 0..parts {
+            let start = i as usize * chunk_size as usize;
+            let mut end = (i as usize + 1) * chunk_size as usize;
+            end = std::cmp::min(end, hashes.len());
+
+            index.push((hashes[start], 0)); // 0 here is a placeholder!
+            hash_splits.push(&hashes[start..end]);
+        }
+
+        // Bitpacked locs are already split into small chunks, so we can process that in the format.rs file
+        (
+            StoredIndexPlan {
+                parts,
+                index,
+                min_size,
+                hash_type,
+                chunk_size,
+                index_len: hashes.len() as u32,
+            },
+            hash_splits,
+        )
+    }
+}
+
+pub struct OnDiskIndex64 {
+    hashes: Vec<u64>,
+    pub locs: Vec<u32>,
+    hash: Hashes,
+
+    #[serde(skip)]
+    pub ids: Option<Vec<String>>,
+}
+
+impl OnDiskIndex64 {
+    pub fn from_parts(hashes: Vec<u64>, locs: Vec<u32>, hash: Hashes) -> Index64 {
+        Index64 {
+            hashes,
+            locs,
+            hash,
+            ids: None,
+        }
+    }
+}
+
+
 
 #[cfg(test)]
 mod tests {
@@ -508,3 +450,165 @@ mod tests {
         assert!(i64.len() == 1024);
     }
 }
+
+// Doesn't work for some reason (input data too small? or too repetitive in my tests?)
+// Keeping in case of future attempts...
+/*
+fn zstd_train_dict_ids(ids: &Vec<String>) -> Vec<u8> {
+    let bytes: Vec<u8> = ids
+        .iter()
+        .map(|x| x.as_bytes().to_owned())
+        .flatten()
+        .collect();
+    // let bytes: Vec<Vec<u8>> = ids.iter().map(|x| x.as_bytes().to_owned()).collect();
+    let lens: Vec<usize> = ids.iter().map(|x| x.len()).collect();
+
+    // zstd::dict::from_samples(&bytes, 256).expect("Unable to create dictionary from IDs")
+    zstd::dict::from_continuous(&bytes, &lens, 1024).expect("Unable to create dictionary from IDs")
+} */
+
+/* Not in use (yet?)
+#[non_exhaustive]
+#[derive(Serialize, Deserialize)]
+enum IndexStored {
+    Index32(Index32),
+    Index64(Index64),
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct Index32 {
+    hashes: Vec<u32>,
+    locs: Vec<u32>,
+
+    #[serde(skip)]
+    pub ids: Option<Vec<String>>,
+}
+
+impl IDIndexer for Index32 {
+    fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String> {
+        self.ids.as_ref().unwrap().chunks(chunk_size)
+    }
+
+    fn with_capacity(capacity: usize) -> Self {
+        Index32 {
+            hashes: Vec::new(),
+            locs: Vec::with_capacity(capacity),
+            ids: Some(Vec::with_capacity(capacity)),
+        }
+    }
+
+    fn new() -> Self {
+        Index32 {
+            hashes: Vec::new(),
+            locs: Vec::new(),
+            ids: Some(Vec::new()),
+        }
+    }
+
+    fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
+        // TODO: Hasing fn, lowercase stuff...
+        let mut hasher = XxHash32::with_seed(42);
+        hasher.write(id.as_bytes());
+        let hash = hasher.finish();
+        // XxHash32 outputs a 64 bit, with the first 32 bits being 0
+        // So this transmute is just fine... we just want to drop those first bits...
+        let hash: [u32; 2] = unsafe { std::mem::transmute(hash) };
+
+        self.hashes.push(hash[1]);
+        self.locs.push(loc);
+        self.ids.as_mut().unwrap().push(id.to_string());
+
+        Ok(())
+    }
+
+    fn find(&self, id: &str) -> Option<Vec<usize>> {
+        let mut hasher = XxHash32::with_seed(42);
+        hasher.write(id.as_bytes());
+        let hash = hasher.finish();
+        let hash: [u32; 2] = unsafe { std::mem::transmute(hash) };
+        let hash = hash[1];
+
+        let found = match self.hashes.binary_search(&hash) {
+            Ok(x) => x,
+            Err(_) => return None,
+        };
+
+        let mut locs = Vec::new();
+
+        if self.hashes[found - 1] != hash && self.hashes[found + 1] != hash {
+            // locs.push(self.locs[found]);
+            locs.push(found);
+            return Some(locs);
+        }
+
+        let mut start = found;
+        let mut end = found;
+
+        while self.hashes[start] == hash {
+            start = start.saturating_sub(1);
+        }
+
+        start = start.saturating_add(1);
+
+        let len = self.locs.len();
+
+        while self.hashes[end] == hash && end < len {
+            end = end.saturating_add(1);
+        }
+
+        end = end.saturating_sub(1);
+
+        Some((start..=end).collect())
+    }
+
+    fn finalize(self) -> Self {
+        // TODO: More memory efficient way...
+        // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
+
+        let mut tuples: Vec<(u32, u32, String)> = Vec::with_capacity(self.locs.len());
+
+        for i in 0..self.locs.len() {
+            tuples.push((
+                self.hashes[i],
+                self.locs[i],
+                self.ids.as_ref().unwrap()[i].clone(),
+            ))
+        }
+
+        tuples.sort_by(|a, b| a.0.cmp(&b.0));
+
+        /* let mut tuples = self
+            .hashes
+            .into_iter()
+            .zip(self.locs.into_iter())
+            // .zip(self.ids.into_iter())
+            .collect::<Vec<(u32, u64)>>();
+        tuples.sort_by(|a, b| a.0.cmp(&b.0)); */
+        let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u32>>();
+        let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u32>>();
+        let ids = tuples
+            .iter()
+            .map(|(_, _, x)| x.clone())
+            .collect::<Vec<String>>();
+
+        Index32 {
+            hashes,
+            locs,
+            ids: Some(ids),
+        }
+    }
+
+    fn len(&self) -> u64 {
+        self.locs.len() as u64
+    }
+
+    fn is_empty(&self) -> bool {
+        self.locs.len() == 0
+    }
+
+    fn set_ids(&mut self, ids: Vec<String>) {
+        assert!(ids.len() == self.locs.len());
+        self.ids = Some(ids);
+    }
+}
+*/

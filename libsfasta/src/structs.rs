@@ -61,6 +61,8 @@ pub struct Header {
     pub compression_type: CompressionType,
 }
 
+/*
+
 #[derive(Serialize, Deserialize)]
 pub struct StoredIndexPlan {
     pub parts: u16,
@@ -133,3 +135,4 @@ impl StoredIndexPlan {
         )
     }
 }
+*/
