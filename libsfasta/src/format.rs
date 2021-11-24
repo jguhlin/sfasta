@@ -27,7 +27,8 @@ pub struct Sfasta {
     pub parameters: Parameters,
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
-    pub index: Option<StoredIndexPlan>,
+    pub index: Option<Index64>,
+    pub index_plan: Option<StoredIndexPlan>,
     buf: Option<RwLock<Box<dyn ReadAndSeek>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
     pub block_locs: Option<Vec<u64>>,
     pub id_blocks_locs: Option<Vec<u64>>,
@@ -85,6 +86,7 @@ impl Sfasta {
             "Sfasta buffer not yet present -- Are you creating a file?"
         );
         let len = self.index.as_ref().unwrap().len();
+
         let blocks = (len as f64 / IDX_CHUNK_SIZE as f64).ceil() as usize;
 
         /* self.buf
@@ -366,11 +368,13 @@ impl SfastaParser {
             .expect("Unable to work with seek API");
 
         // TODO: Parse index plan here...
-        // Currently working on...
 
         let plan: StoredIndexPlan = bincode
             .deserialize_from(&mut in_buf)
             .expect("Unable to get Hash Type of Index");
+
+        sfasta.index_plan = Some(plan);
+        sfasta.index = Index64::from_parts(hashes, locs, hash);
 
         /*
 
