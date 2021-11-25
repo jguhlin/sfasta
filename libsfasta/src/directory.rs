@@ -1,19 +1,22 @@
 use crate::*;
 
+use std::num::NonZeroU64;
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Directory {
-    pub index_loc: Option<u64>,
-    pub ids_loc: u64,
-    pub block_index_loc: u64,
-    pub seqlocs_loc: u64,
-    pub scores_loc: Option<u64>,
-    pub masking_loc: Option<u64>,
-    pub id_blocks_index_loc: Option<u64>,
-    pub seqloc_blocks_index_loc: Option<u64>,
-    pub index_plan_loc: Option<u64>,
-    pub index_bitpacked_loc: Option<u64>,
+    pub index_loc: Option<NonZeroU64>,
+    pub ids_loc: Option<NonZeroU64>,
+    pub block_index_loc: Option<NonZeroU64>,
+    pub seqlocs_loc: Option<NonZeroU64>,
+    pub scores_loc: Option<NonZeroU64>,
+    pub masking_loc: Option<NonZeroU64>,
+    pub id_blocks_index_loc: Option<NonZeroU64>,
+    pub seqloc_blocks_index_loc: Option<NonZeroU64>,
+    pub index_plan_loc: Option<NonZeroU64>,
+    pub index_bitpacked_loc: Option<NonZeroU64>,
+    // TODO: Add pangenome stuff
 }
 
 impl Default for Directory {

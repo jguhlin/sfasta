@@ -14,6 +14,7 @@ pub struct Metadata {
     pub notes: Option<String>,
     pub download_url: Option<String>,
     pub homepage_url: Option<String>,
+    pub version: Option<usize>,
 }
 
 #[cfg(test)]

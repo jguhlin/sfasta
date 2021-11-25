@@ -302,7 +302,7 @@ impl IDIndexer for Index64 {
 const MINIMUM_CHUNK_SIZE: u32 = 8 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize)]
-pub struct StoredIndexPlan {
+pub struct StoredIndex64 {
     pub parts: u16,
     pub index: Vec<(u64, u64)>,
     pub min_size: u32,
