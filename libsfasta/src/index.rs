@@ -303,16 +303,37 @@ impl IDIndexer for Index64 {
 const MINIMUM_CHUNK_SIZE: u32 = 4 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize)]
-pub struct Index64OnDisk {
+pub struct StoredIndexPlan {
     pub parts: u16,
     pub index: Vec<(u64, u64)>,
     pub min_size: u32,
     pub hash_type: Hashes,
     pub chunk_size: u32,
     pub index_len: u32,
+
+    #[serde(skip)]
+    index64: Option<Index64>,
 }
 
-impl StoredIndex64 {
+impl StoredIndexPlan {
+
+    // First output is the block, second is the offset (remainder of the divsion)
+    pub fn find_block(&self, id: &str) -> Option<u64> {
+        let hash = self.index64.unwrap().get_hash(id);
+
+        for (i, j) in self.index.iter().map(|x| x.0).collect::<Vec<u64>>().windows(2).into_iter().enumerate() {
+            if j[0] <= hash && hash < j[1] {
+                return Some(self.index[i].1);
+            }
+        }
+
+        if self.index[self.index.len() - 1].0 <= hash {
+            Some(self.index[self.index.len() - 1].1)
+        } else {
+            None
+        }
+    }
+
     pub fn plan_from_parts<'a>(
         hashes: &'a [u64],
         _locs: &[Bitpacked],
@@ -365,32 +386,12 @@ impl StoredIndex64 {
                 hash_type,
                 chunk_size,
                 index_len: hashes.len() as u32,
+                index64: None,
             },
             hash_splits,
         )
     }
 }
-
-pub struct OnDiskIndex64 {
-    hashes: Vec<u64>,
-    pub locs: Vec<u32>,
-    hash: Hashes,
-
-    #[serde(skip)]
-    pub ids: Option<Vec<String>>,
-}
-
-impl OnDiskIndex64 {
-    pub fn from_parts(hashes: Vec<u64>, locs: Vec<u32>, hash: Hashes) -> Index64 {
-        Index64 {
-            hashes,
-            locs,
-            hash,
-            ids: None,
-        }
-    }
-}
-
 
 
 #[cfg(test)]
