@@ -330,6 +330,7 @@ impl StoredIndexPlan {
         if self.index[self.index.len() - 1].0 <= hash {
             Some(self.index[self.index.len() - 1].1)
         } else {
+            // TODO: Should this be a panic?
             None
         }
     }
