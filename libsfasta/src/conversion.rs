@@ -7,6 +7,7 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, Instant};
+use std::num::NonZeroU64;
 
 use bincode::Options;
 use bumpalo::Bump;
@@ -192,7 +193,7 @@ impl Converter {
 
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
 
-        // Store masks as series of 0s and 1s...
+        // Store masks as series of 0s and 1s... Vec<bool>
         // TODO
         if self.masking {
             sfasta = sfasta.with_masking();
@@ -206,16 +207,11 @@ impl Converter {
         // Output file
         let mut out_fh = out_buf;
 
-        // Dummy values...
-        sfasta.directory.seqloc_blocks_index_loc = Some(std::u64::MAX);
-        sfasta.directory.id_blocks_index_loc = Some(std::u64::MAX);
-        sfasta.directory.index_loc = Some(std::u64::MAX);
-        sfasta.directory.ids_loc = std::u64::MAX;
-        sfasta.directory.index_plan_loc = Some(std::u64::MAX);
-        sfasta.directory.index_bitpacked_loc = Some(std::u64::MAX);
+        // Set dummy values for the directory
+        sfasta.directory.dummy();
 
         // Store the location of the directory so we can update it later...
-        // (It's probably 0... or a little after the SFASTA identifier)
+        // It's a little after the SFASTA and version identifier...
         let directory_location = self.write_headers(&mut out_fh, &sfasta);
 
         // Write sequences
@@ -241,7 +237,9 @@ impl Converter {
             for mut i in fasta.into_iter() {
                 i.seq[..].make_ascii_uppercase();
                 let loc = sb.add_sequence(&i.seq[..]).unwrap();
-                seq_locs.push((Cow::from(i.id), loc));
+                let mut location = Location::new();
+                location.sequence = Some(loc);
+                seq_locs.push((Cow::from(i.id), location));
             }
 
             // Finalize pushes the last block, which is likely smaller than the complete block size
@@ -288,13 +286,15 @@ impl Converter {
         // TODO: Here is where we would write out the scores...
         // ... but this fn is only for FASTA right now...
 
+        // TODO: Here is where we would write out the masking...
+
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer = crate::index::Index64::new();
 
         // Write out the sequence locs...
-        let seq_locs: Vec<(Cow<str>, Vec<Loc>)> = reader_handle.join().unwrap();
+        let seq_locs: Vec<(Cow<str>, Location)> = reader_handle.join().unwrap();
 
         let seqlocs_loc = out_fh
             .seek(SeekFrom::Current(0))
@@ -309,6 +309,12 @@ impl Converter {
 
         let seq_locs = Arc::new(seq_locs);
 
+        // The index points to the location of the Location structs.
+        // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
+        // So index.get(id) --> integer position of the location struct
+        // Which will be in integer position / SEQLOCS_CHUNK_SIZE chunk offset
+        // This will then point to the different location blocks where the sequence is...
+        //
         // TODO: Optional index can probably be handled better...
         let mut index_handle: Option<_> = None;
         if self.index {
@@ -325,10 +331,10 @@ impl Converter {
             }));
         }
 
-        // FORMAT: Write sequence blocks
+        // FORMAT: Write sequence location blocks
         for s in seq_locs
             .iter()
-            .collect::<Vec<&(Cow<str>, Vec<Loc>)>>()
+            .collect::<Vec<&(Cow<str>, Location)>>()
             .chunks(SEQLOCS_CHUNK_SIZE)
         {
             seqlocs_blocks_locs.push(
@@ -340,7 +346,7 @@ impl Converter {
             let locs: Vec<_> = s.iter().map(|(_, l)| l).collect();
 
             let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), 3).unwrap();
+                zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
 
             bincode
                 .serialize_into(&mut compressor, &locs)

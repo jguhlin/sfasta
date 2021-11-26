@@ -8,7 +8,7 @@ use bumpalo::Bump;
 use rayon::prelude::*;
 use serde_bytes::ByteBuf;
 
-use crate::directory::Directory;
+use super::Directory;
 use crate::index::*;
 use crate::index_directory::IndexDirectory;
 use crate::metadata::Metadata;
@@ -58,8 +58,7 @@ impl Sfasta {
         // self.directory = self.directory.with_sequences();
         self
     }
-
-    pub fn with_scores(mut self) -> Self {
+    sfasta.directory -> Self {
         self.directory = self.directory.with_scores();
         self
     }

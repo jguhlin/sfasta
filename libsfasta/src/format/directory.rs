@@ -22,14 +22,14 @@ pub struct Directory {
 impl Default for Directory {
     fn default() -> Self {
         Directory {
-            index_loc: Some(0),
-            ids_loc: 0,
-            block_index_loc: 0,
-            seqlocs_loc: 0,
+            index_loc: None,
+            ids_loc: None,
+            block_index_loc: None,
+            seqlocs_loc: None,
             scores_loc: None,
             masking_loc: None,
-            id_blocks_index_loc: Some(0),
-            seqloc_blocks_index_loc: Some(0),
+            id_blocks_index_loc: None,
+            seqloc_blocks_index_loc: None,
             index_bitpacked_loc: None,
             index_plan_loc: None,
         }
@@ -43,20 +43,30 @@ impl Directory {
     } */
 
     pub fn with_scores(mut self) -> Self {
-        self.scores_loc = Some(0);
+        self.scores_loc = None;
         self
     }
 
     pub fn with_index(mut self) -> Self {
-        self.index_loc = Some(0);
-        self.id_blocks_index_loc = Some(0);
+        self.index_loc = None;
+        self.id_blocks_index_loc = None;
         self
     }
 
     pub fn with_masking(mut self) -> Self {
-        self.masking_loc = Some(0);
+        self.masking_loc = None;
         self
     }
+
+    pub fn dummy(&mut self) {
+        // Dummy values...
+        self.seqloc_blocks_index_loc = NonZeroU64::new(std::u64::MAX);
+        self.id_blocks_index_loc = NonZeroU64::new(std::u64::MAX);
+        self.index_loc = NonZeroU64::new(std::u64::MAX);
+        self.ids_loc = NonZeroU64::new(std::u64::MAX);
+        self.index_plan_loc = NonZeroU64::new(std::u64::MAX);
+        self.index_bitpacked_loc = NonZeroU64::new(std::u64::MAX);
+    }   
 }
 
 #[cfg(test)]
@@ -80,24 +90,24 @@ mod tests {
     #[test]
     pub fn bincode_size_directory_struct() {
         let mut directory = Directory {
-            index_loc: Some(0),
-            ids_loc: 0,
-            block_index_loc: 0,
-            seqlocs_loc: 0,
+            index_loc: None,
+            ids_loc: None,
+            block_index_loc: None,
+            seqlocs_loc: None,
             scores_loc: None,
             masking_loc: None,
-            id_blocks_index_loc: Some(0),
-            seqloc_blocks_index_loc: Some(0),
+            id_blocks_index_loc: None,
+            seqloc_blocks_index_loc: None,
             index_bitpacked_loc: None,
             index_plan_loc: None,
         };
 
         let encoded_0: Vec<u8> = bincode::serialize(&directory).unwrap();
 
-        directory.index_loc = Some(std::u64::MAX);
+        directory.index_loc = NonZeroU64::new(std::u64::MAX);
         let encoded_1: Vec<u8> = bincode::serialize(&directory).unwrap();
 
-        directory.scores_loc = Some(std::u64::MAX);
+        directory.scores_loc = NonZeroU64::new(std::u64::MAX);
         let encoded_2: Vec<u8> = bincode::serialize(&directory).unwrap();
 
         assert!(encoded_0.len() == encoded_1.len());

@@ -299,10 +299,11 @@ impl IDIndexer for Index64 {
         self.ids = Some(ids);
     }
 }
-const MINIMUM_CHUNK_SIZE: u32 = 8 * 1024 * 1024;
+
+const MINIMUM_CHUNK_SIZE: u32 = 4 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize)]
-pub struct StoredIndex64 {
+pub struct Index64OnDisk {
     pub parts: u16,
     pub index: Vec<(u64, u64)>,
     pub min_size: u32,
