@@ -58,7 +58,8 @@ impl Sfasta {
         // self.directory = self.directory.with_sequences();
         self
     }
-    sfasta.directory -> Self {
+    
+    pub fn with_scores(mut self) -> Self {
         self.directory = self.directory.with_scores();
         self
     }
@@ -95,7 +96,7 @@ impl Sfasta {
         .expect("Unable to work with seek API"); */
 
         let mut buf = self.buf.as_ref().unwrap().write().unwrap();
-        buf.seek(SeekFrom::Start(self.directory.ids_loc))
+        buf.seek(SeekFrom::Start(self.directory.ids_loc.unwrap().get()))
             .expect("Unable to work with seek API");
 
         let mut ids: Vec<String> = Vec::with_capacity(len as usize);
@@ -228,7 +229,7 @@ impl Sfasta {
                     .unwrap()
                     .seek(SeekFrom::Start(self.directory.seqlocs_loc))
                     .expect("Unable to work with seek API"); */
-                    buf.seek(SeekFrom::Start(self.directory.seqlocs_loc))
+                    buf.seek(SeekFrom::Start(self.directory.seqlocs_loc.unwrap().get()))
                         .expect("Unable to work with seek API");
                     let block = loc as usize / SEQLOCS_CHUNK_SIZE;
 
@@ -307,7 +308,7 @@ impl Sfasta {
     }
 
     pub fn index_len(&self) -> usize {
-        self.index.as_ref().unwrap().index_len as usize
+        self.index.as_ref().unwrap().index_len.unwrap().get() as usize
     }
 }
 
@@ -363,7 +364,7 @@ impl SfastaParser {
 
         // TODO: Fix for when no index
         in_buf
-            .seek(SeekFrom::Start(sfasta.directory.index_loc.unwrap()))
+            .seek(SeekFrom::Start(sfasta.directory.index_loc.unwrap().get()))
             .expect("Unable to work with seek API");
 
         // TODO: Parse index plan here...
@@ -411,7 +412,7 @@ impl SfastaParser {
         */
 
         in_buf
-            .seek(SeekFrom::Start(sfasta.directory.block_index_loc))
+            .seek(SeekFrom::Start(sfasta.directory.block_index_loc.unwrap().get()))
             .expect("Unable to work with seek API");
 
         let block_locs_compressed: ByteBuf =
@@ -438,7 +439,7 @@ impl SfastaParser {
         if sfasta.directory.id_blocks_index_loc.is_some() {
             in_buf
                 .seek(SeekFrom::Start(
-                    sfasta.directory.id_blocks_index_loc.unwrap(),
+                    sfasta.directory.id_blocks_index_loc.unwrap().get(),
                 ))
                 .expect("Unable to work with seek API");
 
@@ -466,7 +467,7 @@ impl SfastaParser {
 
                 let id_blocks_locs: Vec<u64> = id_blocks_locs
                     .into_iter()
-                    .map(|x| x as u64 + ids_loc)
+                    .map(|x| x as u64 + ids_loc.unwrap().get())
                     .collect();
 
                 id_blocks_locs
@@ -478,7 +479,7 @@ impl SfastaParser {
         if sfasta.directory.seqloc_blocks_index_loc.is_some() {
             in_buf
                 .seek(SeekFrom::Start(
-                    sfasta.directory.seqloc_blocks_index_loc.unwrap(),
+                    sfasta.directory.seqloc_blocks_index_loc.unwrap().get(),
                 ))
                 .expect("Unable to work with seek API");
 
@@ -501,7 +502,7 @@ impl SfastaParser {
 
                 let seqlocs_blocks_locs: Vec<u64> = seqlocs_blocks_locs
                     .into_iter()
-                    .map(|x| x + seqlocs_loc)
+                    .map(|x| x + seqlocs_loc.unwrap().get())
                     .collect();
 
                 seqlocs_blocks_locs

@@ -4,6 +4,10 @@ members = [
     "./sfa",
 ]
 
+# This is magic
+# [profile.dev.package."*"]
+# opt-level = 3
+
 [profile.release]
 opt-level = 3
 lto = "fat"

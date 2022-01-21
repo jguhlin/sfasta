@@ -316,12 +316,19 @@ pub struct StoredIndexPlan {
 }
 
 impl StoredIndexPlan {
-
     // First output is the block, second is the offset (remainder of the divsion)
     pub fn find_block(&self, id: &str) -> Option<u64> {
         let hash = self.index64.unwrap().get_hash(id);
 
-        for (i, j) in self.index.iter().map(|x| x.0).collect::<Vec<u64>>().windows(2).into_iter().enumerate() {
+        for (i, j) in self
+            .index
+            .iter()
+            .map(|x| x.0)
+            .collect::<Vec<u64>>()
+            .windows(2)
+            .into_iter()
+            .enumerate()
+        {
             if j[0] <= hash && hash < j[1] {
                 return Some(self.index[i].1);
             }
@@ -393,7 +400,6 @@ impl StoredIndexPlan {
         )
     }
 }
-
 
 #[cfg(test)]
 mod tests {

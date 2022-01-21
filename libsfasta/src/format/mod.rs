@@ -1,5 +1,5 @@
 pub mod directory;
-pub mod format;
+pub mod sfasta;
 
-use directory::*;
-use format::*;
+pub use directory::*;
+pub use sfasta::*;

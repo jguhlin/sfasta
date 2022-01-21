@@ -18,7 +18,7 @@ extern crate zstd;
 mod compression_stream_buffer;
 mod conversion;
 mod dict;
-mod directory;
+// mod directory;
 mod fasta;
 mod fastq;
 mod format;

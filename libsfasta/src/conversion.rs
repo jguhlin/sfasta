@@ -2,15 +2,13 @@
 use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fs::{metadata, File};
-use std::io::{BufRead, BufReader, BufWriter, Cursor, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
-use std::time::{Duration, Instant};
 use std::num::NonZeroU64;
 
 use bincode::Options;
-use bumpalo::Bump;
 use rayon::prelude::*;
 use serde_bytes::ByteBuf;
 
@@ -300,7 +298,7 @@ impl Converter {
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
-        sfasta.directory.seqlocs_loc = seqlocs_loc;
+        sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_loc);
 
         let mut out_fh = BufWriter::with_capacity(8 * 1024 * 1024, &mut out_fh);
 
@@ -508,12 +506,12 @@ impl Converter {
                 .serialize_into(&mut out_fh, &compressed)
                 .expect("Unable to write directory to file");
 
-            sfasta.directory.seqloc_blocks_index_loc = Some(seqloc_blocks_index_loc);
-            sfasta.directory.id_blocks_index_loc = Some(id_blocks_index_loc);
-            sfasta.directory.index_loc = Some(id_index_pos);
-            sfasta.directory.ids_loc = ids_loc;
-            sfasta.directory.index_plan_loc = Some(plan_loc);
-            sfasta.directory.index_bitpacked_loc = Some(bitpacked_loc);
+            sfasta.directory.seqloc_blocks_index_loc = NonZeroU64::new(seqloc_blocks_index_loc);
+            sfasta.directory.id_blocks_index_loc = NonZeroU64::new(id_blocks_index_loc);
+            sfasta.directory.index_loc = NonZeroU64::new(id_index_pos);
+            sfasta.directory.ids_loc = NonZeroU64::new(ids_loc);
+            sfasta.directory.index_plan_loc = NonZeroU64::new(plan_loc);
+            sfasta.directory.index_bitpacked_loc = NonZeroU64::new(bitpacked_loc);
         }
 
         // Block Index
@@ -542,7 +540,7 @@ impl Converter {
 
         // Go to the beginning, and write the location of the index
 
-        sfasta.directory.block_index_loc = block_index_pos;
+        sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
 
         out_fh
             .seek(SeekFrom::Start(directory_location))
@@ -590,7 +588,7 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::directory::Directory;
+    use crate::format::Directory;
     use crate::metadata::Metadata;
     use crate::parameters::Parameters;
     use crate::sequence_block::SequenceBlockCompressed;
