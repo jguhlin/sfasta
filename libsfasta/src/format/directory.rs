@@ -119,7 +119,7 @@ mod tests {
     #[test]
     pub fn directory_constructors() {
         let d = Directory::default().with_scores();
-        assert!(d.scores_loc == Some(0));
+        assert!(d.scores_loc == Some(NonZeroU64::new(0).unwrap()));
 
         let d = Directory::default();
         assert!(d.scores_loc == None);
