@@ -32,7 +32,7 @@ core_affinity = "0.5.10" # Not used yet...
 
 [dependencies.clap]
 version = "3.1.8"
-features = [ "suggestions", "color", "yaml", "wrap_help"]
+features = [ "suggestions", "derive", "cargo", "color", "wrap_help"]
 
 [[bin]]
 name = "sfa"

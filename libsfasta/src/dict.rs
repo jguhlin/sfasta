@@ -1,7 +1,7 @@
 use crate::fasta::Fasta;
 
 use std::io::{BufReader, Read};
-
+/*
 pub fn build_dict<R: 'static>(in_buf: R) -> Vec<u8>
 where
     R: Read + Send,
@@ -28,3 +28,4 @@ where
 
     result
 }
+*/

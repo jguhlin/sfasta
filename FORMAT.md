@@ -1,7 +1,7 @@
 # SFASTA File Format Definition
 Version 0.0.2
 
-## Reason
+## Rasoning / Need
 FASTA/Q format is slow for random access, even with an index provided by samtools.
 
 ## Pros/Cons

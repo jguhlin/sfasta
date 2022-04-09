@@ -3,10 +3,10 @@ use std::borrow::Cow;
 use std::convert::TryFrom;
 use std::fs::{metadata, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::thread;
-use std::num::NonZeroU64;
 
 use bincode::Options;
 use rayon::prelude::*;
@@ -15,7 +15,7 @@ use serde_bytes::ByteBuf;
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
 use crate::format::{Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
-use crate::index::IDIndexer;
+use crate::index::{IDIndexer, StoredIndexPlan};
 use crate::structs::WriteAndSeek;
 use crate::types::*;
 use crate::utils::*;
@@ -156,10 +156,13 @@ impl Converter {
             .expect("Unable to write 'sfasta' to output");
 
         // Write the directory, parameters, and metadata structs out...
+
+        // Write the version
         bincode
             .serialize_into(&mut out_fh, &sfasta.version)
             .expect("Unable to write directory to file");
 
+        // Write the directory
         let directory_location = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
@@ -168,14 +171,17 @@ impl Converter {
             .serialize_into(&mut out_fh, &sfasta.directory)
             .expect("Unable to write directory to file");
 
+        // Write the parameters
         bincode
             .serialize_into(&mut out_fh, &sfasta.parameters)
             .expect("Unable to write Parameters to file");
 
+        // Write the metadata
         bincode
             .serialize_into(&mut out_fh, &sfasta.metadata)
             .expect("Unable to write Metadata to file");
 
+        // Return the directory location
         directory_location
     }
 
@@ -258,6 +264,8 @@ impl Converter {
 
         // For each entry processed by the sequence buffer, pop it out, write the block, and write the block id
         // FORMAT: Write each sequence block to file
+
+        // This writes out the sequence blocks (seqblockcompressed)
         loop {
             result = oq.pop();
 
@@ -303,7 +311,7 @@ impl Converter {
         let mut out_fh = BufWriter::with_capacity(8 * 1024 * 1024, &mut out_fh);
 
         let mut seqlocs_blocks_locs: Vec<u64> =
-            Vec::with_capacity(seq_locs.len() / SEQLOCS_CHUNK_SIZE);
+            Vec::with_capacity((seq_locs.len() / SEQLOCS_CHUNK_SIZE) + 1);
 
         let seq_locs = Arc::new(seq_locs);
 
@@ -405,7 +413,7 @@ impl Converter {
                 let compressed = ByteBuf::from(compressor.finish().unwrap());
 
                 bincode::serialize_into(&mut out_fh, &compressed)
-                    .expect("Unable to bincode compressed index");
+                    .expect("Unable to bincode compressed hashes");
             }
 
             let bitpacked_loc = out_fh
@@ -471,7 +479,7 @@ impl Converter {
                 ids_blocks_locs.into_iter().map(|x| x - ids_loc).collect();
 
             // TODO: Handle this pre-emptively with a flag or something...
-            assert!(ids_blocks_locs.iter().max().unwrap() <= &(u32::MAX as u64), "Edge case, too many IDs... please e-mail Joseph and we can fix this in the next release");
+            assert!(ids_blocks_locs.iter().max().unwrap() <= &(u32::MAX as u64), "Edge case, too many IDs... please e-mail Joseph and I can fix this in the next release");
             let ids_blocks_locs: Vec<u32> = ids_blocks_locs
                 .into_iter()
                 .map(|x| u32::try_from(x).unwrap())

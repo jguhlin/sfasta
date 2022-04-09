@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize, Debug, Clone, Default)]
 pub struct Metadata {
-    pub created_by: String,
+    pub created_by: Option<String>,
     pub citation_doi: Option<String>,
     pub citation_url: Option<String>,
     pub citation_authors: Option<String>,
@@ -26,7 +26,7 @@ mod tests {
         let mut metadata = Metadata::default();
 
         let encoded_0: Vec<u8> = bincode::serialize(&metadata).unwrap();
-        metadata.created_by = "CrateTest".to_string();
+        metadata.created_by = Some("CrateTest".to_string());
 
         let encoded_1: Vec<u8> = bincode::serialize(&metadata).unwrap();
         assert!(encoded_0.len() != encoded_1.len());

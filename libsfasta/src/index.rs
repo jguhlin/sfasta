@@ -252,7 +252,7 @@ impl IDIndexer for Index64 {
 
         let mut tuples: Vec<(u64, u32, String)> = izip!(self.hashes, self.locs, ids).collect();
 
-        if tuples.len() >= 16 * 1024 {
+        if tuples.len() >= 256 * 1024 {
             tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
         } else {
             tuples.sort_by(|a, b| a.0.cmp(&b.0));
@@ -318,7 +318,7 @@ pub struct StoredIndexPlan {
 impl StoredIndexPlan {
     // First output is the block, second is the offset (remainder of the divsion)
     pub fn find_block(&self, id: &str) -> Option<u64> {
-        let hash = self.index64.unwrap().get_hash(id);
+        let hash = self.index64.as_ref().unwrap().get_hash(id);
 
         for (i, j) in self
             .index

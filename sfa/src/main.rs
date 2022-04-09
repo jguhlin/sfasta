@@ -18,7 +18,7 @@ use std::path::Path;
 use simdutf8::basic::from_utf8;
 
 use bumpalo::Bump;
-use clap::{load_yaml, App, ArgMatches};
+use clap::{arg, command, Command, Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 
 use libsfasta::prelude::*;
@@ -36,10 +36,108 @@ fn style_pb(pb: ProgressBar) -> ProgressBar {
     pb
 }
 
-fn main() {
-    let yaml = load_yaml!("cli.yaml");
-    let matches = App::from(yaml).get_matches();
+#[derive(Parser)]
+#[clap(propagate_version = true)]
+#[clap(arg_required_else_help = true)]
+#[clap(name = "sfasta")]
+#[clap(author = "Joseph Guhlin <joseph.guhlin@gmail.com>")]
+#[clap(about = "Sequence Storage optimized for fast random access", long_about = None)]
+struct Cli {
+    #[clap(subcommand)]
+    command: Commands,
+}
 
+#[derive(Subcommand)]
+enum Commands {
+    /// Adds files to myapp
+    View {
+        input: String,
+    },
+    List {
+        input: String,
+    },
+    Faidx {
+        input: String,
+        ids: Vec<String>,
+    },
+    Convert {
+        input: String,
+        threads: u8,
+        block_size: u16,
+        index_chunk_size: u16,
+        seqlocs_chunk_size: u16,
+        #[clap(short, long)]
+        noindex: bool,
+        #[clap(short, long)]
+        zstd: bool,
+        #[clap(short, long)]
+        lz4: bool,
+        #[clap(short, long)]
+        xz: bool,
+        #[clap(short, long)]
+        brotli: bool,
+        #[clap(short, long)]
+        snappy: bool,
+        #[clap(short, long)]
+        gzip: bool,
+    },
+    Summarize {
+        input: String,
+    },
+    Stats {
+        input: String,
+    },
+    Bp {
+        input: String,
+    },
+    Index {
+        input: String,
+    },
+    Split {
+        input: String,
+        output: String,
+        training: f32,
+        seed: usize,
+        #[clap(short, long)]
+        length_mode: bool,
+    },
+}
+
+fn main() {
+    let cli = Cli::parse();
+
+    match &cli.command {
+        Commands::View { input } => todo!(),
+        Commands::List { input } => todo!(),
+        Commands::Faidx { input, ids } => todo!(),
+        Commands::Convert {
+            input,
+            threads,
+            block_size,
+            index_chunk_size,
+            seqlocs_chunk_size,
+            noindex,
+            zstd,
+            lz4,
+            xz,
+            brotli,
+            snappy,
+            gzip,
+        } => todo!(),
+        Commands::Summarize { input } => todo!(),
+        Commands::Stats { input } => todo!(),
+        Commands::Bp { input } => todo!(),
+        Commands::Index { input } => todo!(),
+        Commands::Split {
+            input,
+            output,
+            training,
+            seed,
+            length_mode,
+        } => todo!(),
+    }
+
+    /*
     if let Some(matches) = matches.subcommand_matches("convert") {
         convert(&matches);
     }
@@ -148,6 +246,7 @@ fn main() {
             println!("{}", i);
         }
     }
+    */
 
     /*
     if let Some(matches) = matches.subcommand_matches("stats") {
@@ -164,10 +263,20 @@ fn main() {
 // TODO: Set metadata
 // TODO: Set masking option
 // TODO: Block sizes, index compression type, etc...
-fn convert(matches: &ArgMatches) {
-    let fasta_filename = matches.value_of("input").unwrap();
-    let threads: usize = matches.value_of_t("threads").unwrap_or(4);
-
+fn convert(
+    fasta_filename: &str,
+    threads: usize,
+    zstd: bool,
+    lz4: bool,
+    xz: bool,
+    gzip: bool,
+    brotli: bool,
+    snappy: bool,
+    block_size: u16,
+    index_chunk_size: u16,
+    seqlocs_chunk_size: u16,
+    noindex: bool,
+) {
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());
     let pb = style_pb(pb);
@@ -204,16 +313,18 @@ fn convert(matches: &ArgMatches) {
     // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
     let buf = buf.2;
 
+    // TODO: Handle all of the compression options...
+    // TODO: Warn if more than one compression option specified
     let mut compression_type = CompressionType::default();
-    if matches.is_present("zstd") {
+    if zstd {
         compression_type = CompressionType::ZSTD;
-    } else if matches.is_present("lz4") {
+    } else if lz4 {
         compression_type = CompressionType::LZ4;
-    } else if matches.is_present("xz") {
+    } else if xz {
         compression_type = CompressionType::XZ;
-    } else if matches.is_present("brotli") {
+    } else if brotli {
         compression_type = CompressionType::BROTLI;
-    } else if matches.is_present("gzip") {
+    } else if gzip {
         println!("🤨");
         compression_type = CompressionType::GZIP;
     }
@@ -225,24 +336,13 @@ fn convert(matches: &ArgMatches) {
     // Disabled for now, no improvement
     // converter = converter.with_dict(dict);
 
-    if matches.is_present("block_size") {
-        let block_size: usize = matches.value_of_t("block_size").unwrap();
-        converter = converter.with_block_size(block_size * 1024);
-    }
+    converter = converter.with_block_size(block_size as usize * 1024);
 
-    if matches.is_present("index_chunk_size") {
-        let chunk_size: usize = matches.value_of_t("index_chunk_size").unwrap();
-        converter = converter.with_index_chunk_size(chunk_size);
-    }
+    converter = converter.with_index_chunk_size(index_chunk_size as usize);
 
-    if matches.is_present("seqlocs_chunk_size") {
-        let chunk_size: usize = matches
-            .value_of_t("seqlocs_chunk_size")
-            .unwrap_or(64 * 1024);
-        converter = converter.with_seqlocs_chunk_size(chunk_size);
-    }
+    converter = converter.with_seqlocs_chunk_size(seqlocs_chunk_size as usize);
 
-    if matches.is_present("noindex") {
+    if noindex {
         println!("Noindex received");
         converter = converter.without_index();
     }

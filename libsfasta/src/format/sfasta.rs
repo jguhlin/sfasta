@@ -48,6 +48,7 @@ impl Default for Sfasta {
             block_locs: None,
             id_blocks_locs: None,
             seqlocs_blocks_locs: None,
+            index_plan: None,
         }
     }
 }
@@ -58,7 +59,7 @@ impl Sfasta {
         // self.directory = self.directory.with_sequences();
         self
     }
-    
+
     pub fn with_scores(mut self) -> Self {
         self.directory = self.directory.with_scores();
         self
@@ -151,7 +152,8 @@ impl Sfasta {
     }
 
     pub fn find(&self, x: &str) -> Result<Option<Vec<(String, usize, u32, Vec<Loc>)>>, &str> {
-        let possibilities = self.index.as_ref().unwrap().find(&x);
+        let possibilities = self.index_plan.as_ref().unwrap().find_block(x);
+        println!("{:#?}", possibilities);
 
         if possibilities.is_some() {
             let possibilities = possibilities.unwrap();
@@ -308,7 +310,10 @@ impl Sfasta {
     }
 
     pub fn index_len(&self) -> usize {
-        self.index.as_ref().unwrap().index_len.unwrap().get() as usize
+        self.index_plan
+            .as_ref()
+            .expect("Index Plan not available")
+            .index_len as usize
     }
 }
 
@@ -374,7 +379,7 @@ impl SfastaParser {
             .expect("Unable to get Hash Type of Index");
 
         sfasta.index_plan = Some(plan);
-        sfasta.index = Index64::from_parts(hashes, locs, hash);
+        sfasta.index = Some(Index64::default());
 
         /*
 
@@ -412,7 +417,9 @@ impl SfastaParser {
         */
 
         in_buf
-            .seek(SeekFrom::Start(sfasta.directory.block_index_loc.unwrap().get()))
+            .seek(SeekFrom::Start(
+                sfasta.directory.block_index_loc.unwrap().get(),
+            ))
             .expect("Unable to work with seek API");
 
         let block_locs_compressed: ByteBuf =
@@ -554,12 +561,11 @@ mod tests {
 
         converter.convert_fasta(in_buf, &mut out_buf);
 
-        match out_buf.seek(SeekFrom::Start(0)) {
-            Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
-            Ok(_) => (),
+        if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
+            panic!("Unable to seek to start of file, {:#?}", x)
         };
 
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf);
+        let sfasta = SfastaParser::open_from_buffer(out_buf);
         assert!(sfasta.index_len() == 3001);
 
         let output = sfasta.find("does-not-exist");
