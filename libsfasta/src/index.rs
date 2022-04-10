@@ -315,9 +315,10 @@ pub struct StoredIndexPlan {
     index64: Option<Index64>,
 }
 
+// TODO: If there are multiple IDs matching there could be muultiple blocks
 impl StoredIndexPlan {
     // First output is the block, second is the offset (remainder of the divsion)
-    pub fn find_block(&self, id: &str) -> Option<u64> {
+    pub fn find_block(&self, id: &str) -> Option<Vec<u64>> {
         let hash = self.index64.as_ref().unwrap().get_hash(id);
 
         for (i, j) in self
@@ -330,16 +331,14 @@ impl StoredIndexPlan {
             .enumerate()
         {
             if j[0] <= hash && hash < j[1] {
-                return Some(self.index[i].1);
+                return Some(vec![self.index[i].1]);
             }
         }
 
-        if self.index[self.index.len() - 1].0 <= hash {
-            Some(self.index[self.index.len() - 1].1)
-        } else {
-            // TODO: Should this be a panic?
-            None
-        }
+        if self.index[self.index.len() - 1].0 >= hash {
+            return Some(vec![self.index[self.index.len() - 1].1])
+        } 
+        None
     }
 
     pub fn plan_from_parts<'a>(

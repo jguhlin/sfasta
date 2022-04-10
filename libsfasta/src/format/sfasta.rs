@@ -152,10 +152,10 @@ impl Sfasta {
     }
 
     pub fn find(&self, x: &str) -> Result<Option<Vec<(String, usize, u32, Vec<Loc>)>>, &str> {
-        let possibilities = self.index_plan.as_ref().unwrap().find_block(x);
-        println!("{:#?}", possibilities);
+        let block = self.index_plan.as_ref().unwrap().find_block(x);
+        
 
-        if possibilities.is_some() {
+        if block.is_some() {
             let possibilities = possibilities.unwrap();
 
             let mut matches: Vec<(String, usize, u32)> = Vec::with_capacity(possibilities.len());
