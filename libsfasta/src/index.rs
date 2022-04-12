@@ -105,7 +105,7 @@ impl Default for Index64 {
 
 impl Index64 {
     #[inline]
-    fn get_hash(&self, id: &str) -> u64 {
+    pub fn get_hash(&self, id: &str) -> u64 {
         // TODO: Pretty sure this code could be simplified with dyn Hasher trait...
         // Not sure if a Box<> overhead would be worth it though...
 
@@ -312,14 +312,16 @@ pub struct StoredIndexPlan {
     pub index_len: u32,
 
     #[serde(skip)]
-    index64: Option<Index64>,
+    pub index64: Option<Index64>,
 }
 
 // TODO: If there are multiple IDs matching there could be muultiple blocks
 impl StoredIndexPlan {
     // First output is the block, second is the offset (remainder of the divsion)
-    pub fn find_block(&self, id: &str) -> Option<Vec<u64>> {
-        let hash = self.index64.as_ref().unwrap().get_hash(id);
+    pub fn find_blocks(&self, hash: u64) -> Option<Vec<usize>> {
+        assert!(!self.index.is_empty(), "Index is empty");
+
+        let mut blocks = Vec::with_capacity(8);
 
         for (i, j) in self
             .index
@@ -330,15 +332,22 @@ impl StoredIndexPlan {
             .into_iter()
             .enumerate()
         {
-            if j[0] <= hash && hash < j[1] {
-                return Some(vec![self.index[i].1]);
+            if (j[0]..j[1] + 1).contains(&hash) {
+                blocks.push(i);
+                // return Some(vec![self.index[i].1]);
             }
         }
 
-        if self.index[self.index.len() - 1].0 >= hash {
-            return Some(vec![self.index[self.index.len() - 1].1])
-        } 
-        None
+        if self.index.last().unwrap().0 <= hash {
+            blocks.push(self.index.len() - 1);
+            // return Some(vec![self.index[self.index.len() - 1].1])
+        }
+
+        if blocks.len() == 0 {
+            return None;
+        } else {
+            return Some(blocks);
+        }
     }
 
     pub fn plan_from_parts<'a>(

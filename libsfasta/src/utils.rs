@@ -5,6 +5,8 @@ use bitpacking::{BitPacker, BitPacker8x};
 use serde::{Deserialize, Serialize};
 use serde_bytes::ByteBuf;
 
+// TODO: Test if possible to make it sorted, then make it sorted...
+// Called delta encoding, will give a bit better space and a small speed boost.
 #[derive(Serialize, Deserialize)]
 pub enum Packed {
     Packed(ByteBuf),
@@ -15,6 +17,20 @@ pub enum Packed {
 pub struct Bitpacked {
     num_bits: u8,
     packed: Packed,
+}
+
+impl Bitpacked {
+    pub fn decompress(&self) -> Vec<u32> {
+        match self.packed {
+            Packed::Packed(ref packed) => {
+                let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
+                let bitpacker = BitPacker8x::new();
+                bitpacker.decompress(packed.as_ref(), &mut decompressed[..], self.num_bits);
+                decompressed
+            }
+            Packed::Remainder(ref remainder) => remainder.clone(),
+        }
+    }
 }
 
 pub fn unbitpack_u32(packed: Vec<Bitpacked>) -> Vec<u32> {

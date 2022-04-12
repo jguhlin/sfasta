@@ -12,8 +12,8 @@ pub struct Sequence {
     pub header: String,
 }
 
-pub struct Fasta<R> {
-    reader: R,
+pub struct Fasta<'fasta, R> {
+    reader: &'fasta mut R,
     buffer: Vec<u8>,
     seqbuffer: Vec<u8>,
     next_seqid: Option<String>,
@@ -21,8 +21,8 @@ pub struct Fasta<R> {
     seqlen: usize,
 }
 
-impl<R: BufRead> Fasta<R> {
-    pub fn from_buffer(in_buf: R) -> Fasta<R> {
+impl<'fasta, R: BufRead> Fasta<'fasta, R> {
+    pub fn from_buffer(in_buf: &mut R) -> Fasta<R> {
         Fasta {
             reader: in_buf,
             buffer: Vec::with_capacity(1024),
@@ -48,7 +48,7 @@ impl<R: BufRead> Fasta<R> {
     } */
 }
 
-impl<R: BufRead> Iterator for Fasta<R> {
+impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
     type Item = Sequence;
 
     fn next(&mut self) -> Option<Sequence> {
@@ -183,7 +183,7 @@ mod tests {
         let fakefasta =
             b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
-        let mut fasta = Fasta::from_buffer(BufReader::new(fakefasta_));
+        let mut fasta = Fasta::from_buffer(&mut BufReader::new(fakefasta_));
         let _j = fasta.next();
         let _j = fasta.next();
     }
@@ -193,7 +193,7 @@ mod tests {
         let fakefasta =
             b">Hello I have more information in the rest of the FASTA header\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
-        let mut fasta = Fasta::from_buffer(BufReader::new(fakefasta_));
+        let mut fasta = Fasta::from_buffer(&mut BufReader::new(fakefasta_));
         let s = fasta.next().unwrap();
         println!("{:#?}", s.header);
         assert!(&s.header == "I have more information in the rest of the FASTA header");

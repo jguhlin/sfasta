@@ -12,6 +12,7 @@ struct DirectoryOnDisk {
     pub seqlocs_loc: u64,
     pub scores_loc: u64,
     pub masking_loc: u64,
+    pub index_seqlocs_blocks_locs: u64,
     pub id_blocks_index_loc: u64,
     pub seqloc_blocks_index_loc: u64,
     pub index_plan_loc: u64,
@@ -61,6 +62,10 @@ impl From<Directory> for DirectoryOnDisk {
                 Some(loc) => loc.get(),
                 None => 0,
             },
+            index_seqlocs_blocks_locs: match dir.index_seqlocs_blocks_locs {
+                Some(loc) => loc.get(),
+                None => 0,
+            },
         }
     }
 }
@@ -79,6 +84,7 @@ pub struct Directory {
     pub seqloc_blocks_index_loc: Option<NonZeroU64>,
     pub index_plan_loc: Option<NonZeroU64>,
     pub index_bitpacked_loc: Option<NonZeroU64>,
+    pub index_seqlocs_blocks_locs: Option<NonZeroU64>,
     // TODO: Add pangenome stuff
 }
 
@@ -95,6 +101,7 @@ impl From<DirectoryOnDisk> for Directory {
             seqloc_blocks_index_loc: NonZeroU64::new(dir.seqloc_blocks_index_loc),
             index_plan_loc: NonZeroU64::new(dir.index_plan_loc),
             index_bitpacked_loc: NonZeroU64::new(dir.index_bitpacked_loc),
+            index_seqlocs_blocks_locs: NonZeroU64::new(dir.index_seqlocs_blocks_locs),
         }
     }
 }
@@ -112,6 +119,7 @@ impl Default for Directory {
             seqloc_blocks_index_loc: None,
             index_bitpacked_loc: None,
             index_plan_loc: None,
+            index_seqlocs_blocks_locs: None,
         }
     }
 }
@@ -180,6 +188,7 @@ mod tests {
             seqloc_blocks_index_loc: None,
             index_bitpacked_loc: None,
             index_plan_loc: None,
+            index_seqlocs_blocks_locs: None,
         };
 
         let encoded_0: Vec<u8> = bincode::serialize(&directory).unwrap();
