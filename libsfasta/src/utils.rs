@@ -7,13 +7,13 @@ use serde_bytes::ByteBuf;
 
 // TODO: Test if possible to make it sorted, then make it sorted...
 // Called delta encoding, will give a bit better space and a small speed boost.
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub enum Packed {
     Packed(ByteBuf),
     Remainder(Vec<u32>),
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug)]
 pub struct Bitpacked {
     num_bits: u8,
     packed: Packed,

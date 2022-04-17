@@ -9,6 +9,7 @@ use rayon::prelude::*;
 use serde_bytes::ByteBuf;
 
 use super::Directory;
+use crate::format::dual_index::*;
 use crate::index::*;
 use crate::index_directory::IndexDirectory;
 use crate::metadata::Metadata;
@@ -33,6 +34,8 @@ pub struct Sfasta {
     pub block_locs: Option<Vec<u64>>,
     pub id_blocks_locs: Option<Vec<u64>>,
     pub seqlocs_blocks_locs: Option<Vec<u64>>,
+
+    pub ids_dual_index: Option<DualIndex>,
 }
 
 impl Default for Sfasta {
@@ -49,6 +52,7 @@ impl Default for Sfasta {
             id_blocks_locs: None,
             seqlocs_blocks_locs: None,
             index_plan: None,
+            ids_dual_index: None,
         }
     }
 }
@@ -621,7 +625,7 @@ mod tests {
             .with_block_size(8 * 1024)
             .with_index();
 
-        converter.convert_fasta(in_buf, &mut out_buf);
+        let mut out_buf = converter.convert_fasta(in_buf, out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
@@ -658,7 +662,7 @@ mod tests {
             .with_block_size(512)
             .with_index();
 
-        converter.convert_fasta(in_buf, &mut out_buf);
+        let mut out_buf = converter.convert_fasta(in_buf, out_buf);
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
@@ -695,7 +699,7 @@ mod tests {
             .with_block_size(512)
             .with_threads(8);
 
-        converter.convert_fasta(in_buf, &mut out_buf);
+        let mut out_buf = converter.convert_fasta(in_buf, out_buf);
 
         match out_buf.seek(SeekFrom::Start(0)) {
             Err(x) => panic!("Unable to seek to start of file, {:#?}", x),

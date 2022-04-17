@@ -10,11 +10,11 @@ use crate::utils::Bitpacked;
 pub trait ReadAndSeek: Read + Seek {}
 impl<T: Read + Seek> ReadAndSeek for T {}
 
-pub trait ReadAndSeekAndSend: Read + Seek + Send {}
-impl<T: Read + Seek + Send> ReadAndSeekAndSend for T {}
+pub trait ReadAndSeekAndSend: Read + Seek {}
+impl<T: Read + Seek> ReadAndSeekAndSend for T {}
 
-pub trait WriteAndSeek: Write + Seek + Send + Sync {}
-impl<T: Write + Seek + Send + Sync + Any> WriteAndSeek for T {}
+pub trait WriteAndSeek: Write + Seek {}
+impl<T: Write + Seek + Any> WriteAndSeek for T {}
 
 pub trait T: Any {}
 impl T for dyn WriteAndSeek {}

@@ -50,24 +50,34 @@ impl DualIndex {
             .allow_trailing_bytes();
 
         let bitpacked = self.bitpack();
-        bincode.serialize_into(&mut out_buf, &self.locs_start);
+        bincode
+            .serialize_into(&mut out_buf, &self.locs_start)
+            .expect("Bincode error");
         let blocks_locs_loc_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        bincode.serialize_into(&mut out_buf, &self.blocks_locs_loc); // this one is a dummy value
+        bincode
+            .serialize_into(&mut out_buf, &self.blocks_locs_loc)
+            .expect("Bincode error"); // this one is a dummy value
 
         for bp in bitpacked {
             self.block_locs
                 .push(out_buf.seek(SeekFrom::Current(0)).unwrap());
-            bincode.serialize_into(&mut out_buf, &bp);
+            bincode
+                .serialize_into(&mut out_buf, &bp)
+                .expect("Bincode error");
         }
 
         // Output the blocks locs
         self.blocks_locs_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        bincode.serialize_into(&mut out_buf, &self.block_locs);
+        bincode
+            .serialize_into(&mut out_buf, &self.block_locs)
+            .expect("Bincode error");
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(blocks_locs_loc_loc)).unwrap();
-        bincode.serialize_into(&mut out_buf, &self.blocks_locs_loc);
+        bincode
+            .serialize_into(&mut out_buf, &self.blocks_locs_loc)
+            .expect("Bincode error");
 
         // Go back to the end so we don't screw up other operations...
         out_buf.seek(SeekFrom::Start(end)).unwrap();

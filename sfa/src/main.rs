@@ -347,7 +347,7 @@ fn convert(
         converter = converter.without_index();
     }
 
-    converter.convert_fasta(buf, &mut output);
+    converter.convert_fasta(buf, output);
 }
 
 pub fn generic_open_file_pb(

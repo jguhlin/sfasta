@@ -183,7 +183,8 @@ mod tests {
         let fakefasta =
             b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
-        let mut fasta = Fasta::from_buffer(&mut BufReader::new(fakefasta_));
+        let mut inner = &mut BufReader::new(fakefasta_);
+        let mut fasta = Fasta::from_buffer(inner);
         let _j = fasta.next();
         let _j = fasta.next();
     }
@@ -193,7 +194,8 @@ mod tests {
         let fakefasta =
             b">Hello I have more information in the rest of the FASTA header\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
-        let mut fasta = Fasta::from_buffer(&mut BufReader::new(fakefasta_));
+        let mut inner = BufReader::new(fakefasta_);
+        let mut fasta = Fasta::from_buffer(&mut inner);
         let s = fasta.next().unwrap();
         println!("{:#?}", s.header);
         assert!(&s.header == "I have more information in the rest of the FASTA header");

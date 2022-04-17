@@ -10,8 +10,8 @@
 | | Parameters | Parameters | Parameters Struct |
 | | Metadata | Metadata | Metadata Struct |
 | Sequence Blocks | | SequenceBlockCompressed | Individual SequenceBlockCompressed |
-| Score Blocks | | | TODO |
-| SeqInfo Blocks | | | TODO |
+| Score Blocks | SequenceBlockCompressed | | TODO |
+| SeqInfo Blocks | SequenceBlockCompressed| | TODO |
 | SeqLoc Blocks | | Vec\<Vec\<Loc\>\> | Location of each of the sequences, stored as groups of Vec\<Loc\> |
 | Index | | StoredIndexPlan | How to reassemble the index |
 | Index | Parts | &\[u64\] | Index Hashes but split into parts |
