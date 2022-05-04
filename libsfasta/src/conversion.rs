@@ -246,7 +246,7 @@ impl Converter {
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
-        let mut indexer = crate::index::Index64::new();
+        let mut indexer = crate::index::Index64Builder::with_capacity(seq_locs.len());
         let mut indexer_final = None;
 
         // Write out the sequence locs...
@@ -276,10 +276,7 @@ impl Converter {
         let to_index = Arc::clone(&seq_locs);
 
         thread::scope(|s| {
-            let mut index_handle: Option<_> = None;
-
-            index_handle = Some(s.spawn(|_| {
-                indexer.reserve(to_index.len());
+            let index_handle = Some(s.spawn(|_| {
 
                 for (i, (id, _)) in to_index.iter().enumerate() {
                     indexer.add(id, i as u32).expect("Unable to add to index");
@@ -502,6 +499,7 @@ impl Converter {
         // TODO: Scores Block Index
 
         // TODO: Masking Block
+        // Use bitvec implementation
 
         // Go to the beginning, and write the location of the index
 
@@ -595,17 +593,14 @@ where
     thread::scope(|s| {
         let reader_handle = s.spawn(move |_| {
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
-            // let in_buf = in_buf.lock().unwrap();
-            // let in_buf = BufReader::with_capacity(16 * 1024 * 1024, in_buf.lock().unwrap());
-            // let mut in_buf_lock = in_buf.lock().unwrap();
-            // let in_buf = in_buf_lock.deref_mut();
             let mut in_buf_reader = BufReader::new(in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
 
             // Store the ID of the sequence and the Location (SeqLocs)
+            // TODO: Auto adjust based off of size of input FASTA file
             let mut seq_locs = Vec::with_capacity(512 * 1024);
 
-            // For each Sequence in the fasta file, make it upper case (masking should be stored separately)
+            // For each Sequence in the fasta file, make it upper case (masking is stored separately)
             // Add the sequence, get the SeqLocs and store them in Location struct
             // And store that in seq_locs Vec...
             for mut i in fasta {

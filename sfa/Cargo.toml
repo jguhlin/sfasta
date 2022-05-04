@@ -12,6 +12,8 @@ codegen-units = 1
 # debug = true
 
 [dependencies]
+
+git-version = "0.3.5"
 indicatif = "0.16.2"
 libsfasta = { path = "../libsfasta/" }
 # serde = { version = "1.0.126", features = ["derive"] }

@@ -10,6 +10,8 @@ extern crate indicatif;
 extern crate rand;
 extern crate rand_chacha;
 
+use git_version::git_version;
+
 use std::fs;
 use std::fs::{metadata, File};
 use std::io::{BufReader, Read};
@@ -25,6 +27,8 @@ use libsfasta::prelude::*;
 
 use libsfasta::CompressionType;
 
+const GIT_VERSION: &str = git_version!();
+
 fn style_pb(pb: ProgressBar) -> ProgressBar {
     let style = ProgressStyle::default_bar()
         .template(
@@ -35,6 +39,8 @@ fn style_pb(pb: ProgressBar) -> ProgressBar {
     pb.set_style(style);
     pb
 }
+
+// TODO: Print out GIT_VERSION in the version text with CLAP (as well as the Cargo.toml version).
 
 #[derive(Parser)]
 #[clap(propagate_version = true)]

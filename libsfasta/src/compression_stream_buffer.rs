@@ -70,7 +70,7 @@ impl CompressionStreamBuffer {
             let cq = Arc::clone(&self.compress_queue);
             let wq = Arc::clone(&self.write_queue);
 
-            let ct = self.compression_type.clone();
+            let ct = self.compression_type;
 
             let dict = self.dict.clone();
 
@@ -92,7 +92,7 @@ impl CompressionStreamBuffer {
         self.initialized = true;
     }
 
-    pub fn with_dict(mut self, dict: Vec<u8>) -> Self {
+    pub fn _with_dict(mut self, dict: Vec<u8>) -> Self {
         self.dict = Some(dict);
         self
     }

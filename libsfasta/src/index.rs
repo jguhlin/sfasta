@@ -62,8 +62,100 @@ pub enum Hashes {
     Ahash,    // ahash // On fastq file was...  102.68 secs
     XxHash64, // On fastq file was... 96.18
     Xxh3Hash64, // This is not a stable hash right now. Here for future-proofing a bit...
-              // On fastq file was... 91.83
+                // On fastq file was... 91.83
 }
+
+pub struct Index64Builder {
+    hash: Hashes,
+    hashes: Vec<u64>,
+    pub locs: Vec<u32>,
+    pub ids: Option<Vec<String>>,
+}
+
+impl Index64Builder {
+    pub fn new() -> Self {
+        Index64Builder {
+            hash: Hashes::XxHash64,
+            hashes: Vec::new(),
+            locs: Vec::new(),
+            ids: None,
+        }
+    }
+
+    pub fn with_hash(mut self, hash: Hashes) -> Self {
+        self.hash = hash;
+        self
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Index64Builder {
+            hash: Hashes::XxHash64,
+            hashes: Vec::with_capacity(capacity),
+            locs: Vec::with_capacity(capacity),
+            ids: None,
+        }
+    }
+
+    pub fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
+        let hash = match self.hash {
+            Hashes::Ahash => {
+                let mut hasher = AHasher::new_with_keys(42, 1010);
+                hasher.write(id.as_bytes());
+                hasher.finish()
+            }
+            Hashes::XxHash64 => {
+                let mut hasher = XxHash64::with_seed(0);
+                hasher.write(id.as_bytes());
+                hasher.finish()
+            }
+            Hashes::Xxh3Hash64 => {
+                let mut hasher = Xxh3Hash64::with_seed(0);
+                hasher.write(id.as_bytes());
+                hasher.finish()
+            }
+        };
+        self.hashes.push(hash);
+        self.locs.push(loc);
+        Ok(())
+    }
+
+    pub fn finalize(mut self) -> Index64 {
+        let ids = self.ids.take().unwrap();
+
+        // Sort based on the hash value
+        let mut tuples: Vec<(u64, u32, String)> = izip!(self.hashes, self.locs, ids).collect();
+
+        if tuples.len() >= 256 * 1024 {
+            tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        } else {
+            tuples.sort_by(|a, b| a.0.cmp(&b.0));
+        }
+
+        let len = tuples.len();
+
+        let mut hashes: Vec<u64> = Vec::with_capacity(len);
+        let mut locs: Vec<u32> = Vec::with_capacity(len);
+        let mut ids: Vec<String> = Vec::with_capacity(len);
+
+        for (hash, loc, id) in tuples.drain(..) {
+            hashes.push(hash);
+            locs.push(loc);
+            ids.push(id);
+        }
+
+        Index64 {
+            hash: self.hash,
+            hashes,
+            locs,
+            ids: Some(ids),
+        }
+    }
+
+    pub fn set_ids(&mut self, ids: Vec<String>) {
+        self.ids = Some(ids);
+    }
+}
+
 
 /// ```
 ///  // Generate an index and search on it
@@ -135,7 +227,7 @@ impl Index64 {
     pub fn into_parts(self) -> (Vec<u64>, Vec<Bitpacked>, Hashes, u32) {
         let hashes = self.hashes;
         let mut locs = self.locs;
-        let min_size = locs.iter().min().unwrap().clone();
+        let min_size = *locs.iter().min().unwrap(); // Stupid, this is probably 0 since it's ordinal positions...
 
         locs = locs
             .into_iter()
