@@ -246,7 +246,7 @@ impl Converter {
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
-        let mut indexer = crate::index::Index64Builder::with_capacity(seq_locs.len());
+        let mut indexer = crate::index::Index64Builder::with_capacity(seq_locs.len()).with_ids();
         let mut indexer_final = None;
 
         // Write out the sequence locs...
@@ -277,6 +277,8 @@ impl Converter {
 
         thread::scope(|s| {
             let index_handle = Some(s.spawn(|_| {
+
+                println!("{:#?}", to_index.len());
 
                 for (i, (id, _)) in to_index.iter().enumerate() {
                     indexer.add(id, i as u32).expect("Unable to add to index");
@@ -314,6 +316,7 @@ impl Converter {
 
             if let Some(indexerh) = index_handle {
                 indexer_final = Some(indexerh.join().unwrap());
+                println!("Got indexer_final");
             } else {
                 // TODO: This should never be called... it's here to make the compiler happy
                 // indexer = crate::index::Index64::with_capacity(1);
@@ -322,7 +325,10 @@ impl Converter {
         })
         .expect("Error");
 
+        println!("Finalizing...");
+
         let mut indexer = indexer_final.unwrap().finalize();
+        println!("Finalizing...Done");
 
         // ID Index
         let id_index_pos = out_fh

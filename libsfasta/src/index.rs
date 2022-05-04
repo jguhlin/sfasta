@@ -87,6 +87,11 @@ impl Index64Builder {
         self
     }
 
+    pub fn with_ids(mut self) -> Self {
+        self.ids = Some(Vec::with_capacity(self.hashes.capacity()));
+        self
+    }
+
     pub fn with_capacity(capacity: usize) -> Self {
         Index64Builder {
             hash: Hashes::XxHash64,
@@ -116,6 +121,7 @@ impl Index64Builder {
         };
         self.hashes.push(hash);
         self.locs.push(loc);
+        self.ids.as_mut().unwrap().push(id.to_string());
         Ok(())
     }
 
