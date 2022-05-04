@@ -277,7 +277,6 @@ impl Converter {
 
         thread::scope(|s| {
             let index_handle = Some(s.spawn(|_| {
-
                 println!("{:#?}", to_index.len());
 
                 for (i, (id, _)) in to_index.iter().enumerate() {

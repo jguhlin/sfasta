@@ -62,7 +62,7 @@ pub enum Hashes {
     Ahash,    // ahash // On fastq file was...  102.68 secs
     XxHash64, // On fastq file was... 96.18
     Xxh3Hash64, // This is not a stable hash right now. Here for future-proofing a bit...
-                // On fastq file was... 91.83
+              // On fastq file was... 91.83
 }
 
 pub struct Index64Builder {
@@ -161,7 +161,6 @@ impl Index64Builder {
         self.ids = Some(ids);
     }
 }
-
 
 /// ```
 ///  // Generate an index and search on it

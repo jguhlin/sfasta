@@ -11,11 +11,11 @@ members = [
 [profile.release]
 opt-level = 3
 lto = "fat"
-# panic = "abort"
-codegen-units = 1
-# debug = true
+codegen-units  = 1
 
 [profile.dev]
-# opt-level = 3 # Memory allocation is too slow otherwise...
+opt-level = 1 
 debug = true
-# lto = true
+
+[profile.dev.package."*"]
+opt-level = 3
