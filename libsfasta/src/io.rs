@@ -27,13 +27,16 @@ impl Iterator for Sequences {
     type Item = Sequence;
 
     fn next(&mut self) -> Option<Sequence> {
-        let seq: Sequence = match bincode::deserialize_from(&mut self.reader) {
-            Ok(x) => x,
-            Err(_) => {
-                println!("SeqStop");
-                return None;
-            }
-        };
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        let seq: Sequence =
+            match bincode::serde::decode_from_std_read(&mut self.reader.as_mut(), bincode_config) {
+                Ok(x) => x,
+                Err(_) => {
+                    println!("SeqStop");
+                    return None;
+                }
+            };
         Some(seq)
     }
 }

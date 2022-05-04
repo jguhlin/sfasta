@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct Location {
     pub sequence: Option<Vec<Loc>>,
     pub masking: Option<Vec<Loc>>,

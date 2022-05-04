@@ -16,11 +16,12 @@ codegen-units = 1
 git-version = "0.3.5"
 indicatif = "0.16.2"
 flate2 = { version = "1.0.23", features = ["zlib-ng-compat"], default-features = false }
-hashbrown = { version = "0.12.1", features = ["serde"] }
+hashbrown = { version = "0.12.1" } #, features = ["serde"] }
 rand = "0.8.5"
 rand_core = "0.6.3"
 rand_chacha = "0.3.1"
-bincode = "1.3.3"
+# Is this even needed here?
+bincode = { version = "2.0.0-rc.1" } #, features = ["serde"] }
 mimalloc = { version = "0.1.29", default-features = false }
 snap = "1.0.5"
 crossbeam = "0.8.1"

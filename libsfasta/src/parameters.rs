@@ -3,7 +3,7 @@ use crate::*;
 use super::structs::CompressionType;
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct Parameters {
     pub block_size: u32,
     pub compression_type: CompressionType,
@@ -30,12 +30,14 @@ mod tests {
 
     #[test]
     pub fn bincode_size_struct() {
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
         let mut params = Parameters::default();
 
-        let encoded_0: Vec<u8> = bincode::serialize(&params).unwrap();
+        let encoded_0: Vec<u8> = bincode::serde::encode_to_vec(&params, bincode_config).unwrap();
 
         params.compression_type = CompressionType::LZ4;
-        let encoded_1: Vec<u8> = bincode::serialize(&params).unwrap();
+        let encoded_1: Vec<u8> = bincode::serde::encode_to_vec(&params, bincode_config).unwrap();
         assert!(encoded_0.len() == encoded_1.len());
     }
 }

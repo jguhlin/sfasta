@@ -1,4 +1,4 @@
-#![feature(is_sorted)]
+// #![feature(is_sorted)]
 
 extern crate bincode;
 extern crate bytelines;

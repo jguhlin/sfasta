@@ -183,7 +183,6 @@ pub fn convert_fasta<R, W: 'static>(
 
     let backoff = Backoff::new();
     fasta.for_each(|x| {
-        // println!("{:#?}", std::str::from_utf8(&x.seq).unwrap());
         let mut item = x;
         while let Err(x) = queue.push(item) {
             item = x;

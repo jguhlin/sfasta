@@ -2,7 +2,7 @@ use crate::*;
 
 use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize, Debug, Clone, Default)]
+#[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, bincode::Decode, Default)]
 pub struct Metadata {
     pub created_by: Option<String>,
     pub citation_doi: Option<String>,
@@ -23,12 +23,14 @@ mod tests {
 
     #[test]
     pub fn bincode_size_struct() {
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
         let mut metadata = Metadata::default();
 
-        let encoded_0: Vec<u8> = bincode::serialize(&metadata).unwrap();
+        let encoded_0: Vec<u8> = bincode::serde::encode_to_vec(&metadata, bincode_config).unwrap();
         metadata.created_by = Some("CrateTest".to_string());
 
-        let encoded_1: Vec<u8> = bincode::serialize(&metadata).unwrap();
+        let encoded_1: Vec<u8> = bincode::serde::encode_to_vec(&metadata, bincode_config).unwrap();
         assert!(encoded_0.len() != encoded_1.len());
     }
 }

@@ -80,7 +80,7 @@ impl SequenceBlock {
         }
 
         SequenceBlockCompressed {
-            compressed_seq: ByteBuf::from(cseq),
+            compressed_seq: cseq,
         }
     }
 
@@ -147,7 +147,7 @@ impl SequenceBlock {
         }
 
         SequenceBlockCompressed {
-            compressed_seq: ByteBuf::from(cseq),
+            compressed_seq: cseq,
         }
     }
 
@@ -162,9 +162,9 @@ impl SequenceBlock {
     } */
 }
 
-#[derive(Deserialize, Serialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug, Default, bincode::Encode, bincode::Decode)]
 pub struct SequenceBlockCompressed {
-    pub compressed_seq: ByteBuf,
+    pub compressed_seq: Vec<u8>,
 }
 
 impl SequenceBlockCompressed {
@@ -212,14 +212,17 @@ mod tests {
 
     #[test]
     pub fn test_encode_and_decode() {
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
         let test_bytes = b"abatcacgactac".to_vec();
         let x = SequenceBlockCompressed {
-            compressed_seq: ByteBuf::from(test_bytes.clone()),
+            compressed_seq: test_bytes.clone(),
             ..Default::default()
         };
 
-        let encoded = bincode::serialize(&x).unwrap();
-        let decoded: SequenceBlockCompressed = bincode::deserialize(&encoded).unwrap();
+        let encoded = bincode::serde::encode_to_vec(&x, bincode_config).unwrap();
+        let decoded: SequenceBlockCompressed =
+            bincode::serde::decode_from_slice(&encoded, bincode_config).unwrap().0;
         assert!(decoded.compressed_seq == x.compressed_seq);
         assert!(decoded.compressed_seq == test_bytes);
     }

@@ -57,7 +57,7 @@ pub trait IDIndexer {
     fn set_ids(&mut self, ids: Vec<String>);
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub enum Hashes {
     Ahash,    // ahash // On fastq file was...  102.68 secs
     XxHash64, // On fastq file was... 96.18
@@ -179,7 +179,7 @@ impl Index64Builder {
 ///
 ///  
 /// ```
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct Index64 {
     hashes: Vec<u64>,
     pub locs: Vec<u32>,
@@ -399,7 +399,7 @@ impl IDIndexer for Index64 {
 
 const MINIMUM_CHUNK_SIZE: u32 = 4 * 1024 * 1024;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode)]
 pub struct StoredIndexPlan {
     pub parts: u16,
     pub index: Vec<(u64, u64)>,
@@ -453,10 +453,12 @@ impl StoredIndexPlan {
         hash_type: Hashes,
         min_size: u32,
     ) -> (StoredIndexPlan, Vec<&'a [u64]>) {
-        assert!(
+
+        // TODO: This is in nightly
+        /*assert!(
             hashes[..].is_sorted(),
             "Hashes Vector must be sorted. Did you forget to finalize the index?"
-        );
+        ); */
 
         assert!(hashes.len() <= u64::MAX as usize, "Hashes Vector must be smaller than 2^64... Contact Joseph to Discuss options or split into multiple files...");
 

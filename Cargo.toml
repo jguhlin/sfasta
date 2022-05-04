@@ -14,8 +14,4 @@ lto = "fat"
 codegen-units  = 1
 
 [profile.dev]
-opt-level = 1 
 debug = true
-
-[profile.dev.package."*"]
-opt-level = 3

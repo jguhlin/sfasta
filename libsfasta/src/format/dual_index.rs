@@ -1,7 +1,6 @@
 use std::convert::TryFrom;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use bincode::Options;
 use bitpacking::{BitPacker, BitPacker8x};
 
 use crate::utils::{bitpack_u32, Bitpacked};
@@ -45,38 +44,34 @@ impl DualIndex {
     where
         W: Write + Seek,
     {
-        let bincode = bincode::DefaultOptions::new()
-            .with_fixint_encoding()
-            .allow_trailing_bytes();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let bitpacked = self.bitpack();
-        bincode
-            .serialize_into(&mut out_buf, &self.locs_start)
+        bincode::serde::encode_into_std_write(&self.locs_start, &mut out_buf, bincode_config)
             .expect("Bincode error");
+
         let blocks_locs_loc_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        bincode
-            .serialize_into(&mut out_buf, &self.blocks_locs_loc)
+
+        bincode::serde::encode_into_std_write(&self.block_locs, &mut out_buf, bincode_config)
             .expect("Bincode error"); // this one is a dummy value
 
         for bp in bitpacked {
             self.block_locs
                 .push(out_buf.seek(SeekFrom::Current(0)).unwrap());
-            bincode
-                .serialize_into(&mut out_buf, &bp)
+            bincode::serde::encode_into_std_write(&bp, &mut out_buf, bincode_config)
                 .expect("Bincode error");
         }
 
         // Output the blocks locs
         self.blocks_locs_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        bincode
-            .serialize_into(&mut out_buf, &self.block_locs)
+        bincode::serde::encode_into_std_write(&self.blocks_locs_loc, &mut out_buf, bincode_config)
             .expect("Bincode error");
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(blocks_locs_loc_loc)).unwrap();
-        bincode
-            .serialize_into(&mut out_buf, &self.blocks_locs_loc)
+
+        bincode::serde::encode_into_std_write(&end, &mut out_buf, bincode_config)
             .expect("Bincode error");
 
         // Go back to the end so we don't screw up other operations...
@@ -87,16 +82,18 @@ impl DualIndex {
     where
         R: Read + Seek,
     {
-        let bincode = bincode::DefaultOptions::new()
-            .with_fixint_encoding()
-            .allow_trailing_bytes();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let locs_start: u64 = bincode.deserialize_from(&mut in_buf).unwrap();
+        let locs_start: u64 = bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
+            .expect("Bincode error");
         let mut di = DualIndex::new(locs_start);
         di.on_disk = true;
-        di.blocks_locs_loc = bincode.deserialize_from(&mut in_buf).unwrap();
+        di.blocks_locs_loc = bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
+            .expect("Bincode error");
+
         in_buf.seek(SeekFrom::Start(di.blocks_locs_loc)).unwrap();
-        di.block_locs = bincode.deserialize_from(&mut in_buf).unwrap();
+        di.block_locs = bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
+            .expect("Bincode error");
 
         // File position(seek) is at the end of the DualIndex block now...
 
@@ -107,15 +104,16 @@ impl DualIndex {
     where
         R: Read + Seek,
     {
-        let bincode = bincode::DefaultOptions::new()
-            .with_fixint_encoding()
-            .allow_trailing_bytes();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let block_idx = pos / BitPacker8x::BLOCK_LEN;
         let block_inner_loc = pos % BitPacker8x::BLOCK_LEN;
         buf.seek(SeekFrom::Start(self.block_locs[block_idx]))
             .unwrap();
-        let bp: Bitpacked = bincode.deserialize_from(&mut buf).unwrap();
+
+        let bp: Bitpacked =
+            bincode::serde::decode_from_std_read(&mut buf, bincode_config).expect("Bincode error");
+
         let block = bp.decompress();
         self.locs_start + block[block_inner_loc] as u64
     }

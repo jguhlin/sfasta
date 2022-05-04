@@ -25,7 +25,7 @@ pub enum SeqMode {
     Random,
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub enum CompressionType {
     ZSTD,   // 9 should be default compression ratio
     LZ4,    // 9 should be default compression ratio
