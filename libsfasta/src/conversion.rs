@@ -11,10 +11,10 @@ use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 
 use rayon::prelude::*;
-use serde_bytes::ByteBuf;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
+use crate::format::DirectoryOnDisk;
 use crate::format::{DualIndex, Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
 use crate::index::{IDIndexer, StoredIndexPlan};
 use crate::structs::WriteAndSeek;
@@ -146,7 +146,8 @@ impl Converter {
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
-        bincode::encode_into_std_write(&sfasta.directory, &mut out_fh, bincode_config)
+        let dir: DirectoryOnDisk = sfasta.directory.clone().into();
+        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
             .expect("Unable to write directory to file");
 
         // Write the parameters
@@ -277,14 +278,10 @@ impl Converter {
 
                 bincode::encode_into_std_write(&locs, &mut compressor, bincode_config)
                     .expect("Unable to bincode locs into compressor");
-                let compressed = ByteBuf::from(compressor.finish().unwrap());
+                let compressed = compressor.finish().unwrap();
 
-                bincode::encode_into_std_write(
-                    bincode::serde::Compat(compressed),
-                    &mut out_fh,
-                    bincode_config,
-                )
-                .expect("Unable to write Sequence Blocks to file");
+                bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
+                    .expect("Unable to write Sequence Blocks to file");
             }
 
             if let Some(indexerh) = index_handle {
@@ -335,14 +332,10 @@ impl Converter {
 
             bincode::encode_into_std_write(part, &mut compressor, bincode_config)
                 .expect("Unable to bincode index to compressor");
-            let compressed = ByteBuf::from(compressor.finish().unwrap());
+            let compressed = compressor.finish().unwrap();
 
-            bincode::encode_into_std_write(
-                bincode::serde::Compat(compressed),
-                &mut out_fh,
-                bincode_config,
-            )
-            .expect("Unable to bincode compressed hashes");
+            bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
+                .expect("Unable to bincode compressed hashes");
 
             let new_pos = out_fh
                 .seek(SeekFrom::Current(0))
@@ -405,13 +398,13 @@ impl Converter {
                     zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 11).unwrap();
 
                 compressor.write(
-                    &bincode::encode_to_vec(bincode::serde::Compat(chunk), bincode_config)
+                    &bincode::encode_to_vec(Vec::from(chunk), bincode_config)
                         .expect("Unable to write chunk to compressor"),
                 );
 
-                ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"))
+                compressor.finish().expect("Unable to compress ID stream")
             })
-            .collect::<Vec<ByteBuf>>();
+            .collect::<Vec<Vec<u8>>>();
 
         for block in compressed_blocks.into_iter() {
             let pos = out_fh
@@ -420,12 +413,8 @@ impl Converter {
 
             ids_blocks_locs.push(pos);
 
-            bincode::encode_into_std_write(
-                bincode::serde::Compat(block),
-                &mut out_fh,
-                bincode_config,
-            )
-            .expect("Unable to write directory to file");
+            bincode::encode_into_std_write(block, &mut out_fh, bincode_config)
+                .expect("Unable to write directory to file");
         }
 
         // ID Block Locs
@@ -465,14 +454,10 @@ impl Converter {
             .write(&bincode::encode_to_vec(seqlocs_blocks_locs, bincode_config).unwrap())
             .expect("Unable to write directory to file");
 
-        let compressed = ByteBuf::from(compressor.finish().expect("Unable to compress ID stream"));
+        let compressed = compressor.finish().expect("Unable to compress ID stream");
 
-        bincode::encode_into_std_write(
-            bincode::serde::Compat(compressed),
-            &mut out_fh,
-            bincode_config,
-        )
-        .expect("Unable to write directory to file");
+        bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
+            .expect("Unable to write directory to file");
 
         sfasta.directory.seqloc_blocks_index_loc = NonZeroU64::new(seqloc_blocks_index_loc);
         sfasta.directory.id_blocks_index_loc = NonZeroU64::new(id_blocks_index_loc);
@@ -496,7 +481,8 @@ impl Converter {
 
         // Here we re-write the directory information at the start of the file, allowing for
         // easy jumps to important areas while keeping everything in a single file
-        bincode::encode_into_std_write(&sfasta.directory, &mut out_fh, bincode_config)
+        let dir: DirectoryOnDisk = sfasta.directory.clone().into();
+        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
             .expect("Unable to write directory to file");
 
         out_fh.into_inner().unwrap()
@@ -702,17 +688,19 @@ mod tests {
             .expect("Unable to read SFASTA Marker");
         assert!(sfasta_marker == "sfasta".as_bytes());
 
-        let _version: u64 =
-            bincode::serde::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
-        let _directory: Directory =
-            bincode::serde::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
-        println!("{:#?}", _directory);
+        let _version: u64 = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+
+        let directory: DirectoryOnDisk =
+            bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+
+        let dir: DirectoryOnDisk = directory.into();
+        println!("{:#?}", dir);
 
         let _parameters: Parameters =
-            bincode::serde::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+            bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
         let _metadata: Metadata =
-            bincode::serde::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+            bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
         let b: SequenceBlockCompressed =
             bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();

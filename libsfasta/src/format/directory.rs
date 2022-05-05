@@ -2,10 +2,8 @@ use crate::*;
 
 use std::num::NonZeroU64;
 
-use serde::{Deserialize, Serialize};
-
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-struct DirectoryOnDisk {
+pub struct DirectoryOnDisk {
     pub index_loc: u64,
     pub ids_loc: u64,
     pub block_index_loc: u64,
@@ -70,9 +68,9 @@ impl From<Directory> for DirectoryOnDisk {
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, bincode::Encode, bincode::Decode)]
-#[serde(into = "DirectoryOnDisk")]
-#[serde(from = "DirectoryOnDisk")]
+// , bincode::Encode, bincode::Decode
+// Directory should not be encoded, DirectoryOnDisk should be (can use .into or .from to get there and back)
+#[derive(Debug, Clone)]
 pub struct Directory {
     pub index_loc: Option<NonZeroU64>,
     pub ids_loc: Option<NonZeroU64>,
@@ -169,9 +167,9 @@ mod tests {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let encoded_x: Vec<u8> = bincode::serde::encode_to_vec(&x, bincode_config).unwrap();
-        let encoded_y: Vec<u8> = bincode::serde::encode_to_vec(&y, bincode_config).unwrap();
-        let encoded_z: Vec<u8> = bincode::serde::encode_to_vec(&z, bincode_config).unwrap();
+        let encoded_x: Vec<u8> = bincode::encode_to_vec(&x, bincode_config).unwrap();
+        let encoded_y: Vec<u8> = bincode::encode_to_vec(&y, bincode_config).unwrap();
+        let encoded_z: Vec<u8> = bincode::encode_to_vec(&z, bincode_config).unwrap();
 
         assert!(encoded_x.len() == encoded_y.len());
         assert!(encoded_x.len() == encoded_z.len());
@@ -195,13 +193,17 @@ mod tests {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let encoded_0: Vec<u8> = bincode::serde::encode_to_vec(&directory, bincode_config).unwrap();
+        let dir: DirectoryOnDisk = directory.clone().into();
+
+        let encoded_0: Vec<u8> = bincode::encode_to_vec(&dir, bincode_config).unwrap();
 
         directory.index_loc = NonZeroU64::new(std::u64::MAX);
-        let encoded_1: Vec<u8> = bincode::serde::encode_to_vec(&directory, bincode_config).unwrap();
+        let dir: DirectoryOnDisk = directory.clone().into();
+        let encoded_1: Vec<u8> = bincode::encode_to_vec(&dir, bincode_config).unwrap();
 
         directory.scores_loc = NonZeroU64::new(std::u64::MAX);
-        let encoded_2: Vec<u8> = bincode::serde::encode_to_vec(&directory, bincode_config).unwrap();
+        let dir: DirectoryOnDisk = directory.clone().into();
+        let encoded_2: Vec<u8> = bincode::encode_to_vec(&dir, bincode_config).unwrap();
         println!(
             "{} {} {}",
             encoded_0.len(),

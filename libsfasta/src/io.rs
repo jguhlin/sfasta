@@ -1,13 +1,11 @@
 use std::fs::{metadata, File};
 use std::io::{BufReader, Read};
 
-use serde::{Deserialize, Serialize};
-
 pub struct Sequences {
     reader: Box<dyn Read + Send>,
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Clone, Debug)]
+#[derive(PartialEq, bincode::Encode, bincode::Decode, Clone, Debug)]
 pub struct Sequence {
     pub seq: Vec<u8>,
     pub id: String,
@@ -30,7 +28,7 @@ impl Iterator for Sequences {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let seq: Sequence =
-            match bincode::serde::decode_from_std_read(&mut self.reader.as_mut(), bincode_config) {
+            match bincode::decode_from_std_read(&mut self.reader.as_mut(), bincode_config) {
                 Ok(x) => x,
                 Err(_) => {
                     println!("SeqStop");

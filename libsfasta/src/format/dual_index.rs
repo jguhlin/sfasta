@@ -47,32 +47,31 @@ impl DualIndex {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let bitpacked = self.bitpack();
-        bincode::serde::encode_into_std_write(&self.locs_start, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(&self.locs_start, &mut out_buf, bincode_config)
             .expect("Bincode error");
 
         let blocks_locs_loc_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        bincode::serde::encode_into_std_write(&self.block_locs, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(&self.block_locs, &mut out_buf, bincode_config)
             .expect("Bincode error"); // this one is a dummy value
 
         for bp in bitpacked {
             self.block_locs
                 .push(out_buf.seek(SeekFrom::Current(0)).unwrap());
-            bincode::serde::encode_into_std_write(&bp, &mut out_buf, bincode_config)
+            bincode::encode_into_std_write(&bp, &mut out_buf, bincode_config)
                 .expect("Bincode error");
         }
 
         // Output the blocks locs
         self.blocks_locs_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        bincode::serde::encode_into_std_write(&self.blocks_locs_loc, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(&self.blocks_locs_loc, &mut out_buf, bincode_config)
             .expect("Bincode error");
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(blocks_locs_loc_loc)).unwrap();
 
-        bincode::serde::encode_into_std_write(&end, &mut out_buf, bincode_config)
-            .expect("Bincode error");
+        bincode::encode_into_std_write(&end, &mut out_buf, bincode_config).expect("Bincode error");
 
         // Go back to the end so we don't screw up other operations...
         out_buf.seek(SeekFrom::Start(end)).unwrap();
@@ -84,16 +83,16 @@ impl DualIndex {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let locs_start: u64 = bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
-            .expect("Bincode error");
+        let locs_start: u64 =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Bincode error");
         let mut di = DualIndex::new(locs_start);
         di.on_disk = true;
-        di.blocks_locs_loc = bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
-            .expect("Bincode error");
+        di.blocks_locs_loc =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Bincode error");
 
         in_buf.seek(SeekFrom::Start(di.blocks_locs_loc)).unwrap();
-        di.block_locs = bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
-            .expect("Bincode error");
+        di.block_locs =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Bincode error");
 
         // File position(seek) is at the end of the DualIndex block now...
 
@@ -112,7 +111,7 @@ impl DualIndex {
             .unwrap();
 
         let bp: Bitpacked =
-            bincode::serde::decode_from_std_read(&mut buf, bincode_config).expect("Bincode error");
+            bincode::decode_from_std_read(&mut buf, bincode_config).expect("Bincode error");
 
         let block = bp.decompress();
         self.locs_start + block[block_inner_loc] as u64

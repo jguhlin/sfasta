@@ -5,8 +5,6 @@ extern crate bytelines;
 extern crate crossbeam;
 extern crate rand;
 extern crate rayon;
-extern crate serde;
-extern crate serde_bytes;
 #[macro_use]
 extern crate itertools;
 

@@ -1,8 +1,6 @@
 use std::any::Any;
 use std::io::prelude::*;
 
-use serde::{Deserialize, Serialize};
-
 use crate::index::Hashes;
 use crate::utils::Bitpacked;
 
@@ -25,7 +23,7 @@ pub enum SeqMode {
     Random,
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
+#[derive(PartialEq, Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub enum CompressionType {
     ZSTD,   // 9 should be default compression ratio
     LZ4,    // 9 should be default compression ratio
@@ -53,7 +51,7 @@ pub const fn default_compression_level(ct: CompressionType) -> i32 {
     }
 }
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(PartialEq, Debug, Clone)]
 pub struct Header {
     pub id: Option<String>,
     pub comment: Option<String>,

@@ -3,8 +3,6 @@ use crate::structs::{default_compression_level, CompressionType};
 use std::io::{Read, Write};
 
 use bumpalo::Bump;
-use serde::{Deserialize, Serialize};
-use serde_bytes::ByteBuf;
 use xz::read::{XzDecoder, XzEncoder};
 
 #[derive(Debug, Default)]
@@ -162,7 +160,7 @@ impl SequenceBlock {
     } */
 }
 
-#[derive(Deserialize, Serialize, Debug, Default, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Default, bincode::Encode, bincode::Decode)]
 pub struct SequenceBlockCompressed {
     pub compressed_seq: Vec<u8>,
 }
@@ -220,9 +218,10 @@ mod tests {
             ..Default::default()
         };
 
-        let encoded = bincode::serde::encode_to_vec(&x, bincode_config).unwrap();
-        let decoded: SequenceBlockCompressed =
-            bincode::serde::decode_from_slice(&encoded, bincode_config).unwrap().0;
+        let encoded = bincode::encode_to_vec(&x, bincode_config).unwrap();
+        let decoded: SequenceBlockCompressed = bincode::decode_from_slice(&encoded, bincode_config)
+            .unwrap()
+            .0;
         assert!(decoded.compressed_seq == x.compressed_seq);
         assert!(decoded.compressed_seq == test_bytes);
     }

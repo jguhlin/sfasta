@@ -1,13 +1,11 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::RwLock;
 use std::thread;
-use std::time::{Duration, Instant};
 
-use bumpalo::Bump;
 use rayon::prelude::*;
-use serde_bytes::ByteBuf;
 
 use super::Directory;
+use super::DirectoryOnDisk;
 use crate::format::dual_index::*;
 use crate::index::*;
 use crate::index_directory::IndexDirectory;
@@ -108,10 +106,10 @@ impl Sfasta {
         let mut ids: Vec<String> = Vec::with_capacity(len as usize);
 
         // Multi-threaded
-        let mut compressed_blocks: Vec<ByteBuf> = Vec::with_capacity(blocks);
+        let mut compressed_blocks: Vec<Vec<u8>> = Vec::with_capacity(blocks);
         for _i in 0..blocks {
             compressed_blocks
-                .push(bincode::serde::decode_from_std_read(&mut *buf, bincode_config).unwrap());
+                .push(bincode::decode_from_std_read(&mut *buf, bincode_config).unwrap());
             // println!("Processed block {}", i);
         }
 
@@ -127,7 +125,7 @@ impl Sfasta {
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
 
-                let (r, _) = bincode::serde::decode_from_slice(&decompressed, bincode_config).unwrap();
+                let (r, _) = bincode::decode_from_slice(&decompressed, bincode_config).unwrap();
                 r
             })
             .collect();
@@ -214,8 +212,8 @@ impl Sfasta {
 
                     let mut decompressed: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
 
-                    let compressed: ByteBuf =
-                        bincode::serde::decode_from_std_read(&mut *buf, bincode_config).unwrap();
+                    let compressed: Vec<u8> =
+                        bincode::decode_from_std_read(&mut *buf, bincode_config).unwrap();
 
                     let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
 
@@ -225,8 +223,9 @@ impl Sfasta {
                     };
 
                     let ids: Vec<String> =
-                        bincode::serde::decode_from_slice(&decompressed, bincode_config)
-                            .unwrap().0;
+                        bincode::decode_from_slice(&decompressed, bincode_config)
+                            .unwrap()
+                            .0;
 
                     if ids[loc as usize % IDX_CHUNK_SIZE] == x {
                         matches.push((
@@ -258,8 +257,8 @@ impl Sfasta {
                         self.seqlocs_blocks_locs.as_ref().unwrap()[block],
                     ))
                     .expect("Unable to work with seek API");
-                    let compressed: ByteBuf =
-                        bincode::serde::decode_from_std_read(&mut *buf, bincode_config).unwrap();
+                    let compressed: Vec<u8> =
+                        bincode::decode_from_std_read(&mut *buf, bincode_config).unwrap();
 
                     let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
                     let mut decompressed = Vec::with_capacity(2 * 1024 * 1024);
@@ -271,8 +270,9 @@ impl Sfasta {
 
                     //let mut decompressed = lz4_flex::frame::FrameDecoder::new(&compressed[..]);
                     let seqlocs: Vec<Vec<Loc>> =
-                        bincode::serde::decode_from_slice(&decompressed[..], bincode_config)
-                            .unwrap().0;
+                        bincode::decode_from_slice(&decompressed[..], bincode_config)
+                            .unwrap()
+                            .0;
 
                     let thisloc = seqlocs[loc as usize % SEQLOCS_CHUNK_SIZE].clone();
                     matches_with_loc.push((id, idxloc, loc, thisloc));
@@ -301,18 +301,18 @@ impl Sfasta {
         buf.seek(SeekFrom::Start(byte_loc))
             .expect("Unable to work with seek API");
 
-        let compressed: ByteBuf =
-            bincode::serde::decode_from_std_read(&mut *buf, bincode_config).unwrap();
+        let compressed: Vec<u8> = bincode::decode_from_std_read(&mut *buf, bincode_config).unwrap();
 
         let mut decompressor = zstd::stream::Decoder::new(&compressed[..]).unwrap();
-        let mut hashes_raw: ByteBuf = ByteBuf::new();
+        let mut hashes_raw: Vec<u8> = Vec::new();
 
         decompressor
             .read_to_end(&mut hashes_raw)
             .expect("Unable to decompress index hash block");
 
-        let hashes: Vec<u64> =
-            bincode::serde::decode_from_slice(&hashes_raw[..], bincode_config).unwrap().0;
+        let hashes: Vec<u64> = bincode::decode_from_slice(&hashes_raw[..], bincode_config)
+            .unwrap()
+            .0;
 
         let mut matches = Vec::new();
 
@@ -355,7 +355,7 @@ impl Sfasta {
                 .expect("Unable to work with seek API");
 
             let sbc: SequenceBlockCompressed =
-                bincode::serde::decode_from_std_read(&mut *buf, bincode_config)
+                bincode::decode_from_std_read(&mut *buf, bincode_config)
                     .expect("Unable to parse SequenceBlockCompressed");
 
             drop(buf); // Open it up for other threads...
@@ -397,7 +397,7 @@ impl SfastaParser {
 
         let mut sfasta = Sfasta::default();
 
-        sfasta.version = match bincode::serde::decode_from_std_read(&mut in_buf, bincode_config) {
+        sfasta.version = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => panic!("Error reading SFASTA directory: {}", y),
         };
@@ -407,18 +407,20 @@ impl SfastaParser {
         // TODO: In the future, with different versions, we will need to do different things
         // when we inevitabily introduce incompatabilities...
 
-        sfasta.directory = match bincode::serde::decode_from_std_read(&mut in_buf, bincode_config) {
+        let dir: DirectoryOnDisk = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
+        {
             Ok(x) => x,
             Err(y) => panic!("Error reading SFASTA directory: {}", y),
         };
 
-        sfasta.parameters = match bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
-        {
+        sfasta.directory = dir.into();
+
+        sfasta.parameters = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => panic!("Error reading SFASTA parameters: {}", y),
         };
 
-        sfasta.metadata = match bincode::serde::decode_from_std_read(&mut in_buf, bincode_config) {
+        sfasta.metadata = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => panic!("Error reading SFASTA metadata: {}", y),
         };
@@ -433,9 +435,8 @@ impl SfastaParser {
 
         // TODO: Parse index plan here...
 
-        let mut plan: StoredIndexPlan =
-            bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
-                .expect("Unable to get Hash Type of Index");
+        let mut plan: StoredIndexPlan = bincode::decode_from_std_read(&mut in_buf, bincode_config)
+            .expect("Unable to get Hash Type of Index");
 
         plan.index64 = Some(Index64::default());
 
@@ -483,22 +484,23 @@ impl SfastaParser {
             ))
             .expect("Unable to work with seek API");
 
-        let block_locs_compressed: ByteBuf =
-            bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
+        let block_locs_compressed: Vec<u8> =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config)
                 .expect("Unable to parse block locs index");
 
         let block_locs_handle = thread::spawn(move || {
             // let mut decompressor = lz4_flex::frame::FrameDecoder::new(&block_locs_compressed[..]);
             let mut decompressor = zstd::stream::Decoder::new(&block_locs_compressed[..]).unwrap();
-            let mut block_locs_bincoded: ByteBuf = ByteBuf::new(); //Vec::with_capacity(2 * 1024 * 1024);
+            let mut block_locs_bincoded: Vec<u8> = Vec::new(); //Vec::with_capacity(2 * 1024 * 1024);
 
             decompressor
                 .read_to_end(&mut block_locs_bincoded)
                 .expect("Unable to parse index");
 
             let block_locs: Vec<u64> =
-                bincode::serde::decode_from_slice(&block_locs_bincoded[..], bincode_config)
-                    .expect("Unable to parse index").0;
+                bincode::decode_from_slice(&block_locs_bincoded[..], bincode_config)
+                    .expect("Unable to parse index")
+                    .0;
 
             block_locs
         });
@@ -513,7 +515,7 @@ impl SfastaParser {
                 .expect("Unable to work with seek API");
 
             let id_blocks_locs_compressed: Vec<Bitpacked> =
-                bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
+                bincode::decode_from_std_read(&mut in_buf, bincode_config)
                     .expect("Unable to parse block locs index");
 
             let ids_loc = sfasta.directory.ids_loc;
@@ -553,8 +555,8 @@ impl SfastaParser {
                 ))
                 .expect("Unable to work with seek API");
 
-            let seqlocs_blocks_locs_compressed: ByteBuf =
-                bincode::serde::decode_from_std_read(&mut in_buf, bincode_config)
+            let seqlocs_blocks_locs_compressed: Vec<u8> =
+                bincode::decode_from_std_read(&mut in_buf, bincode_config)
                     .expect("Unable to parse block locs index");
 
             let seqlocs_loc = sfasta.directory.seqlocs_loc;
@@ -567,11 +569,10 @@ impl SfastaParser {
                     .read_to_end(&mut seqlocs_blocks_locs_bincoded)
                     .expect("Unable to parse index");
 
-                let seqlocs_blocks_locs: Vec<u64> = bincode::serde::decode_from_slice(
-                    &seqlocs_blocks_locs_bincoded[..],
-                    bincode_config,
-                )
-                .expect("Unable to parse index").0;
+                let seqlocs_blocks_locs: Vec<u64> =
+                    bincode::decode_from_slice(&seqlocs_blocks_locs_bincoded[..], bincode_config)
+                        .expect("Unable to parse index")
+                        .0;
 
                 let seqlocs_blocks_locs: Vec<u64> = seqlocs_blocks_locs
                     .into_iter()

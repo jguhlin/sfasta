@@ -1,8 +1,5 @@
-extern crate serde;
-
 use ahash::AHasher;
 use rayon::prelude::*;
-use serde::{Deserialize, Serialize};
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
 
 use std::hash::Hasher;
@@ -57,7 +54,7 @@ pub trait IDIndexer {
     fn set_ids(&mut self, ids: Vec<String>);
 }
 
-#[derive(Serialize, Deserialize, PartialEq, Eq, Clone, Copy, bincode::Encode, bincode::Decode)]
+#[derive(PartialEq, Eq, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub enum Hashes {
     Ahash,    // ahash // On fastq file was...  102.68 secs
     XxHash64, // On fastq file was... 96.18
@@ -179,13 +176,12 @@ impl Index64Builder {
 ///
 ///  
 /// ```
-#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct Index64 {
     hashes: Vec<u64>,
     pub locs: Vec<u32>,
     hash: Hashes,
 
-    #[serde(skip)]
     pub ids: Option<Vec<String>>,
 }
 
@@ -399,7 +395,7 @@ impl IDIndexer for Index64 {
 
 const MINIMUM_CHUNK_SIZE: u32 = 4 * 1024 * 1024;
 
-#[derive(Serialize, Deserialize, bincode::Encode, bincode::Decode)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct StoredIndexPlan {
     pub parts: u16,
     pub index: Vec<(u64, u64)>,
@@ -408,7 +404,6 @@ pub struct StoredIndexPlan {
     pub chunk_size: u32,
     pub index_len: u32,
 
-    #[serde(skip)]
     pub index64: Option<Index64>,
 }
 
@@ -453,7 +448,6 @@ impl StoredIndexPlan {
         hash_type: Hashes,
         min_size: u32,
     ) -> (StoredIndexPlan, Vec<&'a [u64]>) {
-
         // TODO: This is in nightly
         /*assert!(
             hashes[..].is_sorted(),
