@@ -9,6 +9,8 @@ use crate::utils::*;
 
 #[non_exhaustive]
 enum IndexTypes {
+    Index8,
+    Index16,
     Index32,
     Index64,
 }
@@ -22,37 +24,9 @@ enum IndexTypes {
 // Index (In-Memory) --> Fastest, but can take awhile to decompress
 // Index (as parts, for serialization) --> Not for actual usage...
 // Index (on-disk) --> Returns the part of the index that contains the header, then has fn's to decompress
-//                 that part...
+//                 that part... This is the mode for accessing the existing index when it is on disk (for storing it on disk, that is the as parts)
 // Index must convert between all 3
 // And handle edge cases (only a few sequences, etc...)
-
-pub trait IDIndexer {
-    fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str>;
-
-    // We return a vector of possible matches
-    // We deal with collisions by not-dealing with collisions
-    // It's fast enough to take the list of candidates, and query them directly...
-    /// Return a vector of possible matches
-    /// The match is the usize index location of the appropriate fields.
-    /// So the ID will be index.ids[result]
-    /// and the location will be index.locs[result]
-
-    fn find(&self, id: &str) -> Option<Vec<usize>>;
-
-    // Finalize (no more additions)
-    // This function should handle the sorting (binary search doesn't work without it)
-    fn finalize(self) -> Self;
-
-    fn len(&self) -> u64;
-    fn is_empty(&self) -> bool;
-
-    fn with_capacity(capacity: usize) -> Self;
-    fn new() -> Self;
-
-    fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String>;
-
-    fn set_ids(&mut self, ids: Vec<String>);
-}
 
 #[derive(PartialEq, Eq, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub enum Hashes {
@@ -62,6 +36,7 @@ pub enum Hashes {
               // On fastq file was... 91.83
 }
 
+/// IndexBuilder is used to build the index
 pub struct Index64Builder {
     hash: Hashes,
     hashes: Vec<u64>,
@@ -69,7 +44,19 @@ pub struct Index64Builder {
     pub ids: Option<Vec<String>>,
 }
 
+impl Default for Index64Builder {
+    fn default() -> Self {
+        Index64Builder {
+            hash: Hashes::XxHash64,
+            hashes: Vec::new(),
+            locs: Vec::new(),
+            ids: None,
+        }
+    }
+}
+
 impl Index64Builder {
+    /// Prefer to use with_capacity as the length should always be known
     pub fn new() -> Self {
         Index64Builder {
             hash: Hashes::XxHash64,
@@ -79,16 +66,19 @@ impl Index64Builder {
         }
     }
 
+    /// Change which hash is used for this index
     pub fn with_hash(mut self, hash: Hashes) -> Self {
         self.hash = hash;
         self
     }
 
+    /// Supply IDs directly for this index
     pub fn with_ids(mut self) -> Self {
         self.ids = Some(Vec::with_capacity(self.hashes.capacity()));
         self
     }
 
+    /// Create index while reserving memory for it
     pub fn with_capacity(capacity: usize) -> Self {
         Index64Builder {
             hash: Hashes::XxHash64,
@@ -98,18 +88,19 @@ impl Index64Builder {
         }
     }
 
+    /// Add a (sequence id, loc) pair to the index
     pub fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
         let hash = match self.hash {
             Hashes::Ahash => {
                 let mut hasher = AHasher::new_with_keys(42, 1010);
                 hasher.write(id.as_bytes());
                 hasher.finish()
-            }
+            },
             Hashes::XxHash64 => {
                 let mut hasher = XxHash64::with_seed(0);
                 hasher.write(id.as_bytes());
                 hasher.finish()
-            }
+            },
             Hashes::Xxh3Hash64 => {
                 let mut hasher = Xxh3Hash64::with_seed(0);
                 hasher.write(id.as_bytes());
@@ -122,6 +113,10 @@ impl Index64Builder {
         Ok(())
     }
 
+    /// Process intensive step
+    /// Finalize the index. Index is sorted based on hash values.
+    /// Multi-threaded sort as well when index exceeds 256 * 1024 items
+    /// Consumes IndexBuilder and returns Index64
     pub fn finalize(mut self) -> Index64 {
         let ids = self.ids.take().unwrap();
 
@@ -154,6 +149,8 @@ impl Index64Builder {
         }
     }
 
+    /// Manually set IDs for the index
+    /// Used when loading from disk
     pub fn set_ids(&mut self, ids: Vec<String>) {
         self.ids = Some(ids);
     }
@@ -181,7 +178,6 @@ pub struct Index64 {
     hashes: Vec<u64>,
     pub locs: Vec<u32>,
     hash: Hashes,
-
     pub ids: Option<Vec<String>>,
 }
 
@@ -197,6 +193,7 @@ impl Default for Index64 {
 }
 
 impl Index64 {
+    /// Get hash of an ID depending on the hash type
     #[inline]
     pub fn get_hash(&self, id: &str) -> u64 {
         // TODO: Pretty sure this code could be simplified with dyn Hasher trait...
@@ -219,28 +216,39 @@ impl Index64 {
         }
     }
 
+    /// Reserve memory for the index
     pub fn reserve(&mut self, capacity: usize) {
         self.hashes.reserve(capacity);
         self.locs.reserve(capacity);
         self.ids.as_mut().unwrap().reserve(capacity);
     }
 
-    pub fn into_parts(self) -> (Vec<u64>, Vec<Bitpacked>, Hashes, u32) {
+    /// Convert the index into parts for storing on disk
+    /// Returns Vec<u64> of hash values of IDS.
+    /// Vec<String> of IDs
+    /// Vet<Bitpacked> of locations.
+    /// Hash type used in index
+    /// Starting location (subtracted from all locations)
+    pub fn into_parts(self) -> (Vec<u64>, Vec<String>, Vec<Bitpacked>, Hashes, u32) {
         let hashes = self.hashes;
         let mut locs = self.locs;
-        let min_size = *locs.iter().min().unwrap(); // Stupid, this is probably 0 since it's ordinal positions...
+        let start_loc = *locs.iter().min().unwrap();
 
         locs = locs
             .into_iter()
-            .map(|x| x.saturating_sub(min_size))
+            .map(|x| x.saturating_sub(start_loc))
             .collect();
 
         let bitpacked = bitpack_u32(&locs);
 
-        (hashes, bitpacked, self.hash, min_size)
+        let ids = self.ids.unwrap();
+
+        (hashes, ids, bitpacked, self.hash, start_loc)
     }
 
-    pub fn from_parts(hashes: Vec<u64>, locs: Vec<u32>, hash: Hashes) -> Index64 {
+    /// Create an in-memory index from parts stored on disk
+    /// Doesn't take in Bitpacked, so not sure if it works? TODO
+    pub fn from_parts(hashes: Vec<u64>, ids: Vec<String>, locs: Vec<u32>, hash: Hashes, start_loc: u32) -> Index64 {
         Index64 {
             hashes,
             locs,
@@ -248,39 +256,10 @@ impl Index64 {
             ids: None,
         }
     }
-}
 
-impl IDIndexer for Index64 {
+    /// Returns IDs as chunks
     fn ids_chunks(&self, chunk_size: usize) -> Chunks<'_, std::string::String> {
         self.ids.as_ref().unwrap().chunks(chunk_size)
-    }
-
-    fn with_capacity(capacity: usize) -> Self {
-        Index64 {
-            hashes: Vec::with_capacity(capacity),
-            locs: Vec::with_capacity(capacity),
-            hash: Hashes::XxHash64,
-            ids: Some(Vec::with_capacity(capacity)),
-        }
-    }
-
-    fn new() -> Self {
-        Index64 {
-            hashes: Vec::new(),
-            locs: Vec::new(),
-            hash: Hashes::XxHash64,
-            ids: Some(Vec::new()),
-        }
-    }
-
-    fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
-        let hash = self.get_hash(id);
-
-        self.hashes.push(hash);
-        self.locs.push(loc);
-        self.ids.as_mut().unwrap().push(id.to_string());
-
-        Ok(())
     }
 
     // TODO: Dedupe this code with above...
@@ -335,50 +314,6 @@ impl IDIndexer for Index64 {
         Some((start..=end).collect())
     }
 
-    fn finalize(mut self) -> Self {
-        // TODO: More memory efficient way...
-        // But this is a one-time cost so it's hard to justify spending much time or pulling in other crates...
-
-        //let hashes: Vec<u64> = self.ids.as_ref().unwrap().par_iter().map(|x| self.get_hash(x)).collect();
-
-        let ids = self.ids.take().unwrap();
-
-        let mut tuples: Vec<(u64, u32, String)> = izip!(self.hashes, self.locs, ids).collect();
-
-        if tuples.len() >= 256 * 1024 {
-            tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
-        } else {
-            tuples.sort_by(|a, b| a.0.cmp(&b.0));
-        }
-
-        let mut hashes: Vec<u64> = Vec::with_capacity(tuples.len());
-        let mut locs: Vec<u32> = Vec::with_capacity(tuples.len());
-        let mut ids: Vec<String> = Vec::with_capacity(tuples.len());
-
-        for (hash, loc, id) in tuples.drain(..) {
-            hashes.push(hash);
-            locs.push(loc);
-            ids.push(id);
-        }
-
-        // let hashes = tuples.iter().map(|(i, _, _)| *i).collect::<Vec<u64>>();
-        // let locs = tuples.iter().map(|(_, o, _)| *o).collect::<Vec<u32>>();
-
-        // .into_iter here so we don't borrow it, and we can just move the Strings rather than clone them
-        /*        let ids = ids.into_boxed_slice();
-        let ids = tuples
-            .into_iter()
-            .map(|(_, _, x)| ids[x])
-            .collect::<Vec<String>>(); */
-
-        Index64 {
-            hashes,
-            locs,
-            ids: Some(ids),
-            hash: self.hash,
-        }
-    }
-
     fn len(&self) -> u64 {
         self.locs.len() as u64
     }
@@ -386,15 +321,12 @@ impl IDIndexer for Index64 {
     fn is_empty(&self) -> bool {
         self.locs.len() == 0
     }
-
-    fn set_ids(&mut self, ids: Vec<String>) {
-        assert!(ids.len() == self.locs.len());
-        self.ids = Some(ids);
-    }
 }
 
 const MINIMUM_CHUNK_SIZE: u32 = 4 * 1024 * 1024;
 
+
+/// This serves as metadata of where the index parts are stored
 #[derive(bincode::Encode, bincode::Decode)]
 pub struct StoredIndexPlan {
     pub parts: u16,
@@ -442,17 +374,21 @@ impl StoredIndexPlan {
         }
     }
 
+    /// This splits the index into smaller chunks to speed up processing
+    /// Specifically, the hashes and IDs are split into smaller chunks
+    /// This is in the (very unlikely) event that multiple IDs produce the same hash
     pub fn plan_from_parts<'a>(
         hashes: &'a [u64],
+        ids: &'a [String],
         _locs: &[Bitpacked],
         hash_type: Hashes,
         min_size: u32,
-    ) -> (StoredIndexPlan, Vec<&'a [u64]>) {
+    ) -> (StoredIndexPlan, Vec<&'a [u64]>, Vec<&'a [String]>) {
         // TODO: This is in nightly
-        /*assert!(
+        assert!(
             hashes[..].is_sorted(),
-            "Hashes Vector must be sorted. Did you forget to finalize the index?"
-        ); */
+            "Hash Vector must be sorted. Did you forget to finalize the index?"
+        );
 
         assert!(hashes.len() <= u64::MAX as usize, "Hashes Vector must be smaller than 2^64... Contact Joseph to Discuss options or split into multiple files...");
 
@@ -476,6 +412,7 @@ impl StoredIndexPlan {
 
         let mut index = Vec::new();
         let mut hash_splits = Vec::new();
+        let mut id_splits = Vec::new();
 
         for i in 0..parts {
             let start = i as usize * chunk_size as usize;
@@ -483,6 +420,7 @@ impl StoredIndexPlan {
             end = std::cmp::min(end, hashes.len());
 
             index.push((hashes[start], 0)); // 0 here is a placeholder!
+            id_splits.push(&ids[start..end]);
             hash_splits.push(&hashes[start..end]);
         }
 
@@ -498,6 +436,7 @@ impl StoredIndexPlan {
                 index64: None,
             },
             hash_splits,
+            id_splits,
         )
     }
 }
@@ -506,58 +445,15 @@ impl StoredIndexPlan {
 mod tests {
     use super::*;
 
+    /// Need to redo all tests
     #[test]
     pub fn test_index64() {
-        let mut i64 = Index64::with_capacity(64);
-        for n in 0..256 {
-            let id = format!("test{}", n);
-            i64.add(&id, n).expect("Unable to add to index");
-        }
-
-        i64.add("duplicate", 1001).expect("Unable to add to index");
-        i64.add("duplicate", 1002).expect("Unable to add to index");
-        i64.add("duplicate", 1003).expect("Unable to add to index");
-        i64.add("duplicate", 1004).expect("Unable to add to index");
-        i64.add("duplicate", 1005).expect("Unable to add to index");
-
-        let mut i64 = i64.finalize();
-        let ids = i64.ids.take().unwrap();
-
-        let y = i64.find("test32").unwrap();
-        assert!(i64.locs[y[0]] == 32);
-
-        assert!(ids[y[0]] == "test32");
-
-        let y = i64.find("not-in-the-index");
-        assert!(y == None);
-
-        let y = i64.find("duplicate");
-        println!("{:#?}", y);
-        let y = y.expect("Index did not find correctly.");
-        let y = y.iter().map(|&x| i64.locs[x]).collect::<Vec<u32>>();
-        assert!(y.len() == 5);
-        assert!(y.contains(&1001));
-        assert!(y.contains(&1002));
-        assert!(y.contains(&1003));
-        assert!(y.contains(&1004));
-        assert!(y.contains(&1005));
+        todo!();
     }
 
     #[test]
     pub fn test_index64_len() {
-        let mut i64 = Index64::with_capacity(64);
-        for n in 0..512 {
-            let id = format!("test{}", n);
-            i64.add(&id, n).expect("Unable to add to index");
-        }
-
-        for n in 0..512 {
-            let id = "test";
-            i64.add(&id, n).expect("Unable to add to index");
-        }
-
-        let i64 = i64.finalize();
-        assert!(i64.len() == 1024);
+        todo!();
     }
 }
 

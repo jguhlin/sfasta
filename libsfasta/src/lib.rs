@@ -1,4 +1,4 @@
-// #![feature(is_sorted)]
+#![feature(is_sorted)]
 
 extern crate bincode;
 extern crate bytelines;
@@ -20,7 +20,7 @@ mod dict;
 mod fasta;
 mod fastq;
 mod format;
-mod index;
+pub mod index;
 mod index_directory;
 mod io;
 mod metadata;
