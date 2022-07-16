@@ -1,9 +1,213 @@
+//! Dual Index
+//! 
+//! The dual index is a two-tiered index to speed up large datasets.
+//! 
+//! Entries are effectively String -> u64 
+//! Which is Sequence ID -> byte location of SeqLoc Entry
+//! 
+//! The probably poorly named dual index converts to on-disk storage as such:
+//! 
+//! IDs are lower-cased and Hashed with XxHash64
+//! IDs are then sorted by their hash value
+//! IDs are stored in CHUNK_SIZE chunks 
+//! Hashes are stored in CHUNK_SIZE chunks
+//! Hash index is stored as a Vec<(Hash, Loc)>
+//! Where the Hash is the u64 of the first hash of the chunk, and Loc is the u64 byte location of the ordinal Hashes chunk
+//! 
+//! A search is performed by identifying which chunk contains the hash, by finding index[n] <= HASH_QUERY <= index[n+1].0
+//! Possible matches can span multiple chunks (IDs do not need to be unique).
+//! 
+//! The Hash chunk *n* is then opened and searches for an exact match happen. 
+//! 
+//! If exact match(es) of the hash are found, the ID chunks *n* are opened, using the ordinal position of the exact match hashes, the Strings are compared.
+//! If matched, then a match is successful.
+//! 
+//! The important storage types are:
+//! HashIndex -> Vec<(Hash, Hash Chunk Loc)> which is Vec<(u64, u64)>
+//! HashChunks -> sequentially stored as Vec<Hash> which is Vec<u64>
+//! IDChunks -> sequentially stored as Vec<lowercase ID> which is Vec<String>
+//! LocChunks -> sequentially stored as chunks of Vec<u64> but bitpacked for fast decompression
+//! HashChunkLocs -> Vec<u64> where each HashChunk is stored on disk (bitpacked)
+//! IDChunkLocs -> Vec<u64> where each IDChunk is stored on disk (bitpacked)
+//! LocChunks -> Vec<u64> where each Loc chunk is stored on disk (bitpacked)
+//! Where SeqLoc ordinal (u64) of the SeqLoc entry (To be calculated from SeqLoc blocks, which are also chunked, but outside the scope of this index)
+//! 
+//! In order to populate the Locs properly, the data is written to the file in the reverse order, thus:
+//! IDChunks followed by HashChunks followed by HashIndex
+
 use std::convert::TryFrom;
 use std::io::{Read, Seek, SeekFrom, Write};
-
-use bitpacking::{BitPacker, BitPacker8x};
+use std::hash::Hasher;
+use std::slice::Chunks;
 
 use crate::utils::{bitpack_u32, Bitpacked};
+
+use ahash::AHasher;
+use rayon::prelude::*;
+use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
+use bitpacking::{BitPacker, BitPacker8x};
+
+const DEFAULT_CHUNK_SIZE: u64 = 1024;
+
+// TODO: Test different values of...
+const MULTITHREAD_BOUNDARY: usize = 8 * 1024 * 1024;
+
+#[derive(PartialEq, Eq, Clone, Copy, bincode::Encode, bincode::Decode)]
+pub enum Hashes {
+    Ahash,      // ahash, fastq file was...  102.68 secs
+    XxHash64,   // fastq file was... 96.18
+    Xxh3Hash64, // This is not a stable hash right now. Here for future-proofing a bit...
+                // fastq file was... 91.83
+}
+
+impl Hashes {
+    pub fn hash(&self, id: &str) -> u64 {
+        match self {
+            Hashes::Ahash => {
+                let mut hasher = AHasher::new_with_keys(42, 1010);
+                hasher.write(id.as_bytes());
+                hasher.finish()
+            },
+            Hashes::XxHash64 => {
+                let mut hasher = XxHash64::with_seed(0);
+                hasher.write(id.as_bytes());
+                hasher.finish()
+            },
+            Hashes::Xxh3Hash64 => {
+                let mut hasher = Xxh3Hash64::with_seed(0);
+                hasher.write(id.as_bytes());
+                hasher.finish()
+            },
+        }
+    }
+}
+
+pub struct DualIndexBuilder {
+    pub ids: Vec<String>,
+    pub locs: Vec<u32>,
+    pub chunk_size: u64,
+    pub hasher: Hashes,
+}
+
+impl DualIndexBuilder {
+    pub fn new() -> Self {
+        Self {
+            ids: Vec::new(),
+            locs: Vec::new(),
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            hasher: Hashes::XxHash64,
+        }
+    }
+
+    pub fn with_capacity(capacity: usize) -> Self {
+        Self {
+            ids: Vec::with_capacity(capacity),
+            locs: Vec::with_capacity(capacity),
+            chunk_size: DEFAULT_CHUNK_SIZE,
+            hasher: Hashes::XxHash64,
+        }
+    }
+
+    pub fn with_hash(mut self, hash: Hashes) -> Self {
+        self.hasher = hash;
+        self
+    }
+
+    pub fn with_chunk_size(mut self, chunk_size: u64) -> Self {
+        self.chunk_size = chunk_size;
+        self
+    }
+
+    pub fn add(&mut self, id: String, loc: u32) {
+        self.ids.push(id);
+        self.locs.push(loc);
+    }
+}
+
+/// Before written to file version
+pub struct DualIndexWriter {
+    pub locs_start: u64,
+    pub chunk_size: u64,
+    pub hasher: Hashes,
+    pub hash_index: Vec<u64>,
+    pub hash_chunks: Vec<Vec<u64>>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
+    pub id_chunks: Vec<Vec<String>>, // To be sequentially stored on disk, so that only Vec<String> is decompressed
+    pub loc_chunks: Vec<Vec<u32>>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
+    pub hash_chunk_locs: Vec<u64>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
+    pub id_chunk_locs: Vec<u64>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
+    pub loc_chunk_locs: Vec<u64>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
+}
+
+// TODO: Make chunk size an option
+impl From<DualIndexBuilder> for DualIndexWriter {
+    fn from(builder: DualIndexBuilder) -> Self {
+        let len = builder.ids.len();
+
+        assert!(len <= u32::MAX as usize, "u32::MAX is the maximum number of sequences. This can be addressed if necessary, please contact Joseph directly to discuss");
+
+        let DualIndexBuilder { ids, locs, chunk_size, hasher } = builder;
+
+        let mut writer = DualIndexWriter {
+            locs_start: 0,
+            hasher: builder.hasher,
+            chunk_size: builder.chunk_size,
+            hash_index: Vec::with_capacity(len),
+            hash_chunks: Vec::with_capacity(len),
+            id_chunks: Vec::with_capacity(len),
+            loc_chunks: Vec::with_capacity(len),
+            hash_chunk_locs: Vec::with_capacity(len),
+            id_chunk_locs: Vec::with_capacity(len),
+            loc_chunk_locs: Vec::with_capacity(len),
+        };
+
+
+        // Only multithread when the data is relatively large...
+        let hashes = 
+        if len >= MULTITHREAD_BOUNDARY { 
+            builder.ids.par_iter().map(|id| {
+                writer.hasher.hash(id)
+            }).collect::<Vec<u64>>()
+        } else {
+            builder.ids.iter().map(|id| {
+                writer.hasher.hash(id)
+            }).collect::<Vec<u64>>()
+        };
+
+        let mut tuples: Vec<(u64, u32, String)> = izip!(hashes, locs, ids).collect();
+        if len >= MULTITHREAD_BOUNDARY {
+            tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        } else {
+            tuples.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        }
+
+        let mut hashes: Vec<u64> = Vec::with_capacity(len);
+        let mut locs: Vec<u32> = Vec::with_capacity(len);
+        let mut ids: Vec<String> = Vec::with_capacity(len);
+
+        for (hash, loc, id) in tuples.drain(..) {
+            hashes.push(hash);
+            locs.push(loc);
+            ids.push(id);
+        }
+
+        let chunks = (len as f64 / (chunk_size as usize) as f64).ceil() as usize;
+
+        let chunk_size = chunk_size as usize;
+
+        for i in 0..chunks {
+            let start = i * chunk_size;
+            let mut end = std::cmp::min((i + 1) * chunk_size, len);
+
+            writer.hash_index.push(hashes[i * chunk_size]);
+            writer.hash_chunks.push(hashes[start..end].to_vec());
+            writer.id_chunks.push(ids[start..end].to_vec());
+            writer.loc_chunks.push(locs[start..end].to_vec());
+        }
+
+        writer
+    }
+
+}
 
 pub struct DualIndex {
     pub locs_start: u64,

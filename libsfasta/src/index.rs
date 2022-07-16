@@ -95,12 +95,12 @@ impl Index64Builder {
                 let mut hasher = AHasher::new_with_keys(42, 1010);
                 hasher.write(id.as_bytes());
                 hasher.finish()
-            },
+            }
             Hashes::XxHash64 => {
                 let mut hasher = XxHash64::with_seed(0);
                 hasher.write(id.as_bytes());
                 hasher.finish()
-            },
+            }
             Hashes::Xxh3Hash64 => {
                 let mut hasher = Xxh3Hash64::with_seed(0);
                 hasher.write(id.as_bytes());
@@ -248,7 +248,13 @@ impl Index64 {
 
     /// Create an in-memory index from parts stored on disk
     /// Doesn't take in Bitpacked, so not sure if it works? TODO
-    pub fn from_parts(hashes: Vec<u64>, ids: Vec<String>, locs: Vec<u32>, hash: Hashes, start_loc: u32) -> Index64 {
+    pub fn from_parts(
+        hashes: Vec<u64>,
+        ids: Vec<String>,
+        locs: Vec<u32>,
+        hash: Hashes,
+        start_loc: u32,
+    ) -> Index64 {
         Index64 {
             hashes,
             locs,
@@ -324,7 +330,6 @@ impl Index64 {
 }
 
 const MINIMUM_CHUNK_SIZE: u32 = 4 * 1024 * 1024;
-
 
 /// This serves as metadata of where the index parts are stored
 #[derive(bincode::Encode, bincode::Decode)]
