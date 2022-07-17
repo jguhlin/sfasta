@@ -207,6 +207,8 @@ impl From<DualIndexBuilder> for DualIndexWriter {
         writer
     }
 
+    
+
 }
 
 pub struct DualIndex {
