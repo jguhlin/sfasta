@@ -1,4 +1,5 @@
 [workspace]
+edition = "2021"
 members = [
     "./libsfasta",
     "./sfa",
@@ -15,3 +16,6 @@ codegen-units  = 1
 
 [profile.dev]
 debug = true
+
+[profile.dev.package."*"]
+opt-level = 3

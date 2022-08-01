@@ -2,10 +2,13 @@
 name = "libsfasta"
 version = "0.0.1"
 authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
-edition = "2018"
+edition = "2021"
 
 [lib]
 crate-type = ["rlib", "dylib"]
+
+[profile.dev.package."*"]
+opt-level = 3
 
 [profile.release]
 debug = true
@@ -23,7 +26,7 @@ crossbeam = "0.8.1"
 # thincollections = "0.5.3"
 static_assertions = "1.1.0"
 bincode = { version = "2.0.0-rc.1" } #, features = ["serde"] }
-hashbrown = { version = "0.12.1" } #, features = ["serde"] }
+hashbrown = { version = "0.12.3" } #, features = ["serde"] }
 rand = "0.8.5"
 rand_core = "0.6.3"
 rand_chacha = "0.3.1"
