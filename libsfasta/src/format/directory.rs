@@ -155,6 +155,26 @@ impl Directory {
     }
 }
 
+impl bincode::Encode for Directory {
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> core::result::Result<(), bincode::error::EncodeError> {
+        let dir: DirectoryOnDisk = self.clone().into();
+        bincode::Encode::encode(&dir, encoder)?;
+        Ok(())
+    }
+}
+
+impl bincode::Decode for Directory {
+    fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> core::result::Result<Self, bincode::error::DecodeError> {
+        let dir: DirectoryOnDisk = bincode::Decode::decode(decoder)?;
+        Ok(dir.into())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

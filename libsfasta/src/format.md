@@ -70,6 +70,13 @@ ID is converted to upper case, then hashed with xxhash64. The hash is then used 
 
 The appropriate ID block is decompressed, and the ID is compared to the entered ID (case-sensitive) to prevent any hash collisions. If matched, the SeqLoc location is then decompressed from the ordinal and that is used to identify the locations of sequence, scores, masking, etc...
 
+## Dual Index
+* locs_start
+* block_locs
+* bitpacked data (many)
+* blocks_locs_loc
+* end
+
 # Previous attempt: How the Index works
 IDs are hashed and stored as Vec\<u64\>, locs are stored as Vec\<u32\> and point to the location of the seqloc data. Index.add(id, loc) -> loc is the # of the SeqLoc. SeqLocs are then divided in SEQLOCS_CHUNK_SIZE and stored.
 

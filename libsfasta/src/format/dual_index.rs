@@ -256,31 +256,35 @@ impl DualIndex {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
+        // Write the locs_start
         let bitpacked = self.bitpack();
         bincode::encode_into_std_write(&self.locs_start, &mut out_buf, bincode_config)
             .expect("Bincode error");
 
         let blocks_locs_loc_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
+        // Write the block_locs
         bincode::encode_into_std_write(&self.block_locs, &mut out_buf, bincode_config)
             .expect("Bincode error"); // this one is a dummy value
 
+        // Write the bitpacked data
         for bp in bitpacked {
             self.block_locs
                 .push(out_buf.seek(SeekFrom::Current(0)).unwrap());
-            bincode::encode_into_std_write(&bp, &mut out_buf, bincode_config)
+            bincode::encode_into_std_write(bp, &mut out_buf, bincode_config)
                 .expect("Bincode error");
         }
 
-        // Output the blocks locs
         self.blocks_locs_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
+        // Output the blocks locs loc
         bincode::encode_into_std_write(&self.blocks_locs_loc, &mut out_buf, bincode_config)
             .expect("Bincode error");
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(blocks_locs_loc_loc)).unwrap();
 
+        // Output the the end
         bincode::encode_into_std_write(&end, &mut out_buf, bincode_config).expect("Bincode error");
 
         // Go back to the end so we don't screw up other operations...
@@ -305,7 +309,6 @@ impl DualIndex {
             bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Bincode error");
 
         // File position(seek) is at the end of the DualIndex block now...
-
         di
     }
 
@@ -343,7 +346,11 @@ mod tests {
         }
 
         di.write_to_buffer(&mut out_buf);
-        let mut in_buf: Cursor<Vec<u8>> = Cursor::new(out_buf.into_inner());
+
+        // println!("{:#?}", out_buf.into_inner);
+
+        // let mut in_buf: Cursor<Vec<u8>> = Cursor::new(out_buf.into_inner());
+        let mut in_buf = out_buf;
         let di2 = DualIndex::read_from_buffer(&mut in_buf);
         assert_eq!(di.locs_start, di2.locs_start);
         assert_eq!(di.block_locs, di2.block_locs);
