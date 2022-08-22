@@ -5,9 +5,9 @@
 //! Entries are effectively String -> u64
 //! Which is Sequence ID -> byte location of SeqLoc Entry
 //!
-//! The probably poorly named dual index converts to on-disk storage as such:
+//! This probably poorly named dual-layered index converts to on-disk storage as such:
 //!
-//! IDs are lower-cased and Hashed with XxHash64
+//! IDs are lower-cased and Hashed with XxHash64 (referred to as hash)
 //! IDs are then sorted by their hash value
 //! IDs are stored in CHUNK_SIZE chunks
 //! Hashes are stored in CHUNK_SIZE chunks
@@ -38,14 +38,12 @@
 use std::convert::TryFrom;
 use std::hash::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::slice::Chunks;
 
 use crate::utils::{bitpack_u32, Bitpacked};
 
-use ahash::AHasher;
 use bitpacking::{BitPacker, BitPacker8x};
 use rayon::prelude::*;
-use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};
+use twox_hash::{XxHash64, Xxh3Hash64};
 
 const DEFAULT_CHUNK_SIZE: u64 = 1024;
 
@@ -54,27 +52,20 @@ const MULTITHREAD_BOUNDARY: usize = 8 * 1024 * 1024;
 
 #[derive(PartialEq, Eq, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub enum Hashes {
-    Ahash,    // ahash, fastq file was...  102.68 secs
-    XxHash64, // fastq file was... 96.18
-    Xxh3Hash64, // This is not a stable hash right now. Here for future-proofing a bit...
-              // fastq file was... 91.83
+    XxHash64,
+    Xxh3Hash64,
 }
 
 impl Hashes {
     pub fn hash(&self, id: &str) -> u64 {
         match self {
-            Hashes::Ahash => {
-                let mut hasher = AHasher::new_with_keys(42, 1010);
-                hasher.write(id.as_bytes());
-                hasher.finish()
-            }
             Hashes::XxHash64 => {
-                let mut hasher = XxHash64::with_seed(0);
+                let mut hasher = XxHash64::with_seed(42);
                 hasher.write(id.as_bytes());
                 hasher.finish()
             }
             Hashes::Xxh3Hash64 => {
-                let mut hasher = Xxh3Hash64::with_seed(0);
+                let mut hasher = Xxh3Hash64::with_seed(42);
                 hasher.write(id.as_bytes());
                 hasher.finish()
             }
@@ -118,6 +109,10 @@ impl DualIndexBuilder {
         self
     }
 
+    /// Add an entry to the index.
+    /// 
+    /// id: String ID
+    /// loc: u32 location of the SeqLoc entry in the file
     pub fn add(&mut self, id: String, loc: u32) {
         self.ids.push(id);
         self.locs.push(loc);
@@ -130,12 +125,12 @@ pub struct DualIndexWriter {
     pub chunk_size: u64,
     pub hasher: Hashes,
     pub hash_index: Vec<u64>,
-    pub hash_chunks: Vec<Vec<u64>>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
-    pub id_chunks: Vec<Vec<String>>, // To be sequentially stored on disk, so that only Vec<String> is decompressed
-    pub loc_chunks: Vec<Vec<u32>>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
-    pub hash_chunk_locs: Vec<u64>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
-    pub id_chunk_locs: Vec<u64>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
-    pub loc_chunk_locs: Vec<u64>, // To be sequentially stored on disk, so that only Vec<u64> is decompressed
+    pub hash_chunks: Vec<Vec<u64>>, // To be sequentially stored on disk in chunks, so that only the needed Vec<u64> is decompressed
+    pub id_chunks: Vec<Vec<String>>, // To be sequentially stored on disk in chunks, so that only Vec<String> is decompressed
+    pub loc_chunks: Vec<Vec<u32>>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
+    pub hash_chunk_locs: Vec<u64>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
+    pub id_chunk_locs: Vec<u64>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
+    pub loc_chunk_locs: Vec<u64>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
 }
 
 // TODO: Make chunk size an option
@@ -143,7 +138,7 @@ impl From<DualIndexBuilder> for DualIndexWriter {
     fn from(builder: DualIndexBuilder) -> Self {
         let len = builder.ids.len();
 
-        assert!(len <= u32::MAX as usize, "u32::MAX is the maximum number of sequences. This can be addressed if necessary, please contact Joseph directly to discuss");
+        assert!(len <= u32::MAX as usize, "u32::MAX is the maximum number of sequences. This can be addressed if necessary, please contact Joseph directly to discuss.");
 
         let DualIndexBuilder {
             ids,
@@ -165,7 +160,7 @@ impl From<DualIndexBuilder> for DualIndexWriter {
             loc_chunk_locs: Vec::with_capacity(len),
         };
 
-        // Only multithread when the data is relatively large...
+        // Only multithread hashing when the data is relatively large...
         let hashes = if len >= MULTITHREAD_BOUNDARY {
             builder
                 .ids
@@ -191,7 +186,7 @@ impl From<DualIndexBuilder> for DualIndexWriter {
         let mut locs: Vec<u32> = Vec::with_capacity(len);
         let mut ids: Vec<String> = Vec::with_capacity(len);
 
-        for (hash, loc, id) in tuples.drain(..) {
+        for (hash, loc, id) in tuples.into_iter() { //tuples.drain(..) {
             hashes.push(hash);
             locs.push(loc);
             ids.push(id);
@@ -284,7 +279,7 @@ impl DualIndex {
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(blocks_locs_loc_loc)).unwrap();
 
-        // Output the the end
+        // Output the end
         bincode::encode_into_std_write(&end, &mut out_buf, bincode_config).expect("Bincode error");
 
         // Go back to the end so we don't screw up other operations...
@@ -347,9 +342,6 @@ mod tests {
 
         di.write_to_buffer(&mut out_buf);
 
-        // println!("{:#?}", out_buf.into_inner);
-
-        // let mut in_buf: Cursor<Vec<u8>> = Cursor::new(out_buf.into_inner());
         let mut in_buf = out_buf;
         let di2 = DualIndex::read_from_buffer(&mut in_buf);
         assert_eq!(di.locs_start, di2.locs_start);

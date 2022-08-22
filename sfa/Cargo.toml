@@ -13,7 +13,7 @@ codegen-units = 1
 
 [dependencies]
 git-version = "0.3.5"
-indicatif = "0.16.2"
+indicatif = "0.17.0"
 flate2 = { version = "1.0.23", features = ["zlib-ng-compat"], default-features = false }
 hashbrown = { version = "0.12.1" } #, features = ["serde"] }
 rand = "0.8.5"

@@ -34,13 +34,13 @@ bytelines = "2.4.0"
 simdutf8 = "0.1.4"
 rayon = "1.5.3"
 itertools = "0.10.3"
-bumpalo = {version = "3.10.0", features = ["collections"]}
+bumpalo = {version = "3.11.0", features = ["collections"]}
 git-version = "0.3.5" # TODO: Print this out in the library in a version call
 core_affinity = "0.5.10" # Not used yet...
 
 # Hashers
 twox-hash = "1.6.3"
-ahash = "0.7.6"
+ahash = "0.8.0"
  
 # Compression algorithms
 lz4_flex = "0.9.3"
