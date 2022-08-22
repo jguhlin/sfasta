@@ -31,6 +31,7 @@ mod sequence_block;
 pub mod structs;
 mod types;
 mod utils;
+pub mod dual_level_index;
 
 pub use crate::fasta::*;
 pub use crate::io::*;

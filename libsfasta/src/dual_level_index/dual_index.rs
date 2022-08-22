@@ -126,7 +126,6 @@ impl DualIndexBuilder {
 
 /// Before written to file version
 pub struct DualIndexWriter {
-    pub locs_start: u64,
     pub chunk_size: u64,
     pub hasher: Hashes,
     pub hash_index: Vec<u64>,
@@ -153,7 +152,6 @@ impl From<DualIndexBuilder> for DualIndexWriter {
         } = builder;
 
         let mut writer = DualIndexWriter {
-            locs_start: 0,
             hasher: builder.hasher,
             chunk_size: builder.chunk_size,
             hash_index: Vec::with_capacity(len),
@@ -201,6 +199,7 @@ impl From<DualIndexBuilder> for DualIndexWriter {
 
         let chunk_size = chunk_size as usize;
 
+        // TODO: Put into chunks instead of .to_vec() which is likely going to make a copy...
         for i in 0..chunks {
             let start = i * chunk_size;
             let mut end = std::cmp::min((i + 1) * chunk_size, len);
@@ -212,6 +211,77 @@ impl From<DualIndexBuilder> for DualIndexWriter {
         }
 
         writer
+    }
+}
+
+impl DualIndexWriter {
+    // Writes the dual index to a buffer (usually a file)
+    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W)
+    where
+        W: Write + Seek,
+    {
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        // Write the locs_start
+        let bitpacked = self.bitpack();
+        
+        // The starting loc for all is 0, because locs are just enumerated 
+        //bincode::encode_into_std_write(&self.locs_start, &mut out_buf, bincode_config)
+        //    .expect("Bincode error");
+
+        let value_block_index_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
+        // Block Locs:
+        // u64 of the first hash in the block, u64 of the location of the block of bincoded hashes...
+        let mut value_block_index = (0..self.hash_index.len() as u32).map(|x| (x, 0)).collect::<Vec<(u32, u64)>>();
+
+        // Write the block_locs
+        // Location of value blocks (value in this case are Locations)
+        // [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0), ...]
+        bincode::encode_into_std_write(&value_block_index, &mut out_buf, bincode_config)
+            .expect("Bincode error"); // this one is a dummy value
+
+        // Write the bitpacked data (locations, aka value)
+        // [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0), ...] -- value block index
+        // [BitPackedData, BitPackedData, BitPackedData, ...] -- value blocks
+        for (i, bp) in bitpacked.into_iter().enumerate() {
+            value_block_index[i].1 = out_buf.seek(SeekFrom::Current(0)).unwrap();
+            bincode::encode_into_std_write(bp, &mut out_buf, bincode_config)
+                .expect("Bincode error");
+        }
+
+        // Go back and write the correct index
+        // [(0, 1234), (1, 2345), (2, 3456), (3, 4567), ...] -- value block index, dummy values replaced with byte location
+        // [BitPackedData, BitPackedData, BitPackedData, ...] -- value blocks
+        // -> go back to this point once finished
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        out_buf.seek(SeekFrom::Start(value_block_index_location)).unwrap();
+        bincode::encode_into_std_write(&value_block_index, &mut out_buf, bincode_config)
+            .expect("Bincode error");
+        out_buf.seek(SeekFrom::Start(end)).unwrap();
+
+
+        // Output the the end ??
+        bincode::encode_into_std_write(&end, &mut out_buf, bincode_config).expect("Bincode error");
+
+        // Go back to the end so we don't screw up other operations...
+        out_buf.seek(SeekFrom::Start(end)).unwrap();
+    }
+
+    fn bitpack(&self) -> Vec<Bitpacked> {
+        // Subtract the starting location from all the locations.
+        let locs: Vec<u64> = self.locs.iter().map(|x| x - self.locs_start).collect();
+
+        // Assert that they can all fit into a u32
+        assert!(locs.iter().max().unwrap() <= &(u32::MAX as u64), "Unexpected Edge case, too many IDs... please e-mail Joseph and I can fix this in the next release");
+
+        // Convert them all to a u32
+        let locs: Vec<u32> = locs
+            .into_iter()
+            .map(|x| u32::try_from(x).unwrap())
+            .collect();
+
+        bitpack_u32(&locs)
     }
 }
 
