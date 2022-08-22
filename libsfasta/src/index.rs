@@ -92,7 +92,7 @@ impl Index64Builder {
     pub fn add(&mut self, id: &str, loc: u32) -> Result<(), &'static str> {
         let hash = match self.hash {
             Hashes::Ahash => {
-                let mut hasher = AHasher::new_with_keys(42, 1010);
+                let mut hasher = AHasher::default();
                 hasher.write(id.as_bytes());
                 hasher.finish()
             }
@@ -202,7 +202,7 @@ impl Index64 {
         let id = id.to_lowercase();
 
         if self.hash == Hashes::Ahash {
-            let mut hasher = AHasher::new_with_keys(42, 1010);
+            let mut hasher = AHasher::default();
             hasher.write(id.as_bytes());
             hasher.finish()
         } else if self.hash == Hashes::Xxh3Hash64 {

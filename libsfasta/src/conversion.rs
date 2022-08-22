@@ -16,7 +16,7 @@ use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::fasta::*;
 use crate::format::DirectoryOnDisk;
 use crate::format::{DualIndex, Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
-use crate::index::{IDIndexer, StoredIndexPlan};
+use crate::index::StoredIndexPlan;
 use crate::structs::WriteAndSeek;
 use crate::types::*;
 use crate::utils::*;
