@@ -1,20 +1,50 @@
 /// Opens files, including compressed files (gzip or snappy)
 use std::path::Path;
+use std::fmt;
 
 use bitpacking::{BitPacker, BitPacker8x};
 
 // TODO: Test if possible to make it sorted, then make it sorted...
 // Called delta encoding, will give a bit better space and a small speed boost.
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+#[derive(bincode::Encode, bincode::Decode)]
 pub enum Packed {
     Packed(Vec<u8>),
     Remainder(Vec<u32>),
 }
 
-#[derive(Debug, bincode::Encode, bincode::Decode)]
+impl Packed {
+    pub const fn is_packed(&self) -> bool {
+        match self {
+            Packed::Packed(_) => true,
+            Packed::Remainder(_) => false,
+        }
+    }
+}
+
+impl fmt::Debug for Packed {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let packed_type = match &self {
+            Packed::Packed(_) => "Packed",
+            Packed::Remainder(_) => "Remainder",
+        };
+        write!(f, "{{ packed: {:?} }}", packed_type)
+    }
+}
+
+#[derive(bincode::Encode, bincode::Decode)]
 pub struct Bitpacked {
     num_bits: u8,
     packed: Packed,
+}
+
+impl fmt::Debug for Bitpacked {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let packed_type = match &self.packed {
+            Packed::Packed(_) => "Packed",
+            Packed::Remainder(_) => "Remainder",
+        };
+        write!(f, "Bitpacked {{ num_bits: {}, packed: {:?} }}", self.num_bits, packed_type)
+    }
 }
 
 impl Bitpacked {
@@ -52,7 +82,7 @@ pub fn unbitpack_u32(packed: Vec<Bitpacked>) -> Vec<u32> {
     unpacked
 }
 
-pub fn bitpack_u32(to_pack: &[u32]) -> Vec<Bitpacked> {
+pub fn bitpack_u32(to_pack: &[u32]) -> (u8, Vec<Packed>) {
     let bitpacker = BitPacker8x::new();
 
     let chunks = to_pack.chunks_exact(BitPacker8x::BLOCK_LEN);
@@ -61,26 +91,34 @@ pub fn bitpack_u32(to_pack: &[u32]) -> Vec<Bitpacked> {
 
     let remainder = chunks.remainder();
 
+    let mut num_bits: u8 = 0;
+
     for i in chunks {
-        let num_bits: u8 = bitpacker.num_bits(&i);
+        num_bits = std::cmp::max(num_bits, bitpacker.num_bits(i));
+    }
+
+    let chunks = to_pack.chunks_exact(BitPacker8x::BLOCK_LEN);
+
+    for i in chunks {
         let mut packed = vec![0u8; 4 * BitPacker8x::BLOCK_LEN];
-        bitpacker.compress(&i, &mut packed[..], num_bits);
-        bitpacked.push({
-            Bitpacked {
-                num_bits,
-                packed: Packed::Packed(packed), // TODO: Ew, gross...
-            }
-        });
+        bitpacker.compress(i, &mut packed[..], num_bits);
+        bitpacked.push(Packed::Packed(packed)); // Names are hard...
+            //Bitpacked {
+                //num_bits,
+                //packed: Packed::Packed(packed)
+            //}
+        // });
     }
 
     if remainder.len() > 0 {
-        bitpacked.push(Bitpacked {
+        /*bitpacked.push(Bitpacked {
             num_bits: 0,
             packed: Packed::Remainder(remainder.to_vec()),
-        });
+        }); */
+        bitpacked.push(Packed::Remainder(remainder.to_vec()));
     }
 
-    bitpacked
+    return (num_bits, bitpacked)
 }
 
 /* pub fn compress(ct: CompressionType, data: &[u8]) -> Vec<u8> {

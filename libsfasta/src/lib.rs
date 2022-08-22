@@ -17,6 +17,7 @@ mod compression_stream_buffer;
 mod conversion;
 mod dict;
 // mod directory;
+pub mod dual_level_index;
 mod fasta;
 mod fastq;
 mod format;
@@ -31,7 +32,6 @@ mod sequence_block;
 pub mod structs;
 mod types;
 mod utils;
-pub mod dual_level_index;
 
 pub use crate::fasta::*;
 pub use crate::io::*;

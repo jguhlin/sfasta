@@ -43,7 +43,7 @@ twox-hash = "1.6.3"
 ahash = "0.8.0"
  
 # Compression algorithms
-lz4_flex = "0.9.3"
+lz4_flex = "0.9.4"
 zstd = { version="0.11.2", default-features = false, features=["arrays", "legacy", "zstdmt", "experimental"] } # { git = "https://github.com/gyscos/zstd-rs", features = [ "experimental" ] }
 xz = "0.1.0"
 flate2 = { version = "1.0.24", features = ["zlib-ng-compat"], default-features = false }

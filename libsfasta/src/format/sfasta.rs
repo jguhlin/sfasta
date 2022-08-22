@@ -6,7 +6,7 @@ use rayon::prelude::*;
 
 use super::Directory;
 use super::DirectoryOnDisk;
-use crate::format::dual_index::*;
+use crate::dual_level_index::*;
 use crate::index::*;
 use crate::index_directory::IndexDirectory;
 use crate::metadata::Metadata;
@@ -31,8 +31,7 @@ pub struct Sfasta {
     pub block_locs: Option<Vec<u64>>,
     pub id_blocks_locs: Option<Vec<u64>>,
     pub seqlocs_blocks_locs: Option<Vec<u64>>,
-
-    pub ids_dual_index: Option<DualIndex>,
+    // pub ids_dual_index: Option<DualIndex>,
 }
 
 impl Default for Sfasta {
@@ -49,7 +48,7 @@ impl Default for Sfasta {
             id_blocks_locs: None,
             seqlocs_blocks_locs: None,
             index_plan: None,
-            ids_dual_index: None,
+            // ids_dual_index: None,
         }
     }
 }
@@ -87,9 +86,10 @@ impl Sfasta {
             self.buf.is_some(),
             "Sfasta buffer not yet present -- Are you creating a file?"
         );
-        let len = self.index.as_ref().unwrap().len();
+        // let len = self.index.as_ref().unwrap().len();
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let len = 1000; // TODO: Ussing to make this compile...
 
         let blocks = (len as f64 / IDX_CHUNK_SIZE as f64).ceil() as usize;
 
@@ -153,7 +153,8 @@ impl Sfasta {
 
         assert!(ids.len() == self.index.as_ref().unwrap().locs.len());
 
-        self.index.as_mut().unwrap().set_ids(ids);
+        // TODO: FIXME
+        // self.index.as_mut().unwrap().set_ids(ids);
     }
 
     pub fn find(&self, x: &str) -> Result<Option<Vec<(String, usize, u32, Vec<Loc>)>>, &str> {

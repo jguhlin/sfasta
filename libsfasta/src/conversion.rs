@@ -13,9 +13,10 @@ use std::thread::JoinHandle;
 use rayon::prelude::*;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
+use crate::dual_level_index::*;
 use crate::fasta::*;
 use crate::format::DirectoryOnDisk;
-use crate::format::{DualIndex, Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
+use crate::format::{Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
 use crate::index::StoredIndexPlan;
 use crate::structs::WriteAndSeek;
 use crate::types::*;
@@ -309,18 +310,18 @@ impl Converter {
 
         let (hashes, ids, bitpacked, hash_type, min_size) = indexer.into_parts();
 
-        let (mut plan, hash_splits, id_splits) =
-            StoredIndexPlan::plan_from_parts(&hashes, &ids, &bitpacked, hash_type, min_size);
+        //let (mut plan, hash_splits, id_splits) =
+            //StoredIndexPlan::plan_from_parts(&hashes, &ids, &bitpacked, hash_type, min_size);
 
         // FORMAT: Index Plan
         let plan_loc = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
-        bincode::encode_into_std_write(&plan, &mut out_fh, bincode_config)
-            .expect("Unable to bincode Index Plan");
+        //bincode::encode_into_std_write(&plan, &mut out_fh, bincode_config)
+            //.expect("Unable to bincode Index Plan");
 
-        for (n, part) in hash_splits.into_iter().enumerate() {
+        /*for (n, part) in hash_splits.into_iter().enumerate() {
             plan.index[n].1 = out_fh
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API");
@@ -340,7 +341,7 @@ impl Converter {
             let new_pos = out_fh
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API");
-        }
+        } */
 
         let bitpacked_loc = out_fh
             .seek(SeekFrom::Current(0))
@@ -351,8 +352,8 @@ impl Converter {
             .seek(SeekFrom::Start(plan_loc))
             .expect("Unable to seek to plan loc");
 
-        bincode::encode_into_std_write(plan, &mut out_fh, bincode_config)
-            .expect("Unable to bincode plan");
+        //bincode::encode_into_std_write(plan, &mut out_fh, bincode_config)
+            //.expect("Unable to bincode plan");
 
         // IMPORTANT: Jump back to where we were!
 
@@ -362,9 +363,9 @@ impl Converter {
 
         let mut bitpacked_dual_index = DualIndex::new(bitpacked_loc);
 
-        println!("Len: {}", bitpacked.len());
+        //println!("Len: {}", bitpacked.len());
 
-        for bp in bitpacked {
+        /*for bp in bitpacked {
             let pos = out_fh
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API");
@@ -372,10 +373,10 @@ impl Converter {
 
             bincode::encode_into_std_write(bp, &mut out_fh, bincode_config)
                 .expect("Unable to bincode index hash type");
-        }
+        }*/
 
         // TODO: Save this location to the directory...
-        bitpacked_dual_index.write_to_buffer(&mut out_fh);
+        // bitpacked_dual_index.write_to_buffer(&mut out_fh);
 
         let index_seqlocs_blocks_locs = out_fh
             .seek(SeekFrom::Current(0))
@@ -451,7 +452,7 @@ impl Converter {
             zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 3).unwrap();
 
         compressor
-            .write(&bincode::encode_to_vec(seqlocs_blocks_locs, bincode_config).unwrap())
+            .write_all(&bincode::encode_to_vec(seqlocs_blocks_locs, bincode_config).unwrap())
             .expect("Unable to write directory to file");
 
         let compressed = compressor.finish().expect("Unable to compress ID stream");

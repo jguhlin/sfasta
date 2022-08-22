@@ -34,6 +34,7 @@ fn style_pb(pb: ProgressBar) -> ProgressBar {
         .template(
             "[{spinner:.green}] {bar:30.green/yellow} {bytes:.cyan}/{total_bytes:.blue} ({eta})",
         )
+        .unwrap()
         .progress_chars("█▇▆▅▄▃▂▁  ")
         .tick_chars("ACTGN🧬");
     pb.set_style(style);

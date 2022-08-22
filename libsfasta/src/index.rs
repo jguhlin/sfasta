@@ -229,7 +229,7 @@ impl Index64 {
     /// Vet<Bitpacked> of locations.
     /// Hash type used in index
     /// Starting location (subtracted from all locations)
-    pub fn into_parts(self) -> (Vec<u64>, Vec<String>, Vec<Bitpacked>, Hashes, u32) {
+    pub fn into_parts(self) -> (Vec<u64>, Vec<String>, (u8, Vec<Packed>), Hashes, u32) {
         let hashes = self.hashes;
         let mut locs = self.locs;
         let start_loc = *locs.iter().min().unwrap();

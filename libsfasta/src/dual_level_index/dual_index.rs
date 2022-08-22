@@ -39,13 +39,14 @@ use std::convert::TryFrom;
 use std::hash::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::utils::{bitpack_u32, Bitpacked};
+use crate::utils::{bitpack_u32, Bitpacked, Packed};
 
 use bitpacking::{BitPacker, BitPacker8x};
+use bumpalo::Bump;
 use rayon::prelude::*;
 use twox_hash::{XxHash64, Xxh3Hash64};
 
-const DEFAULT_CHUNK_SIZE: u64 = 1024;
+const DEFAULT_CHUNK_SIZE: u64 = 2048;
 
 // TODO: Test different values of...
 const MULTITHREAD_BOUNDARY: usize = 8 * 1024 * 1024;
@@ -110,7 +111,7 @@ impl DualIndexBuilder {
     }
 
     /// Add an entry to the index.
-    /// 
+    ///
     /// id: String ID
     /// loc: u32 location of the SeqLoc entry in the file
     pub fn add(&mut self, id: String, loc: u32) {
@@ -126,7 +127,7 @@ pub struct DualIndexWriter {
     pub hash_index: Vec<u64>,
     pub hash_chunks: Vec<Vec<u64>>, // To be sequentially stored on disk in chunks, so that only the needed Vec<u64> is decompressed
     pub id_chunks: Vec<Vec<String>>, // To be sequentially stored on disk in chunks, so that only Vec<String> is decompressed
-    pub loc_chunks: Vec<Vec<u32>>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
+    pub locs: Vec<u32>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
     pub hash_chunk_locs: Vec<u64>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
     pub id_chunk_locs: Vec<u64>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
     pub loc_chunk_locs: Vec<u64>, // To be sequentially stored on disk in chunks, so that only Vec<u64> is decompressed
@@ -147,12 +148,12 @@ impl From<DualIndexBuilder> for DualIndexWriter {
         } = builder;
 
         let mut writer = DualIndexWriter {
-            hasher: builder.hasher,
+            hasher,
             chunk_size: builder.chunk_size,
             hash_index: Vec::with_capacity(len),
             hash_chunks: Vec::with_capacity(len),
             id_chunks: Vec::with_capacity(len),
-            loc_chunks: Vec::with_capacity(len),
+            locs: Vec::new(),
             hash_chunk_locs: Vec::with_capacity(len),
             id_chunk_locs: Vec::with_capacity(len),
             loc_chunk_locs: Vec::with_capacity(len),
@@ -160,15 +161,11 @@ impl From<DualIndexBuilder> for DualIndexWriter {
 
         // Only multithread hashing when the data is relatively large...
         let hashes = if len >= MULTITHREAD_BOUNDARY {
-            builder
-                .ids
-                .par_iter()
+            ids.par_iter()
                 .map(|id| writer.hasher.hash(id))
                 .collect::<Vec<u64>>()
         } else {
-            builder
-                .ids
-                .iter()
+            ids.iter()
                 .map(|id| writer.hasher.hash(id))
                 .collect::<Vec<u64>>()
         };
@@ -184,7 +181,8 @@ impl From<DualIndexBuilder> for DualIndexWriter {
         let mut locs: Vec<u32> = Vec::with_capacity(len);
         let mut ids: Vec<String> = Vec::with_capacity(len);
 
-        for (hash, loc, id) in tuples.into_iter() { //tuples.drain(..) {
+        for (hash, loc, id) in tuples.into_iter() {
+            //tuples.drain(..) {
             hashes.push(hash);
             locs.push(loc);
             ids.push(id);
@@ -202,8 +200,9 @@ impl From<DualIndexBuilder> for DualIndexWriter {
             writer.hash_index.push(hashes[i * chunk_size]);
             writer.hash_chunks.push(hashes[start..end].to_vec());
             writer.id_chunks.push(ids[start..end].to_vec());
-            writer.loc_chunks.push(locs[start..end].to_vec());
         }
+
+        writer.locs = locs;
 
         writer
     }
@@ -217,63 +216,134 @@ impl DualIndexWriter {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
+        // Write a dummy index header
+        let header_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        bincode::encode_into_std_write(&(0_u64), &mut out_buf, bincode_config).unwrap(); // hash_index
+        bincode::encode_into_std_write(&(0_u64), &mut out_buf, bincode_config).unwrap(); // bitpacked location
+        bincode::encode_into_std_write(&(0_u8), &mut out_buf, bincode_config).unwrap(); // num bits
+        bincode::encode_into_std_write(&(0_u64), &mut out_buf, bincode_config).unwrap(); // bitpacked len
+        bincode::encode_into_std_write(&(0_u64), &mut out_buf, bincode_config).unwrap(); // remainder loc
+
+
         // Write the locs_start
-        let bitpacked = self.bitpack();
-        
-        // The starting loc for all is 0, because locs are just enumerated 
+
+        // The starting loc for all is 0, because locs are just enumerated
         //bincode::encode_into_std_write(&self.locs_start, &mut out_buf, bincode_config)
         //    .expect("Bincode error");
 
-        let value_block_index_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let hash_index_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
         // Block Locs:
         // u64 of the first hash in the block, u64 of the location of the block of bincoded hashes...
-        let mut value_block_index = (0..self.hash_index.len() as u32).map(|x| (x, 0)).collect::<Vec<(u32, u64)>>();
+        let mut hash_block_index = self
+            .hash_index
+            .iter()
+            .map(|x| (*x, 0, 0))
+            .collect::<Vec<(u64, u64, u64)>>();
 
         // Write the block_locs
         // Location of value blocks (value in this case are Locations)
-        // [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0), ...]
-        bincode::encode_into_std_write(&value_block_index, &mut out_buf, bincode_config)
+        // Current written data is:
+        // 0 # u64 hash_index
+        // 0 # u64 bitpack location
+        // [(123, 0, 0), (234, 0, 0), (345, 0, 0), ...]
+        bincode::encode_into_std_write(&hash_block_index, &mut out_buf, bincode_config)
             .expect("Bincode error"); // this one is a dummy value
 
-        // Write the bitpacked data (locations, aka value)
-        // [(0, 0), (1, 0), (2, 0), (3, 0), (4, 0), (5, 0), (6, 0), (7, 0), (8, 0), (9, 0), ...] -- value block index
-        // [BitPackedData, BitPackedData, BitPackedData, ...] -- value blocks
-        for (i, bp) in bitpacked.into_iter().enumerate() {
-            value_block_index[i].1 = out_buf.seek(SeekFrom::Current(0)).unwrap();
-            bincode::encode_into_std_write(bp, &mut out_buf, bincode_config)
+        // Write the hash chunks
+        // Current written data is:
+        // 0 # u64 hash_index
+        // 0 # u64 bitpack location
+        // [(123, 0, 0), (234, 0, 0), (345, 0, 0), ...] -- key/id block location index (key here is the first hash value in the block)
+        // [[u64, u64, u64, u64...], [u64, u64, u64, u64...],...] // Blocks of u64 hashes...
+        // Hashes don't really compress, so we don't try...
+        for (i, chunk) in self.hash_chunks.iter().enumerate() {
+            hash_block_index[i].1 = out_buf.seek(SeekFrom::Current(0)).unwrap();
+            bincode::encode_into_std_write(&chunk, &mut out_buf, bincode_config)
                 .expect("Bincode error");
         }
 
+        // Write the hash chunks
+        // Current written data is:
+        // 0 # u64 hash_index
+        // 0 # u64 bitpack location
+        // [(123, 0, 0), (234, 0, 0), (345, 0, 0), ...] -- key/id block location index (key here is the first hash value in the block)
+        // [[u64, u64, u64, u64...], [u64, u64, u64, u64...],...] // Blocks of u64 hashes...
+        // [Vec<u8>, Vec<u8>, Vec<u8>, ...] // Blocks of compressed (lz4_flex) Strings (IDs)
+        let bump = Bump::new();
+        for (i, id_chunk) in self.id_chunks.iter().enumerate() {
+            hash_block_index[i].2 = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
+            let uncompressed =
+                bump.alloc(bincode::encode_to_vec(id_chunk, bincode_config).unwrap());
+            println!("IDs uncompressed len: {}", uncompressed.len());
+            let compressed = bump.alloc(lz4_flex::compress(uncompressed));
+            println!("IDs compressed len: {}", compressed.len());
+            bincode::encode_into_std_write(id_chunk, &mut out_buf, bincode_config)
+                .expect("Bincode error");
+        }
+        drop(bump);
+
+        // Current written data is:
+        // 0 # u64 hash_index
+        // 0 # u64 bitpack location
+        // [(123, 0, 0), (234, 0, 0), (345, 0, 0), ...] -- key/id block location index (key here is the first hash value in the block)
+        // [[u64, u64, u64, u64...], [u64, u64, u64, u64...],...] // Blocks of u64 hashes...
+        // [Vec<u8>, Vec<u8>, Vec<u8>, ...] // Blocks of compressed (lz4_flex) Strings (IDs)
+        // [Vec<u8>, Vec<u8>, Vec<u8>, ...] // Blocks of bitpacked u32 integers
+        let (num_bits, bitpacked) = self.bitpack();
+        let bitpacked_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
+        let mut bitpacked_len = 0;
+        let mut remainder_loc: u64 = 0;
+
+        // Write the bitpacked data
+        for bp in bitpacked.into_iter() {
+            remainder_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
+            let len = bincode::encode_into_std_write(&bp, &mut out_buf, bincode_config)
+                .expect("Bincode error");
+            println!("Len: {}", len);
+            if bitpacked_len == 0 && bp.is_packed() {
+                bitpacked_len = len;
+            } else if bp.is_packed() {
+                assert_eq!(bitpacked_len, len);
+            }
+        }
+
         // Go back and write the correct index
-        // [(0, 1234), (1, 2345), (2, 3456), (3, 4567), ...] -- value block index, dummy values replaced with byte location
-        // [BitPackedData, BitPackedData, BitPackedData, ...] -- value blocks
+        // Current data is:
+        // 0 # u64 hash_index
+        // 0 # u64 bitpack location
+        // [(123, 1234, 543), (234, 2345, 432), (345, 3456, 321), (456, 4567, 584), ...] -- value block index, dummy values replaced with byte location
+        // [[u64, u64, u64, u64...], [u64, u64, u64, u64...],...] // Blocks of u64 hashes...
+        // [Vec<u8>, Vec<u8>, Vec<u8>, ...] // Blocks of compressed (lz4_flex) Strings (IDs)
+        // [Vec<u8>, Vec<u8>, Vec<u8>, ...] // Blocks of bitpacked u32 integers
         // -> go back to this point once finished
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        out_buf.seek(SeekFrom::Start(value_block_index_location)).unwrap();
-        bincode::encode_into_std_write(&value_block_index, &mut out_buf, bincode_config)
+        out_buf.seek(SeekFrom::Start(hash_index_location)).unwrap();
+        bincode::encode_into_std_write(&hash_block_index, &mut out_buf, bincode_config)
             .expect("Bincode error");
         out_buf.seek(SeekFrom::Start(end)).unwrap();
 
+        // Go back and write the correct headerr
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        out_buf.seek(SeekFrom::Start(header_loc)).unwrap();
+        bincode::encode_into_std_write(&hash_index_location, &mut out_buf, bincode_config).unwrap(); // value_block_index_location
+        bincode::encode_into_std_write(&bitpacked_location, &mut out_buf, bincode_config).unwrap(); // hash_index
+        bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap(); // num_bits
+        bincode::encode_into_std_write(&bitpacked_len, &mut out_buf, bincode_config).unwrap(); // bitpacked_len
+        bincode::encode_into_std_write(&remainder_loc, &mut out_buf, bincode_config).unwrap(); // remainder_loc
 
-        // Output the the end ??
-        bincode::encode_into_std_write(&end, &mut out_buf, bincode_config).expect("Bincode error");
-
-        // Go back to the end so we don't screw up other operations...
+        // Go back to the end so we don't interfere with later operations...
         out_buf.seek(SeekFrom::Start(end)).unwrap();
     }
 
-    fn bitpack(&self) -> Vec<Bitpacked> {
+    fn bitpack(&self) -> (u8, Vec<Packed>) {
         // Subtract the starting location from all the locations.
-        let locs: Vec<u64> = self.locs.iter().map(|x| x - self.locs_start).collect();
-
-        // Assert that they can all fit into a u32
-        assert!(locs.iter().max().unwrap() <= &(u32::MAX as u64), "Unexpected Edge case, too many IDs... please e-mail Joseph and I can fix this in the next release");
-
-        // Convert them all to a u32
-        let locs: Vec<u32> = locs
-            .into_iter()
-            .map(|x| u32::try_from(x).unwrap())
+        let locs: Vec<u32> = self
+            .locs
+            .iter()
+            .map(|x| *x - *self.locs.iter().min().unwrap() as u32)
             .collect();
 
         bitpack_u32(&locs)
@@ -299,7 +369,7 @@ impl DualIndex {
         }
     }
 
-    pub fn bitpack(&self) -> Vec<Bitpacked> {
+    pub fn bitpack(&self) -> (u8, Vec<Packed>) {
         // Subtract the starting location from all the locations.
         let locs: Vec<u64> = self.locs.iter().map(|x| x - self.locs_start).collect();
 
@@ -313,47 +383,6 @@ impl DualIndex {
             .collect();
 
         bitpack_u32(&locs)
-    }
-
-    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W)
-    where
-        W: Write + Seek,
-    {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-        // Write the locs_start
-        let bitpacked = self.bitpack();
-        bincode::encode_into_std_write(&self.locs_start, &mut out_buf, bincode_config)
-            .expect("Bincode error");
-
-        let blocks_locs_loc_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
-
-        // Write the block_locs
-        bincode::encode_into_std_write(&self.block_locs, &mut out_buf, bincode_config)
-            .expect("Bincode error"); // this one is a dummy value
-
-        // Write the bitpacked data
-        for bp in bitpacked {
-            self.block_locs
-                .push(out_buf.seek(SeekFrom::Current(0)).unwrap());
-            bincode::encode_into_std_write(bp, &mut out_buf, bincode_config)
-                .expect("Bincode error");
-        }
-
-        self.blocks_locs_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
-
-        // Output the blocks locs loc
-        bincode::encode_into_std_write(&self.blocks_locs_loc, &mut out_buf, bincode_config)
-            .expect("Bincode error");
-
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        out_buf.seek(SeekFrom::Start(blocks_locs_loc_loc)).unwrap();
-
-        // Output the end
-        bincode::encode_into_std_write(&end, &mut out_buf, bincode_config).expect("Bincode error");
-
-        // Go back to the end so we don't screw up other operations...
-        out_buf.seek(SeekFrom::Start(end)).unwrap();
     }
 
     pub fn read_from_buffer<R>(mut in_buf: &mut R) -> Self
@@ -400,23 +429,32 @@ impl DualIndex {
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use rand::Rng;
 
     #[test]
-    pub fn test_dual_index() {
+    pub fn test_dual_index_builder() {
         let mut out_buf: Cursor<Vec<u8>> = Cursor::new(Vec::new());
-        let mut di = DualIndex::new(0);
+        let mut di = DualIndexBuilder::new();
 
-        for i in (0_u64..10000).step_by(2) {
-            di.locs.push(i);
+        let mut rng = rand::thread_rng();
+
+        for i in (0_u64..10000) {
+            di.add(i.to_string(), (i * 2) as u32);
         }
 
-        di.write_to_buffer(&mut out_buf);
+        for i in (0_u64..10000).step_by(2) {
+            di.add(i.to_string(), rng.gen::<u32>());
+        }
 
-        let mut in_buf = out_buf;
-        let di2 = DualIndex::read_from_buffer(&mut in_buf);
-        assert_eq!(di.locs_start, di2.locs_start);
-        assert_eq!(di.block_locs, di2.block_locs);
-        assert_eq!(di.blocks_locs_loc, di2.blocks_locs_loc);
-        assert_eq!(di.find_loc(&mut in_buf, 1000), 2000);
+        di.add("Max".to_string(), std::u32::MAX);
+
+        for i in (0_u64..1000).step_by(2) {
+            di.add(i.to_string(), rng.gen::<u32>());
+        }
+
+        let mut writer: DualIndexWriter = di.into();
+        writer.write_to_buffer(&mut out_buf);
+        println!("{:#?}", out_buf.into_inner().len());
+        panic!();
     }
 }
