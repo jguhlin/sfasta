@@ -311,7 +311,7 @@ impl Converter {
         let (hashes, ids, bitpacked, hash_type, min_size) = indexer.into_parts();
 
         //let (mut plan, hash_splits, id_splits) =
-            //StoredIndexPlan::plan_from_parts(&hashes, &ids, &bitpacked, hash_type, min_size);
+        //StoredIndexPlan::plan_from_parts(&hashes, &ids, &bitpacked, hash_type, min_size);
 
         // FORMAT: Index Plan
         let plan_loc = out_fh
@@ -319,7 +319,7 @@ impl Converter {
             .expect("Unable to work with seek API");
 
         //bincode::encode_into_std_write(&plan, &mut out_fh, bincode_config)
-            //.expect("Unable to bincode Index Plan");
+        //.expect("Unable to bincode Index Plan");
 
         /*for (n, part) in hash_splits.into_iter().enumerate() {
             plan.index[n].1 = out_fh
@@ -353,7 +353,7 @@ impl Converter {
             .expect("Unable to seek to plan loc");
 
         //bincode::encode_into_std_write(plan, &mut out_fh, bincode_config)
-            //.expect("Unable to bincode plan");
+        //.expect("Unable to bincode plan");
 
         // IMPORTANT: Jump back to where we were!
 
@@ -361,7 +361,7 @@ impl Converter {
             .seek(SeekFrom::Start(bitpacked_loc))
             .expect("Unable to work with seek API");
 
-        let mut bitpacked_dual_index = DualIndex::new(bitpacked_loc);
+        let mut bitpacked_dual_index = DualIndexBuilder::new();
 
         //println!("Len: {}", bitpacked.len());
 

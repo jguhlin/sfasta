@@ -1,6 +1,6 @@
+use std::fmt;
 /// Opens files, including compressed files (gzip or snappy)
 use std::path::Path;
-use std::fmt;
 
 use bitpacking::{BitPacker, BitPacker8x};
 
@@ -17,6 +17,18 @@ impl Packed {
         match self {
             Packed::Packed(_) => true,
             Packed::Remainder(_) => false,
+        }
+    }
+
+    pub fn unpack(&self, num_bits: u8) -> Vec<u32> {
+        match self {
+            Packed::Packed(packed) => {
+                let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
+                let bitpacker = BitPacker8x::new();
+                bitpacker.decompress(&packed, &mut decompressed[..], num_bits);
+                decompressed
+            }
+            Packed::Remainder(remainder) => remainder.clone(),
         }
     }
 }
@@ -43,7 +55,11 @@ impl fmt::Debug for Bitpacked {
             Packed::Packed(_) => "Packed",
             Packed::Remainder(_) => "Remainder",
         };
-        write!(f, "Bitpacked {{ num_bits: {}, packed: {:?} }}", self.num_bits, packed_type)
+        write!(
+            f,
+            "Bitpacked {{ num_bits: {}, packed: {:?} }}",
+            self.num_bits, packed_type
+        )
     }
 }
 
@@ -103,11 +119,11 @@ pub fn bitpack_u32(to_pack: &[u32]) -> (u8, Vec<Packed>) {
         let mut packed = vec![0u8; 4 * BitPacker8x::BLOCK_LEN];
         bitpacker.compress(i, &mut packed[..], num_bits);
         bitpacked.push(Packed::Packed(packed)); // Names are hard...
-            //Bitpacked {
-                //num_bits,
-                //packed: Packed::Packed(packed)
-            //}
-        // });
+                                                //Bitpacked {
+                                                //num_bits,
+                                                //packed: Packed::Packed(packed)
+                                                //}
+                                                // });
     }
 
     if remainder.len() > 0 {
@@ -118,7 +134,7 @@ pub fn bitpack_u32(to_pack: &[u32]) -> (u8, Vec<Packed>) {
         bitpacked.push(Packed::Remainder(remainder.to_vec()));
     }
 
-    return (num_bits, bitpacked)
+    return (num_bits, bitpacked);
 }
 
 /* pub fn compress(ct: CompressionType, data: &[u8]) -> Vec<u8> {
