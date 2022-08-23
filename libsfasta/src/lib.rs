@@ -21,7 +21,7 @@ pub mod dual_level_index;
 mod fasta;
 mod fastq;
 mod format;
-pub mod index;
+// pub mod index;
 mod index_directory;
 mod io;
 mod metadata;

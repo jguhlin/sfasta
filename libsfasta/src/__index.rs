@@ -1,3 +1,5 @@
+// TODO: I believe this is now obsolete...
+
 use ahash::AHasher;
 use rayon::prelude::*;
 use twox_hash::{XxHash32, XxHash64, Xxh3Hash64};

@@ -344,9 +344,6 @@ fn convert(
     // converter = converter.with_dict(dict);
 
     converter = converter.with_block_size(block_size as usize * 1024);
-
-    converter = converter.with_index_chunk_size(index_chunk_size as usize);
-
     converter = converter.with_seqlocs_chunk_size(seqlocs_chunk_size as usize);
 
     if noindex {

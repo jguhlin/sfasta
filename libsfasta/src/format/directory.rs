@@ -10,11 +10,6 @@ pub struct DirectoryOnDisk {
     pub seqlocs_loc: u64,
     pub scores_loc: u64,
     pub masking_loc: u64,
-    pub index_seqlocs_blocks_locs: u64,
-    pub id_blocks_index_loc: u64,
-    pub seqloc_blocks_index_loc: u64,
-    pub index_plan_loc: u64,
-    pub index_bitpacked_loc: u64,
 }
 
 impl From<Directory> for DirectoryOnDisk {
@@ -44,26 +39,6 @@ impl From<Directory> for DirectoryOnDisk {
                 Some(loc) => loc.get(),
                 None => 0,
             },
-            id_blocks_index_loc: match dir.id_blocks_index_loc {
-                Some(loc) => loc.get(),
-                None => 0,
-            },
-            seqloc_blocks_index_loc: match dir.seqloc_blocks_index_loc {
-                Some(loc) => loc.get(),
-                None => 0,
-            },
-            index_plan_loc: match dir.index_plan_loc {
-                Some(loc) => loc.get(),
-                None => 0,
-            },
-            index_bitpacked_loc: match dir.index_bitpacked_loc {
-                Some(loc) => loc.get(),
-                None => 0,
-            },
-            index_seqlocs_blocks_locs: match dir.index_seqlocs_blocks_locs {
-                Some(loc) => loc.get(),
-                None => 0,
-            },
         }
     }
 }
@@ -78,11 +53,6 @@ pub struct Directory {
     pub seqlocs_loc: Option<NonZeroU64>,
     pub scores_loc: Option<NonZeroU64>,
     pub masking_loc: Option<NonZeroU64>,
-    pub id_blocks_index_loc: Option<NonZeroU64>,
-    pub seqloc_blocks_index_loc: Option<NonZeroU64>,
-    pub index_plan_loc: Option<NonZeroU64>,
-    pub index_bitpacked_loc: Option<NonZeroU64>,
-    pub index_seqlocs_blocks_locs: Option<NonZeroU64>,
     // TODO: Add pangenome stuff
 }
 
@@ -95,11 +65,6 @@ impl From<DirectoryOnDisk> for Directory {
             seqlocs_loc: NonZeroU64::new(dir.seqlocs_loc),
             scores_loc: NonZeroU64::new(dir.scores_loc),
             masking_loc: NonZeroU64::new(dir.masking_loc),
-            id_blocks_index_loc: NonZeroU64::new(dir.id_blocks_index_loc),
-            seqloc_blocks_index_loc: NonZeroU64::new(dir.seqloc_blocks_index_loc),
-            index_plan_loc: NonZeroU64::new(dir.index_plan_loc),
-            index_bitpacked_loc: NonZeroU64::new(dir.index_bitpacked_loc),
-            index_seqlocs_blocks_locs: NonZeroU64::new(dir.index_seqlocs_blocks_locs),
         }
     }
 }
@@ -113,11 +78,6 @@ impl Default for Directory {
             seqlocs_loc: None,
             scores_loc: None,
             masking_loc: None,
-            id_blocks_index_loc: None,
-            seqloc_blocks_index_loc: None,
-            index_bitpacked_loc: None,
-            index_plan_loc: None,
-            index_seqlocs_blocks_locs: None,
         }
     }
 }
@@ -135,7 +95,6 @@ impl Directory {
 
     pub fn with_index(mut self) -> Self {
         self.index_loc = NonZeroU64::new(1);
-        self.id_blocks_index_loc = NonZeroU64::new(1);
         self
     }
 
@@ -146,12 +105,8 @@ impl Directory {
 
     pub fn dummy(&mut self) {
         // Dummy values...
-        self.seqloc_blocks_index_loc = NonZeroU64::new(std::u64::MAX);
-        self.id_blocks_index_loc = NonZeroU64::new(std::u64::MAX);
         self.index_loc = NonZeroU64::new(std::u64::MAX);
         self.ids_loc = NonZeroU64::new(std::u64::MAX);
-        self.index_plan_loc = NonZeroU64::new(std::u64::MAX);
-        self.index_bitpacked_loc = NonZeroU64::new(std::u64::MAX);
     }
 }
 
@@ -204,11 +159,6 @@ mod tests {
             seqlocs_loc: None,
             scores_loc: None,
             masking_loc: None,
-            id_blocks_index_loc: None,
-            seqloc_blocks_index_loc: None,
-            index_bitpacked_loc: None,
-            index_plan_loc: None,
-            index_seqlocs_blocks_locs: None,
         };
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();

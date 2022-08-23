@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::io::prelude::*;
 
-use crate::index::Hashes;
+// use crate::index::Hashes;
 use crate::utils::Bitpacked;
 
 // SuperTrait -- needed for pyO3

@@ -51,7 +51,7 @@ const DEFAULT_CHUNK_SIZE: u64 = 2048;
 // TODO: Test different values of...
 const MULTITHREAD_BOUNDARY: usize = 8 * 1024 * 1024;
 
-#[derive(PartialEq, Eq, Clone, Copy, bincode::Encode, bincode::Decode)]
+#[derive(PartialEq, Eq, Clone, Copy, bincode::Encode, bincode::Decode, Debug)]
 pub enum Hashes {
     XxHash64,
     Xxh3Hash64,
@@ -203,6 +203,7 @@ impl DualIndexWriter {
 
         // Write a dummy index header
         let header_loc = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        bincode::encode_into_std_write(&len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.hasher, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config).unwrap(); // Chunk size
         bincode::encode_into_std_write(&(0_u64), &mut out_buf, bincode_config).unwrap(); // hash_index
@@ -319,6 +320,7 @@ impl DualIndexWriter {
         // Go back and write the correct headerr
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(header_loc)).unwrap();
+        bincode::encode_into_std_write(&len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.hasher, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config).unwrap(); // Chunk size
         bincode::encode_into_std_write(&hash_index_location, &mut out_buf, bincode_config).unwrap(); // value_block_index_location
@@ -343,6 +345,7 @@ impl DualIndexWriter {
     }
 }
 
+#[derive(Debug)]
 pub struct DualIndex {
     pub idx_start: u64,
     pub chunk_size: u64,
@@ -353,6 +356,7 @@ pub struct DualIndex {
     pub remainder_loc: u64,
     pub value_block_index: Option<Vec<(u64, u64, u64)>>,
     pub hasher: Hashes,
+    pub len: usize,
 }
 
 impl DualIndex {
@@ -363,6 +367,7 @@ impl DualIndex {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         in_buf.seek(SeekFrom::Start(idx_start)).unwrap();
+        let len: usize = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
         let hasher: Hashes = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
         let chunk_size: u64 = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
         let hash_index = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
@@ -381,6 +386,7 @@ impl DualIndex {
             remainder_loc,
             value_block_index: None,
             hasher,
+            len,
         }
     }
 
@@ -501,6 +507,16 @@ impl DualIndex {
         let chunk: Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
         return chunk;
+    }
+
+    pub fn len(&self) -> usize 
+    {
+        self.len
+    }
+
+    pub fn is_empty(&self) -> bool
+    {
+        self.len == 0
     }
 
     pub fn get_by_id<R>(&mut self, mut in_buf: &mut R, id: &str) -> Option<u32>

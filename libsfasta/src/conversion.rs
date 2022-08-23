@@ -17,7 +17,6 @@ use crate::dual_level_index::*;
 use crate::fasta::*;
 use crate::format::DirectoryOnDisk;
 use crate::format::{Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
-use crate::index::StoredIndexPlan;
 use crate::structs::WriteAndSeek;
 use crate::types::*;
 use crate::utils::*;
@@ -28,11 +27,9 @@ pub struct Converter {
     index: bool,
     threads: usize,
     block_size: usize,
-    index_chunk_size: usize,
     seqlocs_chunk_size: usize,
     quality_scores: bool,
     compression_type: CompressionType,
-    index_compression_type: CompressionType,
     dict: Option<Vec<u8>>,
 }
 
@@ -40,10 +37,8 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 8 * 1024 * 1024,    // 8Mb
-            index_chunk_size: 128 * 1024,   // 128k
-            seqlocs_chunk_size: 128 * 1024, // 128k
-            index_compression_type: CompressionType::ZSTD,
+            block_size: 4 * 1024 * 1024,    // 4Mb
+            seqlocs_chunk_size: 256 * 1024, // 256k
             index: true,
             masking: false,
             quality_scores: false,
@@ -96,16 +91,6 @@ impl Converter {
         );
 
         self.block_size = block_size;
-        self
-    }
-
-    pub fn with_index_chunk_size(mut self, chunk_size: usize) -> Self {
-        assert!(
-            chunk_size < u32::MAX as usize,
-            "Chunk size must be less than u32::MAX (~4Gb)"
-        );
-
-        self.index_chunk_size = chunk_size;
         self
     }
 
@@ -180,8 +165,6 @@ impl Converter {
         }
 
         sfasta.parameters.compression_type = self.compression_type;
-        sfasta.parameters.index_compression_type = self.index_compression_type;
-        sfasta.parameters.index_chunk_size = self.index_chunk_size as u32;
         sfasta.parameters.seqlocs_chunk_size = self.seqlocs_chunk_size as u32;
 
         // Set dummy values for the directory
@@ -210,7 +193,6 @@ impl Converter {
         // out_buffer
         let (seq_locs, block_index_pos, mut _in_buf, mut out_buf) =
             write_fasta_sequence(sb, in_buf, out_buf);
-        //write_fasta_sequence(sb, Arc::clone(&in_buf), Arc::clone(&out_buf));
 
         // TODO: Here is where we would write out the scores...
         // ... but this fn is only for FASTA right now...
@@ -220,11 +202,7 @@ impl Converter {
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
-        let mut indexer = crate::index::Index64Builder::with_capacity(seq_locs.len()).with_ids();
-        let mut indexer_final = None;
-
-        // Write out the sequence locs...
-        //         let seq_locs: Vec<(Cow<str>, Location)> = reader_handle.join().unwrap();
+        let mut indexer = crate::dual_level_index::DualIndexBuilder::with_capacity(seq_locs.len());
 
         let seqlocs_loc = out_buf
             .seek(SeekFrom::Current(0))
@@ -249,14 +227,16 @@ impl Converter {
 
         let to_index = Arc::clone(&seq_locs);
 
+        let mut id_index_pos = 0;
+
         thread::scope(|s| {
             let index_handle = Some(s.spawn(|_| {
-                println!("{:#?}", to_index.len());
 
                 for (i, (id, _)) in to_index.iter().enumerate() {
-                    indexer.add(id, i as u32).expect("Unable to add to index");
+                    indexer.add(id.clone(), i as u32);
                 }
 
+                let indexer: DualIndexWriter = indexer.into();
                 indexer
             }));
 
@@ -285,187 +265,18 @@ impl Converter {
                     .expect("Unable to write Sequence Blocks to file");
             }
 
-            if let Some(indexerh) = index_handle {
-                indexer_final = Some(indexerh.join().unwrap());
-                println!("Got indexer_final");
-            } else {
-                // TODO: This should never be called... it's here to make the compiler happy
-                // indexer = crate::index::Index64::with_capacity(1);
-                unreachable!();
+            if self.index {
+                id_index_pos = out_fh
+                    .seek(SeekFrom::Current(0))
+                    .expect("Unable to work with seek API");
+                
+                let mut index = index_handle.unwrap().join().unwrap();
+                index.write_to_buffer(&mut out_fh);
             }
         })
         .expect("Error");
 
-        println!("Finalizing...");
-
-        let mut indexer = indexer_final.unwrap().finalize();
-        println!("Finalizing...Done");
-
-        // ID Index
-        let id_index_pos = out_fh
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
-
-        let ids = indexer.ids.take().unwrap();
-
-        let (hashes, ids, bitpacked, hash_type, min_size) = indexer.into_parts();
-
-        //let (mut plan, hash_splits, id_splits) =
-        //StoredIndexPlan::plan_from_parts(&hashes, &ids, &bitpacked, hash_type, min_size);
-
-        // FORMAT: Index Plan
-        let plan_loc = out_fh
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
-
-        //bincode::encode_into_std_write(&plan, &mut out_fh, bincode_config)
-        //.expect("Unable to bincode Index Plan");
-
-        /*for (n, part) in hash_splits.into_iter().enumerate() {
-            plan.index[n].1 = out_fh
-                .seek(SeekFrom::Current(0))
-                .expect("Unable to work with seek API");
-
-            let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(16 * 1024 * 1024), -9).unwrap();
-
-            let part = part.to_vec();
-
-            bincode::encode_into_std_write(part, &mut compressor, bincode_config)
-                .expect("Unable to bincode index to compressor");
-            let compressed = compressor.finish().unwrap();
-
-            bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
-                .expect("Unable to bincode compressed hashes");
-
-            let new_pos = out_fh
-                .seek(SeekFrom::Current(0))
-                .expect("Unable to work with seek API");
-        } */
-
-        let bitpacked_loc = out_fh
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
-
-        // Re-write Plan since it now has indexes...
-        out_fh
-            .seek(SeekFrom::Start(plan_loc))
-            .expect("Unable to seek to plan loc");
-
-        //bincode::encode_into_std_write(plan, &mut out_fh, bincode_config)
-        //.expect("Unable to bincode plan");
-
-        // IMPORTANT: Jump back to where we were!
-
-        out_fh
-            .seek(SeekFrom::Start(bitpacked_loc))
-            .expect("Unable to work with seek API");
-
-        let mut bitpacked_dual_index = DualIndexBuilder::new();
-
-        //println!("Len: {}", bitpacked.len());
-
-        /*for bp in bitpacked {
-            let pos = out_fh
-                .seek(SeekFrom::Current(0))
-                .expect("Unable to work with seek API");
-            bitpacked_dual_index.locs.push(pos);
-
-            bincode::encode_into_std_write(bp, &mut out_fh, bincode_config)
-                .expect("Unable to bincode index hash type");
-        }*/
-
-        // TODO: Save this location to the directory...
-        // bitpacked_dual_index.write_to_buffer(&mut out_fh);
-
-        let index_seqlocs_blocks_locs = out_fh
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
-
-        let ids_loc = out_fh
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
-
-        let mut ids_blocks_locs: Vec<u64> = Vec::with_capacity(ids.len() / IDX_CHUNK_SIZE);
-
-        let compressed_blocks = ids
-            .chunks(IDX_CHUNK_SIZE)
-            .collect::<Vec<&[String]>>()
-            .par_iter()
-            .map(|&chunk| {
-                // let output: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
-                // let mut compressor = lz4_flex::frame::FrameEncoder::new(output);
-                let mut compressor =
-                    zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 11).unwrap();
-
-                compressor.write(
-                    &bincode::encode_to_vec(Vec::from(chunk), bincode_config)
-                        .expect("Unable to write chunk to compressor"),
-                );
-
-                compressor.finish().expect("Unable to compress ID stream")
-            })
-            .collect::<Vec<Vec<u8>>>();
-
-        for block in compressed_blocks.into_iter() {
-            let pos = out_fh
-                .seek(SeekFrom::Current(0))
-                .expect("Unable to work with seek API");
-
-            ids_blocks_locs.push(pos);
-
-            bincode::encode_into_std_write(block, &mut out_fh, bincode_config)
-                .expect("Unable to write directory to file");
-        }
-
-        // ID Block Locs
-
-        let id_blocks_index_loc = out_fh
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
-
-        let ids_blocks_locs: Vec<u64> = ids_blocks_locs.into_iter().map(|x| x - ids_loc).collect();
-
-        // TODO: Handle this pre-emptively with a flag or something...
-        assert!(ids_blocks_locs.iter().max().unwrap() <= &(u32::MAX as u64), "Edge case, too many IDs... please e-mail Joseph and I can fix this in the next release");
-        let ids_blocks_locs: Vec<u32> = ids_blocks_locs
-            .into_iter()
-            .map(|x| u32::try_from(x).unwrap())
-            .collect();
-
-        let bitpacked = bitpack_u32(&ids_blocks_locs);
-
-        bincode::encode_into_std_write(bitpacked, &mut out_fh, bincode_config)
-            .expect("Unable to write directory to file");
-
-        // SeqLoc Blocks Locs
-        let seqloc_blocks_index_loc = out_fh
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
-
-        let seqlocs_blocks_locs: Vec<u64> = seqlocs_blocks_locs
-            .into_iter()
-            .map(|x| x - seqlocs_loc)
-            .collect();
-
-        let mut compressor =
-            zstd::stream::Encoder::new(Vec::with_capacity(4 * 1024 * 1024), 3).unwrap();
-
-        compressor
-            .write_all(&bincode::encode_to_vec(seqlocs_blocks_locs, bincode_config).unwrap())
-            .expect("Unable to write directory to file");
-
-        let compressed = compressor.finish().expect("Unable to compress ID stream");
-
-        bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
-            .expect("Unable to write directory to file");
-
-        sfasta.directory.seqloc_blocks_index_loc = NonZeroU64::new(seqloc_blocks_index_loc);
-        sfasta.directory.id_blocks_index_loc = NonZeroU64::new(id_blocks_index_loc);
         sfasta.directory.index_loc = NonZeroU64::new(id_index_pos);
-        sfasta.directory.ids_loc = NonZeroU64::new(ids_loc);
-        sfasta.directory.index_plan_loc = NonZeroU64::new(plan_loc);
-        sfasta.directory.index_bitpacked_loc = NonZeroU64::new(bitpacked_loc);
 
         // TODO: Scores Block Index
 
