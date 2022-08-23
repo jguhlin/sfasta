@@ -333,13 +333,13 @@ impl DualIndexWriter {
 
     fn bitpack(&self) -> (u8, Vec<Packed>) {
         // Subtract the starting location from all the locations.
-        let locs: Vec<u32> = self
-            .locs
-            .iter()
-            .map(|x| *x - *self.locs.iter().min().unwrap() as u32)
-            .collect();
+        //let locs: Vec<u32> = self
+        //.locs
+        //.iter()
+        //.map(|x| *x - *self.locs.iter().min().unwrap() as u32)
+        //.collect();
 
-        bitpack_u32(&locs)
+        bitpack_u32(&self.locs)
     }
 }
 
@@ -401,12 +401,9 @@ impl DualIndex {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        println!("Loading index");
         if self.value_block_index.is_none() {
             self.load_index(&mut in_buf);
         }
-
-        println!("Idx Loaded");
 
         let mut ids = Vec::with_capacity(
             self.value_block_index.as_ref().unwrap().len() * self.chunk_size as usize,
@@ -429,23 +426,27 @@ impl DualIndex {
 
     fn get_putative_block(&self, hash: u64) -> Option<(usize, u64, u64)> {
         let vbi = self.value_block_index.as_ref().unwrap();
-        if vbi.len() == 0 {
+        if vbi.is_empty() {
             return Some((0, vbi[0].1, vbi[0].2));
         }
-
-        println!("Hash: {}", hash);
 
         // TODO: Make this a better binary search....
         // TODO: It looks like Vec's binary_search_by would give us the correct answer!
 
         let find = vbi.binary_search_by(|&(h, _, _)| {
+            h.cmp(&hash)
+            /*            match h.cmp(&hash) {
+                Ordering::Equal => Ordering::Equal,
+                std::Ordering::Less => Ordering::Greater,
+                std::cmp::Ordering::Greater => Ordering::Less,
+            }
             if h > hash {
                 std::cmp::Ordering::Greater
             } else if h < hash {
                 std::cmp::Ordering::Less
             } else {
                 std::cmp::Ordering::Equal
-            }
+            } */
         });
 
         match find {
@@ -478,7 +479,9 @@ impl DualIndex {
         let compressed: Vec<u8> =
             bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
         let decompressed = lz4_flex::decompress_size_prepended(&compressed).unwrap();
-        bincode::decode_from_slice(&decompressed[..], bincode_config).unwrap().0
+        bincode::decode_from_slice(&decompressed[..], bincode_config)
+            .unwrap()
+            .0
     }
 
     pub fn get_bitpacked_chunk_by_pos<R>(&self, mut in_buf: R, pos: usize) -> Packed
@@ -496,8 +499,8 @@ impl DualIndex {
         }
 
         let chunk: Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        
-        return chunk
+
+        return chunk;
     }
 
     pub fn get_by_id<R>(&mut self, mut in_buf: &mut R, id: &str) -> Option<u32>
@@ -532,71 +535,14 @@ impl DualIndex {
             return None;
         }
 
-        println!("Pos: {}", pos.unwrap());
-
         let actual_loc = pos.unwrap() as usize + block_num * self.chunk_size as usize;
         let bp = self.get_bitpacked_chunk_by_pos(&mut in_buf, actual_loc);
         let value = bp.unpack(self.num_bits);
 
         let bitpacked_pos = (actual_loc % BitPacker8x::BLOCK_LEN);
 
-        println!("Contains: {:#?}", value.contains(&std::u32::MAX));
-
-        let bp = self.get_bitpacked_chunk_by_pos(&mut in_buf, actual_loc - 1);
-        let value = bp.unpack(self.num_bits);
-        println!("Contains: {:#?}", value.contains(&std::u32::MAX));
-
-        let bp = self.get_bitpacked_chunk_by_pos(&mut in_buf, actual_loc + 1);
-        let value = bp.unpack(self.num_bits);
-        println!("Contains: {:#?}", value.contains(&std::u32::MAX));
-
-        let bp = self.get_bitpacked_chunk_by_pos(&mut in_buf, actual_loc - 2);
-        let value = bp.unpack(self.num_bits);
-        println!("Contains: {:#?}", value.contains(&std::u32::MAX));
-
-
         Some(value[bitpacked_pos])
     }
-
-    /*
-    pub fn read_from_buffer<R>(mut in_buf: &mut R) -> Self
-    where
-        R: Read + Seek,
-    {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-        let locs_start: u64 =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Bincode error");
-        let mut di = DualIndex::new(locs_start);
-        di.on_disk = true;
-        di.blocks_locs_loc =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Bincode error");
-
-        in_buf.seek(SeekFrom::Start(di.blocks_locs_loc)).unwrap();
-        di.block_locs =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Bincode error");
-
-        // File position(seek) is at the end of the DualIndex block now...
-        di
-    }
-
-    pub fn find_loc<R>(&self, mut buf: &mut R, pos: usize) -> u64
-    where
-        R: Read + Seek,
-    {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-        let block_idx = pos / BitPacker8x::BLOCK_LEN;
-        let block_inner_loc = pos % BitPacker8x::BLOCK_LEN;
-        buf.seek(SeekFrom::Start(self.block_locs[block_idx]))
-            .unwrap();
-
-        let bp: Bitpacked =
-            bincode::decode_from_std_read(&mut buf, bincode_config).expect("Bincode error");
-
-        let block = bp.decompress();
-        self.locs_start + block[block_inner_loc] as u64
-    }*/
 }
 
 #[cfg(test)]
@@ -658,6 +604,5 @@ mod tests {
         assert_eq!(Some(std::u32::MAX), reader.get_by_id(&mut in_buf, "Max"));
 
         // TODO: Some more tests....
-
     }
 }
