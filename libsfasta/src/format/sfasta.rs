@@ -122,13 +122,10 @@ impl Sfasta {
     }
 
     pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str> {
-        assert!(
-            self.index.is_some(),
-            "Sfasta index not present"
-        );
+        assert!(self.index.is_some(), "Sfasta index not present");
 
         let idx = self.index.as_mut().unwrap();
-        let mut buf = &mut * self.buf.as_ref().unwrap().write().unwrap();
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let found = idx.find(&mut buf, x);
         let seqlocs = self.seqlocs.as_ref().unwrap();
 
@@ -250,7 +247,7 @@ impl SfastaParser {
         // TODO: Handle no index
         sfasta.index = Some(DualIndex::new(
             &mut in_buf,
-            sfasta.directory.index_loc.unwrap().get(),           
+            sfasta.directory.index_loc.unwrap().get(),
         ));
 
         if sfasta.directory.seqlocs_loc.is_some() {
@@ -334,7 +331,9 @@ mod tests {
         let output = &sfasta.find("needle_last").unwrap().unwrap();
         assert!(output.id == "needle_last");
 
-        let sequence = sfasta.get_sequence(&output.sequence.as_ref().unwrap()).unwrap();
+        let sequence = sfasta
+            .get_sequence(&output.sequence.as_ref().unwrap())
+            .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
         assert!("ACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATA" == sequence);
     }
@@ -366,7 +365,9 @@ mod tests {
         let output = &sfasta.find("test3").unwrap().unwrap();
         assert!(output.id == "test3");
 
-        let sequence = sfasta.get_sequence(&output.sequence.as_ref().unwrap()).unwrap();
+        let sequence = sfasta
+            .get_sequence(&output.sequence.as_ref().unwrap())
+            .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
 
         println!("{:#?}", sequence.len());

@@ -530,7 +530,7 @@ impl DualIndex {
         let putative_block = self.get_putative_block(hash);
 
         if putative_block.is_none() {
-            return None
+            return None;
         }
 
         let (block_num, hash_chunk_loc, id_chunk_loc) = putative_block.unwrap();

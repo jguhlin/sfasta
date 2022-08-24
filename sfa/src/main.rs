@@ -44,11 +44,11 @@ fn style_pb(pb: ProgressBar) -> ProgressBar {
 // TODO: Print out GIT_VERSION in the version text with CLAP (as well as the Cargo.toml version).
 
 #[derive(Parser)]
-#[clap(propagate_version = true)]
 #[clap(arg_required_else_help = true)]
 #[clap(name = "sfasta")]
 #[clap(author = "Joseph Guhlin <joseph.guhlin@gmail.com>")]
 #[clap(about = "Sequence Storage optimized for fast random access", long_about = None)]
+#[clap(version = "0.0.01")]
 struct Cli {
     #[clap(subcommand)]
     command: Commands,
@@ -126,7 +126,17 @@ fn main() {
             brotli,
             snappy,
             gzip,
-        } => convert(&input, *threads as usize, *zstd, *lz4, *xz, *gzip, *brotli, *snappy, *noindex),
+        } => convert(
+            &input,
+            *threads as usize,
+            *zstd,
+            *lz4,
+            *xz,
+            *gzip,
+            *brotli,
+            *snappy,
+            *noindex,
+        ),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
         Commands::Bp { input } => todo!(),
@@ -356,7 +366,7 @@ pub fn generic_open_file_pb(
         .len();
 
     let file = match File::open(filename) {
-        Err(why) => panic!("Couldn't open {}: {}", filename, why.to_string()),
+        Err(why) => panic!("Couldn't open {}: {}", filename, why),
         Ok(file) => file,
     };
 

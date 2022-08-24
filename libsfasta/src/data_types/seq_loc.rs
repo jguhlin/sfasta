@@ -69,10 +69,12 @@ impl SeqLocs {
             Vec::with_capacity((seq_locs.len() / self.chunk_size) + 1);
 
         // Write out chunk sizes...
-        bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config).expect("Unable to write out chunk size");
+        bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config)
+            .expect("Unable to write out chunk size");
 
         // Write out block index pos
-        bincode::encode_into_std_write(&self.block_index_pos, &mut out_buf, bincode_config).expect("Unable to write out chunk size");
+        bincode::encode_into_std_write(&self.block_index_pos, &mut out_buf, bincode_config)
+            .expect("Unable to write out chunk size");
 
         // FORMAT: Write sequence location blocks
         for s in seq_locs
@@ -126,10 +128,12 @@ impl SeqLocs {
         out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
 
         // Write out chunk sizes...
-        bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config).expect("Unable to write out chunk size");
+        bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config)
+            .expect("Unable to write out chunk size");
 
         // Write out block index pos
-        bincode::encode_into_std_write(&self.block_index_pos, &mut out_buf, bincode_config).expect("Unable to write out chunk size");
+        bincode::encode_into_std_write(&self.block_index_pos, &mut out_buf, bincode_config)
+            .expect("Unable to write out chunk size");
 
         out_buf.seek(SeekFrom::Start(end)).unwrap();
 
@@ -156,7 +160,7 @@ impl SeqLocs {
         let compressed_block_locations: Vec<u8> =
             bincode::decode_from_std_read(&mut in_buf, bincode_config)
                 .expect("Unable to read block locations");
-        
+
         let mut decompressor = zstd::stream::Decoder::new(&compressed_block_locations[..]).unwrap();
 
         let mut decompressed = Vec::with_capacity(4 * 1024 * 1024);
@@ -166,8 +170,9 @@ impl SeqLocs {
             Err(y) => panic!("Unable to decompress block: {:#?}", y),
         };
 
-        let block_locations: Vec<u64> = bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
-            .expect("Unable to read block locations");
+        let block_locations: Vec<u64> =
+            bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
+                .expect("Unable to read block locations");
 
         SeqLocs {
             location: pos,
@@ -186,7 +191,6 @@ impl SeqLocs {
     where
         R: Read + Seek,
     {
-
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         if !self.is_initialized() {
@@ -216,12 +220,12 @@ impl SeqLocs {
             Err(y) => panic!("Unable to decompress block: {:#?}", y),
         };
 
-        let seqlocs: Vec<SeqLoc> = bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
-            .expect("Unable to read block");
+        let seqlocs: Vec<SeqLoc> =
+            bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
+                .expect("Unable to read block");
 
         seqlocs[block_offset].clone()
     }
-
 }
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]

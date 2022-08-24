@@ -405,7 +405,7 @@ where
         let compressed = encoder.finish().unwrap();
 
         bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
-                .expect("Unable to write Sequence Blocks to file");
+            .expect("Unable to write Sequence Blocks to file");
         seq_locs = reader_handle.join().unwrap();
     })
     .expect("Error");
