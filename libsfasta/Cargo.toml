@@ -20,6 +20,7 @@ debug = true
 # Will need a macro to disable when not on a linux host.
 # nix = "0.21.0"
 
+log = "0.4.17"
 # serde = { version = "1.0.136", features = ["derive"] }
 # serde_bytes = "0.11.6"
 crossbeam = "0.8.1"

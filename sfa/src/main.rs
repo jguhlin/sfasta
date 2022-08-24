@@ -110,6 +110,7 @@ enum Commands {
 }
 
 fn main() {
+    env_logger::init();
     let cli = Cli::parse();
 
     match &cli.command {
@@ -287,11 +288,12 @@ fn convert(
     snappy: bool,
     noindex: bool,
 ) {
-    let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
-    let pb = ProgressBar::new(metadata.len());
-    let pb = style_pb(pb);
+    // let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
+    // let pb = ProgressBar::new(metadata.len());
+    // let pb = style_pb(pb);
 
-    let buf = generic_open_file_pb(pb, fasta_filename);
+    // let buf = generic_open_file_pb(pb, fasta_filename);
+    // let buf = generic_open_file(fasta_filename);
     // let buf = pb.wrap_read(buf.2);
     /*let summary = count_fasta_entries(&mut BufReader::with_capacity(32 * 1024 * 1024, buf.2));
     println!("File: {}", fasta_filename);
@@ -304,22 +306,24 @@ fn convert(
         Ok(file) => file,
     };
 
-    let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
-    let pb = ProgressBar::new(metadata.len());
-    let pb = style_pb(pb);
+    // let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
+    // let pb = ProgressBar::new(metadata.len());
+    // let pb = style_pb(pb);
 
-    let buf = generic_open_file_pb(pb, fasta_filename);
+    // let buf = generic_open_file_pb(pb, fasta_filename);
+    let buf = generic_open_file(fasta_filename);
     // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
     let buf = buf.2;
 
     // Disabled for now: No improvement
     // let dict = build_dict(buf);
 
-    let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
-    let pb = ProgressBar::new(metadata.len());
-    let pb = style_pb(pb);
+    // let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
+    // let pb = ProgressBar::new(metadata.len());
+    // let pb = style_pb(pb);
 
-    let buf = generic_open_file_pb(pb, fasta_filename);
+    // let buf = generic_open_file_pb(pb, fasta_filename);
+    let buf = generic_open_file(fasta_filename);
     // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
     let buf = buf.2;
 
@@ -372,6 +376,34 @@ pub fn generic_open_file_pb(
 
     let mut compressed: bool = false;
     let file = pb.wrap_read(file);
+
+    let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
+        compressed = true;
+        Box::new(flate2::read::GzDecoder::new(file))
+    } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai")
+    {
+        compressed = true;
+        Box::new(snap::read::FrameDecoder::new(file))
+    } else {
+        Box::new(file)
+    };
+
+    (filesize as usize, compressed, fasta)
+}
+
+pub fn generic_open_file(
+    filename: &str,
+) -> (usize, bool, Box<dyn Read + Send>) {
+    let filesize = metadata(filename)
+        .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
+        .len();
+
+    let file = match File::open(filename) {
+        Err(why) => panic!("Couldn't open {}: {}", filename, why),
+        Ok(file) => file,
+    };
+
+    let mut compressed: bool = false;
 
     let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
         compressed = true;

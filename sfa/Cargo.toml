@@ -30,6 +30,8 @@ simdutf8 = "0.1.4"
 bumpalo = {version = "3.10.0", features = ["collections"]}
 core_affinity = "0.5.10" # Not used yet...
 libsfasta = { path = "../libsfasta/" }
+log = "0.4.17"
+env_logger = "0.9.0"
 
 [dependencies.clap]
 version = "3.2.8"

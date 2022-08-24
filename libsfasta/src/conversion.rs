@@ -5,6 +5,7 @@ use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
+use log;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::data_types::*;
@@ -30,7 +31,7 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 4 * 1024 * 1024,    // 4Mb
+            block_size:8 * 1024 * 1024,    // 8Mb
             seqlocs_chunk_size: 256 * 1024, // 256k
             index: true,
             masking: false,
@@ -170,6 +171,8 @@ impl Converter {
         // let in_buf = Arc::new(Mutex::new(in_buf));
         // let out_buf = Arc::new(Mutex::new(out_buf));
 
+        log::debug!("Writing sequences start...");
+
         // Write sequences
         let sb = CompressionStreamBuffer::default()
             .with_block_size(self.block_size as u32)
@@ -180,6 +183,8 @@ impl Converter {
         // Vec<(String, Location)>
         // block_index_pos
         let (seq_locs, block_index_pos) = write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
+
+        log::debug!("Writing sequences finished...");
 
         // TODO: Here is where we would write out the scores...
         // ... but this fn is only for FASTA right now...
@@ -212,16 +217,21 @@ impl Converter {
         thread::scope(|s| {
             // Start a thread to build the index...
             let index_handle = Some(s.spawn(|_| {
+                log::debug!("Creating index...");
                 for (i, seqloc) in to_index.iter().enumerate() {
                     indexer.add(seqloc.id.clone(), i as u32);
                 }
+
+                log::debug!("Index complete...");
 
                 let indexer: DualIndexWriter = indexer.into();
                 indexer
             }));
 
             // Use the main thread to write the sequence locations...
+            log::debug!("Writing SeqLocs to file");
             seqlocs_location = seqlocs.write_to_buffer(&mut out_buf);
+            log::debug!("Writing SeqLocs to file: COMPLETE");
 
             if self.index {
                 id_index_pos = out_buf
@@ -320,6 +330,7 @@ where
 
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
+        let mut out_buf = BufWriter::with_capacity(32 * 1024 * 1024, &mut out_fh);
         let reader_handle = s.spawn(move |_| {
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
             let mut in_buf_reader = BufReader::new(in_buf);
@@ -353,7 +364,7 @@ where
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
         let mut block_locs = Vec::with_capacity(512 * 1024);
-        let mut pos = out_fh
+        let mut pos = out_buf
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
@@ -373,12 +384,13 @@ where
                     }
                 }
                 Some((block_id, sb)) => {
-                    bincode::encode_into_std_write(sb, &mut out_fh, bincode_config)
+                    bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
                         .expect("Unable to write to bincode output");
+                        log::debug!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 
-                    pos = out_fh
+                    pos = out_buf
                         .seek(SeekFrom::Current(0))
                         .expect("Unable to work with seek API");
                 }
@@ -387,7 +399,7 @@ where
 
         // Block Index
         block_index_pos = Some(
-            out_fh
+            out_buf
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API"),
         );
@@ -404,7 +416,7 @@ where
 
         let compressed = encoder.finish().unwrap();
 
-        bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
+        bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
             .expect("Unable to write Sequence Blocks to file");
         seq_locs = reader_handle.join().unwrap();
     })
