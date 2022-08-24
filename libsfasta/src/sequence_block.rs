@@ -14,7 +14,7 @@ pub struct SequenceBlock {
 impl SequenceBlock {
     pub fn compress(self, compression_type: CompressionType) -> SequenceBlockCompressed {
         let level = default_compression_level(compression_type);
-        let mut cseq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
+        let mut cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
 
         match compression_type {
             CompressionType::ZSTD => {
@@ -23,15 +23,17 @@ impl SequenceBlock {
                     self.seq.len() as u32
                 ));
                 encoder.set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false));
+                encoder.set_parameter(zstd::stream::raw::CParameter::SearchLog(16));
                 encoder.set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
                     true,
                 ));
-
+		encoder.set_parameter(zstd::stream::raw::CParameter::OverlapSizeLog(9));
+		encoder.include_checksum(false);
                 encoder
                     .long_distance_matching(true)
                     .expect("Unable to set ZSTD Long Distance Matching");
                 encoder
-                    .window_log(27)
+                    .window_log(31)
                     .expect("Unable to set ZSTD Window Log"); // Far bigger than most block sizes, so perfect...
                 encoder
                     .include_magicbytes(false)
@@ -39,7 +41,6 @@ impl SequenceBlock {
                 encoder
                     .include_contentsize(false)
                     .expect("Unable to set ZSTD Content Size Flag");
-
                 encoder
                     .write_all(&self.seq[..])
                     .expect("Unable to write sequence to ZSTD compressor");
