@@ -1,25 +1,18 @@
 // Easy, high-performance conversion functions
 use crossbeam::thread;
-use std::borrow::Cow;
-use std::convert::TryFrom;
 use std::fs::{metadata, File};
-use std::io::{BufRead, BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
-use std::ops::DerefMut;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
-use std::thread::JoinHandle;
-
-use rayon::prelude::*;
+use std::sync::Arc;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
+use crate::data_types::*;
 use crate::dual_level_index::*;
 use crate::fasta::*;
 use crate::format::DirectoryOnDisk;
-use crate::format::{Sfasta, IDX_CHUNK_SIZE, SEQLOCS_CHUNK_SIZE};
+use crate::format::Sfasta;
 use crate::structs::WriteAndSeek;
-use crate::types::*;
-use crate::utils::*;
 use crate::CompressionType;
 
 pub struct Converter {
@@ -99,9 +92,8 @@ impl Converter {
             chunk_size < u32::MAX as usize,
             "Chunk size must be less than u32::MAX (~4Gb)"
         );
-        unimplemented!();
 
-        // self.chunk_size =
+        self.seqlocs_chunk_size = chunk_size;
 
         self
     }
@@ -149,7 +141,7 @@ impl Converter {
     }
 
     /// Main conversion function
-    pub fn convert_fasta<'convert, W, R>(self, in_buf: R, mut out_buf: W) -> W
+    pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, mut out_fh: W) -> W
     where
         W: WriteAndSeek + 'convert + std::fmt::Debug,
         R: Read + Send + 'convert,
@@ -172,7 +164,7 @@ impl Converter {
 
         // Store the location of the directory so we can update it later...
         // It's right after the SFASTA and version identifier...
-        let directory_location = self.write_headers(&mut out_buf, &sfasta);
+        let directory_location = self.write_headers(&mut out_fh, &sfasta);
 
         // Put everything in Arcs and Mutexes to allow for multithreading
         // let in_buf = Arc::new(Mutex::new(in_buf));
@@ -184,15 +176,10 @@ impl Converter {
             .with_compression_type(self.compression_type)
             .with_threads(self.threads as u16); // Effectively # of compression threads
 
-        // This returns in_buf, but is not currently used (hence the _)
-        // Input filehandle goes in, output goes out.
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
-        // in_buffer
-        // out_buffer
-        let (seq_locs, block_index_pos, mut _in_buf, mut out_buf) =
-            write_fasta_sequence(sb, in_buf, out_buf);
+        let (seq_locs, block_index_pos) = write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
 
         // TODO: Here is where we would write out the scores...
         // ... but this fn is only for FASTA right now...
@@ -204,18 +191,9 @@ impl Converter {
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer = crate::dual_level_index::DualIndexBuilder::with_capacity(seq_locs.len());
 
-        let seqlocs_loc = out_buf
-            .seek(SeekFrom::Current(0))
-            .expect("Unable to work with seek API");
+        let mut out_buf = BufWriter::with_capacity(8 * 1024 * 1024, out_fh);
 
-        sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_loc);
-
-        let mut out_fh = BufWriter::with_capacity(8 * 1024 * 1024, out_buf);
-
-        let mut seqlocs_blocks_locs: Vec<u64> =
-            Vec::with_capacity((seq_locs.len() / SEQLOCS_CHUNK_SIZE) + 1);
-
-        let seq_locs = Arc::new(seq_locs);
+        let mut seqlocs = SeqLocs::with_data(seq_locs);
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
@@ -225,57 +203,38 @@ impl Converter {
         //
         // TODO: Optional index can probably be handled better...
 
-        let to_index = Arc::clone(&seq_locs);
+        let to_index = seqlocs.data.as_ref().unwrap().clone();
 
         let mut id_index_pos = 0;
 
-        thread::scope(|s| {
-            let index_handle = Some(s.spawn(|_| {
+        let mut seqlocs_location = 0;
 
-                for (i, (id, _)) in to_index.iter().enumerate() {
-                    indexer.add(id.clone(), i as u32);
+        thread::scope(|s| {
+            // Start a thread to build the index...
+            let index_handle = Some(s.spawn(|_| {
+                for (i, seqloc) in to_index.iter().enumerate() {
+                    indexer.add(seqloc.id.clone(), i as u32);
                 }
 
                 let indexer: DualIndexWriter = indexer.into();
                 indexer
             }));
 
-            // FORMAT: Write sequence location blocks
-            for s in seq_locs
-                .iter()
-                .collect::<Vec<&(String, Location)>>()
-                .chunks(SEQLOCS_CHUNK_SIZE)
-            {
-                seqlocs_blocks_locs.push(
-                    out_fh
-                        .seek(SeekFrom::Current(0))
-                        .expect("Unable to work with seek API"),
-                );
-
-                let locs: Vec<_> = s.iter().map(|(_, l)| l).collect();
-
-                let mut compressor =
-                    zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
-
-                bincode::encode_into_std_write(&locs, &mut compressor, bincode_config)
-                    .expect("Unable to bincode locs into compressor");
-                let compressed = compressor.finish().unwrap();
-
-                bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
-                    .expect("Unable to write Sequence Blocks to file");
-            }
+            // Use the main thread to write the sequence locations...
+            seqlocs_location = seqlocs.write_to_buffer(&mut out_buf);
 
             if self.index {
-                id_index_pos = out_fh
+                id_index_pos = out_buf
                     .seek(SeekFrom::Current(0))
                     .expect("Unable to work with seek API");
-                
+
                 let mut index = index_handle.unwrap().join().unwrap();
-                index.write_to_buffer(&mut out_fh);
+                index.write_to_buffer(&mut out_buf);
             }
         })
         .expect("Error");
 
+        sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
         sfasta.directory.index_loc = NonZeroU64::new(id_index_pos);
 
         // TODO: Scores Block Index
@@ -287,17 +246,17 @@ impl Converter {
 
         sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
 
-        out_fh
+        out_buf
             .seek(SeekFrom::Start(directory_location))
             .expect("Unable to rewind to start of the file");
 
         // Here we re-write the directory information at the start of the file, allowing for
         // easy jumps to important areas while keeping everything in a single file
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
-        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
+        bincode::encode_into_std_write(dir, &mut out_buf, bincode_config)
             .expect("Unable to write directory to file");
 
-        out_fh.into_inner().unwrap()
+        out_buf.into_inner().unwrap()
     }
 }
 
@@ -311,7 +270,7 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
         .len();
 
     let file = match File::open(filename) {
-        Err(why) => panic!("Couldn't open {}: {}", filename, why.to_string()),
+        Err(why) => panic!("Couldn't open {}: {}", filename, why),
         Ok(file) => file,
     };
 
@@ -341,21 +300,13 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 
 pub fn write_fasta_sequence<'write, W, R>(
     mut sb: CompressionStreamBuffer,
-    in_buf: R,
-    mut out_fh: W,
-) -> (Vec<(String, Location)>, u64, R, W)
+    in_buf: &mut R,
+    mut out_fh: &mut W,
+) -> (Vec<SeqLoc>, u64)
 where
     W: WriteAndSeek + 'write,
     R: Read + Send + 'write,
 {
-    // let in_buf = in_buf.get_mut().unwrap();
-    // let in_buf = BufReader::new(in_buf);
-
-    // TODO: I don't believe this is functional right now...
-    // if self.dict.is_some() {
-    // sb = sb.with_dict(self.dict.unwrap());
-    // }
-
     let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
     // Get a handle for the output queue from the sequence compressor
@@ -364,10 +315,8 @@ where
     // Get a handle to the shutdown flag...
     let shutdown = sb.shutdown_notified();
 
-    let mut seq_locs: Option<Vec<(String, Location)>> = None;
+    let mut seq_locs: Option<Vec<SeqLoc>> = None;
     let mut block_index_pos = None;
-
-    let mut return_in_buf: Option<R> = None;
 
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
@@ -386,9 +335,9 @@ where
             for mut i in fasta {
                 i.seq[..].make_ascii_uppercase();
                 let loc = sb.add_sequence(&i.seq[..]).unwrap();
-                let mut location = Location::new();
+                let mut location = SeqLoc::new(i.id);
                 location.sequence = Some(loc);
-                seq_locs.push((i.id.to_string(), location));
+                seq_locs.push(location);
             }
 
             // Finalize pushes the last block, which is likely smaller than the complete block size
@@ -398,12 +347,8 @@ where
             };
 
             // Return seq_locs to the main thread
-            let in_buf = in_buf_reader.into_inner();
-            (Some(seq_locs), Some(in_buf))
+            Some(seq_locs)
         });
-
-        //        let mut out_fh_lock = out_fh.lock().unwrap();
-        //        let mut out_fh = out_fh_lock.deref_mut();
 
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
@@ -447,30 +392,30 @@ where
                 .expect("Unable to work with seek API"),
         );
 
-        // block_locs.sort_by(|a, b| a.0.cmp(&b.0));
+        // Write the block index to file
 
-        // let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
+        block_locs.sort_by(|a, b| a.0.cmp(&b.0));
+        let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
 
-        //let mut seqblocks_locs = DualIndex::new(block_locs[0]);
-        //seqblocks_locs.block_locs = block_locs;
-        //seqblocks_locs.write_to_buffer(&mut out_fh);
+        let compressed: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
+        let mut encoder = zstd::stream::Encoder::new(compressed, -3).unwrap();
+        bincode::encode_into_std_write(block_locs, &mut encoder, bincode_config)
+            .expect("Unable to write to bincode output");
 
-        (seq_locs, return_in_buf) = reader_handle.join().unwrap();
+        let compressed = encoder.finish().unwrap();
+
+        bincode::encode_into_std_write(compressed, &mut out_fh, bincode_config)
+                .expect("Unable to write Sequence Blocks to file");
+        seq_locs = reader_handle.join().unwrap();
     })
     .expect("Error");
 
-    (
-        seq_locs.expect("Error"),
-        block_index_pos.expect("Error"),
-        return_in_buf.unwrap(),
-        out_fh,
-    )
+    (seq_locs.expect("Error"), block_index_pos.expect("Error"))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::format::Directory;
     use crate::metadata::Metadata;
     use crate::parameters::Parameters;
     use crate::sequence_block::SequenceBlockCompressed;
@@ -480,7 +425,7 @@ mod tests {
     pub fn test_create_sfasta() {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let mut out_buf = Cursor::new(Vec::new());
+        let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
             File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
@@ -505,7 +450,7 @@ mod tests {
         let directory: DirectoryOnDisk =
             bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
-        let dir: DirectoryOnDisk = directory.into();
+        let dir = directory;
         println!("{:#?}", dir);
 
         let _parameters: Parameters =

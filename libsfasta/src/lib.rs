@@ -22,25 +22,17 @@ mod fasta;
 mod fastq;
 mod format;
 // pub mod index;
+pub mod data_types;
 mod index_directory;
 mod io;
 mod metadata;
 mod parameters;
 pub mod prelude;
-mod seqloc_block;
 mod sequence_block;
 pub mod structs;
-mod types;
 mod utils;
 
 pub use crate::fasta::*;
 pub use crate::io::*;
 pub use crate::structs::*;
 pub use crate::utils::*;
-
-pub const BLOCK_SIZE: usize = 8 * 1024 * 1024;
-
-// TODO: Set a const for BufReader buffer size
-//       Make it a global const, but also maybe make it configurable?
-//       Reason being that network FS will benefit from larger buffers
-// TODO: Also make BufWriter bufsize global, but ok to leave larger.

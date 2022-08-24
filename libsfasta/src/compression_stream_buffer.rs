@@ -8,8 +8,8 @@ use std::thread::JoinHandle;
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
+use crate::data_types::*;
 use crate::sequence_block::*;
-use crate::types::*;
 use crate::CompressionType;
 
 pub struct CompressionStreamBuffer {
@@ -147,7 +147,11 @@ impl CompressionStreamBuffer {
 
             self.buffer.extend_from_slice(&seq[0..end]);
 
-            locs.push((self.cur_block_id, (len as u32, (len + end) as u32)));
+            locs.push(Loc {
+                block: self.cur_block_id,
+                start: len as u32,
+                end: (len + end) as u32,
+            });
 
             if self.len() >= block_size {
                 self.emit_block();

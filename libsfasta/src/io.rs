@@ -5,7 +5,7 @@ pub struct Sequences {
     reader: Box<dyn Read + Send>,
 }
 
-#[derive(PartialEq, bincode::Encode, bincode::Decode, Clone, Debug)]
+#[derive(PartialEq, Eq, bincode::Encode, bincode::Decode, Clone, Debug)]
 pub struct Sequence {
     pub seq: Vec<u8>,
     pub id: String,
@@ -38,14 +38,6 @@ impl Iterator for Sequences {
         Some(seq)
     }
 }
-/*
-impl Sequences {
-    pub fn new(filename: String) -> Sequences {
-        Sequences {
-            reader: open_file(filename),
-        }
-    }
-} */
 
 #[inline]
 pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) {
@@ -54,7 +46,7 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
         .len();
 
     let file = match File::open(filename) {
-        Err(why) => panic!("Couldn't open {}: {}", filename, why.to_string()),
+        Err(why) => panic!("Couldn't open {}: {}", filename, why),
         Ok(file) => file,
     };
 

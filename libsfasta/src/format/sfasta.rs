@@ -6,17 +6,16 @@ use rayon::prelude::*;
 
 use super::Directory;
 use super::DirectoryOnDisk;
+use crate::data_types::*;
 use crate::dual_level_index::*;
 use crate::index_directory::IndexDirectory;
 use crate::metadata::Metadata;
 use crate::parameters::Parameters;
 use crate::sequence_block::*;
-use crate::types::*;
 use crate::*;
 
 // TODO: Move these into parameters
 pub const IDX_CHUNK_SIZE: usize = 128 * 1024;
-pub const SEQLOCS_CHUNK_SIZE: usize = 128 * 1024;
 
 pub struct Sfasta {
     pub version: u64, // I'm going to regret this, but 18,446,744,073,709,551,615 versions should be enough for anybody.
@@ -27,6 +26,7 @@ pub struct Sfasta {
     pub index: Option<DualIndex>,
     buf: Option<RwLock<Box<dyn ReadAndSeek>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
     pub block_locs: Option<Vec<u64>>,
+    pub seqlocs: Option<SeqLocs>,
 }
 
 impl Default for Sfasta {
@@ -40,6 +40,7 @@ impl Default for Sfasta {
             index: None,
             buf: None,
             block_locs: None,
+            seqlocs: None,
         }
     }
 }
@@ -120,10 +121,23 @@ impl Sfasta {
         // self.index.as_mut().unwrap().set_ids(ids);
     }
 
-    pub fn find(&self, x: &str) -> Result<Option<Vec<(String, usize, u32, Vec<Loc>)>>, &str> {
-       
-        // TODO
-        Ok(None)
+    pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str> {
+        assert!(
+            self.index.is_some(),
+            "Sfasta index not present"
+        );
+
+        let idx = self.index.as_mut().unwrap();
+        let mut buf = &mut * self.buf.as_ref().unwrap().write().unwrap();
+        let found = idx.find(&mut buf, x);
+        let seqlocs = self.seqlocs.as_ref().unwrap();
+
+        if found.is_none() {
+            return Ok(None);
+        }
+
+        // TODO: Allow returning multiple if there are multiple matches...
+        Ok(Some(seqlocs.get_seqloc(&mut buf, found.unwrap())))
     }
 
     pub fn get_index_matches(&self, block: usize, hash: u64) -> Vec<u64> {
@@ -139,24 +153,22 @@ impl Sfasta {
         }
 
         // Basic sanity checks
-        for (i, _) in locs {
-            if *i as usize >= self.block_locs.as_ref().unwrap().len() {
+        for (i, _) in locs.iter().map(|x| x.original_format()) {
+            if i as usize >= self.block_locs.as_ref().unwrap().len() {
                 return Err("Requested block number is larger than the total number of blocks");
             }
         }
 
-        // TODO: Probably no benefit here......
-        // let mut bump = Bump::new();
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
+        println!("{:#?}", self.block_locs);
+        println!("{:#?}", locs);
+
         for loc in locs {
-            let byte_loc = self.block_locs.as_ref().unwrap()[loc.0 as usize];
+            let byte_loc = self.block_locs.as_ref().unwrap()[loc.block as usize];
+            println!("{:#?}", byte_loc);
             let mut buf = self.buf.as_ref().unwrap().write().unwrap();
-            /*self.buf
-            .as_deref_mut()
-            .unwrap()
-            .seek(SeekFrom::Start(byte_loc))
-            .expect("Unable to work with seek API"); */
+
             buf.seek(SeekFrom::Start(byte_loc))
                 .expect("Unable to work with seek API");
 
@@ -168,7 +180,7 @@ impl Sfasta {
                        // let sb = bump.alloc(sbc.decompress(self.parameters.compression_type));
             let sb = sbc.decompress(self.parameters.compression_type);
 
-            seq.extend_from_slice(&sb.seq[loc.1 .0 as usize..loc.1 .1 as usize]);
+            seq.extend_from_slice(&sb.seq[loc.start as usize..loc.end as usize]);
             // bump.reset();
         }
 
@@ -177,7 +189,7 @@ impl Sfasta {
 
     pub fn index_len(&mut self) -> usize {
         if self.index.is_none() {
-            return 0
+            return 0;
         }
 
         self.index.as_mut().unwrap().len()
@@ -236,8 +248,17 @@ impl SfastaParser {
         // The index is much more important to us...
 
         // TODO: Handle no index
-        sfasta.index = Some(DualIndex::new(sfasta.directory.index_loc.unwrap().get(), &mut in_buf));
-        
+        sfasta.index = Some(DualIndex::new(
+            &mut in_buf,
+            sfasta.directory.index_loc.unwrap().get(),           
+        ));
+
+        if sfasta.directory.seqlocs_loc.is_some() {
+            let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
+            let seqlocs = SeqLocs::from_buffer(&mut in_buf, seqlocs_loc);
+            sfasta.seqlocs = Some(seqlocs);
+        }
+
         in_buf
             .seek(SeekFrom::Start(
                 sfasta.directory.block_index_loc.unwrap().get(),
@@ -307,13 +328,13 @@ mod tests {
         let output = sfasta.find("does-not-exist");
         assert!(output == Ok(None));
 
-        let output = &sfasta.find("needle").unwrap().unwrap()[0];
-        assert!(output.0 == "needle");
+        let output = &sfasta.find("needle").unwrap().unwrap();
+        assert!(output.id == "needle");
 
-        let output = &sfasta.find("needle_last").unwrap().unwrap()[0];
-        assert!(output.0 == "needle_last");
+        let output = &sfasta.find("needle_last").unwrap().unwrap();
+        assert!(output.id == "needle_last");
 
-        let sequence = sfasta.get_sequence(&output.3).unwrap();
+        let sequence = sfasta.get_sequence(&output.sequence.as_ref().unwrap()).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
         assert!("ACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATA" == sequence);
     }
@@ -342,15 +363,15 @@ mod tests {
         let mut sfasta = SfastaParser::open_from_buffer(out_buf);
         assert!(sfasta.index_len() == 10);
 
-        let output = &sfasta.find("test3").unwrap().unwrap()[0];
-        assert!(output.0 == "test3");
+        let output = &sfasta.find("test3").unwrap().unwrap();
+        assert!(output.id == "test3");
 
-        let sequence = sfasta.get_sequence(&output.3).unwrap();
+        let sequence = sfasta.get_sequence(&output.sequence.as_ref().unwrap()).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
 
         println!("{:#?}", sequence.len());
 
-        assert!(sequence.len() == 48598);
+        assert_eq!(sequence.len(), 48599);
         assert!(&sequence[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
         assert!(&sequence[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
     }
@@ -379,12 +400,12 @@ mod tests {
         let mut sfasta = SfastaParser::open_from_buffer(out_buf);
         assert!(sfasta.index_len() == 10);
 
-        let output = &sfasta.find("test3").unwrap().unwrap()[0];
-        assert!(output.0 == "test3");
-        &sfasta.find("test").unwrap().unwrap()[0];
-        &sfasta.find("test2").unwrap().unwrap()[0];
-        &sfasta.find("test3").unwrap().unwrap()[0];
-        &sfasta.find("test4").unwrap().unwrap()[0];
-        &sfasta.find("test5").unwrap().unwrap()[0];
+        let output = &sfasta.find("test3").unwrap().unwrap();
+        assert!(output.id == "test3");
+        &sfasta.find("test").unwrap().unwrap();
+        &sfasta.find("test2").unwrap().unwrap();
+        &sfasta.find("test3").unwrap().unwrap();
+        &sfasta.find("test4").unwrap().unwrap();
+        &sfasta.find("test5").unwrap().unwrap();
     }
 }

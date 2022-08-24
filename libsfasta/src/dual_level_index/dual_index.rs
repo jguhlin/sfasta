@@ -360,7 +360,7 @@ pub struct DualIndex {
 }
 
 impl DualIndex {
-    pub fn new<R>(idx_start: u64, mut in_buf: &mut R) -> Self
+    pub fn new<R>(mut in_buf: &mut R, idx_start: u64) -> Self
     where
         R: Read + Seek,
     {
@@ -509,17 +509,15 @@ impl DualIndex {
         return chunk;
     }
 
-    pub fn len(&self) -> usize 
-    {
+    pub fn len(&self) -> usize {
         self.len
     }
 
-    pub fn is_empty(&self) -> bool
-    {
+    pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
-    pub fn get_by_id<R>(&mut self, mut in_buf: &mut R, id: &str) -> Option<u32>
+    pub fn find<R>(&mut self, mut in_buf: &mut R, id: &str) -> Option<u32>
     where
         R: Read + Seek,
     {
@@ -532,7 +530,7 @@ impl DualIndex {
         let putative_block = self.get_putative_block(hash);
 
         if putative_block.is_none() {
-            return None;
+            return None
         }
 
         let (block_num, hash_chunk_loc, id_chunk_loc) = putative_block.unwrap();
@@ -612,12 +610,12 @@ mod tests {
 
         let mut in_buf = Cursor::new(out_buf.into_inner());
 
-        let mut reader = DualIndex::new(0, &mut in_buf);
+        let mut reader = DualIndex::new(&mut in_buf, 0);
 
         let ids = reader.all_ids(&mut in_buf);
         assert_eq!(ids.len(), 10001);
 
-        assert_eq!(Some(std::u32::MAX), reader.get_by_id(&mut in_buf, "Max"));
+        assert_eq!(Some(std::u32::MAX), reader.find(&mut in_buf, "Max"));
 
         // TODO: Some more tests....
     }
