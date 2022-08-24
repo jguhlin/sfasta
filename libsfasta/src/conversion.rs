@@ -310,6 +310,8 @@ impl Converter {
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
 
+        println!("DEBUG: {:?}", debug_size);
+
         out_buf.into_inner().unwrap()
     }
 }
