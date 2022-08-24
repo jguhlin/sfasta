@@ -15,6 +15,7 @@ extern crate zstd;
 
 mod compression_stream_buffer;
 mod conversion;
+mod compression;
 pub mod data_types;
 pub mod dual_level_index;
 mod fasta;
@@ -22,6 +23,7 @@ mod fastq;
 mod format;
 mod io;
 mod utils;
+mod masking;
 
 pub mod prelude;
 

@@ -248,6 +248,10 @@ impl DualIndexWriter {
         // [[u64, u64, u64, u64...], [u64, u64, u64, u64...],...] // Blocks of u64 hashes...
         // Hashes don't really compress, so we don't try...
 
+        // No bitpacking:   2 491 696 bytes
+        // With bitpacking: 2 521 045 bytes
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
         (0..chunks).for_each(|i| {
             // Below is 136.71ms
             let start = i * chunk_size;
@@ -260,6 +264,9 @@ impl DualIndexWriter {
             )
             .expect("Bincode error");
         });
+
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        println!("DEBUG: Hashes: {} bytes", end - start);
 
         // Write the hash chunks
         // Current written data is:

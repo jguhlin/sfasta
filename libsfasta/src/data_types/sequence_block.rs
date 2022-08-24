@@ -1,3 +1,5 @@
+// TODO: Make a Sequences struct to handle sequences, like SeqLocs struct...
+
 use crate::data_types::structs::{default_compression_level, CompressionType};
 
 use std::io::{Read, Write};
@@ -6,8 +8,34 @@ use xz::read::{XzDecoder, XzEncoder};
 
 #[derive(Debug, Default)]
 pub struct SequenceBlock {
-    //    pub compression_type: CompressionType,
     pub seq: Vec<u8>,
+}
+
+fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
+    let mut encoder = zstd::bulk::Compressor::new(compression_level).unwrap();
+    encoder
+        .set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
+        .unwrap();
+    encoder
+        .set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
+            true,
+        ))
+        .unwrap();
+    encoder.include_checksum(false).unwrap();
+    encoder
+        .long_distance_matching(true)
+        .expect("Unable to set ZSTD Long Distance Matching");
+    encoder
+        .window_log(31)
+        .expect("Unable to set ZSTD Window Log");
+    encoder
+        .include_magicbytes(false)
+        .expect("Unable to set ZSTD MagicBytes");
+    encoder
+        .include_contentsize(false)
+        .expect("Unable to set ZSTD Content Size Flag");
+
+    encoder
 }
 
 impl SequenceBlock {
@@ -16,41 +44,13 @@ impl SequenceBlock {
         let mut cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
 
         match compression_type {
+            CompressionType::NAFLike => {
+                
+            }
             CompressionType::ZSTD => {
-                let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
-                encoder
-                    .set_parameter(zstd::stream::raw::CParameter::SrcSizeHint(
-                        self.seq.len() as u32
-                    ))
-                    .unwrap();
-                encoder
-                    .set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
-                    .unwrap();
-                //encoder.set_parameter(zstd::stream::raw::CParameter::SearchLog(16)).unwrap();
-                encoder
-                    .set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
-                        true,
-                    ))
-                    .unwrap();
-                // encoder.set_parameter(zstd::stream::raw::CParameter::OverlapSizeLog(9)).unwrap();
-                encoder.include_checksum(false).unwrap();
-                encoder
-                    .long_distance_matching(true)
-                    .expect("Unable to set ZSTD Long Distance Matching");
-                encoder
-                    .window_log(31)
-                    .expect("Unable to set ZSTD Window Log"); // Far bigger than most block sizes, so perfect...
-                encoder
-                    .include_magicbytes(false)
-                    .expect("Unable to set ZSTD MagicBytes");
-                encoder
-                    .include_contentsize(false)
-                    .expect("Unable to set ZSTD Content Size Flag");
-                encoder
-                    .write_all(&self.seq[..])
-                    .expect("Unable to write sequence to ZSTD compressor");
-                cseq = encoder.finish().unwrap();
-                // zstd::block::compress_to_buffer(&self.seq[..], &mut cseq, level).expect("Unable to compress to buffer ZSTD");
+                // TODO: Find a way to reuse this context...
+                let mut compressor = zstd_encoder(level);
+                compressor.compress_to_buffer(&self.seq, &mut cseq).unwrap();
             }
             CompressionType::LZ4 => {
                 let mut compressor = lz4_flex::frame::FrameEncoder::new(cseq);
@@ -89,72 +89,6 @@ impl SequenceBlock {
         }
     }
 
-    pub fn compress_with_dict(
-        self,
-        compression_type: CompressionType,
-        dict: &[u8],
-    ) -> SequenceBlockCompressed {
-        let level = default_compression_level(compression_type);
-        let mut cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
-
-        match compression_type {
-            CompressionType::ZSTD => {
-                let mut encoder =
-                    zstd::stream::Encoder::with_dictionary(cseq, level, dict).unwrap();
-                encoder
-                    .long_distance_matching(true)
-                    .expect("Unable to set ZSTD Long Distance Matching");
-                encoder
-                    .window_log(27)
-                    .expect("Unable to set ZSTD Window Log"); // Far bigger than most block sizes, so perfect...
-                encoder
-                    .include_magicbytes(false)
-                    .expect("Unable to set ZSTD MagicBytes");
-                encoder
-                    .include_contentsize(false)
-                    .expect("Unable to set ZSTD Content Size Flag");
-                encoder
-                    .write_all(&self.seq[..])
-                    .expect("Unable to write sequence to ZSTD compressor");
-                cseq = encoder.finish().unwrap();
-                // zstd::block::compress_to_buffer(&self.seq[..], &mut cseq, level).expect("Unable to compress to buffer ZSTD");
-            }
-            CompressionType::LZ4 => {
-                let mut compressor = lz4_flex::frame::FrameEncoder::new(cseq);
-                compressor
-                    .write_all(&self.seq[..])
-                    .expect("Unable to compress with LZ4");
-                cseq = compressor.finish().unwrap();
-            }
-            CompressionType::SNAPPY => {
-                unimplemented!();
-            }
-            CompressionType::GZIP => {
-                unimplemented!();
-            }
-            CompressionType::NAF => {
-                unimplemented!();
-            }
-            CompressionType::NONE => {
-                unimplemented!();
-            }
-            CompressionType::XZ => {
-                let mut compressor = XzEncoder::new(&self.seq[..], level as u32);
-                compressor
-                    .read_to_end(&mut cseq)
-                    .expect("Unable to XZ compress");
-            }
-            CompressionType::BROTLI => {
-                let mut compressor =
-                    brotli::CompressorReader::new(&self.seq[..], 2 * 1024 * 1024, level as u32, 22);
-                compressor.read_to_end(&mut cseq).unwrap();
-            }
-        }
-
-        SequenceBlockCompressed {
-            compressed_seq: cseq,
-        }
-    }
 
     pub fn len(&self) -> usize {
         self.seq.len()
@@ -163,12 +97,6 @@ impl SequenceBlock {
     pub fn is_empty(&self) -> bool {
         self.seq.is_empty()
     }
-
-    // Convenience Function
-    /*    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
-        self.compression_type = compression_type;
-        self
-    } */
 }
 
 #[derive(Debug, Default, bincode::Encode, bincode::Decode)]

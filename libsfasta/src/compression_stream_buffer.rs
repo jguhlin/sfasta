@@ -10,6 +10,7 @@ use crossbeam::utils::Backoff;
 
 use crate::data_types::*;
 use crate::CompressionType;
+use crate::masking::*;
 
 pub struct CompressionStreamBuffer {
     block_size: u32,
@@ -27,7 +28,6 @@ pub struct CompressionStreamBuffer {
     written_entries: Arc<AtomicUsize>,
     finalized: bool,
     compression_type: CompressionType,
-    dict: Option<Vec<u8>>,
 }
 
 impl Default for CompressionStreamBuffer {
@@ -48,7 +48,6 @@ impl Default for CompressionStreamBuffer {
             total_entries: Arc::new(AtomicUsize::new(0)),
             written_entries: Arc::new(AtomicUsize::new(0)),
             compression_type: CompressionType::ZSTD,
-            dict: None,
         }
     }
 }
@@ -71,10 +70,8 @@ impl CompressionStreamBuffer {
 
             let ct = self.compression_type;
 
-            let dict = self.dict.clone();
-
             let handle =
-                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct, dict));
+                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct));
             self.workers.push(handle);
         }
 
@@ -89,11 +86,6 @@ impl CompressionStreamBuffer {
         }
 
         self.initialized = true;
-    }
-
-    pub fn _with_dict(mut self, dict: Vec<u8>) -> Self {
-        self.dict = Some(dict);
-        self
     }
 
     pub fn finalize(&mut self) -> Result<(), &'static str> {
@@ -121,7 +113,8 @@ impl CompressionStreamBuffer {
         Ok(())
     }
 
-    pub fn add_sequence(&mut self, x: &[u8]) -> Result<Vec<Loc>, &'static str> {
+    /// Returns the Locations for the sequence, and the locations for the masking (if any)
+    pub fn add_sequence(&mut self, x: &mut [u8]) -> Result<(Vec<Loc>, Vec<Loc>), &'static str> {
         assert!(self.block_size > 0);
         assert!(!self.finalized, "SeqBuffer has been finalized.");
         if !self.initialized {
@@ -129,6 +122,7 @@ impl CompressionStreamBuffer {
         }
 
         let mut locs = Vec::with_capacity(8);
+        let mut masking =  Vec::with_capacity(8);
 
         let block_size = self.block_size as usize;
 
@@ -144,6 +138,9 @@ impl CompressionStreamBuffer {
                 end = block_size - len;
             }
 
+            masking.extend(find_lowercase_range(self.cur_block_id, &seq[0..end]));
+
+            seq[0..end].make_ascii_uppercase();
             self.buffer.extend_from_slice(&seq[0..end]);
 
             locs.push(Loc {
@@ -156,10 +153,10 @@ impl CompressionStreamBuffer {
                 self.emit_block();
             }
 
-            seq = &seq[end..];
+            seq = &mut seq[end..];
         }
 
-        Ok(locs)
+        Ok((locs, masking))
     }
 
     pub fn emit_block(&mut self) {
@@ -226,7 +223,6 @@ fn _compression_worker_thread(
     write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     shutdown: Arc<AtomicBool>,
     compression_type: CompressionType,
-    dict: Option<Vec<u8>>,
 ) {
     let mut result;
     let backoff = Backoff::new();
@@ -244,11 +240,8 @@ fn _compression_worker_thread(
             }
 
             Some((block_id, sb)) => {
-                let sbc = if dict.is_some() {
-                    sb.compress_with_dict(compression_type, dict.as_ref().unwrap())
-                } else {
-                    sb.compress(compression_type)
-                };
+                let sbc = sb.compress(compression_type);
+
 
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
@@ -326,7 +319,7 @@ mod tests {
 
     #[test]
     pub fn test_add_sequence() {
-        let myseq = b"ACTGGGGGGGG".to_vec();
+        let mut myseq = b"ACTGGGGGGGG".to_vec();
 
         let test_block_size = 512 * 1024;
 
@@ -336,7 +329,8 @@ mod tests {
 
         let mut locs = Vec::new();
 
-        let loc = sb.add_sequence(&myseq[..]).unwrap();
+        // TODO: Test for masking
+        let (loc, masking) = sb.add_sequence(&mut myseq[..]).unwrap();
         locs.extend(loc);
 
         let mut largeseq = Vec::new();
@@ -344,8 +338,8 @@ mod tests {
             largeseq.extend_from_slice(&myseq[..]);
         }
 
-        let loc = sb.add_sequence(&largeseq).unwrap();
-        locs.extend(loc);
+        let loc = sb.add_sequence(&mut largeseq).unwrap();
+        locs.extend(loc.0);
 
         // println!("Done adding seqs...");
 
@@ -392,16 +386,47 @@ mod tests {
     }
 
     #[test]
+    pub fn test_masking() {
+
+        let test_seqs = vec!["ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
+        "ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
+        "ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+        ];
+
+        for orig_seq in test_seqs.iter().map(|x| x.as_bytes()) {
+
+            let test_block_size = 512 * 1024;
+
+            let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
+            let _oq = sb.output_queue();
+            let mut locs = Vec::new();
+
+            let mut compress_seq = orig_seq.to_vec().clone();
+
+            let (_loc, masking) = sb.add_sequence(&mut compress_seq[..]).unwrap();
+            sb.finalize().unwrap();
+            locs.extend(masking);
+
+            // This assumes the block id's match, because it is a simplistic test...
+            apply_masking(&mut compress_seq, &locs);
+            assert_eq!(orig_seq, compress_seq);
+        }
+
+    }
+
+    #[test]
     #[should_panic(
         expected = "SequenceBuffer was not empty. Finalize the buffer to emit the final block."
     )]
     pub fn test_lingering_sequence_in_seqbuf() {
-        let myseq = b"ACTGGGGGGGG".to_vec();
+        let mut myseq = b"ACTGGGGGGGG".to_vec();
 
         let test_block_size = 512 * 1024;
 
         let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
 
-        sb.add_sequence(&myseq[..]).expect("Error adding sequence");
+        sb.add_sequence(&mut myseq[..]).expect("Error adding sequence");
     }
 }

@@ -8,7 +8,7 @@ pub struct SeqLocs {
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
     chunk_size: usize,
-    pub data: Option<Vec<SeqLoc>>,
+    pub data: Option<Vec<SeqLoc>>, // Only used for writing...
 }
 
 impl Default for SeqLocs {
@@ -272,5 +272,13 @@ impl Loc {
     /// The ultimate in lazy programming. This was once a type (tuple) and is now a struct...
     pub fn original_format(&self) -> (u32, (u32, u32)) {
         (self.block, (self.start, self.end))
+    }
+
+    pub fn new (block: u32, start: u32, end: u32) -> Self {
+        Self {
+            block,
+            start,
+            end,
+        }
     }
 }

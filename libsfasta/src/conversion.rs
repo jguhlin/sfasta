@@ -148,6 +148,8 @@ impl Converter {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
+        assert!(self.block_size < u32::MAX as usize);
+
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
 
         // Store masks as series of 0s and 1s... Vec<bool>
@@ -387,10 +389,10 @@ where
             // Add the sequence, get the SeqLocs and store them in Location struct
             // And store that in seq_locs Vec...
             for mut i in fasta {
-                i.seq[..].make_ascii_uppercase();
-                let loc = sb.add_sequence(&i.seq[..]).unwrap();
+                let (loc, masking) = sb.add_sequence(&mut i.seq[..]).unwrap();
                 let mut location = SeqLoc::new(i.id);
                 location.sequence = Some(loc);
+                location.masking = Some(masking);
                 seq_locs.push(location);
             }
 
@@ -455,7 +457,6 @@ where
         );
 
         // Write the block index to file
-
         block_locs.sort_by(|a, b| a.0.cmp(&b.0));
         let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
 
@@ -474,15 +475,6 @@ where
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         println!("DEBUG: Wrote {} bytes of block index", end - start);
 
-        // let compressed: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
-        // let mut encoder = zstd::stream::Encoder::new(compressed, -3).unwrap();
-        // bincode::encode_into_std_write(block_locs, &mut encoder, bincode_config)
-        //.expect("Unable to write to bincode output");
-
-        //let compressed = encoder.finish().unwrap();
-
-        //bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
-        // .expect("Unable to write Sequence Blocks to file");
         seq_locs = reader_handle.join().unwrap();
     })
     .expect("Error");
