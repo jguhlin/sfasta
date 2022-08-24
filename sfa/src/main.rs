@@ -379,7 +379,7 @@ pub fn generic_open_file_pb(
 
     let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
         compressed = true;
-        Box::new(flate2::read::GzDecoder::new(file))
+        Box::new(flate2::read::MultiGzDecoder::new(file))
     } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai")
     {
         compressed = true;
@@ -407,7 +407,7 @@ pub fn generic_open_file(
 
     let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
         compressed = true;
-        Box::new(flate2::read::GzDecoder::new(file))
+        Box::new(flate2::read::MultiGzDecoder::new(file))
     } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai")
     {
         compressed = true;
