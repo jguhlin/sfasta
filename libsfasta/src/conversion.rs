@@ -171,7 +171,7 @@ impl Converter {
         // let in_buf = Arc::new(Mutex::new(in_buf));
         // let out_buf = Arc::new(Mutex::new(out_buf));
 
-        log::debug!("Writing sequences start...");
+        log::debug!("Writing sequences start... {}", out_fh.seek(SeekFrom::Current(0)).unwrap());
 
         // Write sequences
         let sb = CompressionStreamBuffer::default()
@@ -184,7 +184,7 @@ impl Converter {
         // block_index_pos
         let (seq_locs, block_index_pos) = write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
 
-        log::debug!("Writing sequences finished...");
+        log::debug!("Writing sequences finished... {}", out_fh.seek(SeekFrom::Current(0)).unwrap());
 
         // TODO: Here is where we would write out the scores...
         // ... but this fn is only for FASTA right now...
@@ -217,21 +217,18 @@ impl Converter {
         thread::scope(|s| {
             // Start a thread to build the index...
             let index_handle = Some(s.spawn(|_| {
-                log::debug!("Creating index...");
                 for (i, seqloc) in to_index.iter().enumerate() {
                     indexer.add(seqloc.id.clone(), i as u32);
                 }
-
-                log::debug!("Index complete...");
 
                 let indexer: DualIndexWriter = indexer.into();
                 indexer
             }));
 
             // Use the main thread to write the sequence locations...
-            log::debug!("Writing SeqLocs to file");
+            log::debug!("Writing SeqLocs to file. {}", out_buf.seek(SeekFrom::Current(0)).unwrap());
             seqlocs_location = seqlocs.write_to_buffer(&mut out_buf);
-            log::debug!("Writing SeqLocs to file: COMPLETE");
+            log::debug!("Writing SeqLocs to file: COMPLETE. {}", out_buf.seek(SeekFrom::Current(0)).unwrap());
 
             if self.index {
                 id_index_pos = out_buf
@@ -239,7 +236,9 @@ impl Converter {
                     .expect("Unable to work with seek API");
 
                 let mut index = index_handle.unwrap().join().unwrap();
+                log::debug!("Writing index to file. {}", out_buf.seek(SeekFrom::Current(0)).unwrap());
                 index.write_to_buffer(&mut out_buf);
+                log::debug!("Writing index to file: COMPLETE. {}", out_buf.seek(SeekFrom::Current(0)).unwrap());
             }
         })
         .expect("Error");
@@ -386,7 +385,7 @@ where
                 Some((block_id, sb)) => {
                     bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
                         .expect("Unable to write to bincode output");
-                        log::debug!("Writer wrote block {}", block_id);
+                        // log::debug!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 

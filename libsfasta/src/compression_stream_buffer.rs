@@ -107,7 +107,6 @@ impl CompressionStreamBuffer {
         while self.written_entries.load(Ordering::Relaxed)
             < self.total_entries.load(Ordering::Relaxed)
         {
-            log::debug!("CompressStreamBuffer: Waiting for more entries...");
             backoff.snooze();
         }
 
@@ -120,7 +119,6 @@ impl CompressionStreamBuffer {
         let writer_handle = std::mem::replace(&mut self.write_worker, None);
 
         writer_handle.unwrap().join().unwrap();
-        log::debug!("CompressStreamBuffer: Finalized");
         Ok(())
     }
 
@@ -179,7 +177,6 @@ impl CompressionStreamBuffer {
 
         let mut entry = (self.cur_block_id, x);
         while let Err(x) = self.compress_queue.push(entry) {
-            // log::debug!("CompressStreamBuffer: Queue full, waiting...");
             entry = x;
         }
         self.cur_block_id += 1;
