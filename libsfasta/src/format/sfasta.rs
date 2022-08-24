@@ -258,9 +258,24 @@ impl SfastaParser {
             ))
             .expect("Unable to work with seek API");
 
-        let block_locs_compressed: Vec<u8> =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config)
-                .expect("Unable to parse block locs index");
+        //let block_locs_compressed: Vec<u8> =
+            //bincode::decode_from_std_read(&mut in_buf, bincode_config)
+                //.expect("Unable to parse block locs index");
+        let num_bits: u8 = bincode::decode_from_std_read(&mut in_buf, bincode_config)
+            .expect("Unable to parse block locs index");
+
+        let bitpacked_u32: Vec<Packed> = bincode::decode_from_std_read(&mut in_buf, bincode_config)
+            .expect("Unable to parse block locs index");
+
+        let block_locs_staggered: Vec<Vec<u32>> = bitpacked_u32.into_iter().map(|x| x.unpack(num_bits)).collect();
+        let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
+        let block_locs: Vec<u64> = unsafe {
+            std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len()).to_vec()
+        };
+
+        std::mem::forget(block_locs_u32);
+
+        /*
 
         let block_locs_handle = thread::spawn(move || {
             // let mut decompressor = lz4_flex::frame::FrameDecoder::new(&block_locs_compressed[..]);
@@ -277,9 +292,10 @@ impl SfastaParser {
                     .0;
 
             block_locs
-        });
+        }); */
 
-        sfasta.block_locs = Some(block_locs_handle.join().unwrap());
+        // sfasta.block_locs = Some(block_locs_handle.join().unwrap());
+        sfasta.block_locs = Some(block_locs);
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 
         sfasta

@@ -15,6 +15,7 @@ use crate::format::DirectoryOnDisk;
 use crate::format::Sfasta;
 use crate::structs::WriteAndSeek;
 use crate::CompressionType;
+use crate::utils::*;
 
 pub struct Converter {
     masking: bool,
@@ -31,8 +32,8 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 8 * 1024 * 1024,    // 8Mb
-            seqlocs_chunk_size: 256 * 1024, // 256k
+            block_size: 16 * 1024 * 1024,    // 16Mb
+            seqlocs_chunk_size: 256 * 1024,  // 256k
             index: true,
             masking: false,
             quality_scores: false,
@@ -192,7 +193,7 @@ impl Converter {
         let (seq_locs, block_index_pos) = write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
 
         let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
-        
+
         debug_size.push(("sequences".to_string(), (end - start) as usize));
 
         log::debug!(
@@ -455,15 +456,27 @@ where
         block_locs.sort_by(|a, b| a.0.cmp(&b.0));
         let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
 
-        let compressed: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
-        let mut encoder = zstd::stream::Encoder::new(compressed, -3).unwrap();
-        bincode::encode_into_std_write(block_locs, &mut encoder, bincode_config)
+        let block_locs_u32 = unsafe {
+            std::slice::from_raw_parts(
+                block_locs.as_ptr() as *const u32,
+                block_locs.len() * std::mem::size_of::<u64>() / std::mem::size_of::<u32>(),
+            )
+        };
+
+        let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
+        bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
             .expect("Unable to write to bincode output");
+        bincode::encode_into_std_write(&bitpacked, &mut out_buf, bincode_config).unwrap();
 
-        let compressed = encoder.finish().unwrap();
+        // let compressed: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
+        // let mut encoder = zstd::stream::Encoder::new(compressed, -3).unwrap();
+        // bincode::encode_into_std_write(block_locs, &mut encoder, bincode_config)
+            //.expect("Unable to write to bincode output");
 
-        bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
-            .expect("Unable to write Sequence Blocks to file");
+        //let compressed = encoder.finish().unwrap();
+
+        //bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
+            // .expect("Unable to write Sequence Blocks to file");
         seq_locs = reader_handle.join().unwrap();
     })
     .expect("Error");
