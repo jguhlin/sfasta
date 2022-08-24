@@ -272,7 +272,13 @@ impl DualIndexWriter {
 
             let uncompressed =
                 bincode::encode_to_vec(&self.ids[start..end].to_vec(), bincode_config).unwrap();
-            let compressed = lz4_flex::compress_prepend_size(&uncompressed);
+            let compressed: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
+            let mut encoder = zstd::stream::Encoder::new(compressed, 3).unwrap();
+            encoder.include_magicbytes(false)
+                   .expect("Unable to set ZSTD MagicBytes");
+            encoder.write_all(&uncompressed).unwrap();
+            // let compressed = lz4_flex::compress_prepend_size(&uncompressed);
+            let compressed = encoder.finish().unwrap();
             bincode::encode_into_std_write(&*compressed, &mut out_buf, bincode_config)
                 .expect("Bincode error");
         }
@@ -419,7 +425,14 @@ impl DualIndex {
             in_buf.seek(SeekFrom::Start(*pos as u64)).unwrap();
             let compressed: Vec<u8> =
                 bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-            let decompressed = lz4_flex::decompress_size_prepended(&compressed).unwrap();
+            
+            // let decompressed = lz4_flex::decompress_size_prepended(&compressed).unwrap();
+            let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
+            decoder
+                .include_magicbytes(false)
+                .expect("Unable to disable magicbytes in decoder");
+            let mut decompressed: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
+            decoder.read_to_end(&mut decompressed).unwrap();
             let ids_in_chunk: Vec<String> =
                 bincode::decode_from_slice(&decompressed[..], bincode_config)
                     .unwrap()

@@ -158,12 +158,8 @@ impl Sfasta {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        println!("{:#?}", self.block_locs);
-        println!("{:#?}", locs);
-
         for loc in locs {
             let byte_loc = self.block_locs.as_ref().unwrap()[loc.block as usize];
-            println!("{:#?}", byte_loc);
             let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 
             buf.seek(SeekFrom::Start(byte_loc))
@@ -369,8 +365,6 @@ mod tests {
             .get_sequence(&output.sequence.as_ref().unwrap())
             .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
-
-        println!("{:#?}", sequence.len());
 
         assert_eq!(sequence.len(), 48599);
         assert!(&sequence[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
