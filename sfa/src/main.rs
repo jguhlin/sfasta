@@ -116,7 +116,7 @@ fn main() {
     match &cli.command {
         Commands::View { input } => todo!(),
         Commands::List { input } => todo!(),
-        Commands::Faidx { input, ids } => todo!(),
+        Commands::Faidx { input, ids } => faidx(&input, &ids),
         Commands::Convert {
             input,
             threads,
@@ -274,6 +274,27 @@ fn main() {
     } */
 }
 
+fn faidx(input: &str, ids: Vec<&str>) {
+    let sfasta_filename = input;
+
+    let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+
+    let sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(2 * 1024 * 1024, in_buf));
+
+    for i in ids {
+        let result = sfasta
+            .find(i)
+            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
+            .unwrap();
+
+        let sequence = sfasta
+            .get_sequence(&result.sequence.unwrap())
+            .expect("Unable to fetch sequence");
+        println!(">{}", i);
+        println!("{}", from_utf8(&sequence).unwrap());
+    }
+}
+
 // TODO: Set metadata
 // TODO: Set masking option
 // TODO: Block sizes, index compression type, etc...
@@ -391,9 +412,7 @@ pub fn generic_open_file_pb(
     (filesize as usize, compressed, fasta)
 }
 
-pub fn generic_open_file(
-    filename: &str,
-) -> (usize, bool, Box<dyn Read + Send>) {
+pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) {
     let filesize = metadata(filename)
         .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
         .len();
