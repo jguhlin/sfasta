@@ -68,6 +68,4 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-}
+mod tests {}

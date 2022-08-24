@@ -1,6 +1,5 @@
 use simdutf8::basic::from_utf8;
 
-use std::borrow::Cow;
 use std::io::BufRead;
 
 use crate::bytelines::ByteLinesReader;
@@ -32,20 +31,6 @@ impl<'fasta, R: BufRead> Fasta<'fasta, R> {
             seqlen: 0,
         }
     }
-
-    /*
-    pub fn from_file(filename: &str) -> Fasta<R> {
-        let (_filesize, _, fh) = generic_open_file(filename);
-        let reader = Box::new(BufReader::with_capacity(512 * 1024, fh));
-
-        Fasta {
-            reader,
-            buffer: Vec::with_capacity(1024),
-            seqbuffer: Vec::with_capacity(32 * 1024 * 1024),
-            next_seqid: None,
-            seqlen: 0,
-        }
-    } */
 }
 
 impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
@@ -53,6 +38,10 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
 
     fn next(&mut self) -> Option<Sequence> {
         while let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
+            if self.buffer.ends_with(&[b'\r']) {
+                self.buffer.pop();
+            }
+
             if bytes_read == 0 {
                 if self.seqlen > 0 {
                     let seq = Sequence {
@@ -183,7 +172,7 @@ mod tests {
         let fakefasta =
             b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
-        let mut inner = &mut BufReader::new(fakefasta_);
+        let inner = &mut BufReader::new(fakefasta_);
         let mut fasta = Fasta::from_buffer(inner);
         let _j = fasta.next();
         let _j = fasta.next();

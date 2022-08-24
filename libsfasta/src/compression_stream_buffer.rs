@@ -9,7 +9,6 @@ use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
 use crate::data_types::*;
-use crate::sequence_block::*;
 use crate::CompressionType;
 
 pub struct CompressionStreamBuffer {

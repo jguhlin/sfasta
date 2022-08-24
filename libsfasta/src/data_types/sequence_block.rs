@@ -1,8 +1,7 @@
-use crate::structs::{default_compression_level, CompressionType};
+use crate::data_types::structs::{default_compression_level, CompressionType};
 
 use std::io::{Read, Write};
 
-use bumpalo::Bump;
 use xz::read::{XzDecoder, XzEncoder};
 
 #[derive(Debug, Default)]
@@ -19,16 +18,22 @@ impl SequenceBlock {
         match compression_type {
             CompressionType::ZSTD => {
                 let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
-                encoder.set_parameter(zstd::stream::raw::CParameter::SrcSizeHint(
-                    self.seq.len() as u32
-                ));
-                encoder.set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false));
-                encoder.set_parameter(zstd::stream::raw::CParameter::SearchLog(16));
-                encoder.set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
-                    true,
-                ));
-		encoder.set_parameter(zstd::stream::raw::CParameter::OverlapSizeLog(9));
-		encoder.include_checksum(false);
+                encoder
+                    .set_parameter(zstd::stream::raw::CParameter::SrcSizeHint(
+                        self.seq.len() as u32
+                    ))
+                    .unwrap();
+                encoder
+                    .set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
+                    .unwrap();
+                //encoder.set_parameter(zstd::stream::raw::CParameter::SearchLog(16)).unwrap();
+                encoder
+                    .set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
+                        true,
+                    ))
+                    .unwrap();
+                // encoder.set_parameter(zstd::stream::raw::CParameter::OverlapSizeLog(9)).unwrap();
+                encoder.include_checksum(false).unwrap();
                 encoder
                     .long_distance_matching(true)
                     .expect("Unable to set ZSTD Long Distance Matching");

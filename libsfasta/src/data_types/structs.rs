@@ -1,9 +1,6 @@
 use std::any::Any;
 use std::io::prelude::*;
 
-// use crate::index::Hashes;
-use crate::utils::Bitpacked;
-
 // SuperTrait -- needed for pyO3
 pub trait ReadAndSeek: Read + Seek {}
 impl<T: Read + Seek> ReadAndSeek for T {}

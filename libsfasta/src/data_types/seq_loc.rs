@@ -114,7 +114,7 @@ impl SeqLocs {
         // Does this need a dual index or bitpacking?
         // Need to measure on large files...
         // let mut compressor =
-            // zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
+        // zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
 
         let mut bincoded: Vec<u8> = Vec::new();
 

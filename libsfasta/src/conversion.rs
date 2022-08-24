@@ -5,17 +5,14 @@ use std::fs::{metadata, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::data_types::*;
 use crate::dual_level_index::*;
 use crate::fasta::*;
-use crate::format::DirectoryOnDisk;
 use crate::format::Sfasta;
-use crate::structs::WriteAndSeek;
-use crate::CompressionType;
 use crate::utils::*;
+use crate::CompressionType;
 
 pub struct Converter {
     masking: bool,
@@ -33,7 +30,7 @@ impl Default for Converter {
         Converter {
             threads: 8,
             block_size: 2 * 1024 * 1024,    // 2Mb
-            seqlocs_chunk_size: 256 * 1024,  // 256k
+            seqlocs_chunk_size: 256 * 1024, // 256k
             index: true,
             masking: false,
             quality_scores: false,
@@ -481,12 +478,12 @@ where
         // let compressed: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
         // let mut encoder = zstd::stream::Encoder::new(compressed, -3).unwrap();
         // bincode::encode_into_std_write(block_locs, &mut encoder, bincode_config)
-            //.expect("Unable to write to bincode output");
+        //.expect("Unable to write to bincode output");
 
         //let compressed = encoder.finish().unwrap();
 
         //bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
-            // .expect("Unable to write Sequence Blocks to file");
+        // .expect("Unable to write Sequence Blocks to file");
         seq_locs = reader_handle.join().unwrap();
     })
     .expect("Error");
@@ -497,9 +494,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::metadata::Metadata;
-    use crate::parameters::Parameters;
-    use crate::sequence_block::SequenceBlockCompressed;
+    use crate::data_types::*;
     use std::io::Cursor;
 
     #[test]

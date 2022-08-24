@@ -1,7 +1,6 @@
 use bytelines::ByteLines;
 use simdutf8::basic::from_utf8;
 
-use std::borrow::Cow;
 use std::io::BufRead;
 
 use crate::bytelines::ByteLinesReader;
@@ -20,7 +19,7 @@ pub struct Fastq<R: BufRead> {
 }
 
 impl<R: BufRead> Fastq<R> {
-    pub fn from_buffer(in_buf: R) -> Fastq<R> {
+    pub fn _from_buffer(in_buf: R) -> Fastq<R> {
         Fastq {
             reader: in_buf.byte_lines(),
         }
@@ -82,7 +81,7 @@ impl<R: BufRead> Iterator for Fastq<R> {
     }
 }
 
-pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<usize>) {
+pub fn _summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<usize>) {
     let mut entries: usize = 0;
     let mut ids: Vec<String> = Vec::with_capacity(2 * 1024 * 1024);
     let mut lengths: Vec<usize> = Vec::with_capacity(2 * 1024 * 1024);
@@ -115,8 +114,6 @@ pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use std::io::BufReader;
 
     /*#[test]
     pub fn test_fasta_parse() {

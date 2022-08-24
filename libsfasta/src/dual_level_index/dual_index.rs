@@ -35,14 +35,12 @@
 //! In order to populate the Locs properly, the data is written to the file in the reverse order, thus:
 //! IDChunks followed by HashChunks followed by HashIndex
 
-use std::convert::TryFrom;
 use std::hash::Hasher;
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::utils::{bitpack_u32, Bitpacked, Packed};
+use crate::utils::{bitpack_u32, Packed};
 
 use bitpacking::{BitPacker, BitPacker8x};
-use bumpalo::Bump;
 use rayon::prelude::*;
 use twox_hash::{XxHash64, Xxh3Hash64};
 
@@ -144,7 +142,7 @@ impl From<DualIndexBuilder> for DualIndexWriter {
 
         let mut writer = DualIndexWriter {
             hasher,
-            chunk_size: builder.chunk_size,
+            chunk_size,
             hashes: Vec::with_capacity(len),
             ids: Vec::with_capacity(len),
             locs: Vec::with_capacity(len),
@@ -274,8 +272,9 @@ impl DualIndexWriter {
                 bincode::encode_to_vec(&self.ids[start..end].to_vec(), bincode_config).unwrap();
             let compressed: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
             let mut encoder = zstd::stream::Encoder::new(compressed, 5).unwrap();
-            encoder.include_magicbytes(false)
-                   .expect("Unable to set ZSTD MagicBytes");
+            encoder
+                .include_magicbytes(false)
+                .expect("Unable to set ZSTD MagicBytes");
             encoder.write_all(&uncompressed).unwrap();
             // let compressed = lz4_flex::compress_prepend_size(&uncompressed);
             let compressed = encoder.finish().unwrap();
@@ -425,7 +424,7 @@ impl DualIndex {
             in_buf.seek(SeekFrom::Start(*pos as u64)).unwrap();
             let compressed: Vec<u8> =
                 bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-            
+
             // let decompressed = lz4_flex::decompress_size_prepended(&compressed).unwrap();
             let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
             decoder
@@ -575,7 +574,7 @@ impl DualIndex {
         let bp = self.get_bitpacked_chunk_by_pos(&mut in_buf, actual_loc);
         let value = bp.unpack(self.num_bits);
 
-        let bitpacked_pos = (actual_loc % BitPacker8x::BLOCK_LEN);
+        let bitpacked_pos = actual_loc % BitPacker8x::BLOCK_LEN;
 
         Some(value[bitpacked_pos])
     }
@@ -594,7 +593,7 @@ mod tests {
 
         let mut rng = rand::thread_rng();
 
-        for i in (0_u64..10000) {
+        for i in 0_u64..10000 {
             di.add(i.to_string(), (i * 2) as u32);
         }
 

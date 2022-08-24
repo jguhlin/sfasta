@@ -15,24 +15,17 @@ extern crate zstd;
 
 mod compression_stream_buffer;
 mod conversion;
-mod dict;
-// mod directory;
+pub mod data_types;
 pub mod dual_level_index;
 mod fasta;
 mod fastq;
 mod format;
-// pub mod index;
-pub mod data_types;
-mod index_directory;
 mod io;
-mod metadata;
-mod parameters;
-pub mod prelude;
-mod sequence_block;
-pub mod structs;
 mod utils;
 
+pub mod prelude;
+
+pub use crate::data_types::structs::*;
 pub use crate::fasta::*;
 pub use crate::io::*;
-pub use crate::structs::*;
 pub use crate::utils::*;
