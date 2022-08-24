@@ -19,15 +19,15 @@ impl SequenceBlock {
         match compression_type {
             CompressionType::ZSTD => {
                 let mut encoder = zstd::stream::Encoder::new(cseq, level).unwrap();
-                /*encoder.set_parameter(zstd::stream::raw::CParameter::SrcSizeHint(
+                encoder.set_parameter(zstd::stream::raw::CParameter::SrcSizeHint(
                     self.seq.len() as u32
                 ));
                 encoder.set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false));
                 encoder.set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
                     true,
-                )); */
+                ));
 
-                /*encoder
+                encoder
                     .long_distance_matching(true)
                     .expect("Unable to set ZSTD Long Distance Matching");
                 encoder
@@ -38,8 +38,8 @@ impl SequenceBlock {
                     .expect("Unable to set ZSTD MagicBytes");
                 encoder
                     .include_contentsize(false)
-                    .expect("Unable to set ZSTD Content Size Flag"); */
-                    
+                    .expect("Unable to set ZSTD Content Size Flag");
+
                 encoder
                     .write_all(&self.seq[..])
                     .expect("Unable to write sequence to ZSTD compressor");
