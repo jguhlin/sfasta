@@ -147,6 +147,8 @@ impl Converter {
         W: WriteAndSeek + 'convert + std::fmt::Debug,
         R: Read + Send + 'convert,
     {
+        let mut debug_size: Vec<(String, usize)> = Vec::new();
+
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
@@ -176,16 +178,22 @@ impl Converter {
             out_fh.seek(SeekFrom::Current(0)).unwrap()
         );
 
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+
         // Write sequences
         let sb = CompressionStreamBuffer::default()
             .with_block_size(self.block_size as u32)
             .with_compression_type(self.compression_type)
             .with_threads(self.threads as u16); // Effectively # of compression threads
 
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
         let (seq_locs, block_index_pos) = write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
+
+        debug_size.push(("sequences".to_string(), (end - start) as usize));
 
         log::debug!(
             "Writing sequences finished... {}",
@@ -236,11 +244,17 @@ impl Converter {
                 "Writing SeqLocs to file. {}",
                 out_buf.seek(SeekFrom::Current(0)).unwrap()
             );
+
+            let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
             seqlocs_location = seqlocs.write_to_buffer(&mut out_buf);
             log::debug!(
                 "Writing SeqLocs to file: COMPLETE. {}",
                 out_buf.seek(SeekFrom::Current(0)).unwrap()
             );
+
+            let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+            debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
                 id_index_pos = out_buf
@@ -252,7 +266,14 @@ impl Converter {
                     "Writing index to file. {}",
                     out_buf.seek(SeekFrom::Current(0)).unwrap()
                 );
+
+                let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
                 index.write_to_buffer(&mut out_buf);
+
+                let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+                debug_size.push(("index".to_string(), (end - start) as usize));
+
                 log::debug!(
                     "Writing index to file: COMPLETE. {}",
                     out_buf.seek(SeekFrom::Current(0)).unwrap()
@@ -279,9 +300,15 @@ impl Converter {
 
         // Here we re-write the directory information at the start of the file, allowing for
         // easy jumps to important areas while keeping everything in a single file
+
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
         bincode::encode_into_std_write(dir, &mut out_buf, bincode_config)
             .expect("Unable to write directory to file");
+
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        debug_size.push(("directory".to_string(), (end - start) as usize));
 
         out_buf.into_inner().unwrap()
     }
