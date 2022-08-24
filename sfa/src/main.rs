@@ -69,10 +69,9 @@ enum Commands {
     },
     Convert {
         input: String,
+        #[clap(short, long)]
+        #[clap(default_value_t = 4)]
         threads: u8,
-        block_size: u16,
-        index_chunk_size: u16,
-        seqlocs_chunk_size: u16,
         #[clap(short, long)]
         noindex: bool,
         #[clap(short, long)]
@@ -120,9 +119,6 @@ fn main() {
         Commands::Convert {
             input,
             threads,
-            block_size,
-            index_chunk_size,
-            seqlocs_chunk_size,
             noindex,
             zstd,
             lz4,
@@ -130,7 +126,7 @@ fn main() {
             brotli,
             snappy,
             gzip,
-        } => todo!(),
+        } => convert(&input, *threads as usize, *zstd, *lz4, *xz, *gzip, *brotli, *snappy, *noindex),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
         Commands::Bp { input } => todo!(),
@@ -279,9 +275,6 @@ fn convert(
     gzip: bool,
     brotli: bool,
     snappy: bool,
-    block_size: u16,
-    index_chunk_size: u16,
-    seqlocs_chunk_size: u16,
     noindex: bool,
 ) {
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
@@ -343,8 +336,8 @@ fn convert(
     // Disabled for now, no improvement
     // converter = converter.with_dict(dict);
 
-    converter = converter.with_block_size(block_size as usize * 1024);
-    converter = converter.with_seqlocs_chunk_size(seqlocs_chunk_size as usize);
+    // converter = converter.with_block_size(block_size as usize * 1024);
+    // converter = converter.with_seqlocs_chunk_size(seqlocs_chunk_size as usize);
 
     if noindex {
         println!("Noindex received");
