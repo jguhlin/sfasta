@@ -202,7 +202,7 @@ impl Converter {
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer = crate::dual_level_index::DualIndexBuilder::with_capacity(seq_locs.len());
 
-        let mut out_buf = BufWriter::with_capacity(8 * 1024 * 1024, out_fh);
+        let mut out_buf = BufWriter::with_capacity(128 * 1024, out_fh);
 
         let mut seqlocs = SeqLocs::with_data(seq_locs);
 
@@ -347,7 +347,7 @@ where
 
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
-        let mut out_buf = BufWriter::with_capacity(32 * 1024 * 1024, &mut out_fh);
+        let mut out_buf = BufWriter::with_capacity(128 * 1024, &mut out_fh);
         let reader_handle = s.spawn(move |_| {
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
             let mut in_buf_reader = BufReader::new(in_buf);
