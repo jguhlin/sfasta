@@ -186,13 +186,13 @@ impl Converter {
             .with_compression_type(self.compression_type)
             .with_threads(self.threads as u16); // Effectively # of compression threads
 
-        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
-
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
         let (seq_locs, block_index_pos) = write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
 
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        
         debug_size.push(("sequences".to_string(), (end - start) as usize));
 
         log::debug!(
