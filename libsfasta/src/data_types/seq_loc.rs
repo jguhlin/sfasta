@@ -17,7 +17,7 @@ impl SeqLocs {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 64 * 1024,
+            chunk_size: 128 * 1024,
             data: None,
         }
     }
@@ -27,7 +27,7 @@ impl SeqLocs {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 64 * 1024,
+            chunk_size: 128 * 1024,
             data: Some(data),
         }
     }
@@ -76,7 +76,14 @@ impl SeqLocs {
         bincode::encode_into_std_write(&self.block_index_pos, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
 
+        // zstd level -3 for speed
+        // zstd appears to outperform lz4 for numeric data
+        let mut compressor =
+            // zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3).unwrap();
+            zstd::bulk::Compressor::new(4).unwrap();
+
         // FORMAT: Write sequence location blocks
+        // TODO: Make a chunk for this, and split up strings + numbers, and bincode the numbers...
         for s in seq_locs
             .iter()
             .collect::<Vec<&SeqLoc>>()
@@ -90,14 +97,11 @@ impl SeqLocs {
 
             let locs = s.to_vec();
 
-            // zstd level -3 for speed
-            // zstd appears to outperform lz4 for numeric data
-            let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
+            let mut bincoded: Vec<u8> = Vec::new();
 
-            bincode::encode_into_std_write(&locs, &mut compressor, bincode_config)
+            bincode::encode_into_std_write(&locs, &mut bincoded, bincode_config)
                 .expect("Unable to bincode locs into compressor");
-            let compressed = compressor.finish().unwrap();
+            let compressed = compressor.compress(&bincoded).unwrap();
 
             bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
                 .expect("Unable to write Sequence Blocks to file");
@@ -109,12 +113,14 @@ impl SeqLocs {
 
         // Does this need a dual index or bitpacking?
         // Need to measure on large files...
-        let mut compressor =
-            zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
+        // let mut compressor =
+            // zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
 
-        bincode::encode_into_std_write(&block_locations, &mut compressor, bincode_config)
+        let mut bincoded: Vec<u8> = Vec::new();
+
+        bincode::encode_into_std_write(&block_locations, &mut bincoded, bincode_config)
             .expect("Unable to bincode locs into compressor");
-        let compressed = compressor.finish().unwrap();
+        let compressed = compressor.compress(&bincoded).unwrap();
 
         bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
             .expect("Unable to write Sequence Blocks to file");
