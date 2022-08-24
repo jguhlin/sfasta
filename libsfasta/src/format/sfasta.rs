@@ -133,7 +133,7 @@ impl Sfasta {
     pub fn get_sequence(&self, locs: &Vec<Loc>) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024); // TODO: We can calculate this
 
-        if locs.len() == 0 {
+        if locs.is_empty() {
             return Err("No locations passed, Vec<Loc> is empty");
         }
 
@@ -195,11 +195,12 @@ impl SfastaParser {
             .expect("Unable to read SFASTA Marker");
         assert!(sfasta_marker == "sfasta".as_bytes());
 
-        let mut sfasta = Sfasta::default();
-
-        sfasta.version = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA directory: {}", y),
+        let mut sfasta = Sfasta {
+            version: match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                Ok(x) => x,
+                Err(y) => panic!("Error reading SFASTA directory: {}", y),
+            },
+            ..Default::default()
         };
 
         assert!(sfasta.version <= 1); // 1 is the maximum version supported at this stage...
@@ -255,10 +256,8 @@ impl SfastaParser {
         let bitpacked_u32: Vec<Packed> = bincode::decode_from_std_read(&mut in_buf, bincode_config)
             .expect("Unable to parse block locs index");
 
-        let block_locs_staggered: Vec<Vec<u32>> = bitpacked_u32
-            .into_iter()
-            .map(|x| x.unpack(num_bits))
-            .collect();
+        let block_locs_staggered = bitpacked_u32
+            .into_iter().map(|x| x.unpack(num_bits));
         let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
         let block_locs: Vec<u64> = unsafe {
             std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len())
@@ -358,9 +357,8 @@ mod tests {
 
         let mut out_buf = converter.convert_fasta(in_buf, out_buf);
 
-        match out_buf.seek(SeekFrom::Start(0)) {
-            Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
-            Ok(_) => (),
+        if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
+            panic!("Unable to seek to start of file, {:#?}", x)
         };
 
         let mut sfasta = SfastaParser::open_from_buffer(out_buf);
@@ -370,7 +368,7 @@ mod tests {
         assert!(output.id == "test3");
 
         let sequence = sfasta
-            .get_sequence(&output.sequence.as_ref().unwrap())
+            .get_sequence(output.sequence.as_ref().unwrap())
             .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
 
@@ -395,9 +393,8 @@ mod tests {
 
         let mut out_buf = converter.convert_fasta(in_buf, out_buf);
 
-        match out_buf.seek(SeekFrom::Start(0)) {
-            Err(x) => panic!("Unable to seek to start of file, {:#?}", x),
-            Ok(_) => (),
+        if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
+            panic!("Unable to seek to start of file, {:#?}", x)
         };
 
         let mut sfasta = SfastaParser::open_from_buffer(out_buf);

@@ -1,22 +1,11 @@
 use crate::*;
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default)]
 pub struct IndexDirectory {
     pub id_index: Option<u64>,
     pub block_index: Option<u64>,
     pub scores_block_index: Option<u64>,
     pub masking_block_index: Option<u64>,
-}
-
-impl Default for IndexDirectory {
-    fn default() -> Self {
-        IndexDirectory {
-            id_index: None,
-            block_index: None,
-            scores_block_index: None,
-            masking_block_index: None,
-        }
-    }
 }
 
 impl IndexDirectory {

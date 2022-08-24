@@ -126,7 +126,7 @@ pub fn bitpack_u32(to_pack: &[u32]) -> (u8, Vec<Packed>) {
                                                 // });
     }
 
-    if remainder.len() > 0 {
+    if !remainder.is_empty() {
         /*bitpacked.push(Bitpacked {
             num_bits: 0,
             packed: Packed::Remainder(remainder.to_vec()),
@@ -134,7 +134,7 @@ pub fn bitpack_u32(to_pack: &[u32]) -> (u8, Vec<Packed>) {
         bitpacked.push(Packed::Remainder(remainder.to_vec()));
     }
 
-    return (num_bits, bitpacked);
+    (num_bits, bitpacked)
 }
 
 /* pub fn compress(ct: CompressionType, data: &[u8]) -> Vec<u8> {

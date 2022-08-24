@@ -11,8 +11,8 @@ pub struct SeqLocs {
     pub data: Option<Vec<SeqLoc>>,
 }
 
-impl SeqLocs {
-    pub fn new() -> Self {
+impl Default for SeqLocs {
+    fn default() -> Self {
         SeqLocs {
             location: 0,
             block_index_pos: 0,
@@ -20,6 +20,12 @@ impl SeqLocs {
             chunk_size: 128 * 1024,
             data: None,
         }
+    }
+}
+
+impl SeqLocs {
+    pub fn new() -> Self {
+        SeqLocs::default()
     }
 
     pub fn with_data(data: Vec<SeqLoc>) -> Self {

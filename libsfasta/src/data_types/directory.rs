@@ -45,7 +45,7 @@ impl From<Directory> for DirectoryOnDisk {
 
 // , bincode::Encode, bincode::Decode
 // Directory should not be encoded, DirectoryOnDisk should be (can use .into or .from to get there and back)
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default,)]
 pub struct Directory {
     pub index_loc: Option<NonZeroU64>,
     pub ids_loc: Option<NonZeroU64>,
@@ -69,7 +69,7 @@ impl From<DirectoryOnDisk> for Directory {
     }
 }
 
-impl Default for Directory {
+/*impl Default for Directory {
     fn default() -> Self {
         Directory {
             index_loc: None,
@@ -80,7 +80,7 @@ impl Default for Directory {
             masking_loc: None,
         }
     }
-}
+}*/
 
 impl Directory {
     /* pub fn with_sequences(mut self) -> Self {
@@ -172,7 +172,7 @@ mod tests {
         let encoded_1: Vec<u8> = bincode::encode_to_vec(&dir, bincode_config).unwrap();
 
         directory.scores_loc = NonZeroU64::new(std::u64::MAX);
-        let dir: DirectoryOnDisk = directory.clone().into();
+        let dir: DirectoryOnDisk = directory.into();
         let encoded_2: Vec<u8> = bincode::encode_to_vec(&dir, bincode_config).unwrap();
         println!(
             "{} {} {}",
@@ -191,6 +191,6 @@ mod tests {
         assert!(d.scores_loc == NonZeroU64::new(1));
 
         let d = Directory::default();
-        assert!(d.scores_loc == None);
+        assert!(d.scores_loc.is_none());
     }
 }

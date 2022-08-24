@@ -1,6 +1,5 @@
 // Easy, high-performance conversion functions
 use crossbeam::thread;
-use log;
 use std::fs::{metadata, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;

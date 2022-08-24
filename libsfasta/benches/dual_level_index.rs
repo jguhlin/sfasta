@@ -23,7 +23,7 @@ pub fn di_benchmark(c: &mut Criterion) {
     let mut rng = rand::thread_rng();
     let mut data = Vec::with_capacity(1_024 * 1_024);
 
-    for i in (0_u64..10000) {
+    for i in 0_u64..10000 {
         data.push((i.to_string(), (i * 2) as u32));
     }
 

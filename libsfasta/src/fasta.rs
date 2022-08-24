@@ -25,7 +25,7 @@ impl<'fasta, R: BufRead> Fasta<'fasta, R> {
         Fasta {
             reader: in_buf,
             buffer: Vec::with_capacity(1024),
-            seqbuffer: Vec::with_capacity(1 * 1024 * 1024),
+            seqbuffer: Vec::with_capacity(1024 * 1024),
             next_seqid: None,
             next_header: None,
             seqlen: 0,
@@ -92,7 +92,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                                 //seq: self.seqbuffer[..self.seqlen].to_vec(),
                                 seq,
                                 id: id.unwrap(),
-                                header: header.unwrap_or("".to_string()),
+                                header: header.unwrap_or_else(|| "".to_string()),
                             };
                             self.seqbuffer.clear();
                             self.seqlen = 0;

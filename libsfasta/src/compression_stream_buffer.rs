@@ -168,7 +168,7 @@ impl CompressionStreamBuffer {
 
         let x = SequenceBlock { seq };
 
-        if x.len() == 0 {
+        if x.is_empty() {
             return;
         }
 

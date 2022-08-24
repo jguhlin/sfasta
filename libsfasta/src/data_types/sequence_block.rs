@@ -160,6 +160,10 @@ impl SequenceBlock {
         self.seq.len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.seq.is_empty()
+    }
+
     // Convenience Function
     /*    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self.compression_type = compression_type;
@@ -222,7 +226,6 @@ mod tests {
         let test_bytes = b"abatcacgactac".to_vec();
         let x = SequenceBlockCompressed {
             compressed_seq: test_bytes.clone(),
-            ..Default::default()
         };
 
         let encoded = bincode::encode_to_vec(&x, bincode_config).unwrap();
@@ -238,7 +241,6 @@ mod tests {
         let test_bytes = b"abatcacgactac".to_vec();
         let x = SequenceBlock {
             seq: test_bytes.clone(),
-            ..Default::default()
         };
 
         let y = x.compress(CompressionType::ZSTD);

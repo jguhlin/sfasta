@@ -74,9 +74,9 @@ impl<R: BufRead> Iterator for Fastq<R> {
         Some(Sequence {
             id,
             seq: seq.to_vec(),
-            plus: plus.to_string(),
+            plus,
             scores: scores.to_vec(),
-            header: header.to_string(),
+            header,
         })
     }
 }

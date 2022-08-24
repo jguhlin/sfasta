@@ -79,14 +79,20 @@ pub struct DualIndexBuilder {
     pub hasher: Hashes,
 }
 
-impl DualIndexBuilder {
-    pub fn new() -> Self {
+impl Default for DualIndexBuilder {
+    fn default() -> Self {
         Self {
             ids: Vec::new(),
             locs: Vec::new(),
             chunk_size: DEFAULT_CHUNK_SIZE,
             hasher: Hashes::XxHash64,
         }
+    }
+}
+
+impl DualIndexBuilder {
+    pub fn new() -> Self {
+        DualIndexBuilder::default()
     }
 
     pub fn with_capacity(capacity: usize) -> Self {
@@ -242,7 +248,7 @@ impl DualIndexWriter {
         // [[u64, u64, u64, u64...], [u64, u64, u64, u64...],...] // Blocks of u64 hashes...
         // Hashes don't really compress, so we don't try...
 
-        for i in 0..chunks {
+        (0..chunks).for_each(|i| {
             // Below is 136.71ms
             let start = i * chunk_size;
             let end = std::cmp::min((i + 1) * chunk_size, len);
@@ -253,7 +259,7 @@ impl DualIndexWriter {
                 bincode_config,
             )
             .expect("Bincode error");
-        }
+        });
 
         // Write the hash chunks
         // Current written data is:
@@ -262,7 +268,7 @@ impl DualIndexWriter {
         // [(123, 0, 0), (234, 0, 0), (345, 0, 0), ...] -- key/id block location index (key here is the first hash value in the block)
         // [[u64, u64, u64, u64...], [u64, u64, u64, u64...],...] // Blocks of u64 hashes...
         // [Vec<u8>, Vec<u8>, Vec<u8>, ...] // Blocks of compressed (lz4_flex) Strings (IDs)
-        for i in 0..chunks {
+        (0..chunks).for_each(|i| {
             let start = i * chunk_size;
             let end = std::cmp::min((i + 1) * chunk_size, len);
 
@@ -280,7 +286,7 @@ impl DualIndexWriter {
             let compressed = encoder.finish().unwrap();
             bincode::encode_into_std_write(&*compressed, &mut out_buf, bincode_config)
                 .expect("Bincode error");
-        }
+        });
 
         // Current written data is:
         // 0 # u64 hash_index
@@ -525,9 +531,7 @@ impl DualIndex {
             in_buf.seek(SeekFrom::Start(bitpacked_loc)).unwrap();
         }
 
-        let chunk: Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-
-        return chunk;
+        bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap()
     }
 
     pub fn len(&self) -> usize {
@@ -550,9 +554,7 @@ impl DualIndex {
 
         let putative_block = self.get_putative_block(hash);
 
-        if putative_block.is_none() {
-            return None;
-        }
+        putative_block?;
 
         let (block_num, hash_chunk_loc, id_chunk_loc) = putative_block.unwrap();
         let hash_chunk = self.get_hash_chunk_by_loc(&mut in_buf, hash_chunk_loc);
