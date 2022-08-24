@@ -421,6 +421,8 @@ where
         // FORMAT: Write each sequence block to file
 
         // This writes out the sequence blocks (seqblockcompressed)
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
         loop {
             result = oq.pop();
 
@@ -443,6 +445,11 @@ where
                 }
             }
         }
+
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        println!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
         // Block Index
         block_index_pos = Some(
@@ -467,6 +474,9 @@ where
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
             .expect("Unable to write to bincode output");
         bincode::encode_into_std_write(&bitpacked, &mut out_buf, bincode_config).unwrap();
+
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        println!("DEBUG: Wrote {} bytes of block index", end - start);
 
         // let compressed: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
         // let mut encoder = zstd::stream::Encoder::new(compressed, -3).unwrap();

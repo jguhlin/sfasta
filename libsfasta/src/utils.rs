@@ -25,7 +25,7 @@ impl Packed {
             Packed::Packed(packed) => {
                 let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
                 let bitpacker = BitPacker8x::new();
-                bitpacker.decompress(&packed, &mut decompressed[..], num_bits);
+                bitpacker.decompress(packed, &mut decompressed[..], num_bits);
                 decompressed
             }
             Packed::Remainder(remainder) => remainder.clone(),
