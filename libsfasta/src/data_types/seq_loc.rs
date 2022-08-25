@@ -1,4 +1,5 @@
 // TODO! Need tests...
+// TODO: Move Seq IDs to separate stream (like headers)
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
