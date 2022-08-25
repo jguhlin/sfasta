@@ -1,5 +1,5 @@
 // TODO! Need tests...
-// TODO: Move Seq IDs to separate stream (like headers)
+// TODO: Bitpack seqlocs instead of zstd compress...
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
