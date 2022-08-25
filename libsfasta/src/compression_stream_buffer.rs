@@ -117,7 +117,7 @@ impl CompressionStreamBuffer {
     pub fn add_sequence(&mut self, x: &mut [u8]) -> Result<(Vec<Loc>, Vec<Loc>), &'static str> {
         assert!(self.block_size > 0);
         assert!(!self.finalized, "SeqBuffer has been finalized.");
-        
+
         if !self.initialized {
             self.initialize();
         }
