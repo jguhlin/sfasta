@@ -121,7 +121,7 @@ impl SeqLocs {
             let mut bincoded: Vec<u8> = Vec::new();
 
             let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
+                zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 9)
                     .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
