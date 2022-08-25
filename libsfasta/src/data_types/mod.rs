@@ -1,5 +1,6 @@
 pub mod directory;
 pub mod header;
+pub mod id;
 pub mod index_directory;
 pub mod metadata;
 pub mod parameters;
@@ -9,6 +10,7 @@ pub mod structs;
 
 pub use directory::*;
 pub use header::*;
+pub use id::*;
 pub use index_directory::*;
 pub use metadata::*;
 pub use parameters::*;

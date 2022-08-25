@@ -21,6 +21,7 @@ pub struct Sfasta {
     pub block_locs: Option<Vec<u64>>,
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<Headers>,
+    pub ids: Option<Ids>,
 }
 
 impl Default for Sfasta {
@@ -36,6 +37,7 @@ impl Default for Sfasta {
             block_locs: None,
             seqlocs: None,
             headers: None,
+            ids: None,
         }
     }
 }
@@ -136,6 +138,12 @@ impl Sfasta {
         let headers = self.headers.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         Ok(headers.get_header(&mut buf, locs))
+    }
+
+    pub fn get_id(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
+        let ids = self.ids.as_mut().unwrap();
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        Ok(ids.get_id(&mut buf, locs))
     }
 
     pub fn get_sequence(&self, locs: &Vec<Loc>) -> Result<Vec<u8>, &'static str> {
@@ -296,6 +304,13 @@ impl SfastaParser {
             ));
         }
 
+        if sfasta.directory.ids_loc.is_some() {
+            sfasta.ids = Some(Ids::from_buffer(
+                &mut in_buf,
+                sfasta.directory.ids_loc.unwrap().get() as u64,
+            ));
+        }
+
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 
         sfasta
@@ -337,11 +352,9 @@ mod tests {
         let output = sfasta.find("does-not-exist");
         assert!(output == Ok(None));
 
-        let output = &sfasta.find("needle").unwrap().unwrap();
-        assert!(output.id == "needle");
+        let _output = &sfasta.find("needle").expect("Unable to find-0").expect("Unable to find-1");
 
         let output = &sfasta.find("needle_last").unwrap().unwrap();
-        assert!(output.id == "needle_last");
 
         let sequence = sfasta
             .get_sequence(output.sequence.as_ref().unwrap())
@@ -374,7 +387,6 @@ mod tests {
         assert!(sfasta.index_len() == 10);
 
         let output = &sfasta.find("test3").unwrap().unwrap();
-        assert!(output.id == "test3");
 
         let sequence = sfasta
             .get_sequence(output.sequence.as_ref().unwrap())
@@ -410,7 +422,6 @@ mod tests {
         assert!(sfasta.index_len() == 10);
 
         let output = &sfasta.find("test3").unwrap().unwrap();
-        assert!(output.id == "test3");
         sfasta.find("test").unwrap().unwrap();
         sfasta.find("test2").unwrap().unwrap();
         sfasta.find("test3").unwrap().unwrap();

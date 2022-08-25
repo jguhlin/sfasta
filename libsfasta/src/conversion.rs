@@ -193,7 +193,7 @@ impl Converter {
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
-        let (seq_locs, block_index_pos, headers_location) =
+        let (ids, seq_locs, block_index_pos, headers_location, ids_location) =
             write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
 
         let end_time = std::time::Instant::now();
@@ -249,8 +249,8 @@ impl Converter {
         thread::scope(|s| {
             // Start a thread to build the index...
             let index_handle = Some(s.spawn(|_| {
-                for (i, seqloc) in to_index.iter().enumerate() {
-                    indexer.add(seqloc.id.clone(), i as u32);
+                for (i, id) in ids.into_iter().enumerate() {
+                    indexer.add(id, i as u32);
                 }
 
                 let indexer: DualIndexWriter = indexer.into();
@@ -311,6 +311,7 @@ impl Converter {
         sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
         sfasta.directory.index_loc = NonZeroU64::new(id_index_pos);
         sfasta.directory.headers_loc = headers_location;
+        sfasta.directory.ids_loc = ids_location;
 
         // TODO: Scores Block Index
 
@@ -391,7 +392,13 @@ pub fn write_fasta_sequence<'write, W, R>(
     mut sb: CompressionStreamBuffer,
     in_buf: &mut R,
     mut out_fh: &mut W,
-) -> (Vec<SeqLoc>, u64, Option<NonZeroU64>)
+) -> (
+    Vec<String>,
+    Vec<SeqLoc>,
+    u64,
+    Option<NonZeroU64>,
+    Option<NonZeroU64>,
+)
 where
     W: WriteAndSeek + 'write,
     R: Read + Send + 'write,
@@ -408,6 +415,9 @@ where
     let mut block_index_pos = None;
     let mut headers = None;
     let mut headers_location = None;
+    let mut ids = None;
+    let mut ids_location = None;
+    let mut ids_string = Vec::new();
 
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
@@ -422,16 +432,21 @@ where
             let mut seq_locs = Vec::with_capacity(512 * 1024);
 
             let mut headers = Headers::default();
+            let mut ids = Ids::default();
+            let mut ids_string = Vec::new();
 
             // For each Sequence in the fasta file, make it upper case (masking is stored separately)
             // Add the sequence, get the SeqLocs and store them in Location struct
             // And store that in seq_locs Vec...
             for mut i in fasta {
                 let (loc, masking) = sb.add_sequence(&mut i.seq[..]).unwrap();
-                let mut location = SeqLoc::new(i.id);
-                if i.header.len() > 0 {
+                ids_string.push(i.id.clone());
+                let idloc = ids.add_id(i.id);
+                let mut location = SeqLoc::new();
+                if !i.header.is_empty() {
                     location.headers = Some(headers.add_header(i.header));
                 }
+                location.ids = Some(idloc);
                 location.sequence = Some(loc);
                 location.masking = Some(masking);
                 seq_locs.push(location);
@@ -444,7 +459,7 @@ where
             };
 
             // Return seq_locs to the main thread
-            (seq_locs, headers)
+            (seq_locs, headers, ids, ids_string)
         });
 
         // Store the location of the Sequence Blocks...
@@ -519,10 +534,15 @@ where
         let j = reader_handle.join().expect("Unable to join thread");
         seq_locs = Some(j.0);
         headers = Some(j.1);
+        ids = Some(j.2);
+        ids_string = j.3;
 
-        let mut headers = headers.unwrap();
+        headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_buf) {
+            Some(x) => NonZeroU64::new(x),
+            None => None,
+        };
 
-        headers_location = match headers.write_to_buffer(&mut out_buf) {
+        ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_buf) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
@@ -530,9 +550,11 @@ where
     .expect("Error");
 
     (
+        ids_string,
         seq_locs.expect("Error"),
         block_index_pos.expect("Error"),
         headers_location,
+        ids_location,
     )
 }
 

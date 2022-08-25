@@ -328,15 +328,19 @@ fn view(input: &str) {
         panic!("File is empty of corrupt");
     }
 
+    // TODO: Make DualIndex NOT store strings anymore
+    // SFASTA parser to use ids...
+
     for i in 0..sfasta.len() {
         let seqloc = &sfasta.get_seqloc(i);
+        let id = &sfasta.get_id(&seqloc.ids.as_ref().unwrap()).unwrap();
         if seqloc.headers.is_some() {
             let header = sfasta
                 .get_header(&seqloc.headers.as_ref().unwrap())
                 .expect("Unable to fetch header");
-            println!(">{} {}", seqloc.id, header);
+            println!(">{} {}", id, header);
         } else {
-            println!(">{}", seqloc.id);
+            println!(">{}", id);
         }
 
         let mut sequence = sfasta
@@ -364,7 +368,8 @@ fn list(input: &str) {
 
     for i in 0..sfasta.len() {
         let seqloc = &sfasta.get_seqloc(i);
-        println!("{}", seqloc.id);
+        let id = &sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
+        println!("{}", id);
     }
 }
 

@@ -292,21 +292,21 @@ impl SeqLocs {
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]
 pub struct SeqLoc {
-    pub id: String,
     pub sequence: Option<Vec<Loc>>,
     pub masking: Option<Vec<Loc>>,
     pub scores: Option<Vec<Loc>>,
     pub headers: Option<Vec<Loc>>,
+    pub ids: Option<Vec<Loc>>,
 }
 
 impl SeqLoc {
-    pub const fn new(id: String) -> Self {
+    pub const fn new() -> Self {
         Self {
-            id,
             sequence: None,
             masking: None,
             scores: None,
             headers: None,
+            ids: None,
         }
     }
 }
