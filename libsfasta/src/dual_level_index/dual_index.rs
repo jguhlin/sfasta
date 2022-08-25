@@ -165,7 +165,7 @@ impl From<DualIndexBuilder> for DualIndexWriter {
                 .collect::<Vec<u64>>()
         };
 
-        let mut tuples: Vec<(u64, u32, String)> = izip!(hashes, locs, ids).collect();
+        let mut tuples: Vec<(u64, u32)> = izip!(hashes, locs).collect();
         if len >= MULTITHREAD_BOUNDARY {
             tuples.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
         } else {
@@ -174,17 +174,17 @@ impl From<DualIndexBuilder> for DualIndexWriter {
 
         let mut hashes: Vec<u64> = Vec::with_capacity(len);
         let mut locs: Vec<u32> = Vec::with_capacity(len);
-        let mut ids: Vec<String> = Vec::with_capacity(len);
+        // let mut ids: Vec<String> = Vec::with_capacity(len);
 
-        for (hash, loc, id) in tuples.into_iter() {
+        for (hash, loc) in tuples.into_iter() {
             //tuples.drain(..) {
             hashes.push(hash);
             locs.push(loc);
-            ids.push(id);
+            // ids.push(id);
         }
 
         writer.hashes = hashes;
-        writer.ids = ids;
+        // writer.ids = ids;
         writer.locs = locs;
 
         writer
@@ -228,8 +228,8 @@ impl DualIndexWriter {
         // u64 of the first hash in the block, u64 of the location of the block of bincoded hashes...
         let mut hash_block_index = hash_index
             .iter()
-            .map(|x| (*x, 0, 0))
-            .collect::<Vec<(u64, u64, u64)>>();
+            .map(|x| (*x, 0))
+            .collect::<Vec<(u64, u64)>>();
 
         // Write the block_locs
         // Location of value blocks (value in this case are Locations)
@@ -275,6 +275,7 @@ impl DualIndexWriter {
         // [(123, 0, 0), (234, 0, 0), (345, 0, 0), ...] -- key/id block location index (key here is the first hash value in the block)
         // [[u64, u64, u64, u64...], [u64, u64, u64, u64...],...] // Blocks of u64 hashes...
         // [Vec<u8>, Vec<u8>, Vec<u8>, ...] // Blocks of compressed (lz4_flex) Strings (IDs)
+        /*
         (0..chunks).for_each(|i| {
             let start = i * chunk_size;
             let end = std::cmp::min((i + 1) * chunk_size, len);
@@ -293,7 +294,7 @@ impl DualIndexWriter {
             let compressed = encoder.finish().unwrap();
             bincode::encode_into_std_write(&*compressed, &mut out_buf, bincode_config)
                 .expect("Bincode error");
-        });
+        }); */
 
         // Current written data is:
         // 0 # u64 hash_index
@@ -372,7 +373,7 @@ pub struct DualIndex {
     pub num_bits: u8,
     pub bitpacked_len: u64,
     pub remainder_loc: u64,
-    pub value_block_index: Option<Vec<(u64, u64, u64)>>,
+    pub value_block_index: Option<Vec<(u64, u64)>>,
     pub hasher: Hashes,
     pub len: usize,
 }
@@ -414,57 +415,21 @@ impl DualIndex {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
         in_buf.seek(SeekFrom::Start(self.hash_index)).unwrap();
-        let hash_block_index: Vec<(u64, u64, u64)> =
+        let hash_block_index: Vec<(u64, u64)> =
             bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
         self.value_block_index = Some(hash_block_index);
     }
 
-    pub fn all_ids<R>(&mut self, mut in_buf: &mut R) -> Vec<String>
-    where
-        R: Read + Seek,
-    {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-        if self.value_block_index.is_none() {
-            self.load_index(&mut in_buf);
-        }
-
-        let mut ids = Vec::with_capacity(
-            self.value_block_index.as_ref().unwrap().len() * self.chunk_size as usize,
-        );
-
-        for (_, _, pos) in self.value_block_index.as_ref().unwrap().iter() {
-            in_buf.seek(SeekFrom::Start(*pos as u64)).unwrap();
-            let compressed: Vec<u8> =
-                bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-
-            // let decompressed = lz4_flex::decompress_size_prepended(&compressed).unwrap();
-            let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
-            decoder
-                .include_magicbytes(false)
-                .expect("Unable to disable magicbytes in decoder");
-            let mut decompressed: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
-            decoder.read_to_end(&mut decompressed).unwrap();
-            let ids_in_chunk: Vec<String> =
-                bincode::decode_from_slice(&decompressed[..], bincode_config)
-                    .unwrap()
-                    .0;
-            ids.extend(ids_in_chunk);
-        }
-
-        ids
-    }
-
-    fn get_putative_block(&self, hash: u64) -> Option<(usize, u64, u64)> {
+    fn get_putative_block(&self, hash: u64) -> Option<(usize, u64)> {
         let vbi = self.value_block_index.as_ref().unwrap();
         if vbi.is_empty() {
-            return Some((0, vbi[0].1, vbi[0].2));
+            return Some((0, vbi[0].1));
         }
 
         // TODO: Make this a better binary search....
         // TODO: It looks like Vec's binary_search_by would give us the correct answer!
 
-        let find = vbi.binary_search_by(|&(h, _, _)| {
+        let find = vbi.binary_search_by(|&(h, _)| {
             h.cmp(&hash)
             /*            match h.cmp(&hash) {
                 Ordering::Equal => Ordering::Equal,
@@ -481,12 +446,12 @@ impl DualIndex {
         });
 
         match find {
-            Ok(i) => Some((i, vbi[i].1, vbi[i].2)),
+            Ok(i) => Some((i, vbi[i].1)),
             Err(i) => {
                 if i == 0 {
-                    Some((0, vbi[0].1, vbi[0].2))
+                    Some((0, vbi[0].1))
                 } else {
-                    Some((i - 1, vbi[i - 1].1, vbi[i - 1].2))
+                    Some((i - 1, vbi[i - 1].1))
                 }
             }
         }
@@ -499,29 +464,6 @@ impl DualIndex {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
         in_buf.seek(SeekFrom::Start(loc)).unwrap();
         bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap()
-    }
-
-    fn get_id_chunk_by_loc<R>(&self, mut in_buf: R, loc: u64) -> Vec<String>
-    where
-        R: Read + Seek,
-    {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-        in_buf.seek(SeekFrom::Start(loc)).unwrap();
-        let compressed: Vec<u8> =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-
-        let mut decoder = zstd::stream::Decoder::new(&compressed[..]).unwrap();
-        decoder
-            .include_magicbytes(false)
-            .expect("Unable to disable magicbytes in decoder");
-
-        let mut decompressed: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
-        decoder.read_to_end(&mut decompressed).unwrap();
-        // let decompressed = lz4_flex::decompress_size_prepended(&compressed).unwrap();
-
-        bincode::decode_from_slice(&decompressed[..], bincode_config)
-            .unwrap()
-            .0
     }
 
     pub fn get_bitpacked_chunk_by_pos<R>(&self, mut in_buf: R, pos: usize) -> Packed
@@ -563,7 +505,7 @@ impl DualIndex {
 
         putative_block?;
 
-        let (block_num, hash_chunk_loc, id_chunk_loc) = putative_block.unwrap();
+        let (block_num, hash_chunk_loc) = putative_block.unwrap();
         let hash_chunk = self.get_hash_chunk_by_loc(&mut in_buf, hash_chunk_loc);
         let pos = hash_chunk.binary_search(&hash);
 
@@ -573,11 +515,11 @@ impl DualIndex {
         }
 
         // If hash is found, we unpack the actual ID's...
-        let id_chunk = self.get_id_chunk_by_loc(&mut in_buf, id_chunk_loc);
+        // let id_chunk = self.get_id_chunk_by_loc(&mut in_buf, id_chunk_loc);
 
-        if id_chunk[pos.unwrap() as usize] != id {
-            return None;
-        }
+        // if id_chunk[pos.unwrap() as usize] != id {
+            // return None;
+        // }
 
         let actual_loc = pos.unwrap() as usize + block_num * self.chunk_size as usize;
         let bp = self.get_bitpacked_chunk_by_pos(&mut in_buf, actual_loc);
@@ -642,8 +584,8 @@ mod tests {
 
         let mut reader = DualIndex::new(&mut in_buf, 0);
 
-        let ids = reader.all_ids(&mut in_buf);
-        assert_eq!(ids.len(), 10001);
+        // let ids = reader.all_ids(&mut in_buf);
+        // assert_eq!(ids.len(), 10001);
 
         assert_eq!(Some(std::u32::MAX), reader.find(&mut in_buf, "Max"));
 
