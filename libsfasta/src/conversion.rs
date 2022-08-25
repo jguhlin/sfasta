@@ -247,11 +247,16 @@ impl Converter {
 
             let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
+            let start_time = std::time::Instant::now();
+
             seqlocs_location = seqlocs.write_to_buffer(&mut out_buf);
             log::debug!(
                 "Writing SeqLocs to file: COMPLETE. {}",
                 out_buf.seek(SeekFrom::Current(0)).unwrap()
             );
+
+            let end_time = std::time::Instant::now();
+            println!("SeqLocs write time: {:?}", end_time - start_time);
 
             let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
@@ -269,7 +274,10 @@ impl Converter {
 
                 let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
+                let start_time = std::time::Instant::now();
                 index.write_to_buffer(&mut out_buf);
+                let end_time = std::time::Instant::now();
+                println!("Index write time: {:?}", end_time - start_time);
 
                 let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
                 debug_size.push(("index".to_string(), (end - start) as usize));
