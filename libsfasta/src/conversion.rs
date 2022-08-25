@@ -188,7 +188,8 @@ impl Converter {
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
-        let (seq_locs, block_index_pos) = write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
+        let (seq_locs, block_index_pos, headers_location) =
+            write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
 
         let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
@@ -283,6 +284,7 @@ impl Converter {
 
         sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
         sfasta.directory.index_loc = NonZeroU64::new(id_index_pos);
+        sfasta.directory.headers_loc = headers_location;
 
         // TODO: Scores Block Index
 
@@ -309,7 +311,7 @@ impl Converter {
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
 
-        println!("DEBUG: {:?}", debug_size);
+        log::debug!("DEBUG: {:?}", debug_size);
 
         out_buf.into_inner().unwrap()
     }
@@ -357,7 +359,7 @@ pub fn write_fasta_sequence<'write, W, R>(
     mut sb: CompressionStreamBuffer,
     in_buf: &mut R,
     mut out_fh: &mut W,
-) -> (Vec<SeqLoc>, u64)
+) -> (Vec<SeqLoc>, u64, Option<NonZeroU64>)
 where
     W: WriteAndSeek + 'write,
     R: Read + Send + 'write,
@@ -372,6 +374,8 @@ where
 
     let mut seq_locs: Option<Vec<SeqLoc>> = None;
     let mut block_index_pos = None;
+    let mut headers = None;
+    let mut headers_location = None;
 
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
@@ -385,12 +389,17 @@ where
             // TODO: Auto adjust based off of size of input FASTA file
             let mut seq_locs = Vec::with_capacity(512 * 1024);
 
+            let mut headers = Headers::default();
+
             // For each Sequence in the fasta file, make it upper case (masking is stored separately)
             // Add the sequence, get the SeqLocs and store them in Location struct
             // And store that in seq_locs Vec...
             for mut i in fasta {
                 let (loc, masking) = sb.add_sequence(&mut i.seq[..]).unwrap();
                 let mut location = SeqLoc::new(i.id);
+                if i.header.len() > 0 {
+                    location.headers = Some(headers.add_header(i.header));
+                }
                 location.sequence = Some(loc);
                 location.masking = Some(masking);
                 seq_locs.push(location);
@@ -403,7 +412,7 @@ where
             };
 
             // Return seq_locs to the main thread
-            Some(seq_locs)
+            (seq_locs, headers)
         });
 
         // Store the location of the Sequence Blocks...
@@ -445,7 +454,7 @@ where
         }
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        println!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+        log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
 
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
@@ -473,13 +482,26 @@ where
         bincode::encode_into_std_write(&bitpacked, &mut out_buf, bincode_config).unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        println!("DEBUG: Wrote {} bytes of block index", end - start);
+        log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
 
-        seq_locs = reader_handle.join().unwrap();
+        let j = reader_handle.join().expect("Unable to join thread");
+        seq_locs = Some(j.0);
+        headers = Some(j.1);
+
+        let mut headers = headers.unwrap();
+
+        headers_location = match headers.write_to_buffer(&mut out_buf) {
+            Some(x) => NonZeroU64::new(x),
+            None => None,
+        };
     })
     .expect("Error");
 
-    (seq_locs.expect("Error"), block_index_pos.expect("Error"))
+    (
+        seq_locs.expect("Error"),
+        block_index_pos.expect("Error"),
+        headers_location,
+    )
 }
 
 #[cfg(test)]
@@ -518,7 +540,6 @@ mod tests {
             bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
         let dir = directory;
-        println!("{:#?}", dir);
 
         let _parameters: Parameters =
             bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();

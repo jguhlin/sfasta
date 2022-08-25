@@ -31,7 +31,7 @@ pub fn find_lowercase_range(block: u32, seq: &[u8]) -> Vec<Loc> {
         ranges.push(Loc::new(block, start as u32, end as u32));
     }
 
-    ranges    
+    ranges
 }
 
 pub fn apply_masking(seq: &mut [u8], ranges: &[Loc]) {
@@ -41,4 +41,3 @@ pub fn apply_masking(seq: &mut [u8], ranges: &[Loc]) {
         }
     }
 }
-

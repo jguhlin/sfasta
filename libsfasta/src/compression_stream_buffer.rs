@@ -9,8 +9,8 @@ use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
 use crate::data_types::*;
-use crate::CompressionType;
 use crate::masking::*;
+use crate::CompressionType;
 
 pub struct CompressionStreamBuffer {
     block_size: u32,
@@ -122,7 +122,7 @@ impl CompressionStreamBuffer {
         }
 
         let mut locs = Vec::with_capacity(8);
-        let mut masking =  Vec::with_capacity(8);
+        let mut masking = Vec::with_capacity(8);
 
         let block_size = self.block_size as usize;
 
@@ -241,7 +241,6 @@ fn _compression_worker_thread(
 
             Some((block_id, sb)) => {
                 let sbc = sb.compress(compression_type);
-
 
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
@@ -387,7 +386,6 @@ mod tests {
 
     #[test]
     pub fn test_masking() {
-
         let test_seqs = vec!["ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
         "ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
         "ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
@@ -396,7 +394,6 @@ mod tests {
         ];
 
         for orig_seq in test_seqs.iter().map(|x| x.as_bytes()) {
-
             let test_block_size = 512 * 1024;
 
             let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
@@ -413,7 +410,6 @@ mod tests {
             apply_masking(&mut compress_seq, &locs);
             assert_eq!(orig_seq, compress_seq);
         }
-
     }
 
     #[test]
@@ -427,6 +423,7 @@ mod tests {
 
         let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
 
-        sb.add_sequence(&mut myseq[..]).expect("Error adding sequence");
+        sb.add_sequence(&mut myseq[..])
+            .expect("Error adding sequence");
     }
 }

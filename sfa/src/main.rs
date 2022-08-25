@@ -114,8 +114,8 @@ fn main() {
     let cli = Cli::parse();
 
     match &cli.command {
-        Commands::View { input } => todo!(),
-        Commands::List { input } => todo!(),
+        Commands::View { input } => view(input),
+        Commands::List { input } => list(input),
         Commands::Faidx { input, ids } => faidx(&input, &ids),
         Commands::Convert {
             input,
@@ -274,6 +274,15 @@ fn main() {
     } */
 }
 
+fn print_sequence(seq: &[u8], line_length: usize) {
+    let mut i = 0;
+    while i < seq.len() {
+        let end = std::cmp::min(i + line_length, seq.len());
+        println!("{}", from_utf8(&seq[i..end]).unwrap());
+        i += line_length;
+    }
+}
+
 fn faidx(input: &str, ids: &Vec<String>) {
     let sfasta_filename = input;
 
@@ -287,11 +296,75 @@ fn faidx(input: &str, ids: &Vec<String>) {
             .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
             .unwrap();
 
-        let sequence = sfasta
+        if result.headers.is_some() {
+            let header = sfasta
+                .get_header(&result.headers.unwrap())
+                .expect("Unable to fetch header");
+            println!(">{} {}", i, header);
+        } else {
+            println!(">{}", i);
+        }
+
+        let mut sequence = sfasta
             .get_sequence(&result.sequence.unwrap())
             .expect("Unable to fetch sequence");
-        println!(">{}", i);
-        println!("{}", from_utf8(&sequence).unwrap());
+
+        if result.masking.is_some() {
+            apply_masking(&mut sequence, &result.masking.unwrap());
+        }
+
+        // 60 matches samtools faidx output
+        print_sequence(&sequence, 60);
+    }
+}
+
+fn view(input: &str) {
+    let sfasta_filename = input;
+
+    let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+    let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
+
+    if sfasta.seqlocs.is_none() {
+        panic!("File is empty of corrupt");
+    }
+
+    for i in 0..sfasta.len() {
+        let seqloc = &sfasta.get_seqloc(i);
+        if seqloc.headers.is_some() {
+            let header = sfasta
+                .get_header(&seqloc.headers.as_ref().unwrap())
+                .expect("Unable to fetch header");
+            println!(">{} {}", seqloc.id, header);
+        } else {
+            println!(">{}", seqloc.id);
+        }
+
+        let mut sequence = sfasta
+            .get_sequence(&seqloc.sequence.as_ref().unwrap())
+            .expect("Unable to fetch sequence");
+
+        if seqloc.masking.is_some() {
+            apply_masking(&mut sequence, &seqloc.masking.as_ref().unwrap());
+        }
+
+        // 60 matches samtools faidx output
+        print_sequence(&sequence, 60);
+    }
+}
+
+fn list(input: &str) {
+    let sfasta_filename = input;
+
+    let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+    let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
+
+    if sfasta.seqlocs.is_none() {
+        panic!("File is empty of corrupt");
+    }
+
+    for i in 0..sfasta.len() {
+        let seqloc = &sfasta.get_seqloc(i);
+        println!("{}", seqloc.id);
     }
 }
 

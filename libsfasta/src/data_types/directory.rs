@@ -10,6 +10,7 @@ pub struct DirectoryOnDisk {
     pub seqlocs_loc: u64,
     pub scores_loc: u64,
     pub masking_loc: u64,
+    pub headers_loc: u64,
 }
 
 impl From<Directory> for DirectoryOnDisk {
@@ -39,13 +40,17 @@ impl From<Directory> for DirectoryOnDisk {
                 Some(loc) => loc.get(),
                 None => 0,
             },
+            headers_loc: match dir.headers_loc {
+                Some(loc) => loc.get(),
+                None => 0,
+            },
         }
     }
 }
 
 // , bincode::Encode, bincode::Decode
 // Directory should not be encoded, DirectoryOnDisk should be (can use .into or .from to get there and back)
-#[derive(Debug, Clone, Default,)]
+#[derive(Debug, Clone, Default)]
 pub struct Directory {
     pub index_loc: Option<NonZeroU64>,
     pub ids_loc: Option<NonZeroU64>,
@@ -53,6 +58,7 @@ pub struct Directory {
     pub seqlocs_loc: Option<NonZeroU64>,
     pub scores_loc: Option<NonZeroU64>,
     pub masking_loc: Option<NonZeroU64>,
+    pub headers_loc: Option<NonZeroU64>,
     // TODO: Add pangenome stuff
 }
 
@@ -65,6 +71,7 @@ impl From<DirectoryOnDisk> for Directory {
             seqlocs_loc: NonZeroU64::new(dir.seqlocs_loc),
             scores_loc: NonZeroU64::new(dir.scores_loc),
             masking_loc: NonZeroU64::new(dir.masking_loc),
+            headers_loc: NonZeroU64::new(dir.headers_loc),
         }
     }
 }
@@ -159,6 +166,7 @@ mod tests {
             seqlocs_loc: None,
             scores_loc: None,
             masking_loc: None,
+            headers_loc: None,
         };
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();

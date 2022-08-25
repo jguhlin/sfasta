@@ -266,7 +266,7 @@ impl DualIndexWriter {
         });
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        println!("DEBUG: Hashes: {} bytes", end - start);
+        log::debug!("DEBUG: Hashes: {} bytes", end - start);
 
         // Write the hash chunks
         // Current written data is:

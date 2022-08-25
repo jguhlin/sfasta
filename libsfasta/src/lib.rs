@@ -13,17 +13,17 @@ extern crate lz4_flex;
 extern crate snap;
 extern crate zstd;
 
+mod compression;
 mod compression_stream_buffer;
 mod conversion;
-mod compression;
 pub mod data_types;
 pub mod dual_level_index;
 mod fasta;
 mod fastq;
 mod format;
 mod io;
-mod utils;
 mod masking;
+mod utils;
 
 pub mod prelude;
 

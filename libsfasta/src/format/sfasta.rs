@@ -20,6 +20,7 @@ pub struct Sfasta {
     buf: Option<RwLock<Box<dyn ReadAndSeek>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
     pub block_locs: Option<Vec<u64>>,
     pub seqlocs: Option<SeqLocs>,
+    pub headers: Option<Headers>,
 }
 
 impl Default for Sfasta {
@@ -34,6 +35,7 @@ impl Default for Sfasta {
             buf: None,
             block_locs: None,
             seqlocs: None,
+            headers: None,
         }
     }
 }
@@ -120,7 +122,7 @@ impl Sfasta {
         let idx = self.index.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let found = idx.find(&mut buf, x);
-        let seqlocs = self.seqlocs.as_ref().unwrap();
+        let seqlocs = self.seqlocs.as_mut().unwrap();
 
         if found.is_none() {
             return Ok(None);
@@ -128,6 +130,12 @@ impl Sfasta {
 
         // TODO: Allow returning multiple if there are multiple matches...
         Ok(Some(seqlocs.get_seqloc(&mut buf, found.unwrap())))
+    }
+
+    pub fn get_header(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
+        let headers = self.headers.as_mut().unwrap();
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        Ok(headers.get_header(&mut buf, locs))
     }
 
     pub fn get_sequence(&self, locs: &Vec<Loc>) -> Result<Vec<u8>, &'static str> {
@@ -166,6 +174,21 @@ impl Sfasta {
         }
 
         Ok(seq)
+    }
+
+    pub fn len(&self) -> usize {
+        self.seqlocs.as_ref().unwrap().len()
+    }
+
+    pub fn get_seqloc(&mut self, i: usize) -> SeqLoc {
+        assert!(i < self.len(), "Index out of bounds");
+        assert!(i < std::u32::MAX as usize, "Index out of bounds");
+
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        self.seqlocs
+            .as_mut()
+            .unwrap()
+            .get_seqloc(&mut buf, i as u32)
     }
 
     pub fn index_len(&mut self) -> usize {
@@ -256,8 +279,7 @@ impl SfastaParser {
         let bitpacked_u32: Vec<Packed> = bincode::decode_from_std_read(&mut in_buf, bincode_config)
             .expect("Unable to parse block locs index");
 
-        let block_locs_staggered = bitpacked_u32
-            .into_iter().map(|x| x.unpack(num_bits));
+        let block_locs_staggered = bitpacked_u32.into_iter().map(|x| x.unpack(num_bits));
         let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
         let block_locs: Vec<u64> = unsafe {
             std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len())
@@ -265,28 +287,15 @@ impl SfastaParser {
         };
 
         std::mem::forget(block_locs_u32);
-
-        /*
-
-        let block_locs_handle = thread::spawn(move || {
-            // let mut decompressor = lz4_flex::frame::FrameDecoder::new(&block_locs_compressed[..]);
-            let mut decompressor = zstd::stream::Decoder::new(&block_locs_compressed[..]).unwrap();
-            let mut block_locs_bincoded: Vec<u8> = Vec::new(); //Vec::with_capacity(2 * 1024 * 1024);
-
-            decompressor
-                .read_to_end(&mut block_locs_bincoded)
-                .expect("Unable to parse index");
-
-            let block_locs: Vec<u64> =
-                bincode::decode_from_slice(&block_locs_bincoded[..], bincode_config)
-                    .expect("Unable to parse index")
-                    .0;
-
-            block_locs
-        }); */
-
-        // sfasta.block_locs = Some(block_locs_handle.join().unwrap());
         sfasta.block_locs = Some(block_locs);
+
+        if sfasta.directory.headers_loc.is_some() {
+            sfasta.headers = Some(Headers::from_buffer(
+                &mut in_buf,
+                sfasta.directory.headers_loc.unwrap().get() as u64,
+            ));
+        }
+
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 
         sfasta

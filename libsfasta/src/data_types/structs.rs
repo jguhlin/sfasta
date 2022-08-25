@@ -22,15 +22,15 @@ pub enum SeqMode {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
 pub enum CompressionType {
-    ZSTD,   // 1 should be default compression ratio
-    LZ4,    // 9 should be default compression ratio
-    SNAPPY, // Not yet implemented -- IMPLEMENT
-    GZIP,   // Please don't use this -- IMPLEMENT
-    NAF,    // Not yet supported -- IMPLEMENT
-    NONE,   // No Compression -- IMPLEMENT
-    XZ,     // Implemented, 6 is default ratio
-    BROTLI, // Implemented, 6 is default
-    NAFLike // 1 should be default compression rate
+    ZSTD,    // 1 should be default compression ratio
+    LZ4,     // 9 should be default compression ratio
+    SNAPPY,  // Not yet implemented -- IMPLEMENT
+    GZIP,    // Please don't use this -- IMPLEMENT
+    NAF,     // Not yet supported -- IMPLEMENT
+    NONE,    // No Compression -- IMPLEMENT
+    XZ,      // Implemented, 6 is default ratio
+    BROTLI,  // Implemented, 6 is default
+    NAFLike, // 1 should be default compression rate
 }
 
 impl Default for CompressionType {

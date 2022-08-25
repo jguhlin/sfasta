@@ -11,7 +11,7 @@ pub struct SequenceBlock {
     pub seq: Vec<u8>,
 }
 
-fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
+pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
     let mut encoder = zstd::bulk::Compressor::new(compression_level).unwrap();
     encoder
         .set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
@@ -44,9 +44,7 @@ impl SequenceBlock {
         let mut cseq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
 
         match compression_type {
-            CompressionType::NAFLike => {
-                
-            }
+            CompressionType::NAFLike => {}
             CompressionType::ZSTD => {
                 // TODO: Find a way to reuse this context...
                 let mut compressor = zstd_encoder(level);
@@ -88,7 +86,6 @@ impl SequenceBlock {
             compressed_seq: cseq,
         }
     }
-
 
     pub fn len(&self) -> usize {
         self.seq.len()
