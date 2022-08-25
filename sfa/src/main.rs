@@ -405,9 +405,9 @@ fn convert(
     // let pb = style_pb(pb);
 
     // let buf = generic_open_file_pb(pb, fasta_filename);
-    let buf = generic_open_file(fasta_filename);
+    // let buf = generic_open_file(fasta_filename);
     // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
-    let buf = buf.2;
+    // let buf = buf.2;
 
     // Disabled for now: No improvement
     // let dict = build_dict(buf);

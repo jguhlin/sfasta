@@ -119,11 +119,12 @@ impl SeqLocs {
 
             let mut bincoded: Vec<u8> = Vec::new();
 
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
-                .expect("Unable to create zstd encoder");
+            let mut compressor =
+                zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
+                    .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
-            
+
             bincode::encode_into_std_write(&locs, &mut bincoded, bincode_config)
                 .expect("Unable to bincode locs into compressor");
 
@@ -152,9 +153,9 @@ impl SeqLocs {
             .expect("Unable to create zstd encoder");
         compressor.include_magicbytes(false).unwrap();
         compressor.long_distance_matching(true).unwrap();
-        
+
         compressor.write_all(&bincoded).unwrap();
-        let compressed = compressor.finish().unwrap();      
+        let compressed = compressor.finish().unwrap();
 
         bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
             .expect("Unable to write Sequence Blocks to file");
@@ -207,7 +208,8 @@ impl SeqLocs {
             bincode::decode_from_std_read(&mut in_buf, bincode_config)
                 .expect("Unable to read block locations");
 
-        let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block_locations[..]).unwrap();
+        let mut decompressor =
+            zstd::stream::read::Decoder::new(&compressed_block_locations[..]).unwrap();
         decompressor.include_magicbytes(false).unwrap();
 
         let mut decompressed = Vec::new();

@@ -138,6 +138,7 @@ impl CompressionStreamBuffer {
                 end = block_size - len;
             }
 
+            // masking adds 2.552156094 seconds
             masking.extend(find_lowercase_range(self.cur_block_id, &seq[0..end]));
 
             seq[0..end].make_ascii_uppercase();

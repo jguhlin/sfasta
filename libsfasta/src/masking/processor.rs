@@ -30,7 +30,6 @@ pub fn find_lowercase_range(block: u32, seq: &[u8]) -> Vec<Loc> {
     if in_range {
         ranges.push(Loc::new(block, start as u32, end as u32));
     }
-
     ranges
 }
 

@@ -139,11 +139,14 @@ impl Converter {
     }
 
     /// Main conversion function
+    // TODO: Switch R and W into borrows
     pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, mut out_fh: W) -> W
     where
         W: WriteAndSeek + 'convert + std::fmt::Debug,
         R: Read + Send + 'convert,
     {
+        let fn_start_time = std::time::Instant::now();
+
         let mut debug_size: Vec<(String, usize)> = Vec::new();
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
@@ -185,11 +188,20 @@ impl Converter {
             .with_compression_type(self.compression_type)
             .with_threads(self.threads as u16); // Effectively # of compression threads
 
+        let start_time = std::time::Instant::now();
+
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
         let (seq_locs, block_index_pos, headers_location) =
             write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
+
+        let end_time = std::time::Instant::now();
+
+        println!(
+            "Write Fasta Sequence write time: {:?}",
+            end_time - start_time
+        );
 
         let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
@@ -210,9 +222,15 @@ impl Converter {
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer = crate::dual_level_index::DualIndexBuilder::with_capacity(seq_locs.len());
 
-        let mut out_buf = BufWriter::with_capacity(8 * 1024, out_fh);
+        let mut out_buf = BufWriter::with_capacity(64 * 1024, out_fh);
+
+        let start_time = std::time::Instant::now();
 
         let mut seqlocs = SeqLocs::with_data(seq_locs);
+
+        let end_time = std::time::Instant::now();
+
+        println!("Create SeqLocs Struct time: {:?}", end_time - start_time);
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
@@ -296,9 +314,6 @@ impl Converter {
 
         // TODO: Scores Block Index
 
-        // TODO: Masking Block
-        // Use bitvec implementation
-
         // Go to the beginning, and write the location of the index
 
         sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
@@ -312,6 +327,8 @@ impl Converter {
 
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
+        let start_time = std::time::Instant::now();
+
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
         bincode::encode_into_std_write(dir, &mut out_buf, bincode_config)
             .expect("Unable to write directory to file");
@@ -319,7 +336,14 @@ impl Converter {
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
 
+        let end_time = std::time::Instant::now();
+
+        println!("Directory write time: {:?}", end_time - start_time);
+
         log::debug!("DEBUG: {:?}", debug_size);
+
+        let fn_end_time = std::time::Instant::now();
+        println!("Conversion time: {:?}", fn_end_time - fn_start_time);
 
         out_buf.into_inner().unwrap()
     }
