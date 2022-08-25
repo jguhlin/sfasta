@@ -22,7 +22,7 @@ impl Default for SeqLocs {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 128 * 1024,
+            chunk_size: 256 * 1024,
             data: None,
             len: 0,
             cache: None,
@@ -40,7 +40,7 @@ impl SeqLocs {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 128 * 1024,
+            chunk_size: 256 * 1024,
             data: Some(data),
             len: 0,
             cache: None,
@@ -110,6 +110,7 @@ impl SeqLocs {
             .collect::<Vec<&SeqLoc>>()
             .chunks(self.chunk_size)
         {
+	    println!("SeqLoc Chunk...");
             block_locations.push(
                 out_buf
                     .seek(SeekFrom::Current(0))
