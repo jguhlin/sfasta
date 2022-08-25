@@ -117,6 +117,7 @@ impl CompressionStreamBuffer {
     pub fn add_sequence(&mut self, x: &mut [u8]) -> Result<(Vec<Loc>, Vec<Loc>), &'static str> {
         assert!(self.block_size > 0);
         assert!(!self.finalized, "SeqBuffer has been finalized.");
+        
         if !self.initialized {
             self.initialize();
         }
@@ -142,7 +143,7 @@ impl CompressionStreamBuffer {
             masking.extend(find_lowercase_range(self.cur_block_id, &seq[0..end]));
 
             seq[0..end].make_ascii_uppercase();
-            self.buffer.extend_from_slice(&seq[0..end]);
+            self.buffer.extend_from_slice(seq[0..end].trim_ascii());
 
             locs.push(Loc {
                 block: self.cur_block_id,

@@ -38,10 +38,6 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
 
     fn next(&mut self) -> Option<Sequence> {
         while let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
-            if self.buffer.ends_with(&[b'\r']) {
-                self.buffer.pop();
-            }
-
             if bytes_read == 0 {
                 if self.seqlen > 0 {
                     let seq = Sequence {

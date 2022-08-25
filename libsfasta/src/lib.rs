@@ -1,3 +1,4 @@
+#![feature(byte_slice_trim_ascii)]
 #![feature(is_sorted)]
 
 extern crate bincode;
