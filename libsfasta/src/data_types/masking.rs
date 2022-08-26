@@ -133,7 +133,6 @@ impl Masking {
             let mut end = std::cmp::min(BitPacker8x::BLOCK_LEN, to_fetch as usize);
             end = std::cmp::min(end, unpacked.len() - in_block_pos as usize);
             
-            println!("{} {} {}", block, in_block_pos, end);
             u32s.extend(&unpacked[in_block_pos as usize..in_block_pos as usize+end]);
             to_fetch = to_fetch.saturating_sub(end as u32);
             in_block_pos = 0;
