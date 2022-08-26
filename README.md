@@ -61,6 +61,8 @@ Samtools index pre-built
 |:---|---:|---:|---:|---:|
 | `samtools faidx Essy1B.fasta.gz ae278260-d941-45c9-9e76-40f04ef8e56c` | 935.1 ± 13.4 | 923.2 | 959.8 | 10.91 ± 0.65 |
 | `sfa faidx Essy1B.sfasta ae278260-d941-45c9-9e76-40f04ef8e56c` | 85.7 ± 4.9 | 83.1 | 104.6 | 1.00 |
+
+
 ![Nanopore Reads Random Access Comparison](info/nanopore_reads_random_access.png)
 
 ### Nanopore Reads Size
