@@ -63,4 +63,9 @@ fn convert_uniprot() {
     converter.convert_fasta(buf, output);
 }
 
+fn test() {
+	println!("{}", 5 + 5);
+}
+
+// iai::main!(test);
 iai::main!(convert_uniprot, convert_erow);
