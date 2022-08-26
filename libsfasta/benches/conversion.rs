@@ -1,4 +1,4 @@
-use iai::{black_box, main};
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use libsfasta::prelude::*;
 
@@ -63,4 +63,12 @@ fn convert_uniprot() {
     converter.convert_fasta(buf, output);
 }
 
-iai::main!(convert_uniprot, convert_erow);
+fn criterion_benchmark(c: &mut Criterion) {
+    c.bench_function("convert_erow", |b| b.iter(|| convert_erow()));
+    c.bench_function("convert_uniprot", |b| b.iter(|| convert_uniprot()));
+}
+
+criterion_group!(benches, criterion_benchmark);
+criterion_main!(benches);
+
+// iai::main!(convert_uniprot, convert_erow);

@@ -4,6 +4,7 @@ use std::fs::{metadata, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
+use std::time::Instant;
 
 use crate::compression_stream_buffer::CompressionStreamBuffer;
 use crate::data_types::*;
@@ -28,7 +29,7 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 2 * 1024 * 1024,    // 2Mb
+            block_size: 8 * 1024 * 1024,    // 2Mb
             seqlocs_chunk_size: 256 * 1024, // 256k
             index: true,
             masking: false,
@@ -433,7 +434,7 @@ where
 
             // Store the ID of the sequence and the Location (SeqLocs)
             // TODO: Auto adjust based off of size of input FASTA file
-            let mut seq_locs = Vec::with_capacity(512 * 1024);
+            let mut seq_locs = Vec::with_capacity(1024);
 
             let mut headers = Headers::default();
             let mut ids = Ids::default();
@@ -543,29 +544,35 @@ where
         ids_string = j.3;
         masking = Some(j.4);
 
+        let start_time = Instant::now();
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
         headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_buf) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        log::debug!("DEBUG: Wrote {} bytes of headers", end - start);
+        let end_time = Instant::now();
+        log::debug!("DEBUG: Wrote {} bytes of headers in {:#?}", end - start, end_time - start_time);
 
+        let start_time = Instant::now();
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
         ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_buf) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        log::debug!("DEBUG: Wrote {} bytes of ids", end - start);
+        let end_time = Instant::now();
+        log::debug!("DEBUG: Wrote {} bytes of ids in {:#?}", end - start, end_time - start_time);
 
+        let start_time = Instant::now();
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
         masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_buf) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        log::debug!("DEBUG: Wrote {} bytes of masking", end - start);
+        let end_time = Instant::now();
+        log::debug!("DEBUG: Wrote {} bytes of masking in {:#?}", end - start, end_time - start_time);
     })
     .expect("Error");
 

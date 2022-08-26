@@ -122,7 +122,7 @@ impl CompressionStreamBuffer {
             self.initialize();
         }
 
-        let mut locs = Vec::with_capacity(8);
+        let mut locs = Vec::new();
 
         let block_size = self.block_size as usize;
 
