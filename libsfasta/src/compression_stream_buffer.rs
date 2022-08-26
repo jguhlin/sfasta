@@ -9,8 +9,61 @@ use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
 use crate::data_types::*;
-use crate::masking::*;
 use crate::CompressionType;
+
+pub struct CompressionStreamBufferConfig {
+    pub block_size: u32,
+    pub compression_type: CompressionType,
+    pub compression_level: i32,
+    pub num_threads: u16,
+}
+
+impl Default for CompressionStreamBufferConfig {
+    fn default() -> Self {
+        Self {
+            block_size: 4 * 1024 * 1024,
+            compression_type: CompressionType::ZSTD,
+            compression_level: 3,
+            num_threads: 1,
+        }
+    }
+}
+
+impl CompressionStreamBufferConfig {
+    pub fn new(
+        block_size: u32,
+        compression_type: CompressionType,
+        compression_level: i32,
+        num_threads: u16,
+    ) -> Self {
+        Self {
+            block_size,
+            compression_type,
+            compression_level,
+            num_threads,
+        }
+    }
+
+    pub fn with_block_size(mut self, block_size: u32) -> Self {
+        self.block_size = block_size;
+        self
+    }
+
+    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
+        self.compression_type = compression_type;
+        self
+    }
+
+    pub fn with_compression_level(mut self, compression_level: i32) -> Self {
+        self.compression_level = compression_level;
+        self
+    }
+
+    pub fn with_threads(mut self, num_threads: u16) -> Self {
+        self.num_threads = num_threads;
+        self
+    }
+}
 
 pub struct CompressionStreamBuffer {
     block_size: u32,
@@ -62,13 +115,22 @@ impl Drop for CompressionStreamBuffer {
 }
 
 impl CompressionStreamBuffer {
+
+    pub fn from_config(config: CompressionStreamBufferConfig) -> Self {
+        let mut buffer = Self::default();
+        buffer.block_size = config.block_size;
+        buffer.threads = config.num_threads;
+        buffer.compression_type = config.compression_type;
+        buffer
+    }
+
     pub fn initialize(&mut self) {
         for _ in 0..self.threads {
             let shutdown_copy = Arc::clone(&self.shutdown);
             let cq = Arc::clone(&self.compress_queue);
             let wq = Arc::clone(&self.write_queue);
 
-            let ct = self.compression_type;
+            let ct = self.compression_type;          
 
             let handle =
                 thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct));
@@ -117,10 +179,6 @@ impl CompressionStreamBuffer {
     pub fn add_sequence(&mut self, x: &mut [u8]) -> Result<Vec<Loc>, &'static str> {
         assert!(self.block_size > 0);
         assert!(!self.finalized, "SeqBuffer has been finalized.");
-
-        if !self.initialized {
-            self.initialize();
-        }
 
         let mut locs = Vec::new();
 
@@ -208,11 +266,11 @@ impl CompressionStreamBuffer {
         self
     }
 
-    pub fn output_queue(&self) -> Arc<ArrayQueue<(u32, SequenceBlockCompressed)>> {
+    pub fn get_output_queue(&self) -> Arc<ArrayQueue<(u32, SequenceBlockCompressed)>> {
         Arc::clone(&self.output_queue)
     }
 
-    pub fn shutdown_notified(&self) -> Arc<AtomicBool> {
+    pub fn get_shutdown_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.shutdown)
     }
 }
@@ -224,15 +282,12 @@ fn _compression_worker_thread(
     compression_type: CompressionType,
 ) {
     let mut result;
-    let backoff = Backoff::new();
 
     loop {
-        backoff.reset();
         result = compress_queue.pop();
 
         match result {
             None => {
-                backoff.spin();
                 if shutdown.load(Ordering::Relaxed) {
                     return;
                 }
@@ -244,7 +299,6 @@ fn _compression_worker_thread(
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
                     entry = x;
-                    backoff.spin();
                 }
             }
         }
@@ -323,7 +377,7 @@ mod tests {
 
         let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
 
-        let oq = sb.output_queue();
+        let oq = sb.get_output_queue();
 
         let mut locs = Vec::new();
 

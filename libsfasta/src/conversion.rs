@@ -6,7 +6,7 @@ use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
 
-use crate::compression_stream_buffer::CompressionStreamBuffer;
+use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
 use crate::data_types::*;
 use crate::dual_level_index::*;
 use crate::fasta::*;
@@ -184,7 +184,7 @@ impl Converter {
         let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         // Write sequences
-        let sb = CompressionStreamBuffer::default()
+        let sb_config = CompressionStreamBufferConfig::default()
             .with_block_size(self.block_size as u32)
             .with_compression_type(self.compression_type)
             .with_threads(self.threads as u16); // Effectively # of compression threads
@@ -195,7 +195,7 @@ impl Converter {
         // Vec<(String, Location)>
         // block_index_pos
         let (ids, seq_locs, block_index_pos, headers_location, ids_location, masking_location) =
-            write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
+            write_fasta_sequence(sb_config, &mut in_buf, &mut out_fh);
 
         let end_time = std::time::Instant::now();
 
@@ -391,7 +391,7 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 /// out_buffer
 
 pub fn write_fasta_sequence<'write, W, R>(
-    mut sb: CompressionStreamBuffer,
+    sb_config: CompressionStreamBufferConfig,
     in_buf: &mut R,
     mut out_fh: &mut W,
 ) -> (
@@ -408,11 +408,13 @@ where
 {
     let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
+    let mut sb = CompressionStreamBuffer::from_config(sb_config);
+
     // Get a handle for the output queue from the sequence compressor
-    let oq = sb.output_queue();
+    let oq = sb.get_output_queue();
 
     // Get a handle to the shutdown flag...
-    let shutdown = sb.shutdown_notified();
+    let shutdown = sb.get_shutdown_flag();
 
     let mut seq_locs: Option<Vec<SeqLoc>> = None;
     let mut block_index_pos = None;
@@ -426,8 +428,9 @@ where
 
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
-        let mut out_buf = BufWriter::with_capacity(64 * 1024, &mut out_fh);
+        let mut out_buf = BufWriter::new(&mut out_fh);
         let reader_handle = s.spawn(move |_| {
+            sb.initialize();
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
             let mut in_buf_reader = BufReader::new(in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
