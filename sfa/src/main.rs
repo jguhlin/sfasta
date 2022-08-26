@@ -395,7 +395,7 @@ fn convert(
 
     let path = Path::new(fasta_filename);
     let output_name = path.with_extension("sfasta");
-    let mut output = match File::create(output_name) {
+    let output = match File::create(output_name) {
         Err(why) => panic!("couldn't create: {}", why),
         Ok(file) => file,
     };
