@@ -18,34 +18,15 @@ Everything is bincoded, and either bitpacked, or ZSTD compressed.... add more he
 | sfasta | Yes | Yes |
 | bgzip | Yes | Yes |
 
-
-## Genome
-
-### Genome Compression Speed
-| Command | Mean [s] | Min [s] | Max [s] | Relative |
-|:---|---:|---:|---:|---:|
-| `ennaf Erow_1.0.fasta --temp-dir /tmp` | 8.111 ± 0.018 | 8.087 | 8.145 | 3.65 ± 0.11 |
-| `bgzip -k --index -f --threads 7 Erow_1.0.fasta` | 9.492 ± 0.442 | 8.940 | 9.975 | 4.27 ± 0.24 |
-| `sfa convert Erow_1.0.fasta` | 7.499 ± 0.477 | 6.914 | 8.345 | 3.37 ± 0.24 |
-| `pigz -k -p 7 Erow_1.0.fasta -f` | 10.833 ± 0.271 | 10.548 | 11.213 | 4.87 ± 0.19 |
-| `crabz -p 7 Erow_1.0.fasta > Erow_1.0.crabz` | 10.594 ± 0.171 | 10.387 | 10.971 | 4.76 ± 0.16 |
-| `zstd -k Erow_1.0.fasta -f -T7` | 2.224 ± 0.067 | 2.087 | 2.291 | 1.00 |
-
-### Genome Size 
-Uncompressed: 2.7G
-
-| Compression Type | Size |
-|---|--|
-| NAF | 446M |
-| sfasta | 596M |
-| bgzip | 635M |
-| Zstd | 663M |
-
 ### Uniprot Random Access
+Samtools index pre-built
+
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
 | `samtools faidx uniprot_sprot.fasta.gz "sp\|P10459\|3S1B_LATLA"` | 422.7 ± 4.7 | 417.8 | 433.3 | 3.42 ± 0.25 |
 | `sfa faidx uniprot_sprot.fasta.sfasta "sp\|P10459\|3S1B_LATLA"` | 123.5 ± 8.9 | 118.3 | 141.6 | 1.00 |
+
+![Uniprot Random Access](info/uniprot_random_access.png)
 
 ### Uniprot Compression Speed
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
@@ -56,6 +37,8 @@ Uncompressed: 2.7G
 | `pigz -k -p 7 uniprot_sprot.fasta -f` | 771.5 ± 55.2 | 704.2 | 872.3 | 2.31 ± 0.21 |
 | `crabz -p 7 Erow_1.0.fasta -f > uniprot_sprot.crabz` | 10688.8 ± 224.7 | 10322.6 | 10990.7 | 32.01 ± 1.82 |
 | `zstd -k uniprot_sprot.fasta -f -T7` | 333.9 ± 17.6 | 303.4 | 351.6 | 1.00 |
+
+![Uniprot Compression Speed](info/uniprot_compress_comparison.png)
 
 ### Uniprot Size
 Uncompressed: 282M
@@ -71,11 +54,54 @@ Uncompressed: 282M
 ### Nanopore Reads Compression Speed
 
 ### Nanopore Reads Random Access
+Samtools index pre-built
+
+## Genome
+
+### Genome Random Access Speed
+Samtools index pre-built
+
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+|:---|---:|---:|---:|---:|
+| `samtools faidx Erow_1.0.fasta.gz PXIH01S0167520.1` | 184.6 ± 10.6 | 169.0 | 197.4 | 1.38 ± 0.15 |
+| `sfa faidx Erow_1.0.sfasta PXIH01S0167520.1` | 134.0 ± 12.1 | 118.4 | 154.1 | 1.00 |
+
+![Genome Random Access Comparison](info/genome_random_access.png)
+
+
+### Genome Compression Speed
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `ennaf Erow_1.0.fasta --temp-dir /tmp` | 8.111 ± 0.018 | 8.087 | 8.145 | 3.65 ± 0.11 |
+| `bgzip -k --index -f --threads 7 Erow_1.0.fasta` | 9.492 ± 0.442 | 8.940 | 9.975 | 4.27 ± 0.24 |
+| `sfa convert Erow_1.0.fasta` | 7.499 ± 0.477 | 6.914 | 8.345 | 3.37 ± 0.24 |
+| `pigz -k -p 7 Erow_1.0.fasta -f` | 10.833 ± 0.271 | 10.548 | 11.213 | 4.87 ± 0.19 |
+| `crabz -p 7 Erow_1.0.fasta > Erow_1.0.crabz` | 10.594 ± 0.171 | 10.387 | 10.971 | 4.76 ± 0.16 |
+| `zstd -k Erow_1.0.fasta -f -T7` | 2.224 ± 0.067 | 2.087 | 2.291 | 1.00 |
+
+![Genome Compression Comparison](info/genome_compress_comparison.png)
+
+### Genome Size 
+Uncompressed: 2.7G
+
+| Compression Type | Size |
+|---|--|
+| NAF | 446M |
+| sfasta | 596M |
+| bgzip | 635M |
+| Zstd | 663M |
+
 
 ### Nanopore Reads Size
 Uncompressed Size: 8.8G
 
 # Future Plans
+## Additional Speed-ups
+There is plenty of room for additional speed-ups, including adding more threads for specific tasks, CPU affinities, native compilation, and probably using more Cow.
+
+## Command-line interface
+As I've refactored much of the library, the CLI code withered and decayed. Need to fix this.
+
 ## Quality Scores
 To support FASTQ files
 
@@ -85,5 +111,7 @@ For other applications (such as long term storage)
 ## C and Python bindings
 To make it easier to use in other programs and in python/jupyter
 
-## PGO
+## Profile Guided Optimization
 Enable PGO for additional speed-ups
+
+![Genomics Aotearoa](info/genomics-aotearoa.png)
