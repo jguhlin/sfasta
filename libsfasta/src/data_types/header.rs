@@ -12,6 +12,7 @@ pub struct Headers {
     block_size: usize,
     pub data: Option<Vec<u8>>, // Only used for writing...
     pub compression_type: CompressionType,
+    cache: Option<(u32, Vec<u8>)>,
 }
 
 impl Default for Headers {
@@ -23,6 +24,7 @@ impl Default for Headers {
             block_size: 2 * 1024 * 1024,
             data: None,
             compression_type: CompressionType::ZSTD,
+            cache: None,
         }
     }
 }
@@ -147,28 +149,60 @@ impl Headers {
         headers
     }
 
-    pub fn get_header<R>(&self, mut in_buf: &mut R, loc: &[Loc]) -> String
+    pub fn get_header<R>(&mut self, mut in_buf: &mut R, loc: &[Loc]) -> String
     where
         R: Read + Seek,
     {
+
+        let mut header = String::with_capacity(1024);
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
         let block_locations = self.block_locations.as_ref().unwrap();
-        let mut header = String::with_capacity(1024);
 
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
 
+        if self.cache.is_some() {
+            let mut cache = self.cache.as_mut().unwrap();
+            for i in loc {
+                if i.block == cache.0 {
+                    let start = i.start as usize;
+                    let end = i.end as usize;
+                    header.push_str(std::str::from_utf8(&cache.1[start..=end]).unwrap());
+                } else {
+                    let block_location = block_locations[i.block as usize];
+                    in_buf.seek(SeekFrom::Start(block_location)).unwrap();
+                    let compressed_block: Vec<u8> =
+                        bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+                    let decompressed_block = decompressor
+                        .decompress(&compressed_block, self.block_size)
+                        .unwrap();
+                    let start = i.start as usize;
+                    let end = i.end as usize;
+                    header.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
+                    *cache = (i.block, decompressed_block);
+                }
+            }
+        } else {
+            // TODO: Repetitive code...
+            for i in loc {
+                let block_location = block_locations[i.block as usize];
+                in_buf.seek(SeekFrom::Start(block_location)).unwrap();
+                let compressed_block: Vec<u8> =
+                    bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+                let decompressed_block = decompressor
+                    .decompress(&compressed_block, self.block_size)
+                    .unwrap();
+                let start = i.start as usize;
+                let end = i.end as usize;
+                header.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
+                self.cache = Some((i.block, decompressed_block));
+            }
+        }
+
+
+
         for i in loc {
-            let block_location = block_locations[i.block as usize];
-            in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-            let compressed_block: Vec<u8> =
-                bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-            let decompressed_block = decompressor
-                .decompress(&compressed_block, self.block_size)
-                .unwrap();
-            let start = i.start as usize;
-            let end = i.end as usize;
-            header.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
+            
         }
 
         header

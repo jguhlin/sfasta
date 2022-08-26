@@ -1,3 +1,4 @@
+// TODO: Add caching
 // This is not even a good copy of headers... could it be generic?
 
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -118,13 +119,16 @@ impl Masking {
         in_buf.seek(SeekFrom::Start(self.location + 8 + 1)).unwrap();
 
         let starting_block = loc.0 / BitPacker8x::BLOCK_LEN as u32;
-        let ending_block = (loc.0 + loc.1) / BitPacker8x::BLOCK_LEN as u32;
+        let ending_block = (loc.0 + loc.1 - 1) / BitPacker8x::BLOCK_LEN as u32;
         let mut in_block_pos = loc.0 % BitPacker8x::BLOCK_LEN as u32;
 
         let mut to_fetch = loc.1;
         let mut u32s: Vec<u32> = Vec::new();
         
         for block in starting_block..=ending_block {
+            println!("Block: {}", block);
+            println!("To fetch: {}", to_fetch);
+
             assert!(to_fetch > 0);
             let block_position = self.location + 8 + 1 + (block as u64 * self.bitpack_len);
             in_buf.seek(SeekFrom::Start(block_position)).unwrap();
@@ -132,6 +136,8 @@ impl Masking {
             let unpacked = bp.unpack(self.num_bits);
             let mut end = std::cmp::min(BitPacker8x::BLOCK_LEN, to_fetch as usize);
             end = std::cmp::min(end, unpacked.len() - in_block_pos as usize);
+
+            println!("End: {}", end);
             
             u32s.extend(&unpacked[in_block_pos as usize..in_block_pos as usize+end]);
             to_fetch = to_fetch.saturating_sub(end as u32);
