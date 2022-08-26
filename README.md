@@ -46,15 +46,32 @@ Uncompressed: 282M
 | Compression Type | Size |
 | --- | --- |
 | NAF | 68M |
-| bgzip | 92M |
+| bgzip* | 92M |
 | zstd | 78M | 
 | sfasta | 83M |
+* Excludes index
 
 ## Nanopore Reads
 ### Nanopore Reads Compression Speed
 
 ### Nanopore Reads Random Access
 Samtools index pre-built
+
+| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+|:---|---:|---:|---:|---:|
+| `samtools faidx Essy1B.fasta.gz ae278260-d941-45c9-9e76-40f04ef8e56c` | 935.1 ± 13.4 | 923.2 | 959.8 | 10.91 ± 0.65 |
+| `sfa faidx Essy1B.sfasta ae278260-d941-45c9-9e76-40f04ef8e56c` | 85.7 ± 4.9 | 83.1 | 104.6 | 1.00 |
+![Nanopore Reads Random Access Comparison](info/nanopore_reads_random_access.png)
+
+### Nanopore Reads Size
+Uncompressed Size: 8.8G
+| Compression Type | Size |
+| --- | --- |
+| NAF | 2.2G |
+| bgzip* | 2.6G |
+| sfasta | 2.6G |
+
+* Excludes index
 
 ## Genome
 
@@ -88,16 +105,17 @@ Uncompressed: 2.7G
 |---|--|
 | NAF | 446M |
 | sfasta | 596M |
-| bgzip | 635M |
+| bgzip* | 635M |
 | Zstd | 663M |
 
-
-### Nanopore Reads Size
-Uncompressed Size: 8.8G
+* Excludes index
 
 # Future Plans
 ## Additional Speed-ups
 There is plenty of room for additional speed-ups, including adding more threads for specific tasks, CPU affinities, native compilation, and probably using more Cow.
+
+## Additional Compression
+There is likely room to decrease size as well without hurting speed.
 
 ## Command-line interface
 As I've refactored much of the library, the CLI code withered and decayed. Need to fix this.
@@ -114,4 +132,10 @@ To make it easier to use in other programs and in python/jupyter
 ## Profile Guided Optimization
 Enable PGO for additional speed-ups
 
+## Small file optimization
+Sfasta is currently optimized for larger files.
+
 ![Genomics Aotearoa](info/genomics-aotearoa.png)
+
+## Implement NAF-like algorithm
+NAF has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some SIMD support for 2bit and 4bit DNA/RNA encoding.
