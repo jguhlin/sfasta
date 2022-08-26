@@ -110,6 +110,9 @@ enum Commands {
 }
 
 fn main() {
+
+    println!("The file format is not stable yet, so don't use it for anything other than testing. Cheers!");
+
     env_logger::init();
     let cli = Cli::parse();
 
@@ -298,7 +301,7 @@ fn faidx(input: &str, ids: &Vec<String>) {
 
         if result.headers.is_some() {
             let header = sfasta
-                .get_header(&result.headers.unwrap())
+                .get_header(&result.headers.as_ref().unwrap())
                 .expect("Unable to fetch header");
             println!(">{} {}", i, header);
         } else {
@@ -306,12 +309,8 @@ fn faidx(input: &str, ids: &Vec<String>) {
         }
 
         let mut sequence = sfasta
-            .get_sequence(&result.sequence.unwrap())
+            .get_sequence(&result)
             .expect("Unable to fetch sequence");
-
-        if result.masking.is_some() {
-            apply_masking(&mut sequence, &result.masking.unwrap());
-        }
 
         // 60 matches samtools faidx output
         print_sequence(&sequence, 60);
@@ -344,12 +343,8 @@ fn view(input: &str) {
         }
 
         let mut sequence = sfasta
-            .get_sequence(&seqloc.sequence.as_ref().unwrap())
+            .get_sequence(&seqloc)
             .expect("Unable to fetch sequence");
-
-        if seqloc.masking.is_some() {
-            apply_masking(&mut sequence, &seqloc.masking.as_ref().unwrap());
-        }
 
         // 60 matches samtools faidx output
         print_sequence(&sequence, 60);
@@ -387,9 +382,9 @@ fn convert(
     snappy: bool,
     noindex: bool,
 ) {
-    // let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
-    // let pb = ProgressBar::new(metadata.len());
-    // let pb = style_pb(pb);
+    let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
+    let pb = ProgressBar::new(metadata.len());
+    let pb = style_pb(pb);
 
     // let buf = generic_open_file_pb(pb, fasta_filename);
     // let buf = generic_open_file(fasta_filename);
@@ -421,8 +416,8 @@ fn convert(
     // let pb = ProgressBar::new(metadata.len());
     // let pb = style_pb(pb);
 
-    // let buf = generic_open_file_pb(pb, fasta_filename);
-    let buf = generic_open_file(fasta_filename);
+    let buf = generic_open_file_pb(pb, fasta_filename);
+    // let buf = generic_open_file(fasta_filename);
     // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
     let buf = buf.2;
 

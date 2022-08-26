@@ -37,6 +37,7 @@ itertools = "0.10.3"
 bumpalo = {version = "3.11.0", features = ["collections"]}
 git-version = "0.3.5" # TODO: Print this out in the library in a version call
 core_affinity = "0.5.10" # Not used yet...
+bitvec = "1.0.1"
 
 # Hashers
 twox-hash = "1.6.3"

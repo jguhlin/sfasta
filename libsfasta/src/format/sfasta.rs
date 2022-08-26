@@ -22,6 +22,7 @@ pub struct Sfasta {
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<Headers>,
     pub ids: Option<Ids>,
+    pub masking: Option<Masking>
 }
 
 impl Default for Sfasta {
@@ -38,6 +39,7 @@ impl Default for Sfasta {
             seqlocs: None,
             headers: None,
             ids: None,
+            masking: None
         }
     }
 }
@@ -146,12 +148,12 @@ impl Sfasta {
         Ok(ids.get_id(&mut buf, locs))
     }
 
-    pub fn get_sequence(&self, locs: &Vec<Loc>) -> Result<Vec<u8>, &'static str> {
+    pub fn get_sequence(&self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024); // TODO: We can calculate this
 
-        if locs.is_empty() {
-            return Err("No locations passed, Vec<Loc> is empty");
-        }
+        seqloc.sequence.as_ref().expect("No locations passed, Vec<Loc> is empty");
+
+        let locs = seqloc.sequence.as_ref().unwrap();
 
         // Basic sanity checks
         for (i, _) in locs.iter().map(|x| x.original_format()) {
@@ -162,9 +164,10 @@ impl Sfasta {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
+        let mut buf = self.buf.as_ref().unwrap().write().unwrap();
+
         for loc in locs {
             let byte_loc = self.block_locs.as_ref().unwrap()[loc.block as usize];
-            let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 
             buf.seek(SeekFrom::Start(byte_loc))
                 .expect("Unable to work with seek API");
@@ -173,12 +176,15 @@ impl Sfasta {
                 bincode::decode_from_std_read(&mut *buf, bincode_config)
                     .expect("Unable to parse SequenceBlockCompressed");
 
-            drop(buf); // Open it up for other threads...
-                       // let sb = bump.alloc(sbc.decompress(self.parameters.compression_type));
             let sb = sbc.decompress(self.parameters.compression_type);
 
             seq.extend_from_slice(&sb.seq[loc.start as usize..loc.end as usize]);
-            // bump.reset();
+        }
+
+        if seqloc.masking.is_some() && self.masking.is_some() {
+            let masked_loc = seqloc.masking.as_ref().unwrap();
+            let masking = self.masking.as_ref().unwrap();
+            masking.mask_sequence(&mut *buf, *masked_loc, &mut seq);
         }
 
         Ok(seq)
@@ -311,6 +317,13 @@ impl SfastaParser {
             ));
         }
 
+        if sfasta.directory.masking_loc.is_some() {
+            sfasta.masking = Some(Masking::from_buffer(
+                &mut in_buf,
+                sfasta.directory.masking_loc.unwrap().get() as u64,
+            ));
+        }
+
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 
         sfasta
@@ -352,12 +365,15 @@ mod tests {
         let output = sfasta.find("does-not-exist");
         assert!(output == Ok(None));
 
-        let _output = &sfasta.find("needle").expect("Unable to find-0").expect("Unable to find-1");
+        let _output = &sfasta
+            .find("needle")
+            .expect("Unable to find-0")
+            .expect("Unable to find-1");
 
         let output = &sfasta.find("needle_last").unwrap().unwrap();
 
         let sequence = sfasta
-            .get_sequence(output.sequence.as_ref().unwrap())
+            .get_sequence(output)
             .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
         assert!("ACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATA" == sequence);
@@ -389,7 +405,7 @@ mod tests {
         let output = &sfasta.find("test3").unwrap().unwrap();
 
         let sequence = sfasta
-            .get_sequence(output.sequence.as_ref().unwrap())
+            .get_sequence(output)
             .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
 

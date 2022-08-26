@@ -110,7 +110,6 @@ impl SeqLocs {
             .collect::<Vec<&SeqLoc>>()
             .chunks(self.chunk_size)
         {
-	    println!("SeqLoc Chunk...");
             block_locations.push(
                 out_buf
                     .seek(SeekFrom::Current(0))
@@ -121,9 +120,8 @@ impl SeqLocs {
 
             let mut bincoded: Vec<u8> = Vec::new();
 
-            let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 9)
-                    .expect("Unable to create zstd encoder");
+            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 9)
+                .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
 
@@ -294,7 +292,7 @@ impl SeqLocs {
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]
 pub struct SeqLoc {
     pub sequence: Option<Vec<Loc>>,
-    pub masking: Option<Vec<Loc>>,
+    pub masking: Option<(u32, u32)>,
     pub scores: Option<Vec<Loc>>,
     pub headers: Option<Vec<Loc>>,
     pub ids: Option<Vec<Loc>>,

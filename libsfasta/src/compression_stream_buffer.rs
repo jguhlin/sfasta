@@ -114,7 +114,7 @@ impl CompressionStreamBuffer {
     }
 
     /// Returns the Locations for the sequence, and the locations for the masking (if any)
-    pub fn add_sequence(&mut self, x: &mut [u8]) -> Result<(Vec<Loc>, Vec<Loc>), &'static str> {
+    pub fn add_sequence(&mut self, x: &mut [u8]) -> Result<Vec<Loc>, &'static str> {
         assert!(self.block_size > 0);
         assert!(!self.finalized, "SeqBuffer has been finalized.");
 
@@ -123,10 +123,10 @@ impl CompressionStreamBuffer {
         }
 
         let mut locs = Vec::with_capacity(8);
-        let mut masking = Vec::with_capacity(8);
 
         let block_size = self.block_size as usize;
 
+        // Remove whitespace
         let mut seq = x;
 
         while !seq.is_empty() {
@@ -138,9 +138,6 @@ impl CompressionStreamBuffer {
             if len + seq.len() >= block_size {
                 end = block_size - len;
             }
-
-            // masking adds 2.552156094 seconds
-            masking.extend(find_lowercase_range(self.cur_block_id, &seq[0..end]));
 
             seq[0..end].make_ascii_uppercase();
             self.buffer.extend_from_slice(seq[0..end].trim_ascii());
@@ -158,7 +155,7 @@ impl CompressionStreamBuffer {
             seq = &mut seq[end..];
         }
 
-        Ok((locs, masking))
+        Ok(locs)
     }
 
     pub fn emit_block(&mut self) {
@@ -331,7 +328,7 @@ mod tests {
         let mut locs = Vec::new();
 
         // TODO: Test for masking
-        let (loc, masking) = sb.add_sequence(&mut myseq[..]).unwrap();
+        let loc = sb.add_sequence(&mut myseq[..]).unwrap();
         locs.extend(loc);
 
         let mut largeseq = Vec::new();
@@ -340,7 +337,7 @@ mod tests {
         }
 
         let loc = sb.add_sequence(&mut largeseq).unwrap();
-        locs.extend(loc.0);
+        locs.extend(loc);
 
         // println!("Done adding seqs...");
 
@@ -384,34 +381,6 @@ mod tests {
         let seq = std::str::from_utf8(&decoded.seq[0..100]).unwrap();
         assert!(seq == "CTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGACTGGGGGGGGAC");
         */
-    }
-
-    #[test]
-    pub fn test_masking() {
-        let test_seqs = vec!["ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
-        "ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
-        "ACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAAACTGGGGGGGGactgggtgtgcgcgagagagcgtggctacannnannaAAAAAAAA",
-        "aaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-        "AAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        ];
-
-        for orig_seq in test_seqs.iter().map(|x| x.as_bytes()) {
-            let test_block_size = 512 * 1024;
-
-            let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
-            let _oq = sb.output_queue();
-            let mut locs = Vec::new();
-
-            let mut compress_seq = orig_seq.to_vec().clone();
-
-            let (_loc, masking) = sb.add_sequence(&mut compress_seq[..]).unwrap();
-            sb.finalize().unwrap();
-            locs.extend(masking);
-
-            // This assumes the block id's match, because it is a simplistic test...
-            apply_masking(&mut compress_seq, &locs);
-            assert_eq!(orig_seq, compress_seq);
-        }
     }
 
     #[test]

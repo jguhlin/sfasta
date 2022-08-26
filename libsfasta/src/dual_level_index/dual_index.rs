@@ -518,7 +518,7 @@ impl DualIndex {
         // let id_chunk = self.get_id_chunk_by_loc(&mut in_buf, id_chunk_loc);
 
         // if id_chunk[pos.unwrap() as usize] != id {
-            // return None;
+        // return None;
         // }
 
         let actual_loc = pos.unwrap() as usize + block_num * self.chunk_size as usize;

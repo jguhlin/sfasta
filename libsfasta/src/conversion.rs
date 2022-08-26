@@ -193,12 +193,12 @@ impl Converter {
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
-        let (ids, seq_locs, block_index_pos, headers_location, ids_location) =
+        let (ids, seq_locs, block_index_pos, headers_location, ids_location, masking_location) =
             write_fasta_sequence(sb, &mut in_buf, &mut out_fh);
 
         let end_time = std::time::Instant::now();
 
-        println!(
+        log::debug!(
             "Write Fasta Sequence write time: {:?}",
             end_time - start_time
         );
@@ -230,7 +230,7 @@ impl Converter {
 
         let end_time = std::time::Instant::now();
 
-        println!("Create SeqLocs Struct time: {:?}", end_time - start_time);
+        log::debug!("Create SeqLocs Struct time: {:?}", end_time - start_time);
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
@@ -274,7 +274,7 @@ impl Converter {
             );
 
             let end_time = std::time::Instant::now();
-            println!("SeqLocs write time: {:?}", end_time - start_time);
+            log::debug!("SeqLocs write time: {:?}", end_time - start_time);
 
             let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
@@ -295,7 +295,7 @@ impl Converter {
                 let start_time = std::time::Instant::now();
                 index.write_to_buffer(&mut out_buf);
                 let end_time = std::time::Instant::now();
-                println!("Index write time: {:?}", end_time - start_time);
+                log::debug!("Index write time: {:?}", end_time - start_time);
 
                 let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
                 debug_size.push(("index".to_string(), (end - start) as usize));
@@ -312,6 +312,7 @@ impl Converter {
         sfasta.directory.index_loc = NonZeroU64::new(id_index_pos);
         sfasta.directory.headers_loc = headers_location;
         sfasta.directory.ids_loc = ids_location;
+        sfasta.directory.masking_loc = masking_location;
 
         // TODO: Scores Block Index
 
@@ -339,12 +340,12 @@ impl Converter {
 
         let end_time = std::time::Instant::now();
 
-        println!("Directory write time: {:?}", end_time - start_time);
+        log::debug!("Directory write time: {:?}", end_time - start_time);
 
         log::debug!("DEBUG: {:?}", debug_size);
 
         let fn_end_time = std::time::Instant::now();
-        println!("Conversion time: {:?}", fn_end_time - fn_start_time);
+        log::debug!("Conversion time: {:?}", fn_end_time - fn_start_time);
 
         out_buf.into_inner().unwrap()
     }
@@ -398,6 +399,7 @@ pub fn write_fasta_sequence<'write, W, R>(
     u64,
     Option<NonZeroU64>,
     Option<NonZeroU64>,
+    Option<NonZeroU64>,
 )
 where
     W: WriteAndSeek + 'write,
@@ -418,6 +420,8 @@ where
     let mut ids = None;
     let mut ids_location = None;
     let mut ids_string = Vec::new();
+    let mut masking = None;
+    let mut masking_location = None;
 
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
@@ -434,21 +438,22 @@ where
             let mut headers = Headers::default();
             let mut ids = Ids::default();
             let mut ids_string = Vec::new();
+            let mut masking = Masking::default();
 
             // For each Sequence in the fasta file, make it upper case (masking is stored separately)
             // Add the sequence, get the SeqLocs and store them in Location struct
             // And store that in seq_locs Vec...
             for mut i in fasta {
-                let (loc, masking) = sb.add_sequence(&mut i.seq[..]).unwrap();
+                let mut location = SeqLoc::new();
+                location.masking = masking.add_masking(&i.seq[..]);
+                let loc = sb.add_sequence(&mut i.seq[..]).unwrap(); // Destructive, capitalizes everything...
                 ids_string.push(i.id.clone());
                 let idloc = ids.add_id(i.id);
-                let mut location = SeqLoc::new();
                 if !i.header.is_empty() {
                     location.headers = Some(headers.add_header(i.header));
                 }
                 location.ids = Some(idloc);
                 location.sequence = Some(loc);
-                location.masking = Some(masking);
                 seq_locs.push(location);
             }
 
@@ -459,7 +464,7 @@ where
             };
 
             // Return seq_locs to the main thread
-            (seq_locs, headers, ids, ids_string)
+            (seq_locs, headers, ids, ids_string, masking)
         });
 
         // Store the location of the Sequence Blocks...
@@ -536,16 +541,31 @@ where
         headers = Some(j.1);
         ids = Some(j.2);
         ids_string = j.3;
+        masking = Some(j.4);
 
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
         headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_buf) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        log::debug!("DEBUG: Wrote {} bytes of headers", end - start);
 
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
         ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_buf) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        log::debug!("DEBUG: Wrote {} bytes of ids", end - start);
+
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_buf) {
+            Some(x) => NonZeroU64::new(x),
+            None => None,
+        };
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        log::debug!("DEBUG: Wrote {} bytes of masking", end - start);
     })
     .expect("Error");
 
@@ -555,6 +575,7 @@ where
         block_index_pos.expect("Error"),
         headers_location,
         ids_location,
+        masking_location,
     )
 }
 
