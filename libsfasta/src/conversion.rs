@@ -394,6 +394,7 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 /// in_buffer
 /// out_buffer
 
+#[derive(Debug)]
 enum Work {
     Payload(Sequence),
     Shutdown,
@@ -474,7 +475,8 @@ where
             }
 
             backoff.snooze();
-            fasta_queue_in.push(Work::Shutdown);
+            backoff.snooze();
+            fasta_queue_in.push(Work::Shutdown).expect("Unable to send shutdown signal!");
         });
 
         let mut out_buf = BufWriter::new(&mut out_fh);
