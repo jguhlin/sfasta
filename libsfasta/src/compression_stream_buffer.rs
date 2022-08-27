@@ -115,7 +115,6 @@ impl Drop for CompressionStreamBuffer {
 }
 
 impl CompressionStreamBuffer {
-
     pub fn from_config(config: CompressionStreamBufferConfig) -> Self {
         let mut buffer = Self::default();
         buffer.block_size = config.block_size;
@@ -130,7 +129,7 @@ impl CompressionStreamBuffer {
             let cq = Arc::clone(&self.compress_queue);
             let wq = Arc::clone(&self.write_queue);
 
-            let ct = self.compression_type;          
+            let ct = self.compression_type;
 
             let handle =
                 thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct));

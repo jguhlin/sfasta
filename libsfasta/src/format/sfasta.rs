@@ -22,7 +22,7 @@ pub struct Sfasta {
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<Headers>,
     pub ids: Option<Ids>,
-    pub masking: Option<Masking>
+    pub masking: Option<Masking>,
 }
 
 impl Default for Sfasta {
@@ -39,7 +39,7 @@ impl Default for Sfasta {
             seqlocs: None,
             headers: None,
             ids: None,
-            masking: None
+            masking: None,
         }
     }
 }
@@ -151,7 +151,10 @@ impl Sfasta {
     pub fn get_sequence(&self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024); // TODO: We can calculate this
 
-        seqloc.sequence.as_ref().expect("No locations passed, Vec<Loc> is empty");
+        seqloc
+            .sequence
+            .as_ref()
+            .expect("No locations passed, Vec<Loc> is empty");
 
         let locs = seqloc.sequence.as_ref().unwrap();
 
@@ -372,9 +375,7 @@ mod tests {
 
         let output = &sfasta.find("needle_last").unwrap().unwrap();
 
-        let sequence = sfasta
-            .get_sequence(output)
-            .unwrap();
+        let sequence = sfasta.get_sequence(output).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
         assert!("ACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATA" == sequence);
     }
@@ -404,9 +405,7 @@ mod tests {
 
         let output = &sfasta.find("test3").unwrap().unwrap();
 
-        let sequence = sfasta
-            .get_sequence(output)
-            .unwrap();
+        let sequence = sfasta.get_sequence(output).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
 
         assert_eq!(sequence.len(), 48598);

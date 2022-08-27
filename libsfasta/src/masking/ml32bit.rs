@@ -176,67 +176,29 @@ pub fn get_masking_ranges(seq: &[u8]) -> Vec<(usize, usize)> {
     let mut pos = 0;
 
     while pos < seq.len() {
-        let idx =
-        if is_masked {
+        let idx = if is_masked {
             seq[pos..].iter().position(|x| x.is_ascii_uppercase())
         } else {
             seq[pos..].iter().position(|x| x.is_ascii_lowercase())
         };
-        
+
         if let Some(x) = idx {
             if is_masked {
-                ranges.push((pos, pos.saturating_add(x)));
+                ranges.push((pos, pos.wrapping_add(x)));
             }
             is_masked = !is_masked;
-            pos = pos.saturating_add(x);
+            pos = pos.wrapping_add(x);
         } else {
-            break
+            break;
         }
     }
-    
+
     if is_masked {
         ranges.push((pos, seq.len()));
     }
 
     ranges
 }
-
-pub fn get_masking_ranges2(seq: &[u8]) -> Vec<(usize, usize)> {
-    assert!(!seq.is_empty());
-    let mut ranges = Vec::new();
-    let mut is_masked = seq[0].is_ascii_lowercase();
-    let mut pos = 0;
-
-    let len = seq.len();
-
-    while pos < len {
-        let idx =
-        if is_masked {
-            seq[pos..].iter().position(|x| x.is_ascii_uppercase())
-        } else {
-            seq[pos..].iter().position(|x| x.is_ascii_lowercase())
-        };
-        
-        match idx {
-            None => break,
-            Some(x) => {
-                if is_masked {
-                    ranges.push((pos, pos+x));
-                }
-                is_masked = !is_masked;
-                pos += x;
-            }
-        }
-    }
-    
-    if is_masked {
-        ranges.push((pos, seq.len()));
-    }
-
-    ranges
-    
-}
-
 
 pub fn pad_commands_to_u32(commands: &[Ml32bit]) -> Vec<Ml32bit> {
     let mut padded_commands = Vec::new();
@@ -418,10 +380,10 @@ pub fn convert_u32_to_commands(u32s: &[u32]) -> Vec<Ml32bit> {
         i = 0;
         while i < 32 {
             let command = match cur_u32_bits[i..i + 4].load::<u8>() {
-                0b0000 => {
+                0b0000 => { // PASS command indicates skip to next u32
                     i = 32;
                     continue;
-                } // We don't need the pass commands
+                }
                 0b1000 => {
                     let len = cur_u32_bits[i + 4..i + 8].load::<u8>();
                     i += 8;

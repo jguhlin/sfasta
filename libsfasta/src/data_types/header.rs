@@ -153,7 +153,6 @@ impl Headers {
     where
         R: Read + Seek,
     {
-
         let mut header = String::with_capacity(1024);
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
         let block_locations = self.block_locations.as_ref().unwrap();
@@ -199,11 +198,7 @@ impl Headers {
             }
         }
 
-
-
-        for i in loc {
-            
-        }
+        for i in loc {}
 
         header
     }

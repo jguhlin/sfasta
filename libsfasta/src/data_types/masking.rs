@@ -28,7 +28,8 @@ impl Default for Masking {
 }
 
 impl Masking {
-    pub fn add_masking(&mut self, seq: &[u8]) -> Option<(u32, u32)> { // Start and LENGTH (not end)
+    pub fn add_masking(&mut self, seq: &[u8]) -> Option<(u32, u32)> {
+        // Start and LENGTH (not end)
         if self.data.is_none() {
             self.data = Some(Vec::new());
         }
@@ -41,16 +42,14 @@ impl Masking {
         let data = self.data.as_mut().unwrap();
         // BitPacker8x::BLOCK_LEN
 
-        let commands = convert_commands_to_u32(
-                &pad_commands_to_u32(
-                    &convert_ranges_to_ml32bit(
-                        &get_masking_ranges(seq),
+        let commands = convert_commands_to_u32(&pad_commands_to_u32(&convert_ranges_to_ml32bit(
+            &get_masking_ranges(seq),
         )));
 
         let len = commands.len();
         let start = data.len();
         data.extend(commands);
-        
+
         Some((start as u32, len as u32))
     }
 
@@ -60,18 +59,21 @@ impl Masking {
     {
         self.data.as_ref()?;
 
+        let mut size = 0;
+
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         self.location = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let (num_bits, packed) = bitpack_u32(&self.data.as_ref().unwrap());
-        
+
         let mut bitpacked_len: u64 = 0;
 
-        bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
+        size += bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
+        size += bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
 
         for bp in packed {
             let len = bincode::encode_into_std_write(&bp, &mut out_buf, bincode_config).unwrap();
+            size += len;
             if bitpacked_len == 0 && bp.is_packed() {
                 bitpacked_len = len as u64;
             } else if bp.is_packed() {
@@ -84,6 +86,42 @@ impl Masking {
 
         bincode::encode_into_std_write(&bitpacked_len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
+
+        // Back to the end so we don't interfere with anything...
+        out_buf.seek(SeekFrom::Start(end)).unwrap();
+
+        println!("Bitpacking Size: {}", size);
+
+        Some(self.location)
+    }
+
+    pub fn write_to_buffer_zstd<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
+    where
+        W: Write + Seek,
+    {
+        self.data.as_ref()?;
+
+        let mut size = 0;
+
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        self.location = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        // let (num_bits, packed) = bitpack_u32(&self.data.as_ref().unwrap());
+
+        for chunk in self.data.take().unwrap().chunks(2 * 1024) {
+            let mut encoder = zstd_encoder(1);
+            let mut cseq : Vec<u8> = Vec::with_capacity(2 * 1024 * 32);
+            let mut uncompressed = Vec::with_capacity(2 * 1024 * 32);
+            bincode::encode_into_std_write(chunk.to_vec(), &mut uncompressed, bincode_config).unwrap();
+            encoder.compress_to_buffer(&uncompressed, &mut cseq).unwrap();
+            size += bincode::encode_into_std_write(&cseq, &mut out_buf, bincode_config).unwrap();
+        }
+
+
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        out_buf.seek(SeekFrom::Start(self.location)).unwrap();
+
+        println!("Zstd Size: {}", size);
 
         // Back to the end so we don't interfere with anything...
         out_buf.seek(SeekFrom::Start(end)).unwrap();
@@ -124,7 +162,7 @@ impl Masking {
 
         let mut to_fetch = loc.1;
         let mut u32s: Vec<u32> = Vec::new();
-        
+
         for block in starting_block..=ending_block {
             println!("Block: {}", block);
             println!("To fetch: {}", to_fetch);
@@ -138,8 +176,8 @@ impl Masking {
             end = std::cmp::min(end, unpacked.len() - in_block_pos as usize);
 
             println!("End: {}", end);
-            
-            u32s.extend(&unpacked[in_block_pos as usize..in_block_pos as usize+end]);
+
+            u32s.extend(&unpacked[in_block_pos as usize..in_block_pos as usize + end]);
             to_fetch = to_fetch.saturating_sub(end as u32);
             in_block_pos = 0;
         }
@@ -161,7 +199,7 @@ mod tests {
             "ATCGGGGCAACTACTACGATCAcccccccccaccatgcacatcatctacAAAActcgacaAcatcgacgactacgaa",
             "aaaaaaaaaaaaTACTACGATCAcccccccccaccatgcacatcatctacAAAActcgacaAcatcgacgactACGA",
             "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAaaaaaaaaaaaaaAAAAAAAAAAAAAAAAA",
-            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", 
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
         ];
 
         let seq = test_seqs[0].as_bytes();
@@ -196,5 +234,4 @@ mod tests {
         masking.mask_sequence(&mut buffer, loc2, &mut seq);
         assert_eq!(seq, test_seqs[0].as_bytes());
     }
-        
 }

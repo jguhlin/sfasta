@@ -556,7 +556,11 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
-        log::debug!("DEBUG: Wrote {} bytes of headers in {:#?}", end - start, end_time - start_time);
+        log::debug!(
+            "DEBUG: Wrote {} bytes of headers in {:#?}",
+            end - start,
+            end_time - start_time
+        );
 
         let start_time = Instant::now();
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -566,7 +570,11 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
-        log::debug!("DEBUG: Wrote {} bytes of ids in {:#?}", end - start, end_time - start_time);
+        log::debug!(
+            "DEBUG: Wrote {} bytes of ids in {:#?}",
+            end - start,
+            end_time - start_time
+        );
 
         let start_time = Instant::now();
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -576,9 +584,31 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
-        log::debug!("DEBUG: Wrote {} bytes of masking in {:#?}", end - start, end_time - start_time);
+        log::debug!(
+            "DEBUG: Wrote {} bytes of masking in {:#?}",
+            end - start,
+            end_time - start_time
+        );
+
+        // TODO: Comes out about 20% smaller but about 2x as long in time...
+        /*
+
+        let start_time = Instant::now();
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        masking_location = match masking.as_mut().unwrap().write_to_buffer_zstd(&mut out_buf) {
+            Some(x) => NonZeroU64::new(x),
+            None => None,
+        };
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end_time = Instant::now();
+        log::debug!(
+            "DEBUG: Wrote {} bytes of masking ZSTD in {:#?}",
+            end - start,
+            end_time - start_time
+        );
+
     })
-    .expect("Error");
+    .expect("Error"); */
 
     (
         ids_string,

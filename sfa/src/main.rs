@@ -17,9 +17,9 @@ use std::fs::{metadata, File};
 use std::io::{BufReader, Read};
 use std::path::Path;
 
-use simdutf8::basic::from_utf8;
 use clap::{arg, command, Command, Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
+use simdutf8::basic::from_utf8;
 
 use libsfasta::prelude::*;
 
@@ -108,7 +108,6 @@ enum Commands {
 }
 
 fn main() {
-
     println!("The file format is not stable yet, so don't use it for anything other than testing. Cheers!");
 
     env_logger::init();
