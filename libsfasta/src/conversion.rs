@@ -474,9 +474,10 @@ where
                 }
             }
 
-            backoff.snooze();
-            backoff.snooze();
-            fasta_queue_in.push(Work::Shutdown).expect("Unable to send shutdown signal!");
+            while let Err(z) = fasta_queue_in.push(Work::Shutdown) {
+                backoff.snooze();
+            }
+            
         });
 
         let mut out_buf = BufWriter::new(&mut out_fh);
