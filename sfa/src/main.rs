@@ -1,8 +1,8 @@
-/*extern crate mimalloc;
+extern crate mimalloc;
 use mimalloc::MiMalloc;
 
 #[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;*/
+static GLOBAL: MiMalloc = MiMalloc;
 
 extern crate bumpalo;
 extern crate clap;

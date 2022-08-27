@@ -9,7 +9,11 @@ fn criterion_benchmark(c: &mut Criterion) {
 
     c.bench_function("get_masking_ranges", |b| b.iter(|| get_masking_ranges(black_box(seq.as_bytes()))));
 
-    c.bench_function("get_masking_ranges", |b| b.iter(|| get_masking_ranges_previous(black_box(seq.as_bytes()))));
+    c.bench_function("get_masking_ranges2", |b| b.iter(|| get_masking_ranges(black_box(seq.as_bytes()))));
+
+
+
+    c.bench_function("get_masking_ranges previous", |b| b.iter(|| get_masking_ranges_previous(black_box(seq.as_bytes()))));
 
     let ranges = get_masking_ranges(seq.as_bytes());
     c.bench_function("convert ranges to ml32bit", |b| b.iter(|| convert_ranges_to_ml32bit(black_box(&ranges))));

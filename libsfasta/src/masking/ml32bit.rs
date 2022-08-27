@@ -167,12 +167,49 @@ pub fn get_masking_ranges_previous(seq: &[u8]) -> Vec<(usize, usize)> {
     ranges
 }
 
+/// Must pass in a sequence that contains some masking (lower-case letters)
+/// Handles the masking language. If all uppercase, should be handled before this part...
 pub fn get_masking_ranges(seq: &[u8]) -> Vec<(usize, usize)> {
+    assert!(!seq.is_empty());
     let mut ranges = Vec::new();
     let mut is_masked = seq[0].is_ascii_lowercase();
     let mut pos = 0;
 
     while pos < seq.len() {
+        let idx =
+        if is_masked {
+            seq[pos..].iter().position(|x| x.is_ascii_uppercase())
+        } else {
+            seq[pos..].iter().position(|x| x.is_ascii_lowercase())
+        };
+        
+        if let Some(x) = idx {
+            if is_masked {
+                ranges.push((pos, pos.saturating_add(x)));
+            }
+            is_masked = !is_masked;
+            pos = pos.saturating_add(x);
+        } else {
+            break
+        }
+    }
+    
+    if is_masked {
+        ranges.push((pos, seq.len()));
+    }
+
+    ranges
+}
+
+pub fn get_masking_ranges2(seq: &[u8]) -> Vec<(usize, usize)> {
+    assert!(!seq.is_empty());
+    let mut ranges = Vec::new();
+    let mut is_masked = seq[0].is_ascii_lowercase();
+    let mut pos = 0;
+
+    let len = seq.len();
+
+    while pos < len {
         let idx =
         if is_masked {
             seq[pos..].iter().position(|x| x.is_ascii_uppercase())
