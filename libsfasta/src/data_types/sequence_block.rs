@@ -5,6 +5,7 @@ use crate::data_types::structs::{default_compression_level, CompressionType};
 use std::io::{Read, Write};
 
 use xz::read::{XzDecoder, XzEncoder};
+use log::{debug, error, info, trace, warn};
 
 #[derive(Debug, Default)]
 pub struct SequenceBlock {
@@ -44,6 +45,8 @@ impl SequenceBlock {
         // TODO: This needs to be at least as big as block_size!
         let mut cseq: Vec<u8> = Vec::with_capacity(16 * 1024 * 1024);
 
+        debug!("Compressing sequence block with length: {}", self.seq.len());
+
         match compression_type {
             CompressionType::NAFLike => {}
             CompressionType::ZSTD => {
@@ -82,6 +85,8 @@ impl SequenceBlock {
                 compressor.read_to_end(&mut cseq).unwrap();
             }
         }
+
+        debug!("Compressed sequence block to length: {}", cseq.len());
 
         SequenceBlockCompressed {
             compressed_seq: cseq,
