@@ -2,6 +2,7 @@
 // This is not even a good copy of headers... could it be generic?
 
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::sync::Arc;
 
 use crate::data_types::{zstd_encoder, CompressionType, Loc};
 
@@ -28,7 +29,7 @@ impl Default for Ids {
 }
 
 impl Ids {
-    pub fn add_id(&mut self, id: String) -> Vec<Loc> {
+    pub fn add_id(&mut self, id: Arc<String>) -> Vec<Loc> {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
@@ -191,7 +192,7 @@ mod tests {
         let mut locs = Vec::new();
 
         for id in test_ids.iter() {
-            locs.push(ids.add_id(id.to_string()));
+            locs.push(ids.add_id(Arc::new(id.to_string())));
         }
 
         let mut buffer = Cursor::new(Vec::new());

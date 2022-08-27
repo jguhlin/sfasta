@@ -11,6 +11,12 @@ pub struct Sequence {
     pub header: String,
 }
 
+impl Sequence {
+    pub fn into_parts(self) -> (String, String, Vec<u8>) {{
+        (self.id, self.header, self.seq)
+    }}
+}
+
 pub struct Fasta<'fasta, R> {
     reader: &'fasta mut R,
     buffer: Vec<u8>,

@@ -223,7 +223,7 @@ impl Converter {
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer = crate::dual_level_index::DualIndexBuilder::with_capacity(seq_locs.len());
 
-        let mut out_buf = BufWriter::with_capacity(64 * 1024, out_fh);
+        let mut out_buf = BufWriter::new(out_fh);
 
         let start_time = std::time::Instant::now();
 
@@ -395,7 +395,7 @@ pub fn write_fasta_sequence<'write, W, R>(
     in_buf: &mut R,
     mut out_fh: &mut W,
 ) -> (
-    Vec<String>,
+    Vec<std::sync::Arc<String>>,
     Vec<SeqLoc>,
     u64,
     Option<NonZeroU64>,
@@ -447,14 +447,15 @@ where
             // For each Sequence in the fasta file, make it upper case (masking is stored separately)
             // Add the sequence, get the SeqLocs and store them in Location struct
             // And store that in seq_locs Vec...
-            for mut i in fasta {
+            for (seqid, seqheader, mut seq) in fasta.map(|x| x.into_parts()) {
                 let mut location = SeqLoc::new();
-                location.masking = masking.add_masking(&i.seq[..]);
-                let loc = sb.add_sequence(&mut i.seq[..]).unwrap(); // Destructive, capitalizes everything...
-                ids_string.push(i.id.clone());
-                let idloc = ids.add_id(i.id);
-                if !i.header.is_empty() {
-                    location.headers = Some(headers.add_header(i.header));
+                location.masking = masking.add_masking(&seq[..]);
+                let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
+                let myid = std::sync::Arc::new(seqid);
+                ids_string.push(std::sync::Arc::clone(&myid));
+                let idloc = ids.add_id(std::sync::Arc::clone(&myid));
+                if !seqheader.is_empty() {
+                    location.headers = Some(headers.add_header(seqheader));
                 }
                 location.ids = Some(idloc);
                 location.sequence = Some(loc);

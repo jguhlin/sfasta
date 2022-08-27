@@ -3,14 +3,16 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use libsfasta::dual_level_index::*;
 
 use rand::Rng;
+
 use std::io::Cursor;
+use std::sync::Arc;
 
 pub fn build_dual_index(data: Vec<(String, u32)>) {
     let mut out_buf: Cursor<Vec<u8>> = Cursor::new(Vec::new());
     let mut di = DualIndexBuilder::new();
 
     for (s, i) in data {
-        di.add(s, i);
+        di.add(Arc::new(s), i);
     }
 
     let mut writer: DualIndexWriter = di.into();

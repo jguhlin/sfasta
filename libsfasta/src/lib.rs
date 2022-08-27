@@ -23,7 +23,7 @@ mod fasta;
 mod fastq;
 mod format;
 mod io;
-mod masking;
+pub mod masking;
 mod utils;
 
 pub mod prelude;

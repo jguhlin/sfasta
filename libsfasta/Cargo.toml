@@ -73,7 +73,7 @@ iai = "0.1"
 #harness = false
 
 [[bench]]
-name = "conversion"
+name = "ml32bit"
 harness = false
 
 #[[bench]]

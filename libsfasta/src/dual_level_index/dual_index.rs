@@ -73,7 +73,7 @@ impl Hashes {
 }
 
 pub struct DualIndexBuilder {
-    pub ids: Vec<String>,
+    pub ids: Vec<std::sync::Arc<String>>,
     pub locs: Vec<u32>,
     pub chunk_size: u64,
     pub hasher: Hashes,
@@ -118,7 +118,7 @@ impl DualIndexBuilder {
     ///
     /// id: String ID
     /// loc: u32 location of the SeqLoc entry in the file
-    pub fn add(&mut self, id: String, loc: u32) {
+    pub fn add(&mut self, id: std::sync::Arc<String>, loc: u32) {
         self.ids.push(id);
         self.locs.push(loc);
     }
@@ -536,6 +536,7 @@ mod tests {
     use super::*;
     use rand::Rng;
     use std::io::Cursor;
+    use std::sync::Arc;
 
     #[test]
     pub fn test_dual_index_builder() {
@@ -545,17 +546,17 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         for i in 0_u64..10000 {
-            di.add(i.to_string(), (i * 2) as u32);
+            di.add(Arc::new(i.to_string()), (i * 2) as u32);
         }
 
         for i in (0_u64..10000).step_by(2) {
-            di.add(i.to_string(), rng.gen::<u32>());
+            di.add(Arc::new(i.to_string()), rng.gen::<u32>());
         }
 
-        di.add("Max".to_string(), std::u32::MAX);
+        di.add(Arc::new("Max".to_string()), std::u32::MAX);
 
         for i in (0_u64..1000).step_by(2) {
-            di.add(i.to_string(), rng.gen::<u32>());
+            di.add(Arc::new(i.to_string()), rng.gen::<u32>());
         }
 
         let mut writer: DualIndexWriter = di.into();
@@ -571,10 +572,10 @@ mod tests {
         let mut rng = rand::thread_rng();
 
         for i in 0_u64..10000 {
-            di.add(i.to_string(), rng.gen::<u32>());
+            di.add(Arc::new(i.to_string()), rng.gen::<u32>());
         }
 
-        di.add("Max".to_string(), std::u32::MAX);
+        di.add(Arc::new("Max".to_string()), std::u32::MAX);
 
         let mut writer: DualIndexWriter = di.into();
         writer.write_to_buffer(&mut out_buf);

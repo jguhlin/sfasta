@@ -42,9 +42,9 @@ impl Masking {
         // BitPacker8x::BLOCK_LEN
 
         let commands = convert_commands_to_u32(
-                pad_commands_to_u32(
+                &pad_commands_to_u32(
                     &convert_ranges_to_ml32bit(
-                        get_masking_ranges(seq),
+                        &get_masking_ranges(seq),
         )));
 
         let len = commands.len();
@@ -144,8 +144,8 @@ impl Masking {
             in_block_pos = 0;
         }
 
-        let commands = convert_u32_to_commands(u32s);
-        mask_sequence(commands, &mut seq);
+        let commands = convert_u32_to_commands(&u32s);
+        mask_sequence(&commands, &mut seq);
     }
 }
 
