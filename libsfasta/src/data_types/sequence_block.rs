@@ -19,7 +19,7 @@ pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
     .unwrap();
     encoder
     .set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
-    true,
+    false,
     ))
     .unwrap();
     encoder.include_checksum(false).unwrap();
@@ -27,7 +27,7 @@ pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
         .long_distance_matching(true)
         .expect("Unable to set ZSTD Long Distance Matching");
     encoder
-        .window_log(31)
+        .window_log(27)
         .expect("Unable to set ZSTD Window Log");
     encoder
         .include_magicbytes(false)
@@ -35,7 +35,7 @@ pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
     encoder
         .include_contentsize(false)
         .expect("Unable to set ZSTD Content Size Flag");
-
+    encoder.include_dictid(false);
     encoder
 }
 
@@ -45,7 +45,7 @@ impl SequenceBlock {
         // TODO: This needs to be at least as big as block_size!
         let mut cseq: Vec<u8> = Vec::with_capacity(16 * 1024 * 1024);
 
-        debug!("Compressing sequence block with length: {}", self.seq.len());
+        //debug!("Compressing sequence block with length: {}", self.seq.len());
 
         match compression_type {
             CompressionType::NAFLike => {}
@@ -86,7 +86,7 @@ impl SequenceBlock {
             }
         }
 
-        debug!("Compressed sequence block to length: {}", cseq.len());
+        //debug!("Compressed sequence block to length: {}", cseq.len());
 
         SequenceBlockCompressed {
             compressed_seq: cseq,
