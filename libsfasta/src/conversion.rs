@@ -472,6 +472,9 @@ where
                     backoff.snooze();               
                 }
             }
+
+            backoff.snooze();
+            fasta_queue_in.push(Work::Shutdown);
         });
 
         let mut out_buf = BufWriter::new(&mut out_fh);
