@@ -13,20 +13,20 @@ pub struct SequenceBlock {
 
 pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
     let mut encoder = zstd::bulk::Compressor::new(compression_level).unwrap();
-    //encoder
-    //.set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
-    //.unwrap();
-    //encoder
-    //.set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
-    //true,
-    //))
-    //.unwrap();
+    encoder
+    .set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
+    .unwrap();
+    encoder
+    .set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
+    true,
+    ))
+    .unwrap();
     encoder.include_checksum(false).unwrap();
     encoder
         .long_distance_matching(true)
         .expect("Unable to set ZSTD Long Distance Matching");
     encoder
-        .window_log(21)
+        .window_log(31)
         .expect("Unable to set ZSTD Window Log");
     encoder
         .include_magicbytes(false)

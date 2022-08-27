@@ -68,7 +68,8 @@ impl Masking {
 
         let mut bitpacked_len: u64 = 0;
 
-        size += bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
+        size += bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config)
+            .unwrap();
         size += bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
 
         for bp in packed {
@@ -110,13 +111,15 @@ impl Masking {
 
         for chunk in self.data.take().unwrap().chunks(2 * 1024) {
             let mut encoder = zstd_encoder(1);
-            let mut cseq : Vec<u8> = Vec::with_capacity(2 * 1024 * 32);
+            let mut cseq: Vec<u8> = Vec::with_capacity(2 * 1024 * 32);
             let mut uncompressed = Vec::with_capacity(2 * 1024 * 32);
-            bincode::encode_into_std_write(chunk.to_vec(), &mut uncompressed, bincode_config).unwrap();
-            encoder.compress_to_buffer(&uncompressed, &mut cseq).unwrap();
+            bincode::encode_into_std_write(chunk.to_vec(), &mut uncompressed, bincode_config)
+                .unwrap();
+            encoder
+                .compress_to_buffer(&uncompressed, &mut cseq)
+                .unwrap();
             size += bincode::encode_into_std_write(&cseq, &mut out_buf, bincode_config).unwrap();
         }
-
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(self.location)).unwrap();

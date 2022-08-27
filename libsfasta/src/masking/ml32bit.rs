@@ -380,7 +380,8 @@ pub fn convert_u32_to_commands(u32s: &[u32]) -> Vec<Ml32bit> {
         i = 0;
         while i < 32 {
             let command = match cur_u32_bits[i..i + 4].load::<u8>() {
-                0b0000 => { // PASS command indicates skip to next u32
+                0b0000 => {
+                    // PASS command indicates skip to next u32
                     i = 32;
                     continue;
                 }

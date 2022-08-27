@@ -29,7 +29,7 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 8 * 1024 * 1024,    // 2Mb
+            block_size: 8 * 1024 * 1024,    // 8Mb
             seqlocs_chunk_size: 256 * 1024, // 256k
             index: true,
             masking: false,
@@ -605,10 +605,9 @@ where
             "DEBUG: Wrote {} bytes of masking ZSTD in {:#?}",
             end - start,
             end_time - start_time
-        );
-
+        ); */
     })
-    .expect("Error"); */
+    .expect("Error");
 
     (
         ids_string,
