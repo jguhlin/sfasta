@@ -1,10 +1,14 @@
 // Easy, high-performance conversion functions
 use crossbeam::thread;
+use crossbeam::queue::ArrayQueue;
+use crossbeam::utils::Backoff;
+
 use std::fs::{metadata, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
 use std::time::Instant;
+use std::sync::Arc;
 
 use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
 use crate::data_types::*;
@@ -390,6 +394,27 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 /// in_buffer
 /// out_buffer
 
+enum Work {
+    Payload(Sequence),
+    Shutdown,
+}
+
+impl Work {
+    fn is_shutdown(&self) -> bool {
+        match self {
+            Work::Shutdown => true,
+            _ => false,
+        }
+    }
+
+    fn payload(self) -> Sequence {
+        match self {
+            Work::Payload(s) => s,
+            _ => panic!("Unable to get payload from shutdown"),
+        }
+    }
+}
+
 pub fn write_fasta_sequence<'write, W, R>(
     sb_config: CompressionStreamBufferConfig,
     in_buf: &mut R,
@@ -426,14 +451,33 @@ where
     let mut masking = None;
     let mut masking_location = None;
 
+    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192));
+
+    let fasta_queue_in = Arc::clone(&fasta_queue);
+    let fasta_queue_out = Arc::clone(&fasta_queue);
+
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
-        let mut out_buf = BufWriter::new(&mut out_fh);
-        let reader_handle = s.spawn(move |_| {
-            sb.initialize();
+        let fasta_thread = s.spawn(|_| {
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
             let mut in_buf_reader = BufReader::new(in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
+    
+            let backoff = Backoff::new();
+    
+            for x in fasta {
+                let mut d = Work::Payload(x);
+                while let Err(z) = fasta_queue_in.push(d) {
+                    d = z;
+                    backoff.snooze();               
+                }
+            }
+        });
+
+        let mut out_buf = BufWriter::new(&mut out_fh);
+        let reader_handle = s.spawn(move |_| {
+            sb.initialize();
+            
 
             // Store the ID of the sequence and the Location (SeqLocs)
             // TODO: Auto adjust based off of size of input FASTA file
@@ -447,19 +491,33 @@ where
             // For each Sequence in the fasta file, make it upper case (masking is stored separately)
             // Add the sequence, get the SeqLocs and store them in Location struct
             // And store that in seq_locs Vec...
-            for (seqid, seqheader, mut seq) in fasta.map(|x| x.into_parts()) {
-                let mut location = SeqLoc::new();
-                location.masking = masking.add_masking(&seq[..]);
-                let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
-                let myid = std::sync::Arc::new(seqid);
-                ids_string.push(std::sync::Arc::clone(&myid));
-                let idloc = ids.add_id(std::sync::Arc::clone(&myid));
-                if !seqheader.is_empty() {
-                    location.headers = Some(headers.add_header(seqheader));
+
+            let backoff = Backoff::new();
+
+            loop {
+                match fasta_queue_out.pop() {
+                    Some(Work::Payload(seq)) => {
+                        let (seqid, seqheader, mut seq) = seq.into_parts();
+                        let mut location = SeqLoc::new();
+                        location.masking = masking.add_masking(&seq[..]);
+                        let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
+                        let myid = std::sync::Arc::new(seqid);
+                        ids_string.push(std::sync::Arc::clone(&myid));
+                        let idloc = ids.add_id(std::sync::Arc::clone(&myid));
+                        if !seqheader.is_empty() {
+                            location.headers = Some(headers.add_header(seqheader));
+                        }
+                        location.ids = Some(idloc);
+                        location.sequence = Some(loc);
+                        seq_locs.push(location);
+                    },
+                    Some(Work::Shutdown) => {
+                        break
+                    },
+                    None => {
+                        backoff.snooze();
+                    }
                 }
-                location.ids = Some(idloc);
-                location.sequence = Some(loc);
-                seq_locs.push(location);
             }
 
             // Finalize pushes the last block, which is likely smaller than the complete block size
@@ -509,6 +567,8 @@ where
                 }
             }
         }
+
+        fasta_thread.join().unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
