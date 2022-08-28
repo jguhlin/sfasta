@@ -1,14 +1,14 @@
 // Easy, high-performance conversion functions
-use crossbeam::queue::ArrayQueue;
 use crossbeam::thread;
+use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
 use std::fs::{metadata, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
 use std::time::Instant;
+use std::sync::Arc;
 
 use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
 use crate::data_types::*;
@@ -396,7 +396,7 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 
 #[derive(Debug)]
 enum Work {
-    Payload(Vec<Sequence>),
+    Payload(Sequence),
     Shutdown,
 }
 
@@ -408,7 +408,7 @@ impl Work {
         }
     }
 
-    fn payload(self) -> Vec<Sequence> {
+    fn payload(self) -> Sequence {
         match self {
             Work::Payload(s) => s,
             _ => panic!("Unable to get payload from shutdown"),
@@ -463,46 +463,27 @@ where
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
             let mut in_buf_reader = BufReader::new(in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
-
+    
             let backoff = Backoff::new();
-
-            let mut payload = Vec::new();
+    
             for x in fasta {
-                payload.push(x);
-
-                if payload.len() >= 128 {
-                    let mut pkg = Work::Payload(payload);
-                    while let Err(z) = fasta_queue_in.push(pkg) {
-                        pkg = z;
-                        backoff.snooze();
-                    }
-                    payload = Vec::new();
-                }
-
-                // let mut d = Work::Payload(x);
-                // while let Err(z) = fasta_queue_in.push(d) {
-                // d = z;
-                // backoff.snooze();
-                // }
-            }
-
-            // Push the last payload
-            if !payload.is_empty() {
-                let mut pkg = Work::Payload(payload);
-                while let Err(z) = fasta_queue_in.push(pkg) {
-                    pkg = z;
-                    backoff.snooze();
+                let mut d = Work::Payload(x);
+                while let Err(z) = fasta_queue_in.push(d) {
+                    d = z;
+                    backoff.snooze();               
                 }
             }
 
             while let Err(z) = fasta_queue_in.push(Work::Shutdown) {
                 backoff.snooze();
             }
+            
         });
 
         let mut out_buf = BufWriter::new(&mut out_fh);
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
+            
 
             // Store the ID of the sequence and the Location (SeqLocs)
             // TODO: Auto adjust based off of size of input FASTA file
@@ -521,24 +502,24 @@ where
 
             loop {
                 match fasta_queue_out.pop() {
-                    Some(Work::Payload(seqs)) => {
-                        for seq in seqs {
-                            let (seqid, seqheader, mut seq) = seq.into_parts();
-                            let mut location = SeqLoc::new();
-                            location.masking = masking.add_masking(&seq[..]);
-                            let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
-                            let myid = std::sync::Arc::new(seqid);
-                            ids_string.push(std::sync::Arc::clone(&myid));
-                            let idloc = ids.add_id(std::sync::Arc::clone(&myid));
-                            if !seqheader.is_empty() {
-                                location.headers = Some(headers.add_header(seqheader));
-                            }
-                            location.ids = Some(idloc);
-                            location.sequence = Some(loc);
-                            seq_locs.push(location);
+                    Some(Work::Payload(seq)) => {
+                        let (seqid, seqheader, mut seq) = seq.into_parts();
+                        let mut location = SeqLoc::new();
+                        location.masking = masking.add_masking(&seq[..]);
+                        let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
+                        let myid = std::sync::Arc::new(seqid);
+                        ids_string.push(std::sync::Arc::clone(&myid));
+                        let idloc = ids.add_id(std::sync::Arc::clone(&myid));
+                        if !seqheader.is_empty() {
+                            location.headers = Some(headers.add_header(seqheader));
                         }
-                    }
-                    Some(Work::Shutdown) => break,
+                        location.ids = Some(idloc);
+                        location.sequence = Some(loc);
+                        seq_locs.push(location);
+                    },
+                    Some(Work::Shutdown) => {
+                        break
+                    },
                     None => {
                         backoff.snooze();
                     }
