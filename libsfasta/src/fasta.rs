@@ -33,7 +33,7 @@ impl<'fasta, R: BufRead> Fasta<'fasta, R> {
         Fasta {
             reader: in_buf,
             buffer: Vec::with_capacity(1024),
-            seqbuffer: Vec::with_capacity(1024 * 1024),
+            seqbuffer: Vec::with_capacity(2048),
             next_seqid: None,
             next_header: None,
             seqlen: 0,
@@ -74,7 +74,6 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
 
                         self.buffer.clear();
                         let split: Vec<&str> = next_id.splitn(2, ' ').collect();
-                        // let next_id = next_id.split(' ').next().unwrap().trim().to_string();
                         let next_id = split[0].trim().to_string();
                         let next_header = if split.len() == 2 {
                             split[1].trim().to_string()
@@ -88,12 +87,12 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                         if self.seqlen > 0 {
                             assert!(id.is_some());
 
+                            // Use the last seqlen as the new buffer's size
                             let seqbuf = Vec::with_capacity(self.seqlen);
-
-                            let seq: Vec<u8> = std::mem::replace(&mut self.seqbuffer, seqbuf);
+                            let mut seq: Vec<u8> = std::mem::replace(&mut self.seqbuffer, seqbuf);
+                            seq.shrink_to_fit();
 
                             let seq = Sequence {
-                                //seq: self.seqbuffer[..self.seqlen].to_vec(),
                                 seq,
                                 id: id.unwrap(),
                                 header: header.unwrap_or_else(|| "".to_string()),

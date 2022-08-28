@@ -402,10 +402,7 @@ enum Work {
 
 impl Work {
     fn is_shutdown(&self) -> bool {
-        match self {
-            Work::Shutdown => true,
-            _ => false,
-        }
+        matches!(self, Work::Shutdown)
     }
 
     fn payload(self) -> Sequence {
@@ -483,7 +480,6 @@ where
         let mut out_buf = BufWriter::new(&mut out_fh);
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
-            
 
             // Store the ID of the sequence and the Location (SeqLocs)
             // TODO: Auto adjust based off of size of input FASTA file
