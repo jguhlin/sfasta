@@ -471,7 +471,7 @@ where
                 }
             }
 
-            while let Err(z) = fasta_queue_in.push(Work::Shutdown) {
+            while fasta_queue_in.push(Work::Shutdown).is_err() {
                 backoff.snooze();
             }
             
