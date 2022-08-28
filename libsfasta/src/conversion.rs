@@ -1,14 +1,14 @@
 // Easy, high-performance conversion functions
-use crossbeam::thread;
 use crossbeam::queue::ArrayQueue;
+use crossbeam::thread;
 use crossbeam::utils::Backoff;
 
 use std::fs::{metadata, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
-use std::time::Instant;
 use std::sync::Arc;
+use std::time::Instant;
 
 use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
 use crate::data_types::*;
@@ -460,21 +460,20 @@ where
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
             let mut in_buf_reader = BufReader::with_capacity(512 * 1024, in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
-    
+
             let backoff = Backoff::new();
-    
+
             for x in fasta {
                 let mut d = Work::Payload(x);
                 while let Err(z) = fasta_queue_in.push(d) {
                     d = z;
-                    backoff.snooze();               
+                    backoff.snooze();
                 }
             }
 
             while fasta_queue_in.push(Work::Shutdown).is_err() {
                 backoff.snooze();
             }
-            
         });
 
         let mut out_buf = BufWriter::new(&mut out_fh);
@@ -512,10 +511,8 @@ where
                         location.ids = Some(idloc);
                         location.sequence = Some(loc);
                         seq_locs.push(location);
-                    },
-                    Some(Work::Shutdown) => {
-                        break
-                    },
+                    }
+                    Some(Work::Shutdown) => break,
                     None => {
                         backoff.snooze();
                     }
