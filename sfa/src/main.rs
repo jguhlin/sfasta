@@ -29,11 +29,11 @@ const GIT_VERSION: &str = git_version!();
 fn style_pb(pb: ProgressBar) -> ProgressBar {
     let style = ProgressStyle::default_bar()
         .template(
-            "[{spinner:.green}] {bar:30.green/yellow} {bytes:.cyan}/{total_bytes:.blue} ({eta})",
+            "[{spinner:.green}] 🧬 {bar:30.green/yellow} {bytes:.cyan}/{total_bytes:.blue} ({eta})",
         )
         .unwrap()
         .progress_chars("█▇▆▅▄▃▂▁  ")
-        .tick_chars("🧬A🧬C🧬T🧬G🧬N🧬");
+        .tick_chars("ACTGN");
     pb.set_style(style);
     pb
 }
