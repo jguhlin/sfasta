@@ -458,7 +458,7 @@ where
     thread::scope(|s| {
         let fasta_thread = s.spawn(|_| {
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
-            let mut in_buf_reader = BufReader::new(in_buf);
+            let mut in_buf_reader = BufReader::with_capacity(512 * 1024, in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
     
             let backoff = Backoff::new();
