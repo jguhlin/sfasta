@@ -131,9 +131,6 @@ For other applications (such as long term storage)
 ## C and Python bindings
 To make it easier to use in other programs and in python/jupyter
 
-## Profile Guided Optimization
-Enable PGO for additional speed-ups
-
 ## Small file optimization
 Sfasta is currently optimized for larger files.
 
@@ -141,3 +138,9 @@ Sfasta is currently optimized for larger files.
 
 ## Implement NAF-like algorithm
 NAF has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some SIMD support for 2bit and 4bit DNA/RNA encoding.
+
+## GFA file format support
+Graph genome file format is in dire need of an optimized format
+
+## Profile Guided Optimization
+NO. This somehow doubled the time it takes to compress binaries. Enable PGO for additional speed-ups
