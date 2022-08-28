@@ -35,41 +35,36 @@ path = "libsfasta/src/lib.rs"
 name = "sfa"
 path = "sfa/src/main.rs"
 
+[[bench]]
+name = "ml32bit"
+harness = false
+
 [dev-dependencies]
 criterion = "0.3.5"
 humansize = "1.1.1"
 generic-array = "0.14.5"
 numeric-array = "0.5.2"
 num-traits = "0.2.15"
-iai = "0.1"
-
-[[bench]]
-name = "ml32bit"
-harness = false
 
 [dependencies]
-# TODO: Implement pwrite/pread from nix crate
-# Will need a macro to disable when not on a linux host.
-# nix = "0.21.0"
-log = "0.4.17"
-# serde = { version = "1.0.136", features = ["derive"] }
-# serde_bytes = "0.11.6"
-crossbeam = "0.8.1"
-# thincollections = "0.5.3"
-static_assertions = "1.1.0"
-bincode = { version = "2.0.0-rc.1" } #, features = ["serde"] }
-hashbrown = { version = "0.12.3" } #, features = ["serde"] }
 rand = "0.8.5"
 rand_core = "0.6.3"
 rand_chacha = "0.3.1"
+log = "0.4.17"
+crossbeam = "0.8.1"
+static_assertions = "1.1.0"
+bincode = { version = "2.0.0-rc.1" } #, features = ["serde"] }
 bytelines = "2.4.0"
 simdutf8 = "0.1.4"
 rayon = "1.5.3"
 itertools = "0.10.3"
-bumpalo = {version = "3.11.0", features = ["collections"]}
 git-version = "0.3.5" # TODO: Print this out in the library in a version call
-core_affinity = "0.5.10" # Not used yet...
+# core_affinity = "0.5.10" # Not used yet...
 bitvec = "1.0.1"
+mimalloc = { version = "0.1.29", default-features = false }
+toml = "0.5.9"
+env_logger = "0.9.0"
+
 
 # Hashers
 twox-hash = "1.6.3"
@@ -79,15 +74,11 @@ ahash = "0.8.0"
 lz4_flex = "0.9.4"
 zstd = { version="0.11.2", default-features = false, features=["arrays", "legacy", "zstdmt", "experimental"] } # { git = "https://github.com/gyscos/zstd-rs", features = [ "experimental" ] }
 xz = "0.1.0"
-flate2 = { version = "1.0.24", features = ["zlib-ng-compat"], default-features = false }
+flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
 snap = "1.0.5"
 brotli = "3.3.4"
 bitpacking = { version = "0.8.4", features = ["bitpacker8x"] }
 indicatif = "0.17.0"
-# Is this even needed here?
-mimalloc = { version = "0.1.29", default-features = false }
-toml = "0.5.9"
-env_logger = "0.9.0"
 
 [dependencies.clap]
 version = "3.2.8"

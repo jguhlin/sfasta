@@ -1,9 +1,8 @@
 use bytelines::ByteLines;
+use bytelines::ByteLinesReader;
 use simdutf8::basic::from_utf8;
 
 use std::io::BufRead;
-
-use crate::bytelines::ByteLinesReader;
 
 #[derive(Debug)]
 pub struct Sequence {

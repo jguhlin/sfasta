@@ -4,7 +4,6 @@ use mimalloc::MiMalloc;
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
 
-extern crate bumpalo;
 extern crate clap;
 extern crate indicatif;
 extern crate rand;
@@ -34,7 +33,7 @@ fn style_pb(pb: ProgressBar) -> ProgressBar {
         )
         .unwrap()
         .progress_chars("█▇▆▅▄▃▂▁  ")
-        .tick_chars("ACTGN🧬");
+        .tick_chars("🧬A🧬C🧬T🧬G🧬N🧬");
     pb.set_style(style);
     pb
 }
@@ -108,8 +107,6 @@ enum Commands {
 }
 
 fn main() {
-    println!("The file format is not stable yet, so don't use it for anything other than testing. Cheers!");
-
     env_logger::init();
     let cli = Cli::parse();
 

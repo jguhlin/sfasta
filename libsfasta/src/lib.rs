@@ -2,16 +2,13 @@
 #![feature(is_sorted)]
 
 extern crate bincode;
-extern crate bytelines;
 extern crate crossbeam;
-extern crate rand;
 extern crate rayon;
 #[macro_use]
 extern crate itertools;
 
 extern crate flate2;
 extern crate lz4_flex;
-extern crate snap;
 extern crate zstd;
 
 mod compression;
