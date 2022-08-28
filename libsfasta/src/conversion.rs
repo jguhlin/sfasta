@@ -534,7 +534,7 @@ where
 
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
-        let mut block_locs = Vec::with_capacity(2 * 1024 * 1024);
+        let mut block_locs = Vec::with_capacity(512 * 1024);
         let mut pos = out_buf
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
