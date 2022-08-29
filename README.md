@@ -1,17 +1,30 @@
 # Introduction
-Sfasta is a replacement for the FASTA/Q format with a goal of both saving space but also having very fast random-access for machine learning, even for large datasets (such as the nt database, 217Gb gzip compressed, 225Gb bgzip compressed, and 175Gb with sfasta, including an index). Speed advantages are by assuming modern hardware, thus: i) multiple compression threads, ii) I/O dedicated threads, iii) SIMD bitpacking support, iv) modern compression algorithms (ZSTD, as default). If you need different hardware, open an issue. There are SIMD support for other architectures that could be implemented.
+Sfasta is a replacement for the FASTA/Q format with a goal of both saving space but also having very fast random-access for machine learning, even for large datasets (such as the nt database, 217Gb gzip compressed, 225Gb bgzip compressed, and 175Gb with sfasta, including an index). 
+
+Speed comes from assuming modern hardware, thus: 
+* Multiple compression threads
+* I/O dedicated threads 
+* SIMD bitpacking support
+* modern compression algorithms (ZSTD, as default). 
+* Dual level ID Index
+* Everything stored as sequence streams (for better compression).
+
+If you need different hardware ssupport, open an issue. There are SIMD support for other architectures that could be implemented.
 
 While the goals are random-access speed by ID query, and smaller size, I hope it can become a more general purpose format. Currently it makes extensive use of bitpacking, as well as ZSTD compression. It supports others, which could be used for archival purposes (such as xz compression). It is a work in progress, but is ready for community feedback. Because the goals are not simple decompression, this part of the code is not-optimized yet, and is much slower than zcat or other tools. This will be remedied in the future.
 
 ## Note
 This has taken a few years of on again, off again development. FORMAT.md and other files are likely out of date.
 
-## FASTQ support?
-It's somewhat trivial to add the scores as another compression stream, and the struct that puts it all back together already has 
+## Community Feedback Period
+I'm hopeful folks will check this out, play around, break it, and give feedback. 
+
+## FASTQ support
+It's now trivial to add the scores as another compression stream, and the struct that puts it all back together already has an entries for scores. I'll get to it soon.
 
 # Usage
 ## Installation
-`cargo install sfasta`
+`cargo install sfasta` [Don't have cargo?](https://rustup.rs/)
 
 ## Usage
 To compress a file:
@@ -37,15 +50,19 @@ For help:
 `sfa --help`
 
 Please note, not all subcommands are implemented yet. The following should work: convert, view, list, faidx.
+
+## Requirements
+Should work anywhere [Rust](https://www.rust-lang.org/) works. Tested on Ubuntu, Red Hat, and Windows 10. I suspect it will work on Mac OS, and will likely run quite slowly in WASM. 
+
 # Comparisons
 
 ## Features
 | Compression Type | Random Access | Multithreaded |
 |:---:|:---:|:----|
-| NAF | No | No |
-| ZSTD | No | Yes |
+| [NAF](https://github.com/KirillKryukov/naf) | No | No |
+| [ZSTD](http://facebook.github.io/zstd/) | No | Yes |
 | sfasta | Yes | Yes |
-| bgzip | Yes | Yes |
+| [bgzip](http://www.htslib.org/doc/bgzip.html) | Yes | Yes |
 
 ### Uniprot Random Access
 Samtools index pre-built
