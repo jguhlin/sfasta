@@ -4,8 +4,6 @@
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::data_types::sequence_block::zstd_encoder;
-
 /// Handles access to SeqLocs
 pub struct SeqLocs {
     location: u64,
@@ -121,7 +119,7 @@ impl SeqLocs {
 
             let mut bincoded: Vec<u8> = Vec::new();
 
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 3)
+            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
