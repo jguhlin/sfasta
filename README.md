@@ -21,6 +21,13 @@ You can use other compression schemes. The software automatically detects which 
 `sfa convert --snappy MyFile.fasta`
 `sfa convert --xz MyFile.fasta`
 
+View a file:
+`sfa view MyFile.sfasta`
+
+Query a file by sequence ID:
+`sfa faidx MyFile.sfasta Chr1`
+
+
 For help:
 `sfa --help`
 
