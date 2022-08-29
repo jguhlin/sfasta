@@ -144,7 +144,7 @@ The best source is currently this file: [conversion.rs](https://github.com/jguhl
 
 ## Header
 | Data Type | Name | Description |
-| ---/:|:--- |:--- |
+| ---:|:--- |:--- |
 | [u8; 6] | b"sfasta" | Indicates an sfasta file |
 | u64 | Version | Version of the SFASTA file (currently set to 1) |
 | struct | [Directory](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/directory.rs#L53) | Directory of the file; u64 bytes pointing to indices, sequence blocks, etc... |
@@ -167,6 +167,8 @@ The best source is currently this file: [conversion.rs](https://github.com/jguhl
 | u8 | num_bits| Number of bits used to bitpack each integer |
 | [Packed] | BitPacked Masking Instructions | Bitpacked masking instructions. [See here](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/masking/ml32bit.rs) |
 | [struct] | [SeqLocs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs) | Sequence locations, stored as a vector of u64. |
+| Special | [Dual Index](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/dual_level_index/dual_index.rs) | See file for more description. |
+
 
 
 
