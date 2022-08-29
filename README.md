@@ -1,5 +1,5 @@
 # Introduction
-Sfasta is a replacement for the FASTA/Q format with a goal of both saving space but also having very fast random-access for machine learning, even for large datasets (such as the nt database, 217Gb gzip compressed, 225Gb bgzip compressed). Speed advantages are by assuming modern hardware, thus: i) multiple compression threads, ii) I/O dedicated threads, iii) SIMD bitpacking support, iv) modern compression algorithms (ZSTD, as default). If you need different hardware, open an issue. There are SIMD support for other architectures that could be implemented.
+Sfasta is a replacement for the FASTA/Q format with a goal of both saving space but also having very fast random-access for machine learning, even for large datasets (such as the nt database, 217Gb gzip compressed, 225Gb bgzip compressed, and 175Gb with sfasta, including an index). Speed advantages are by assuming modern hardware, thus: i) multiple compression threads, ii) I/O dedicated threads, iii) SIMD bitpacking support, iv) modern compression algorithms (ZSTD, as default). If you need different hardware, open an issue. There are SIMD support for other architectures that could be implemented.
 
 While the goals are random-access speed by ID query, and smaller size, I hope it can become a more general purpose format. Currently it makes extensive use of bitpacking, as well as ZSTD compression. It supports others, which could be used for archival purposes (such as xz compression). It is a work in progress, but is ready for community feedback. Because the goals are not simple decompression, this part of the code is not-optimized yet, and is much slower than zcat or other tools. This will be remedied in the future.
 
@@ -21,12 +21,14 @@ You can use other compression schemes. The software automatically detects which 
 `sfa convert --snappy MyFile.fasta`
 `sfa convert --xz MyFile.fasta`
 
+You can also change the block size. Units are in * 1024 bytes. Default is 4Mb (4096):
+`sfa convert --block-size 8192 MyFile.fasta`
+
 View a file:
 `sfa view MyFile.sfasta`
 
 Query a file by sequence ID:
 `sfa faidx MyFile.sfasta Chr1`
-
 
 For help:
 `sfa --help`
@@ -47,23 +49,18 @@ Samtools index pre-built
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `samtools faidx uniprot_sprot.fasta.gz "sp\|P10459\|3S1B_LATLA"` | 422.7 ± 4.7 | 417.8 | 433.3 | 3.42 ± 0.25 |
-| `sfa faidx uniprot_sprot
-.fasta.sfasta "sp\|P10459\|3S1B_LATLA"` | 123.5 ± 8.9 | 118.3 | 141.6 | 1.00 |
-
-![Uniprot Random Access](info/uniprot_random_access.png)
+| `samtools faidx uniprot_sprot.fasta.gz "sp\|Q6GZX1\|004R_FRG3G"` | 423.0 ± 3.3 | 419.4 | 434.1 | 3.42 ± 0.13 |
+| `sfa faidx uniprot_sprot.sfasta "sp\|Q6GZX1\|004R_FRG3G"` | 123.8 ± 4.5 | 121.8 | 143.7 | 1.00 |
 
 ### Uniprot Compression Speed
-| Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
-| `ennaf --protein uniprot_sprot.fasta --temp-dir /tmp` | 966.5 ± 32.2 | 924.6 | 1018.7 | 2.89 ± 0.18 |
-| `bgzip -k --index -f --threads 7 uniprot_sprot.fasta` | 719.7 ± 7.6 | 706.6 | 731.0 | 2.16 ± 0.12 |
-| `sfa convert uniprot_sprot.fasta` | 2676.7 ± 105.9 | 2394.8 | 2756.2 | 8.02 ± 0.53 |
-| `pigz -k -p 7 uniprot_sprot.fasta -f` | 771.5 ± 55.2 | 704.2 | 872.3 | 2.31 ± 0.21 |
-| `crabz -p 7 Erow_1.0.fasta -f > uniprot_sprot.crabz` | 10688.8 ± 224.7 | 10322.6 | 10990.7 | 32.01 ± 1.82 |
-| `zstd -k uniprot_sprot.fasta -f -T7` | 333.9 ± 17.6 | 303.4 | 351.6 | 1.00 |
-
-![Uniprot Compression Speed](info/uniprot_compress_comparison.png)
+| `sfa convert uniprot_sprot.fasta` | 1.974 ± 0.128 | 1.673 | 2.143 | 5.75 ± 0.59 |
+| `ennaf --protein uniprot_sprot.fasta --temp-dir /tmp` | 0.923 ± 0.009 | 0.913 | 0.942 | 2.69 ± 0.22 |
+| `bgzip -k --index -f --threads 8 uniprot_sprot.fasta` | 0.670 ± 0.019 | 0.641 | 0.734 | 1.95 ± 0.17 |
+| `pigz -k -p 8 uniprot_sprot.fasta -f` | 0.636 ± 0.021 | 0.612 | 0.682 | 1.85 ± 0.16 |
+| `crabz -p 8 Erow_1.0.fasta -f > uniprot_sprot.crabz` | 9.150 ± 0.182 | 8.883 | 9.523 | 26.67 ± 2.20 |
+| `zstd -k uniprot_sprot.fasta -f -T8` | 0.343 ± 0.027 | 0.296 | 0.406 | 1.00 |
 
 ### Uniprot Size
 Uncompressed: 282M
@@ -78,17 +75,22 @@ Uncompressed: 282M
 
 ## Nanopore Reads
 ### Nanopore Reads Compression Speed
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `sfa convert Essy1B.fasta` | 22.844 ± 2.973 | 18.514 | 26.591 | 3.37 ± 0.45 |
+| `ennaf Essy1B.fasta --temp-dir /tmp` | 19.231 ± 0.158 | 19.003 | 19.505 | 2.84 ± 0.10 |
+| `bgzip -k --index -f --threads 7 Essy1B.fasta` | 82.065 ± 0.478 | 81.559 | 82.720 | 12.10 ± 0.42 |
+| `pigz -k -p 7 Essy1B.fasta -f` | 83.118 ± 0.994 | 82.055 | 85.015 | 12.26 ± 0.44 |
+| `crabz -p 7 Essy1B.fasta > Essy1B.fasta.crabz` | 82.933 ± 1.268 | 81.313 | 84.412 | 12.23 ± 0.46 |
+| `zstd -k Essy1B.fasta -f -T7` | 6.780 ± 0.232 | 6.484 | 7.220 | 1.00 |
 
 ### Nanopore Reads Random Access
 Samtools index pre-built
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `samtools faidx Essy1B.fasta.gz ae278260-d941-45c9-9e76-40f04ef8e56c` | 935.1 ± 13.4 | 923.2 | 959.8 | 10.91 ± 0.65 |
-| `sfa faidx Essy1B.sfasta ae278260-d941-45c9-9e76-40f04ef8e56c` | 85.7 ± 4.9 | 83.1 | 104.6 | 1.00 |
-
-
-![Nanopore Reads Random Access Comparison](info/nanopore_reads_random_access.png)
+| `samtools faidx Essy1B.fasta.gz ae278260-d941-45c9-9e76-40f04ef8e56c` | 752.6 ± 5.8 | 746.7 | 764.8 | 9.01 ± 1.15 |
+| `sfa faidx Essy1B.sfasta ae278260-d941-45c9-9e76-40f04ef8e56c` | 83.6 ± 10.6 | 71.7 | 98.5 | 1.00 |
 
 ### Nanopore Reads Size
 Uncompressed Size: 8.8G
@@ -107,23 +109,18 @@ Samtools index pre-built
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `samtools faidx Erow_1.0.fasta.gz PXIH01S0167520.1` | 184.6 ± 10.6 | 169.0 | 197.4 | 1.38 ± 0.15 |
-| `sfa faidx Erow_1.0.sfasta PXIH01S0167520.1` | 134.0 ± 12.1 | 118.4 | 154.1 | 1.00 |
-
-![Genome Random Access Comparison](info/genome_random_access.png)
-
+| `samtools faidx Erow_1.0.fasta.gz PXIH01S0167520.1` | 189.7 ± 10.2 | 182.2 | 215.7 | 1.53 ± 0.10 |
+| `sfa faidx Erow_1.0.sfasta PXIH01S0167520.1` | 135.3 ± 9.4 | 129.4 | 153.4 | 1.09 ± 0.09 |
 
 ### Genome Compression Speed
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
-| `ennaf Erow_1.0.fasta --temp-dir /tmp` | 8.111 ± 0.018 | 8.087 | 8.145 | 3.65 ± 0.11 |
-| `bgzip -k --index -f --threads 7 Erow_1.0.fasta` | 9.492 ± 0.442 | 8.940 | 9.975 | 4.27 ± 0.24 |
-| `sfa convert Erow_1.0.fasta` | 7.499 ± 0.477 | 6.914 | 8.345 | 3.37 ± 0.24 |
-| `pigz -k -p 7 Erow_1.0.fasta -f` | 10.833 ± 0.271 | 10.548 | 11.213 | 4.87 ± 0.19 |
-| `crabz -p 7 Erow_1.0.fasta > Erow_1.0.crabz` | 10.594 ± 0.171 | 10.387 | 10.971 | 4.76 ± 0.16 |
-| `zstd -k Erow_1.0.fasta -f -T7` | 2.224 ± 0.067 | 2.087 | 2.291 | 1.00 |
-
-![Genome Compression Comparison](info/genome_compress_comparison.png)
+| `sfa convert Erow_1.0.fasta` | 4.847 ± 0.189 | 4.579 | 5.199 | 2.39 ± 0.16 |
+| `ennaf Erow_1.0.fasta --temp-dir /tmp` | 8.054 ± 0.044 | 7.986 | 8.155 | 3.97 ± 0.22 |
+| `bgzip -k --index -f --threads 10 Erow_1.0.fasta` | 7.522 ± 0.510 | 6.639 | 8.132 | 3.71 ± 0.32 |
+| `pigz -k -p 10 Erow_1.0.fasta -f` | 7.593 ± 0.110 | 7.353 | 7.965 | 3.75 ± 0.21 |
+| `crabz -p 10 Erow_1.0.fasta > Erow_1.0.crabz` | 7.530 ± 0.203 | 7.317 | 7.992 | 3.72 ± 0.23 |
+| `zstd -k Erow_1.0.fasta -f -T10` | 2.026 ± 0.112 | 1.834 | 2.273 | 1.00 |
 
 ### Genome Size 
 Uncompressed: 2.7G
@@ -178,5 +175,8 @@ You need to install a font that supports Unicode. I'll see if there is a way to 
 
 ## XZ compression is fast until about halfway, then slows to a crawl.
 The buffers can store lots of sequence, but the compression algorithm takes longer.
+
+## Why so many dependencies?
+Right it it works with a wide range of compression functions. Once some are determined to be the best others could be dropped from future versions. The file format itself has a version identifier so we could request people rollback to an older version if they need to.
 
 ![Genomics Aotearoa](info/genomics-aotearoa.png)
