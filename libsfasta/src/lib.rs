@@ -11,7 +11,7 @@ extern crate flate2;
 extern crate lz4_flex;
 extern crate zstd;
 
-mod compression;
+pub mod compression;
 mod compression_stream_buffer;
 mod conversion;
 pub mod data_types;
