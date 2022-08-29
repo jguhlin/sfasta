@@ -2,10 +2,50 @@
 
 use crate::data_types::structs::{default_compression_level, CompressionType};
 
-use std::io::{Read, Write};
+use std::io::{Read, Write, Seek, SeekFrom};
 
 use log::{debug, error, info, trace, warn};
 use xz::read::{XzDecoder, XzEncoder};
+
+pub struct SequenceBlocks {
+    pub block_locs: Vec<u64>,
+    cache: Option<(u32, Vec<u8>)>,
+    pub compression_type: CompressionType,
+}
+
+impl SequenceBlocks {
+    pub fn new(block_locs: Vec<u64>, compression_type: CompressionType) -> Self {
+        SequenceBlocks {
+            block_locs,
+            cache: None,
+            compression_type: compression_type,
+        }
+    }
+
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[u8]
+    where
+        R: Read + Seek,
+    {
+
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
+            return self.cache.as_ref().unwrap().1.as_slice();
+        } else {
+            let byte_loc = self.block_locs[block as usize];
+            in_buf.seek(SeekFrom::Start(byte_loc))
+                .expect("Unable to work with seek API");
+            let sbc: SequenceBlockCompressed =
+                bincode::decode_from_std_read(&mut *in_buf, bincode_config)
+                .expect("Unable to parse SequenceBlockCompressed");
+
+            let sb = sbc.decompress(self.compression_type);
+            self.cache = Some((block, sb.seq));
+            return self.cache.as_ref().unwrap().1.as_slice()
+        }
+    }
+}
+
 
 #[derive(Debug, Default)]
 pub struct SequenceBlock {
@@ -102,7 +142,7 @@ impl SequenceBlock {
     }
 }
 
-#[derive(Debug, Default, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Default, bincode::Encode, bincode::Decode, Clone,)]
 pub struct SequenceBlockCompressed {
     pub compressed_seq: Vec<u8>,
 }

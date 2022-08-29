@@ -1,13 +1,30 @@
 # Introduction
-Sfasta is a side-project I've been working on. I'm training Transformer models and needed to use large datasets such as reads or databases. Block gzip, even when stored on a ramdisk, is far too slow to keep the GPU full, so I started working on an alternative format that allowed for better random-access. This is that format.
+Sfasta is a replacement for the FASTA/Q format with a goal of both saving space but also having very fast random-access for machine learning, even for large datasets (such as the nt database, 217Gb gzip compressed, 225Gb bgzip compressed). Speed advantages are by assuming modern hardware, thus: i) multiple compression threads, ii) I/O dedicated threads, iii) SIMD bitpacking support, iv) modern compression algorithms (ZSTD, as default). If you need different hardware, open an issue. There are SIMD support for other architectures that could be implemented.
 
-I hope it becomes a more general purpose format, saving space and time, but for me it has been a success for my needs already.
+While the goals are random-access speed by ID query, and smaller size, I hope it can become a more general purpose format. Currently it makes extensive use of bitpacking, as well as ZSTD compression. It supports others, which could be used for archival purposes (such as xz compression). It is a work in progress, but is ready for community feedback. Because the goals are not simple decompression, this part of the code is not-optimized yet, and is much slower than zcat or other tools. This will be remedied in the future.
 
-Currently it makes extensive use of bitpacking, as well as ZSTD compression. It supports others, which could be used for archival purposes (such as xz compression), but those functions are not connected to the command-line anymore. Size is generally favorable as-is, although disabling masking and indexing would make it even smaller.
+## Note
+This has taken a few years of on again, off again development. FORMAT.md and other files are likely out of date.
 
-# Format Overview
-Everything is bincoded, and either bitpacked, or ZSTD compressed.... add more here...
+# Usage
+## Installation
+`cargo install sfasta`
 
+## Usage
+To compress a file:
+`sfa convert MyFile.fasta`
+
+You can also convert directly from gzipped files
+`sfa convert MyFile.fasta.gz`
+
+You can use other compression schemes. The software automatically detects which is used and decompresses accordingly.
+`sfa convert --snappy MyFile.fasta`
+`sfa convert --xz MyFile.fasta`
+
+For help:
+`sfa --help`
+
+Please note, not all subcommands are implemented yet. The following should work: convert, view, list, faidx.
 # Comparisons
 
 ## Features
@@ -24,7 +41,8 @@ Samtools index pre-built
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
 | `samtools faidx uniprot_sprot.fasta.gz "sp\|P10459\|3S1B_LATLA"` | 422.7 ± 4.7 | 417.8 | 433.3 | 3.42 ± 0.25 |
-| `sfa faidx uniprot_sprot.fasta.sfasta "sp\|P10459\|3S1B_LATLA"` | 123.5 ± 8.9 | 118.3 | 141.6 | 1.00 |
+| `sfa faidx uniprot_sprot
+.fasta.sfasta "sp\|P10459\|3S1B_LATLA"` | 123.5 ± 8.9 | 118.3 | 141.6 | 1.00 |
 
 ![Uniprot Random Access](info/uniprot_random_access.png)
 
@@ -134,8 +152,6 @@ To make it easier to use in other programs and in python/jupyter
 ## Small file optimization
 Sfasta is currently optimized for larger files.
 
-![Genomics Aotearoa](info/genomics-aotearoa.png)
-
 ## Implement NAF-like algorithm
 NAF has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some SIMD support for 2bit and 4bit DNA/RNA encoding.
 
@@ -143,4 +159,14 @@ NAF has an advantage with 4bit encoding. It's possible to implement this, and us
 Graph genome file format is in dire need of an optimized format
 
 ## Profile Guided Optimization
-NO. This somehow doubled the time it takes to compress binaries. Enable PGO for additional speed-ups
+Never mind. This somehow doubled the time it takes to compress binaries. Enable PGO for additional speed-ups
+
+# FAQ
+
+## I get a strange symbol near the progress bar
+You need to install a font that supports Unicode. I'll see if there is a way to auto-detect.
+
+## XZ compression is fast until about halfway, then slows to a crawl.
+The buffers can store lots of sequence, but the compression algorithm takes longer.
+
+![Genomics Aotearoa](info/genomics-aotearoa.png)

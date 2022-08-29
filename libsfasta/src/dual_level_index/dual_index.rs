@@ -385,7 +385,7 @@ impl DualIndex {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        in_buf.seek(SeekFrom::Start(idx_start)).unwrap();
+        in_buf.seek(SeekFrom::Start(idx_start)).expect(format!("Unable to seek for DualIndex: {}", idx_start).as_str());
         let len: usize = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
         let hasher: Hashes = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
         let chunk_size: u64 = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();

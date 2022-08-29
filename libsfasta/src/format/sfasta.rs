@@ -18,7 +18,7 @@ pub struct Sfasta {
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
     buf: Option<RwLock<Box<dyn ReadAndSeek>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
-    pub block_locs: Option<Vec<u64>>,
+    pub sequenceblocks: Option<SequenceBlocks>,
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<Headers>,
     pub ids: Option<Ids>,
@@ -35,7 +35,7 @@ impl Default for Sfasta {
             index_directory: IndexDirectory::default().with_blocks().with_ids(),
             index: None,
             buf: None,
-            block_locs: None,
+            sequenceblocks: None,
             seqlocs: None,
             headers: None,
             ids: None,
@@ -148,7 +148,7 @@ impl Sfasta {
         Ok(ids.get_id(&mut buf, locs))
     }
 
-    pub fn get_sequence(&self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
+    pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024); // TODO: We can calculate this
 
         seqloc
@@ -159,34 +159,21 @@ impl Sfasta {
         let locs = seqloc.sequence.as_ref().unwrap();
 
         // Basic sanity checks
-        for (i, _) in locs.iter().map(|x| x.original_format()) {
-            if i as usize >= self.block_locs.as_ref().unwrap().len() {
-                return Err("Requested block number is larger than the total number of blocks");
-            }
-        }
-
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let max_block = locs.iter().map(|x| x.original_format()).map(|(x, _)| x).max().unwrap();
+        assert!(self.sequenceblocks.as_ref().unwrap().block_locs.len() > max_block as usize, "Requested block is larger than the total number of blocks.");
 
         let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 
         for loc in locs {
-            let byte_loc = self.block_locs.as_ref().unwrap()[loc.block as usize];
 
-            buf.seek(SeekFrom::Start(byte_loc))
-                .expect("Unable to work with seek API");
+            let seqblock = self.sequenceblocks.as_mut().unwrap().get_block(&mut *buf, loc.block);
 
-            let sbc: SequenceBlockCompressed =
-                bincode::decode_from_std_read(&mut *buf, bincode_config)
-                    .expect("Unable to parse SequenceBlockCompressed");
-
-            let sb = sbc.decompress(self.parameters.compression_type);
-
-            seq.extend_from_slice(&sb.seq[loc.start as usize..loc.end as usize]);
+            seq.extend_from_slice(&seqblock[loc.start as usize..loc.end as usize]);
         }
 
         if seqloc.masking.is_some() && self.masking.is_some() {
             let masked_loc = seqloc.masking.as_ref().unwrap();
-            let masking = self.masking.as_ref().unwrap();
+            let masking = self.masking.as_mut().unwrap();
             masking.mask_sequence(&mut *buf, *masked_loc, &mut seq);
         }
 
@@ -304,7 +291,7 @@ impl SfastaParser {
         };
 
         std::mem::forget(block_locs_u32);
-        sfasta.block_locs = Some(block_locs);
+        sfasta.sequenceblocks = Some(SequenceBlocks::new(block_locs, sfasta.parameters.compression_type));
 
         if sfasta.directory.headers_loc.is_some() {
             sfasta.headers = Some(Headers::from_buffer(
@@ -346,7 +333,7 @@ mod tests {
         let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
-            File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
+            File::open("libsfasta/test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
         let converter = Converter::default()
@@ -385,7 +372,7 @@ mod tests {
         let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
-            File::open("test_data/test_sequence_conversion.fasta")
+            File::open("libsfasta/test_data/test_sequence_conversion.fasta")
                 .expect("Unable to open testing file"),
         );
 
@@ -418,7 +405,7 @@ mod tests {
         let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
-            File::open("test_data/test_sequence_conversion.fasta")
+            File::open("libsfasta/test_data/test_sequence_conversion.fasta")
                 .expect("Unable to open testing file"),
         );
 

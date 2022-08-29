@@ -227,7 +227,7 @@ impl Converter {
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer = crate::dual_level_index::DualIndexBuilder::with_capacity(seq_locs.len());
 
-        let mut out_buf = BufWriter::new(out_fh);
+        let mut out_buf = BufWriter::with_capacity(128 * 1024, out_fh);
 
         let start_time = std::time::Instant::now();
 
@@ -245,9 +245,7 @@ impl Converter {
         //
         // TODO: Optional index can probably be handled better...
 
-        let to_index = seqlocs.data.as_ref().unwrap().clone();
-
-        let mut id_index_pos = 0;
+        let mut dual_index_pos = 0;
 
         let mut seqlocs_location = 0;
 
@@ -285,7 +283,7 @@ impl Converter {
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
-                id_index_pos = out_buf
+                dual_index_pos = out_buf
                     .seek(SeekFrom::Current(0))
                     .expect("Unable to work with seek API");
 
@@ -314,7 +312,7 @@ impl Converter {
         .expect("Error");
 
         sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
-        sfasta.directory.index_loc = NonZeroU64::new(id_index_pos);
+        sfasta.directory.index_loc = NonZeroU64::new(dual_index_pos);
         sfasta.directory.headers_loc = headers_location;
         sfasta.directory.ids_loc = ids_location;
         sfasta.directory.masking_loc = masking_location;
@@ -398,19 +396,6 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 enum Work {
     Payload(Sequence),
     Shutdown,
-}
-
-impl Work {
-    fn is_shutdown(&self) -> bool {
-        matches!(self, Work::Shutdown)
-    }
-
-    fn payload(self) -> Sequence {
-        match self {
-            Work::Payload(s) => s,
-            _ => panic!("Unable to get payload from shutdown"),
-        }
-    }
 }
 
 pub fn write_fasta_sequence<'write, W, R>(
@@ -678,6 +663,275 @@ where
     )
 }
 
+// We have to iterate through the file twice...
+// Thus, we need two file handles for input... (must be done before this fn to handle compression)...
+// TODO:
+pub fn write_fastq_sequence<'write, W, R>(
+    sb_config: CompressionStreamBufferConfig,
+    in_buf: &mut R,
+    in_buf2: &mut R,
+    mut out_fh: &mut W,
+) -> (
+    Vec<std::sync::Arc<String>>,
+    Vec<SeqLoc>,
+    u64,
+    Option<NonZeroU64>,
+    Option<NonZeroU64>,
+    Option<NonZeroU64>,
+)
+where
+    W: WriteAndSeek + 'write,
+    R: Read + Send + Seek + 'write,
+{
+    let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+    let mut sb = CompressionStreamBuffer::from_config(sb_config);
+
+    // Get a handle for the output queue from the sequence compressor
+    let oq = sb.get_output_queue();
+
+    // Get a handle to the shutdown flag...
+    let shutdown = sb.get_shutdown_flag();
+
+    let mut seq_locs: Option<Vec<SeqLoc>> = None;
+    let mut block_index_pos = None;
+    let mut headers = None;
+    let mut headers_location = None;
+    let mut ids = None;
+    let mut ids_location = None;
+    let mut ids_string = Vec::new();
+    let mut masking = None;
+    let mut masking_location = None;
+
+    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192));
+
+    let fasta_queue_in = Arc::clone(&fasta_queue);
+    let fasta_queue_out = Arc::clone(&fasta_queue);
+
+    // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
+    thread::scope(|s| {
+        let fasta_thread = s.spawn(|_| {
+            // Convert reader into buffered reader then into the Fasta struct (and iterator)
+            let mut in_buf_reader = BufReader::with_capacity(512 * 1024, in_buf);
+            let fasta = Fasta::from_buffer(&mut in_buf_reader);
+
+            let backoff = Backoff::new();
+
+            for x in fasta {
+                let mut d = Work::Payload(x);
+                while let Err(z) = fasta_queue_in.push(d) {
+                    d = z;
+                    backoff.snooze();
+                }
+            }
+
+            while fasta_queue_in.push(Work::Shutdown).is_err() {
+                backoff.snooze();
+            }
+        });
+
+        let mut out_buf = BufWriter::new(&mut out_fh);
+        let reader_handle = s.spawn(move |_| {
+            sb.initialize();
+
+            // Store the ID of the sequence and the Location (SeqLocs)
+            // TODO: Auto adjust based off of size of input FASTA file
+            let mut seq_locs = Vec::with_capacity(1024);
+
+            let mut headers = Headers::default();
+            let mut ids = Ids::default();
+            let mut ids_string = Vec::new();
+            let mut masking = Masking::default();
+
+            // For each Sequence in the fasta file, make it upper case (masking is stored separately)
+            // Add the sequence, get the SeqLocs and store them in Location struct
+            // And store that in seq_locs Vec...
+
+            let backoff = Backoff::new();
+
+            loop {
+                match fasta_queue_out.pop() {
+                    Some(Work::Payload(seq)) => {
+                        let (seqid, seqheader, mut seq) = seq.into_parts();
+                        let mut location = SeqLoc::new();
+                        location.masking = masking.add_masking(&seq[..]);
+                        let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
+                        let myid = std::sync::Arc::new(seqid);
+                        ids_string.push(std::sync::Arc::clone(&myid));
+                        let idloc = ids.add_id(std::sync::Arc::clone(&myid));
+                        if !seqheader.is_empty() {
+                            location.headers = Some(headers.add_header(seqheader));
+                        }
+                        location.ids = Some(idloc);
+                        location.sequence = Some(loc);
+                        seq_locs.push(location);
+                    }
+                    Some(Work::Shutdown) => break,
+                    None => {
+                        backoff.snooze();
+                    }
+                }
+            }
+
+            // Finalize pushes the last block, which is likely smaller than the complete block size
+            match sb.finalize() {
+                Ok(()) => (),
+                Err(x) => panic!("Unable to finalize sequence buffer, {:#?}", x),
+            };
+
+            // Return seq_locs to the main thread
+            (seq_locs, headers, ids, ids_string, masking)
+        });
+
+        // Store the location of the Sequence Blocks...
+        // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
+        let mut block_locs = Vec::with_capacity(512 * 1024);
+        let mut pos = out_buf
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API");
+
+        let mut result;
+
+        // For each entry processed by the sequence buffer, pop it out, write the block, and write the block id
+        // FORMAT: Write each sequence block to file
+
+        // This writes out the sequence blocks (seqblockcompressed)
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
+        loop {
+            result = oq.pop();
+
+            match result {
+                None => {
+                    if oq.is_empty() && shutdown.load(Ordering::Relaxed) {
+                        break;
+                    }
+                }
+                Some((block_id, sb)) => {
+                    bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
+                        .expect("Unable to write to bincode output");
+                    // log::debug!("Writer wrote block {}", block_id);
+
+                    block_locs.push((block_id, pos));
+
+                    pos = out_buf
+                        .seek(SeekFrom::Current(0))
+                        .expect("Unable to work with seek API");
+                }
+            }
+        }
+
+        fasta_thread.join().unwrap();
+
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
+        // Block Index
+        block_index_pos = Some(
+            out_buf
+                .seek(SeekFrom::Current(0))
+                .expect("Unable to work with seek API"),
+        );
+
+        // Write the block index to file
+        block_locs.sort_by(|a, b| a.0.cmp(&b.0));
+        let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
+
+        let block_locs_u32 = unsafe {
+            std::slice::from_raw_parts(
+                block_locs.as_ptr() as *const u32,
+                block_locs.len() * std::mem::size_of::<u64>() / std::mem::size_of::<u32>(),
+            )
+        };
+
+        let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
+        bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
+            .expect("Unable to write to bincode output");
+        bincode::encode_into_std_write(&bitpacked, &mut out_buf, bincode_config).unwrap();
+
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
+
+        let j = reader_handle.join().expect("Unable to join thread");
+        seq_locs = Some(j.0);
+        headers = Some(j.1);
+        ids = Some(j.2);
+        ids_string = j.3;
+        masking = Some(j.4);
+
+        let start_time = Instant::now();
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_buf) {
+            Some(x) => NonZeroU64::new(x),
+            None => None,
+        };
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end_time = Instant::now();
+        log::debug!(
+            "DEBUG: Wrote {} bytes of headers in {:#?}",
+            end - start,
+            end_time - start_time
+        );
+
+        let start_time = Instant::now();
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_buf) {
+            Some(x) => NonZeroU64::new(x),
+            None => None,
+        };
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end_time = Instant::now();
+        log::debug!(
+            "DEBUG: Wrote {} bytes of ids in {:#?}",
+            end - start,
+            end_time - start_time
+        );
+
+        let start_time = Instant::now();
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_buf) {
+            Some(x) => NonZeroU64::new(x),
+            None => None,
+        };
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end_time = Instant::now();
+        log::debug!(
+            "DEBUG: Wrote {} bytes of masking in {:#?}",
+            end - start,
+            end_time - start_time
+        );
+
+        // TODO: Comes out about 20% smaller but about 2x as long in time...
+        /*
+
+        let start_time = Instant::now();
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        masking_location = match masking.as_mut().unwrap().write_to_buffer_zstd(&mut out_buf) {
+            Some(x) => NonZeroU64::new(x),
+            None => None,
+        };
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end_time = Instant::now();
+        log::debug!(
+            "DEBUG: Wrote {} bytes of masking ZSTD in {:#?}",
+            end - start,
+            end_time - start_time
+        ); */
+    })
+    .expect("Error");
+
+    (
+        ids_string,
+        seq_locs.expect("Error"),
+        block_index_pos.expect("Error"),
+        headers_location,
+        ids_location,
+        masking_location,
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -691,7 +945,7 @@ mod tests {
         let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
-            File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
+            File::open("libsfasta/test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
         let converter = Converter::default().with_threads(6).with_block_size(8192);

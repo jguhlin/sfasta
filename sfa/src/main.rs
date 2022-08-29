@@ -315,14 +315,11 @@ fn view(input: &str) {
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(128 * 1024, in_buf));
+    let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(512 * 1024, in_buf));
 
     if sfasta.seqlocs.is_none() {
-        panic!("File is empty of corrupt");
+        panic!("File is empty or corrupt");
     }
-
-    // TODO: Make DualIndex NOT store strings anymore
-    // SFASTA parser to use ids...
 
     for i in 0..sfasta.len() {
         let seqloc = &sfasta.get_seqloc(i);
@@ -336,12 +333,12 @@ fn view(input: &str) {
             println!(">{}", id);
         }
 
-        let mut sequence = sfasta
+        let sequence = sfasta
             .get_sequence(&seqloc)
             .expect("Unable to fetch sequence");
 
         // 60 matches samtools faidx output
-        print_sequence(&sequence, 60);
+        print_sequence(&sequence, 80);
     }
 }
 
@@ -380,13 +377,6 @@ fn convert(
     let pb = ProgressBar::new(metadata.len());
     let pb = style_pb(pb);
 
-    // let buf = generic_open_file_pb(pb, fasta_filename);
-    // let buf = generic_open_file(fasta_filename);
-    // let buf = pb.wrap_read(buf.2);
-    /*let summary = count_fasta_entries(&mut BufReader::with_capacity(32 * 1024 * 1024, buf.2));
-    println!("File: {}", fasta_filename);
-    println!("Total Entries: {}", summary); */
-
     let path = Path::new(fasta_filename);
     let output_name = path.with_extension("sfasta");
     let output = match File::create(output_name) {
@@ -394,25 +384,7 @@ fn convert(
         Ok(file) => file,
     };
 
-    // let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
-    // let pb = ProgressBar::new(metadata.len());
-    // let pb = style_pb(pb);
-
-    // let buf = generic_open_file_pb(pb, fasta_filename);
-    // let buf = generic_open_file(fasta_filename);
-    // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
-    // let buf = buf.2;
-
-    // Disabled for now: No improvement
-    // let dict = build_dict(buf);
-
-    // let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
-    // let pb = ProgressBar::new(metadata.len());
-    // let pb = style_pb(pb);
-
     let buf = generic_open_file_pb(pb, fasta_filename);
-    // let buf = generic_open_file(fasta_filename);
-    // let buf = BufReader::with_capacity(2 * 1024 * 1024, buf.2);
     let buf = buf.2;
 
     // TODO: Handle all of the compression options...
@@ -435,14 +407,8 @@ fn convert(
         .with_threads(threads)
         .with_compression_type(compression_type);
 
-    // Disabled for now, no improvement
-    // converter = converter.with_dict(dict);
-
-    // converter = converter.with_block_size(block_size as usize * 1024);
-    // converter = converter.with_seqlocs_chunk_size(seqlocs_chunk_size as usize);
-
     if noindex {
-        println!("Noindex received");
+        println!("Noindex received -- But this doesn't work yet -- Here be dragons");
         converter = converter.without_index();
     }
 

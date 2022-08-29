@@ -38,7 +38,7 @@ impl Headers {
         let data = self.data.as_mut().unwrap();
 
         let mut start = data.len();
-        data.extend(header.as_bytes());
+        data.extend_from_slice(header.as_bytes());
         let end = data.len() - 1;
         let starting_block = start / self.block_size;
         let ending_block = end / self.block_size;
@@ -161,7 +161,7 @@ impl Headers {
         decompressor.include_magicbytes(false).unwrap();
 
         if self.cache.is_some() {
-            let mut cache = self.cache.as_mut().unwrap();
+            let cache = self.cache.as_mut().unwrap();
             for i in loc {
                 if i.block == cache.0 {
                     let start = i.start as usize;

@@ -72,13 +72,13 @@ pub struct CompressionStreamBuffer {
     threads: u16,
     initialized: bool,
     workers: Vec<JoinHandle<()>>,
-    write_worker: Option<JoinHandle<()>>,
-    write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
+    sort_worker: Option<JoinHandle<()>>,
+    sort_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     compress_queue: Arc<ArrayQueue<(u32, SequenceBlock)>>,
     shutdown: Arc<AtomicBool>,
     total_entries: Arc<AtomicUsize>,
-    written_entries: Arc<AtomicUsize>,
+    sorted_entries: Arc<AtomicUsize>,
     finalized: bool,
     compression_type: CompressionType,
 }
@@ -92,14 +92,14 @@ impl Default for CompressionStreamBuffer {
             threads: 1,
             initialized: false,
             workers: Vec::<JoinHandle<()>>::new(),
-            write_worker: None,
-            write_queue: Arc::new(ArrayQueue::new(128)),
+            sort_worker: None,
+            sort_queue: Arc::new(ArrayQueue::new(128)),
             compress_queue: Arc::new(ArrayQueue::new(256)),
             output_queue: Arc::new(ArrayQueue::new(64)),
             shutdown: Arc::new(AtomicBool::new(false)),
             finalized: false,
             total_entries: Arc::new(AtomicUsize::new(0)),
-            written_entries: Arc::new(AtomicUsize::new(0)),
+            sorted_entries: Arc::new(AtomicUsize::new(0)),
             compression_type: CompressionType::ZSTD,
         }
     }
@@ -127,7 +127,7 @@ impl CompressionStreamBuffer {
         for _ in 0..self.threads {
             let shutdown_copy = Arc::clone(&self.shutdown);
             let cq = Arc::clone(&self.compress_queue);
-            let wq = Arc::clone(&self.write_queue);
+            let wq = Arc::clone(&self.sort_queue);
 
             let ct = self.compression_type;
 
@@ -138,12 +138,12 @@ impl CompressionStreamBuffer {
 
         {
             let shutdown_copy = Arc::clone(&self.shutdown);
-            let wq = Arc::clone(&self.write_queue);
-            let we = Arc::clone(&self.written_entries);
+            let wq = Arc::clone(&self.sort_queue);
+            let we = Arc::clone(&self.sorted_entries);
             let oq = Arc::clone(&self.output_queue);
-            let handle = thread::spawn(move || _writer_worker_thread(wq, oq, shutdown_copy, we));
+            let handle = thread::spawn(move || _sorter_worker_thread(wq, oq, shutdown_copy, we));
 
-            self.write_worker = Some(handle);
+            self.sort_worker = Some(handle);
         }
 
         self.initialized = true;
@@ -156,7 +156,7 @@ impl CompressionStreamBuffer {
 
         let backoff = Backoff::new();
 
-        while self.written_entries.load(Ordering::Relaxed)
+        while self.sorted_entries.load(Ordering::Relaxed)
             < self.total_entries.load(Ordering::Relaxed)
         {
             backoff.snooze();
@@ -168,7 +168,7 @@ impl CompressionStreamBuffer {
             i.join().unwrap();
         }
 
-        let writer_handle = std::mem::replace(&mut self.write_worker, None);
+        let writer_handle = std::mem::replace(&mut self.sort_worker, None);
 
         writer_handle.unwrap().join().unwrap();
         Ok(())
@@ -255,7 +255,7 @@ impl CompressionStreamBuffer {
         self._check_initialized();
         self.threads = threads;
         self.compress_queue = Arc::new(ArrayQueue::new(threads as usize * 8));
-        self.write_queue = Arc::new(ArrayQueue::new(threads as usize * 2));
+        self.sort_queue = Arc::new(ArrayQueue::new(threads as usize * 2));
         self
     }
 
@@ -305,14 +305,14 @@ fn _compression_worker_thread(
 }
 
 // This name is a lie. This only sorts the blocks...
-fn _writer_worker_thread(
-    write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
+fn _sorter_worker_thread(
+    sort_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     shutdown: Arc<AtomicBool>,
     written_entries: Arc<AtomicUsize>,
 ) {
     let mut expected_block: u32 = 0;
-    let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::with_capacity(8 * 1024 * 1024);
+    let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::with_capacity(1024);
     let mut result;
     let backoff = Backoff::new();
 
@@ -331,7 +331,7 @@ fn _writer_worker_thread(
             written_entries.fetch_add(1, Ordering::SeqCst);
         }
 
-        while write_queue.is_empty() {
+        while sort_queue.is_empty() {
             backoff.spin();
 
             if shutdown.load(Ordering::Relaxed) {
@@ -339,7 +339,7 @@ fn _writer_worker_thread(
             }
         }
 
-        result = write_queue.pop();
+        result = sort_queue.pop();
 
         match result {
             None => {
@@ -375,12 +375,12 @@ mod tests {
         let test_block_size = 512 * 1024;
 
         let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
+        sb.initialize();
 
         let oq = sb.get_output_queue();
 
         let mut locs = Vec::new();
 
-        // TODO: Test for masking
         let loc = sb.add_sequence(&mut myseq[..]).unwrap();
         locs.extend(loc);
 
@@ -393,7 +393,6 @@ mod tests {
         locs.extend(loc);
 
         // println!("Done adding seqs...");
-
         sb.finalize().expect("Unable to finalize SeqBuffer");
 
         // println!("Finalized...");

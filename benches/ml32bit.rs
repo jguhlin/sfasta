@@ -3,7 +3,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use libsfasta::masking::ml32bit::*;
 
 fn criterion_benchmark(c: &mut Criterion) {
-    let seq = include_str!("../test_data/Erow_sample.fasta");
+    let seq = include_str!("../libsfasta/test_data/Erow_sample.fasta");
     // Remove whitespace
     let seq = seq.split_whitespace().collect::<String>();
 
