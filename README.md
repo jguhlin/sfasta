@@ -161,6 +161,9 @@ Uncompressed: 2.7G
 | Zstd (no index) | 663M |
 
 # Future Plans
+## Implement NAF-like algorithm
+[NAF](https://github.com/KirillKryukov/naf) has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some SIMD support for 2bit and 4bit DNA/RNA encoding.
+
 ## Subsequence support for faidx CLI
 Only open the block(s) that contain the subsequence. The index is already set up to support this and I've had it working before in the python bindings.
 
@@ -185,8 +188,6 @@ To make it easier to use in other programs and in python/jupyter
 ## Small file optimization
 Sfasta is currently optimized for larger files.
 
-## Implement NAF-like algorithm
-NAF has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some SIMD support for 2bit and 4bit DNA/RNA encoding.
 
 ## GFA file format support
 Graph genome file format is in dire need of an optimized format
