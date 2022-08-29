@@ -83,6 +83,8 @@ enum Commands {
         snappy: bool,
         #[clap(short, long)]
         gzip: bool,
+        #[clap(short, long)]
+        none: bool,
     },
     Summarize {
         input: String,
@@ -124,6 +126,7 @@ fn main() {
             brotli,
             snappy,
             gzip,
+            none,
         } => convert(
             &input,
             *threads as usize,
@@ -134,6 +137,7 @@ fn main() {
             *brotli,
             *snappy,
             *noindex,
+            *none,
         ),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
@@ -371,6 +375,7 @@ fn convert(
     gzip: bool,
     brotli: bool,
     snappy: bool,
+    none: bool,
     noindex: bool,
 ) {
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");

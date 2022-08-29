@@ -6,6 +6,7 @@ use std::io::{Read, Write, Seek, SeekFrom};
 
 use log::{debug, error, info, trace, warn};
 use xz::read::{XzDecoder, XzEncoder};
+use flate2::write::{GzDecoder, GzEncoder};
 
 pub struct SequenceBlocks {
     pub block_locs: Vec<u64>,
@@ -102,16 +103,24 @@ impl SequenceBlock {
                 cseq = compressor.finish().unwrap();
             }
             CompressionType::SNAPPY => {
-                unimplemented!();
+                let mut compressor = snap::write::FrameEncoder::new(cseq);
+                compressor
+                    .write_all(&self.seq[..])
+                    .expect("Unable to compress with Snappy");
+                cseq = compressor.into_inner().unwrap();
             }
             CompressionType::GZIP => {
-                unimplemented!();
+                let mut compressor = GzEncoder::new(cseq, flate2::Compression::new(level as u32));
+                compressor
+                    .write_all(&self.seq[..])
+                    .expect("Unable to compress with GZIP");
+                cseq = compressor.finish().unwrap();
             }
             CompressionType::NAF => {
                 unimplemented!();
             }
             CompressionType::NONE => {
-                unimplemented!();
+                cseq = self.seq;
             }
             CompressionType::XZ => {
                 let mut compressor = XzEncoder::new(&self.seq[..], level as u32);
@@ -163,13 +172,37 @@ impl SequenceBlockCompressed {
                     Ok(x) => x,
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
-                // zstd::block::decompress_to_buffer(&self.compressed_seq[..], &mut seq).expect("Unable to decompress");
-            }
+            },
             CompressionType::XZ => {
                 let mut decompressor = XzDecoder::new(&self.compressed_seq[..]);
                 decompressor
                     .read_to_end(&mut seq)
                     .expect("Unable to XZ compress");
+            },
+            CompressionType::BROTLI => {
+                let mut decompressor = brotli::Decompressor::new(&self.compressed_seq[..], 2 * 1024 * 1024);
+                decompressor.read_to_end(&mut seq).unwrap();
+            },
+            CompressionType::LZ4 => {
+                let mut decompressor = lz4_flex::frame::FrameDecoder::new(&self.compressed_seq[..]);
+                decompressor
+                    .read_to_end(&mut seq)
+                    .expect("Unable to decompress with LZ4");
+            },
+            CompressionType::SNAPPY => {
+                let mut decompressor = snap::read::FrameDecoder::new(&self.compressed_seq[..]);
+                decompressor
+                    .read_to_end(&mut seq)
+                    .expect("Unable to decompress with Snappy");
+            },
+            CompressionType::GZIP => {
+                let mut decompressor = GzDecoder::new(&mut seq);
+                decompressor
+                    .write_all(&self.compressed_seq[..])
+                    .expect("Unable to decompress with GZIP");
+            },
+            CompressionType::NONE => {
+                seq = self.compressed_seq
             }
             _ => {
                 unimplemented!()
