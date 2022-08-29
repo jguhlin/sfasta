@@ -580,6 +580,8 @@ where
             )
         };
 
+        log::debug!("DEBUG: Wrote {} total blocks", block_locs.len());
+
         let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
             .expect("Unable to write to bincode output");
