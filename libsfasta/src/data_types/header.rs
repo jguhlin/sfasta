@@ -21,7 +21,7 @@ impl Default for Headers {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            block_size: 2 * 1024 * 1024,
+            block_size: 4 * 1024 * 1024,
             data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
@@ -44,8 +44,6 @@ impl Headers {
         let ending_block = end / self.block_size;
 
         let mut locs = Vec::new();
-
-        let len = header.len() as u32;
 
         for block in starting_block..=ending_block {
             let block_start = start % self.block_size;
@@ -78,9 +76,7 @@ impl Headers {
     where
         W: Write + Seek,
     {
-        if self.data.is_none() {
-            return None;
-        }
+        self.data.as_ref()?;
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 

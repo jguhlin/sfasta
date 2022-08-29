@@ -200,7 +200,7 @@ impl Converter {
         // Vec<(String, Location)>
         // block_index_pos
         let (ids, seq_locs, block_index_pos, headers_location, ids_location, masking_location) =
-            write_fasta_sequence(sb_config, &mut in_buf, &mut out_fh);
+            write_fasta_sequence(sb_config, &mut in_buf, &mut out_fh, &mut debug_size);
 
         let end_time = std::time::Instant::now();
 
@@ -403,6 +403,7 @@ pub fn write_fasta_sequence<'write, W, R>(
     sb_config: CompressionStreamBufferConfig,
     in_buf: &mut R,
     mut out_fh: &mut W,
+    mut debug_size: &mut Vec<(String, usize)>,
 ) -> (
     Vec<std::sync::Arc<String>>,
     Vec<SeqLoc>,
@@ -517,7 +518,7 @@ where
 
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
-        let mut block_locs = Vec::with_capacity(512 * 1024);
+        let mut block_locs = Vec::with_capacity(1024);
         let mut pos = out_buf
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
@@ -557,6 +558,7 @@ where
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+        debug_size.push(("Sequence Blocks".to_string(), (end-start) as usize));
 
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
@@ -585,6 +587,7 @@ where
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
+        debug_size.push(("Block Index".to_string(), (end - start) as usize));
 
         let j = reader_handle.join().expect("Unable to join thread");
         seq_locs = Some(j.0);
@@ -601,6 +604,7 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
+        debug_size.push(("Headers".to_string(), (end - start) as usize));
         log::debug!(
             "DEBUG: Wrote {} bytes of headers in {:#?}",
             end - start,
@@ -615,6 +619,7 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
+        debug_size.push(("IDs".to_string(), (end - start) as usize));
         log::debug!(
             "DEBUG: Wrote {} bytes of ids in {:#?}",
             end - start,
@@ -628,6 +633,7 @@ where
             None => None,
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        debug_size.push(("Masking".to_string(), (end - start) as usize));
         let end_time = Instant::now();
         log::debug!(
             "DEBUG: Wrote {} bytes of masking in {:#?}",
