@@ -85,6 +85,10 @@ enum Commands {
         gzip: bool,
         #[clap(short, long)]
         none: bool,
+        /// Block size for sequence blocks / 1024
+        /// 4Mb (4096) is the default
+        #[clap(short, long)]
+        blocksize: Option<u64>,
     },
     Summarize {
         input: String,
@@ -127,6 +131,7 @@ fn main() {
             snappy,
             gzip,
             none,
+            blocksize,
         } => convert(
             &input,
             *threads as usize,
@@ -138,6 +143,7 @@ fn main() {
             *snappy,
             *none,
             *noindex,
+            *blocksize,
         ),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
@@ -284,6 +290,7 @@ fn print_sequence(seq: &[u8], line_length: usize) {
     }
 }
 
+// TODO: Subsequence support
 fn faidx(input: &str, ids: &Vec<String>) {
     let sfasta_filename = input;
 
@@ -377,6 +384,7 @@ fn convert(
     snappy: bool,
     none: bool,
     noindex: bool,
+    blocksize: Option<u64>,
 ) {
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());
@@ -416,6 +424,10 @@ fn convert(
     let mut converter = Converter::default()
         .with_threads(threads)
         .with_compression_type(compression_type);
+
+    if let Some(size) = blocksize {
+        converter = converter.with_block_size(size as usize * 1024);
+    }
 
     if noindex {
         println!("Noindex received -- But this doesn't work yet -- Here be dragons");

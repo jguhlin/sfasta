@@ -138,8 +138,11 @@ Uncompressed: 2.7G
 * Excludes index
 
 # Future Plans
+## Subsequence support for faidx CLI
+Only open the block(s) that contain the subsequence. The index is already set up to support this and I've had it working before in the python bindings.
+
 ## Additional Speed-ups
-There is plenty of room for additional speed-ups, including adding more threads for specific tasks, CPU affinities, native compilation, and probably using more Cow.
+There is plenty of room for speed improvements, including adding more threads for specific tasks, CPU affinities, native compilation, and maybe more Cow.
 
 ## Additional Compression
 There is likely room to decrease size as well without hurting speed.
