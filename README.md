@@ -6,6 +6,9 @@ While the goals are random-access speed by ID query, and smaller size, I hope it
 ## Note
 This has taken a few years of on again, off again development. FORMAT.md and other files are likely out of date.
 
+## FASTQ support?
+It's somewhat trivial to add the scores as another compression stream, and the struct that puts it all back together already has 
+
 # Usage
 ## Installation
 `cargo install sfasta`
@@ -49,8 +52,8 @@ Samtools index pre-built
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `samtools faidx uniprot_sprot.fasta.gz "sp\|Q6GZX1\|004R_FRG3G"` | 423.0 ± 3.3 | 419.4 | 434.1 | 3.42 ± 0.13 |
 | `sfa faidx uniprot_sprot.sfasta "sp\|Q6GZX1\|004R_FRG3G"` | 123.8 ± 4.5 | 121.8 | 143.7 | 1.00 |
+| `samtools faidx uniprot_sprot.fasta.gz "sp\|Q6GZX1\|004R_FRG3G"` | 423.0 ± 3.3 | 419.4 | 434.1 | 3.42 ± 0.13 |
 
 ### Uniprot Compression Speed
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
@@ -74,23 +77,25 @@ Uncompressed: 282M
 * Excludes index
 
 ## Nanopore Reads
+As a FASTA file.
+
 ### Nanopore Reads Compression Speed
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
-| `sfa convert Essy1B.fasta` | 22.844 ± 2.973 | 18.514 | 26.591 | 3.37 ± 0.45 |
-| `ennaf Essy1B.fasta --temp-dir /tmp` | 19.231 ± 0.158 | 19.003 | 19.505 | 2.84 ± 0.10 |
-| `bgzip -k --index -f --threads 7 Essy1B.fasta` | 82.065 ± 0.478 | 81.559 | 82.720 | 12.10 ± 0.42 |
-| `pigz -k -p 7 Essy1B.fasta -f` | 83.118 ± 0.994 | 82.055 | 85.015 | 12.26 ± 0.44 |
-| `crabz -p 7 Essy1B.fasta > Essy1B.fasta.crabz` | 82.933 ± 1.268 | 81.313 | 84.412 | 12.23 ± 0.46 |
-| `zstd -k Essy1B.fasta -f -T7` | 6.780 ± 0.232 | 6.484 | 7.220 | 1.00 |
+| `sfa convert nanopore.fasta` | 22.844 ± 2.973 | 18.514 | 26.591 | 3.37 ± 0.45 |
+| `ennaf nanopore.fasta --temp-dir /tmp` | 19.231 ± 0.158 | 19.003 | 19.505 | 2.84 ± 0.10 |
+| `bgzip -k --index -f --threads 7 nanopore.fasta` | 82.065 ± 0.478 | 81.559 | 82.720 | 12.10 ± 0.42 |
+| `pigz -k -p 7 nanopore.fasta -f` | 83.118 ± 0.994 | 82.055 | 85.015 | 12.26 ± 0.44 |
+| `crabz -p 7 nanopore.fasta > nanopore.fasta.crabz` | 82.933 ± 1.268 | 81.313 | 84.412 | 12.23 ± 0.46 |
+| `zstd -k nanopore.fasta -f -T7` | 6.780 ± 0.232 | 6.484 | 7.220 | 1.00 |
 
 ### Nanopore Reads Random Access
 Samtools index pre-built
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `samtools faidx Essy1B.fasta.gz ae278260-d941-45c9-9e76-40f04ef8e56c` | 752.6 ± 5.8 | 746.7 | 764.8 | 9.01 ± 1.15 |
-| `sfa faidx Essy1B.sfasta ae278260-d941-45c9-9e76-40f04ef8e56c` | 83.6 ± 10.6 | 71.7 | 98.5 | 1.00 |
+| `sfa faidx nanopore.sfasta ae278260-d941-45c9-9e76-40f04ef8e56c` | 83.6 ± 10.6 | 71.7 | 98.5 | 1.00 |
+| `samtools faidx nanopore.fasta.gz ae278260-d941-45c9-9e76-40f04ef8e56c` | 752.6 ± 5.8 | 746.7 | 764.8 | 9.01 ± 1.15 |
 
 ### Nanopore Reads Size
 Uncompressed Size: 8.8G
@@ -133,6 +138,45 @@ Uncompressed: 2.7G
 | Zstd | 663M |
 
 * Excludes index
+
+# File Format
+The best source is currently this file: [conversion.rs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/conversion.rs#L148). Masking is converted into instructions in a u32, see [ml32bit.rs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/masking/ml32bit.rs).
+
+## Header
+| Data Type | Name | Description |
+| ---/:|:--- |:--- |
+| [u8; 6] | b"sfasta" | Indicates an sfasta file |
+| u64 | Version | Version of the SFASTA file (currently set to 1) |
+| struct | [Directory](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/directory.rs#L53) | Directory of the file; u64 bytes pointing to indices, sequence blocks, etc... |
+| struct | [Parameters](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/parameters.rs#L5) | Parameters used to create the file |
+| struct | [Metadata](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/metadata.rs#L3) | unused |
+| structs | [SequenceBlock](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs#L11) | Sequences, split into block_size chunks, and compressed on disk (see: [SequenceBlockCompressed](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs#L154)) |
+| Vec<u64> | Sequence Block Offsets | Location of each sequence block, in bytes, from the start of the file. Stored on disk as bitpacked u32. |
+| [Header](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/header.rs) Region ||
+| enum | [CompressionType](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/structs.rs#L23) | Type of compression used for the Headers. |
+| u64 | Block Locations Position | Position of the header blocks locations |
+| [u8] | Header Block | Header (everything after the sequence ID in a FASTA file) stored as blocks of u8 on disk, zstd compressed. |
+| [u64] | Header Block Offsets | Location of each header block, in bytes, from the start of the file. |
+| [IDs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/id.rs) Region ||
+| enum | [CompressionType](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/structs.rs#L23) | Type of compression used for the IDs. |
+| u64 | Block Locations Position | Position of the ID blocks locations |
+| [u8] | ID Block | IDs (everything after the sequence ID in a FASTA file) stored as blocks of u8 on disk, zstd compressed. |
+| [u64] | ID Block Offsets | Location of each header block, in bytes, from the start of the file. |
+| [Masking](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/masking.rs) Region ||
+| u64 | bitpack_len | Length of each bitpacked block |
+| u8 | num_bits| Number of bits used to bitpack each integer |
+| [Packed] | BitPacked Masking Instructions | Bitpacked masking instructions. [See here](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/masking/ml32bit.rs) |
+| [struct] | [SeqLocs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs) | Sequence locations, stored as a vector of u64. |
+
+
+
+| u64 | Block Locations Position | Position of the ID blocks locations |
+| [u8] | ID Block | IDs (everything after the sequence ID in a FASTA file) stored as blocks of u8 on disk, zstd compressed. |
+| [u64] | ID Block Offsets | Location of each header block, in bytes, from the start of the file. |
+
+
+
+
 
 # Future Plans
 ## Subsequence support for faidx CLI
@@ -178,5 +222,8 @@ The buffers can store lots of sequence, but the compression algorithm takes long
 
 ## Why so many dependencies?
 Right it it works with a wide range of compression functions. Once some are determined to be the best others could be dropped from future versions. The file format itself has a version identifier so we could request people rollback to an older version if they need to.
+
+## Why samtools?
+I've got plenty of experiments trying to get a fast gzip compressed multi-threaded reader, but even when mounted on a ramdisk, it is too slow. Samtools is an awesome, handy tool that has the 'faidx' function, of which I am a huge fan. While the faidx is not it's main function, it is not optimized for large datasets, thus the test is a little unfair. Still, it's helpful to have something to compare to. 
 
 ![Genomics Aotearoa](info/genomics-aotearoa.png)
