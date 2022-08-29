@@ -121,7 +121,7 @@ impl SeqLocs {
 
             let mut bincoded: Vec<u8> = Vec::new();
 
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 9)
+            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 3)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
@@ -311,20 +311,25 @@ impl SeqLoc {
     }
 }
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]
-pub struct Loc {
-    pub block: u32,
-    pub start: u32,
-    pub end: u32,
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Hash)]
+pub enum Loc {
+    Loc(u32, u32, u32), // Block, start, end...
+    FromStart(u32, u32), // Block, length...
+    ToEnd(u32, u32), // Block, start,
+    EntireBlock(u32) // Entire block belongs to this seq...
+    // pub block: u32,
+    // pub start: u32,
+    // pub end: u32,
 }
 
 impl Loc {
-    /// The ultimate in lazy programming. This was once a type (tuple) and is now a struct...
-    pub fn original_format(&self) -> (u32, (u32, u32)) {
-        (self.block, (self.start, self.end))
-    }
-
-    pub fn new(block: u32, start: u32, end: u32) -> Self {
-        Self { block, start, end }
+    /// The ultimate in lazy programming. This was once a type (tuple) and is now a enum....
+    pub fn original_format(&self, block_size: u32,) -> (u32, (u32, u32)) {
+        match self {
+            Loc::Loc(block, start, end) => (*block, (*start, *end)),
+            Loc::FromStart(block, length) => (*block, (0, *length)),
+            Loc::ToEnd(block, start) => (*block, (*start, block_size)),
+            Loc::EntireBlock(block) => (*block, (0, block_size)),
+        }
     }
 }

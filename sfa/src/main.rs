@@ -24,7 +24,7 @@ use libsfasta::prelude::*;
 
 use libsfasta::CompressionType;
 
-const GIT_VERSION: &str = git_version!();
+// const GIT_VERSION: &str = git_version!();
 
 fn style_pb(pb: ProgressBar) -> ProgressBar {
     let style = ProgressStyle::default_bar()

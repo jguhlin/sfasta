@@ -158,17 +158,17 @@ impl Sfasta {
 
         let locs = seqloc.sequence.as_ref().unwrap();
 
+        println!("{:#?}", locs);
+
         // Basic sanity checks
-        let max_block = locs.iter().map(|x| x.original_format()).map(|(x, _)| x).max().unwrap();
+        let max_block = locs.iter().map(|x| x.original_format(self.parameters.block_size)).map(|(x, _)| x).max().unwrap();
         assert!(self.sequenceblocks.as_ref().unwrap().block_locs.len() > max_block as usize, "Requested block is larger than the total number of blocks.");
 
         let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 
-        for loc in locs {
-
-            let seqblock = self.sequenceblocks.as_mut().unwrap().get_block(&mut *buf, loc.block);
-
-            seq.extend_from_slice(&seqblock[loc.start as usize..loc.end as usize]);
+        for (block, (start, end)) in locs.iter().map(|x| x.original_format(self.parameters.block_size)) {
+            let seqblock = self.sequenceblocks.as_mut().unwrap().get_block(&mut *buf, block);
+            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
         }
 
         if seqloc.masking.is_some() && self.masking.is_some() {
@@ -343,12 +343,16 @@ mod tests {
 
         let mut out_buf = converter.convert_fasta(in_buf, out_buf);
 
+        println!("here...0");
+
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
         let mut sfasta = SfastaParser::open_from_buffer(out_buf);
         sfasta.index_len();
+
+        println!("here...1");
 
         assert_eq!(sfasta.index_len(), 3001);
 
@@ -360,7 +364,12 @@ mod tests {
             .expect("Unable to find-0")
             .expect("Unable to find-1");
 
+        println!("here...2");
+
         let output = &sfasta.find("needle_last").unwrap().unwrap();
+
+        println!("here...3");
+        println!("{:#?}", output);
 
         let sequence = sfasta.get_sequence(output).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();

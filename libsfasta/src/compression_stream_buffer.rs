@@ -199,11 +199,17 @@ impl CompressionStreamBuffer {
             seq[0..end].make_ascii_uppercase();
             self.buffer.extend_from_slice(seq[0..end].trim_ascii());
 
-            locs.push(Loc {
-                block: self.cur_block_id,
-                start: len as u32,
-                end: (len + end) as u32,
-            });
+            let loc = if len as u32 == 0 && len as u32 + end as u32 == self.block_size {
+                Loc::EntireBlock(self.cur_block_id)
+            } else if len == 0 {
+                Loc::FromStart(self.cur_block_id, len as u32 + end as u32)
+            } else if len + end == self.block_size as usize {
+                Loc::ToEnd(self.cur_block_id, len as u32)
+            } else {
+                Loc::Loc(self.cur_block_id, len as u32, len as u32 + end as u32)
+            };
+
+            locs.push(loc);
 
             if self.len() >= block_size {
                 self.emit_block();

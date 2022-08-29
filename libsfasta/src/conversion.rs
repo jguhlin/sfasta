@@ -168,6 +168,7 @@ impl Converter {
 
         sfasta.parameters.compression_type = self.compression_type;
         sfasta.parameters.seqlocs_chunk_size = self.seqlocs_chunk_size as u32;
+        sfasta.parameters.block_size = self.block_size as u32;
 
         // Set dummy values for the directory
         sfasta.directory.dummy();
