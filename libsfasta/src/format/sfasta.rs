@@ -158,8 +158,6 @@ impl Sfasta {
 
         let locs = seqloc.sequence.as_ref().unwrap();
 
-        println!("{:#?}", locs);
-
         // Basic sanity checks
         let max_block = locs.iter().map(|x| x.original_format(self.parameters.block_size)).map(|(x, _)| x).max().unwrap();
         assert!(self.sequenceblocks.as_ref().unwrap().block_locs.len() > max_block as usize, "Requested block is larger than the total number of blocks.");
