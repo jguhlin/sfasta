@@ -197,7 +197,20 @@ impl CompressionStreamBuffer {
             }
 
             seq[0..end].make_ascii_uppercase();
-            self.buffer.extend_from_slice(seq[0..end].trim_ascii());
+            //self.buffer.extend_from_slice(seq[0..end].trim_ascii());
+            // Until trim_ascii is stabilized...
+            
+            let mut effective_end = end;
+            while effective_end > 0 && seq[effective_end - 1].is_ascii_whitespace() {
+                effective_end -= 1;
+            }
+
+            let mut effective_start = 0;
+            while effective_start < effective_end && seq[effective_start].is_ascii_whitespace() {
+                effective_start += 1;
+            }
+           
+            self.buffer.extend_from_slice(&seq[effective_start..effective_end]);
 
             let loc = if len as u32 == 0 && len as u32 + end as u32 == self.block_size {
                 Loc::EntireBlock(self.cur_block_id)

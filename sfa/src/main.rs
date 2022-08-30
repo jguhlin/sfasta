@@ -113,6 +113,7 @@ enum Commands {
 }
 
 fn main() {
+    sigpipe::reset();
     env_logger::init();
     let cli = Cli::parse();
 

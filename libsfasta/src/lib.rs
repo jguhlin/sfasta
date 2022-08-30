@@ -1,5 +1,4 @@
-#![feature(byte_slice_trim_ascii)]
-#![feature(is_sorted)]
+// #![feature(byte_slice_trim_ascii)]
 
 extern crate bincode;
 extern crate crossbeam;

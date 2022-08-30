@@ -402,9 +402,18 @@ mod tests {
         let sequence = sfasta.get_sequence(output).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
 
-        assert_eq!(sequence.len(), 48598);
+        let sequence = sequence.trim();
+
+        println!("{:#?}", &sequence[48590..]);
+        println!("{:#?}", &sequence[48590..].as_bytes());
+
         assert!(&sequence[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
         assert!(&sequence[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
+        // Last 10
+        let last_ten = sequence.len() - 10;
+        assert!(&sequence[last_ten..] == "ATGTACAGCG");
+        assert_eq!(sequence.len(), 48598);
+        
     }
 
     #[test]
