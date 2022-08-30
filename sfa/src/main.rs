@@ -45,7 +45,7 @@ fn style_pb(pb: ProgressBar) -> ProgressBar {
 #[clap(name = "sfasta")]
 #[clap(author = "Joseph Guhlin <joseph.guhlin@gmail.com>")]
 #[clap(about = "Sequence Storage optimized for fast random access", long_about = None)]
-#[clap(version = "0.0.01")]
+#[clap(version = clap::crate_version!())]
 struct Cli {
     #[clap(subcommand)]
     command: Commands,
