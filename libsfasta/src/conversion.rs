@@ -454,8 +454,8 @@ where
 
             for x in fasta {
                 let mut d = Work::FastaPayload(x);
+                main_thread.unpark();
                 while let Err(z) = fasta_queue_in.push(d) {
-                    main_thread.unpark();
                     d = z;
                     backoff.snooze();
                     fasta_thread_spins = fasta_thread_spins.saturating_add(1);
