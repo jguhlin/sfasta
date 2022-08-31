@@ -399,7 +399,21 @@ fn convert(
     };
 
     let buf = generic_open_file_pb(pb, fasta_filename);
-    let buf = buf.2;
+    let mut buf = buf.2;
+
+    let (s, r) = crossbeam::channel::bounded(32);
+
+    let io_thread = std::thread::spawn(move || {
+        let mut buffer: [u8; 8192] = [0; 8 * 1024];
+        while let Ok(bytes_read) = buf.read(&mut buffer) {
+            if bytes_read == 0 {
+                s.send(libsfasta::utils::ReaderData::EOF).unwrap();
+                break;
+            }
+            s.send(libsfasta::utils::ReaderData::Data(buffer.to_vec())).unwrap();
+
+        }
+    });
 
     // TODO: Handle all of the compression options...
     // TODO: Warn if more than one compression option specified
@@ -435,7 +449,10 @@ fn convert(
         converter = converter.without_index();
     }
 
+    let buf = libsfasta::utils::CrossbeamReader::from_channel(r);
+
     converter.convert_fasta(buf, output);
+    io_thread.join().expect("Unable to join IO thread");
 }
 
 pub fn generic_open_file_pb(

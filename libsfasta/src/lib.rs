@@ -18,7 +18,7 @@ pub mod dual_level_index;
 mod formats;
 mod io;
 pub mod masking;
-mod utils;
+pub mod utils;
 
 pub mod prelude;
 
