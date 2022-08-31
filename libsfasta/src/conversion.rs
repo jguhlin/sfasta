@@ -472,6 +472,7 @@ where
             log::debug!("fasta_thread_spins: {}", fasta_thread_spins);
         });
 
+        let main_thread = std::thread::current();
         let fasta_thread_clone = fasta_thread.thread().clone();
         let mut out_buf = BufWriter::new(&mut out_fh);
         let reader_handle = s.spawn(move |_| {
@@ -494,6 +495,7 @@ where
 
             let mut fasta_queue_spins: usize = 0;
             loop {
+                main_thread.unpark();
                 fasta_thread_clone.unpark();
                 match fasta_queue_out.pop() {
                     Some(Work::FastaPayload(seq)) => {
