@@ -333,7 +333,7 @@ fn view(input: &str) {
         panic!("File is empty or corrupt");
     }
 
-    for seqloc in sfasta.seqlocs.as_ref().unwrap().data.as_ref().unwrap().clone().iter() {
+    for seqloc in sfasta.seqlocs.as_mut().unwrap().data.take().unwrap().iter() {
         let id = &sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
         if seqloc.headers.is_some() {
             let header = sfasta
