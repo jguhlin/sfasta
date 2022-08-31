@@ -615,6 +615,7 @@ where
         log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
         debug_size.push(("Block Index".to_string(), (end - start) as usize));
 
+        reader_handle.thread().unpark();
         let j = reader_handle.join().expect("Unable to join thread");
         seq_locs = Some(j.0);
         headers = Some(j.1);
