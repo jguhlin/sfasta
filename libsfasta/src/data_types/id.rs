@@ -140,65 +140,16 @@ impl Ids {
         ids
     }
 
-    pub fn get_block<R>(&mut self, mut in_buf: &mut R, loc: &[Loc]) -> String
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-        let block_locations = self.block_locations.as_ref().unwrap();
-
-        let mut id = String::with_capacity(64);
-
-        if self.cache.is_some() {
-            for (block, (start, end)) in loc
-                .iter()
-                .map(|x| x.original_format(self.block_size as u32))
-            {
-                let cache = self.cache.as_mut().unwrap();
-                if block == cache.0 {
-                    let start = start as usize;
-                    let end = end as usize;
-                    id.push_str(std::str::from_utf8(&cache.1[start..=end]).unwrap());
-                } else {
-                    let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
-                    decompressor.include_magicbytes(false).unwrap();
-
-                    for i in loc {
-                        let block_location = block_locations[block as usize];
-                        in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-                        let compressed_block: Vec<u8> =
-                            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-                        let decompressed_block = decompressor
-                            .decompress(&compressed_block, self.block_size)
-                            .unwrap();
-                        let start = start as usize;
-                        let end = end as usize;
-                        id.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
-                    }
-                }
-            }
+        if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
+            return self.cache.as_ref().unwrap().1.clone();
         } else {
-            let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
-            decompressor.include_magicbytes(false).unwrap();
-
-            for (block, (start, end)) in loc
-                .iter()
-                .map(|x| x.original_format(self.block_size as u32))
-            {
-                let block_location = block_locations[block as usize];
-                in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-                let compressed_block: Vec<u8> =
-                    bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-                let decompressed_block = decompressor
-                    .decompress(&compressed_block, self.block_size)
-                    .unwrap();
-                let start = start as usize;
-                let end = end as usize;
-                id.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
-            }
+            self.cache = Some((block, self.get_block_uncached(in_buf, block)));
+            return self.cache.as_ref().unwrap().1.clone();
         }
-
-        id
     }
 
     pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<u8>
