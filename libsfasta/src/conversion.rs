@@ -868,7 +868,6 @@ where
         let mut sb = CompressionStreamBuffer::from_config(sb_config);
         let fastq_queue_in = Arc::clone(&fastq_queue);
         let fastq_queue_out = Arc::clone(&fastq_queue);
-   
 
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
@@ -959,14 +958,10 @@ where
             }
         }
 
-        let mut in_buf = fastq_thread.join().unwrap();
+        fastq_thread.join().unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
-
-
-
-        
 
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 

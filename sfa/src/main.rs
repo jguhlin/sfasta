@@ -410,8 +410,8 @@ fn convert(
                 s.send(libsfasta::utils::ReaderData::EOF).unwrap();
                 break;
             }
-            s.send(libsfasta::utils::ReaderData::Data(buffer.to_vec())).unwrap();
-
+            s.send(libsfasta::utils::ReaderData::Data(buffer.to_vec()))
+                .unwrap();
         }
     });
 
