@@ -1,5 +1,4 @@
-// TODO: Sequences should be like this
-// TODO: FASTQ scores should be like this (well, more like Sequences, since too big to fit in memory)
+// TODO: This is the same as ID with the names changed....
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -146,62 +145,76 @@ impl Headers {
         headers
     }
 
-    pub fn get_header<R>(&mut self, mut in_buf: &mut R, loc: &[Loc]) -> String
+    // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
+    pub fn prefetch<R>(&mut self, in_buf: &mut R)
     where
         R: Read + Seek,
     {
-        let mut header = String::with_capacity(1024);
+        let mut data =
+            Vec::with_capacity(self.block_size * self.block_locations.as_ref().unwrap().len());
+
+        for i in 0..self.block_locations.as_ref().unwrap().len() {
+            data.extend(self.get_block_uncached(in_buf, i as u32));
+        }
+        log::debug!("ID Prefetching done: {}", data.len());
+        self.data = Some(data);
+    }
+
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
+    where
+        R: Read + Seek,
+    {
+        if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
+            return self.cache.as_ref().unwrap().1.clone();
+        } else {
+            self.cache = Some((block, self.get_block_uncached(in_buf, block)));
+            return self.cache.as_ref().unwrap().1.clone();
+        }
+    }
+
+    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<u8>
+    where
+        R: Read + Seek,
+    {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
         let block_locations = self.block_locations.as_ref().unwrap();
 
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
 
-        if self.cache.is_some() {
-            let cache = self.cache.as_mut().unwrap();
-            for (block, (start, end)) in loc
-                .iter()
-                .map(|x| x.original_format(self.block_size as u32))
-            {
-                if block == cache.0 {
-                    let start = start as usize;
-                    let end = end as usize;
-                    header.push_str(std::str::from_utf8(&cache.1[start..=end]).unwrap());
-                } else {
-                    let block_location = block_locations[block as usize];
-                    in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-                    let compressed_block: Vec<u8> =
-                        bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-                    let decompressed_block = decompressor
-                        .decompress(&compressed_block, self.block_size)
-                        .unwrap();
-                    let start = start as usize;
-                    let end = end as usize;
-                    header.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
-                    *cache = (block, decompressed_block);
-                }
-            }
+        let block_location = block_locations[block as usize];
+        in_buf.seek(SeekFrom::Start(block_location)).unwrap();
+        let compressed_block: Vec<u8> =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+
+        decompressor
+            .decompress(&compressed_block, self.block_size)
+            .unwrap()
+    }
+
+    pub fn get_header<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
+    where
+        R: Read + Seek,
+    {
+        let mut header = String::with_capacity(1024);
+        let block_size = self.block_size as u32;
+
+        if self.data.is_some() {
+            let loc0 = loc[0].original_format(block_size);
+            let loc1 = loc[loc.len() - 1].original_format(block_size);
+
+            let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
+            let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
+            header.push_str(
+                std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..end as usize])
+                    .unwrap(),
+            );
         } else {
-            // TODO: Repetitive code...
-            for (block, (start, end)) in loc
-                .iter()
-                .map(|x| x.original_format(self.block_size as u32))
-            {
-                let block_location = block_locations[block as usize];
-                in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-                let compressed_block: Vec<u8> =
-                    bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-                let decompressed_block = decompressor
-                    .decompress(&compressed_block, self.block_size)
-                    .unwrap();
-                let start = start as usize;
-                let end = end as usize;
-                header.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
-                self.cache = Some((block, decompressed_block));
+            for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
+                let block = self.get_block(in_buf, block as u32);
+                header.push_str(std::str::from_utf8(&block[start as usize..end as usize]).unwrap());
             }
         }
-
-        for i in loc {}
 
         header
     }

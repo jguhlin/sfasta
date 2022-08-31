@@ -317,10 +317,15 @@ impl SfastaParser {
         ));
 
         if sfasta.directory.headers_loc.is_some() {
-            sfasta.headers = Some(Headers::from_buffer(
+            let mut headers = Headers::from_buffer(
                 &mut in_buf,
                 sfasta.directory.headers_loc.unwrap().get() as u64,
-            ));
+            );
+            if prefetch {
+                headers.prefetch(&mut in_buf);
+            }
+
+            sfasta.headers = Some(headers);
         }
 
         if sfasta.directory.ids_loc.is_some() {
