@@ -457,6 +457,10 @@ where
                     d = z;
                     backoff.snooze();
                     fasta_thread_spins = fasta_thread_spins.saturating_add(1);
+
+                    if backoff.is_completed() {
+                        std::thread::park();
+                    }
                 }
             }
 
@@ -466,6 +470,7 @@ where
             log::debug!("fasta_thread_spins: {}", fasta_thread_spins);
         });
 
+        let fasta_thread_clone = fasta_thread.thread().clone();
         let mut out_buf = BufWriter::new(&mut out_fh);
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
@@ -487,6 +492,7 @@ where
 
             let mut fasta_queue_spins: usize = 0;
             loop {
+                fasta_thread_clone.unpark();
                 match fasta_queue_out.pop() {
                     Some(Work::FastaPayload(seq)) => {
                         let (seqid, seqheader, mut seq) = seq.into_parts();

@@ -347,7 +347,6 @@ fn _compression_worker_thread(
     }
 }
 
-// This name is a lie. This only sorts the blocks...
 fn _sorter_worker_thread(
     sort_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
@@ -355,7 +354,7 @@ fn _sorter_worker_thread(
     written_entries: Arc<AtomicUsize>,
 ) {
     let mut expected_block: u32 = 0;
-    let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::with_capacity(1024);
+    let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::with_capacity(256);
     let mut result;
     let backoff = Backoff::new();
 
