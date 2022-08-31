@@ -223,7 +223,8 @@ pub struct SfastaParser {
 
 impl SfastaParser {
     // TODO: Can probably multithread parts of this...
-    pub fn open_from_buffer<R>(mut in_buf: R) -> Sfasta
+    // Prefetch should probably be another name...
+    pub fn open_from_buffer<R>(mut in_buf: R, prefetch: bool) -> Sfasta
     where
         R: 'static + Read + Seek + Send,
     {
@@ -280,7 +281,8 @@ impl SfastaParser {
 
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
-            let seqlocs = SeqLocs::from_buffer(&mut in_buf, seqlocs_loc);
+            let mut seqlocs = SeqLocs::from_buffer(&mut in_buf, seqlocs_loc);
+            seqlocs.prefetch(&mut in_buf);
             sfasta.seqlocs = Some(seqlocs);
         }
 
@@ -366,7 +368,7 @@ mod tests {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf);
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false);
         sfasta.index_len();
 
         assert_eq!(sfasta.index_len(), 3001);
@@ -406,7 +408,7 @@ mod tests {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf);
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false);
         assert!(sfasta.index_len() == 10);
 
         let output = &sfasta.find("test3").unwrap().unwrap();
@@ -447,10 +449,10 @@ mod tests {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf);
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false);
         assert!(sfasta.index_len() == 10);
 
-        let output = &sfasta.find("test3").unwrap().unwrap();
+        let _output = &sfasta.find("test3").unwrap().unwrap();
         sfasta.find("test").unwrap().unwrap();
         sfasta.find("test2").unwrap().unwrap();
         sfasta.find("test3").unwrap().unwrap();

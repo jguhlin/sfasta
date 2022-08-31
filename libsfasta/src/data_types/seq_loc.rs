@@ -10,7 +10,7 @@ pub struct SeqLocs {
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
     chunk_size: usize,
-    pub data: Option<Vec<SeqLoc>>, // Only used for writing...
+    pub data: Option<Vec<SeqLoc>>, // Primarily for writing...
     len: usize,
     cache: Option<(u32, Vec<SeqLoc>)>,
 }
@@ -32,6 +32,26 @@ impl Default for SeqLocs {
 impl SeqLocs {
     pub fn new() -> Self {
         SeqLocs::default()
+    }
+
+    pub fn prefetch<R>(&mut self, mut in_buf: &mut R)
+    where
+        R: Read + Seek
+    {
+        if self.data.is_none() {
+            return;
+        }
+
+        let mut data = Vec::with_capacity(self.len());
+
+        for i in 0..self.len() {
+            assert!(i < std::u32::MAX as usize);
+            assert!(i < self.len());
+            let seq_loc = self.get_block_uncached(&mut in_buf, i as u32);
+            data.extend(seq_loc);
+        }
+
+        self.data = Some(data);
     }
 
     pub fn with_data(data: Vec<SeqLoc>) -> Self {
@@ -240,51 +260,68 @@ impl SeqLocs {
         self.len == 0
     }
 
-    pub fn get_seqloc<R>(&mut self, mut in_buf: &mut R, index: u32) -> SeqLoc
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[SeqLoc]
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
         if !self.is_initialized() {
             panic!("Unable to get SeqLoc as SeqLocs are not initialized");
         }
 
-        let index: usize = index as usize;
-
-        let block_locations = self.block_locations.as_ref().unwrap();
-
-        let block_index = index / self.chunk_size;
-        let block_offset = index % self.chunk_size;
-
-        if self.cache.is_some() {
+        if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
             let cache = self.cache.as_ref().unwrap();
-            if cache.0 == block_index as u32 {
-                return cache.1[block_offset].clone();
-            }
+                &cache.1
+        } else {
+            let seqlocs = self.get_block_uncached(in_buf, block);
+       
+                self.cache = Some((block as u32, seqlocs));
+        
+                &self.cache.as_ref().unwrap().1
         }
+        
+    }
 
-        let block_location = block_locations[block_index];
-
+    fn get_block_uncached<R>(&self, mut in_buf: &mut R, block: u32) -> Vec<SeqLoc>
+    where
+        R: Read + Seek,
+    {
+        let block_locations = self.block_locations.as_ref().unwrap();
+        let block_location = block_locations[block as usize];
         in_buf.seek(SeekFrom::Start(block_location)).unwrap();
+        
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let compressed_block: Vec<u8> = bincode::decode_from_std_read(&mut in_buf, bincode_config)
             .expect("Unable to read block");
+            let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
+            decompressor.include_magicbytes(false).unwrap();
+    
+            let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
+    
+            decompressor.read_to_end(&mut decompressed).unwrap();
+    
+            let seqlocs: Vec<SeqLoc> =
+                bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
+                    .expect("Unable to read block");
+            seqlocs
+    }
 
-        let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
-        decompressor.include_magicbytes(false).unwrap();
+    pub fn get_seqloc<R>(&mut self, in_buf: &mut R, index: u32) -> SeqLoc
+    where
+        R: Read + Seek,
+    {
+        if !self.is_initialized() {
+            panic!("Unable to get SeqLoc as SeqLocs are not initialized");
+        }
 
-        let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
-
-        decompressor.read_to_end(&mut decompressed).unwrap();
-
-        let seqlocs: Vec<SeqLoc> =
-            bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
-                .expect("Unable to read block");
-
-        self.cache = Some((block_index as u32, seqlocs));
-
-        self.cache.as_ref().unwrap().1[block_offset].clone()
+        if self.data.is_some() {
+            self.data.as_ref().unwrap()[index as usize].clone()
+        } else {
+            let block = index / self.chunk_size as u32;
+            let block_index = index % self.chunk_size as u32;
+            let seqlocs = self.get_block(in_buf, block);
+            seqlocs[block_index as usize].clone()
+        }
     }
 }
 

@@ -33,7 +33,7 @@ impl Default for Converter {
         Converter {
             threads: 8,
             block_size: 4 * 1024 * 1024,    // 1Mb
-            seqlocs_chunk_size: 256 * 1024, // 256k
+            seqlocs_chunk_size: 128 * 1024, // 128k
             index: true,
             masking: false,
             quality_scores: false,
@@ -174,7 +174,7 @@ impl Converter {
 
         // Store the location of the directory so we can update it later...
         // It's right after the SFASTA and version identifier...
-        let directory_location = self.write_headers(&mut out_fh, &sfasta);
+        let directory_location = self.write_headers(out_fh, &sfasta);
 
         // Put everything in Arcs and Mutexes to allow for multithreading
         // let in_buf = Arc::new(Mutex::new(in_buf));
@@ -199,7 +199,7 @@ impl Converter {
         // Vec<(String, Location)>
         // block_index_pos
         let (ids, seq_locs, block_index_pos, headers_location, ids_location, masking_location) =
-            write_fasta_sequence(sb_config, &mut in_buf, &mut out_fh, &mut debug_size);
+            write_fasta_sequence(sb_config, &mut in_buf, out_fh, &mut debug_size);
 
         let end_time = std::time::Instant::now();
 
@@ -626,14 +626,20 @@ where
         masking = Some(j.4);
 
         let start_time = Instant::now();
+
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
         headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_buf) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
+
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
         let end_time = Instant::now();
+
         debug_size.push(("Headers".to_string(), (end - start) as usize));
+
         log::debug!(
             "DEBUG: Wrote {} bytes of headers in {:#?}",
             end - start,
@@ -646,8 +652,11 @@ where
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
+
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
         let end_time = Instant::now();
+
         debug_size.push(("IDs".to_string(), (end - start) as usize));
         log::debug!(
             "DEBUG: Wrote {} bytes of ids in {:#?}",
@@ -661,6 +670,7 @@ where
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
+
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         debug_size.push(("Masking".to_string(), (end - start) as usize));
         let end_time = Instant::now();
