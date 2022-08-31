@@ -83,6 +83,7 @@ pub struct CompressionStreamBuffer {
     finalized: bool,
     compression_type: CompressionType,
     emit_block_spins: usize,
+    main_thread: Option<std::thread::Thread>,
 }
 
 impl Default for CompressionStreamBuffer {
@@ -95,8 +96,8 @@ impl Default for CompressionStreamBuffer {
             initialized: false,
             workers: Vec::<JoinHandle<()>>::new(),
             sort_worker: None,
-            sort_queue: Arc::new(ArrayQueue::new(512)),
-            compress_queue: Arc::new(ArrayQueue::new(512)),
+            sort_queue: Arc::new(ArrayQueue::new(128)),
+            compress_queue: Arc::new(ArrayQueue::new(128)),
             output_queue: Arc::new(ArrayQueue::new(128)),
             shutdown: Arc::new(AtomicBool::new(false)),
             finalized: false,
@@ -104,6 +105,7 @@ impl Default for CompressionStreamBuffer {
             sorted_entries: Arc::new(AtomicUsize::new(0)),
             compression_type: CompressionType::ZSTD,
             emit_block_spins: 0,
+            main_thread: None,
         }
     }
 }
@@ -124,6 +126,11 @@ impl CompressionStreamBuffer {
         buffer.threads = config.num_threads;
         buffer.compression_type = config.compression_type;
         buffer
+    }
+
+    pub fn with_main_thread(mut self, main_thread: std::thread::Thread) -> Self {
+        self.main_thread = Some(main_thread);
+        self
     }
 
     pub fn initialize(&mut self) {
@@ -269,6 +276,8 @@ impl CompressionStreamBuffer {
             i.thread().unpark();
         }
         self.sort_worker.as_ref().unwrap().thread().unpark();
+
+        self.main_thread.as_ref().unwrap().unpark();
     }
 
     // Convenience functions

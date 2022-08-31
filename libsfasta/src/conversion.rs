@@ -418,7 +418,8 @@ where
 {
     let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-    let mut sb = CompressionStreamBuffer::from_config(sb_config);
+    let main_thread = std::thread::current();
+    let mut sb = CompressionStreamBuffer::from_config(sb_config).with_main_thread(main_thread);;
 
     // Get a handle for the output queue from the sequence compressor
     let oq = sb.get_output_queue();
@@ -514,6 +515,10 @@ where
                     None => {
                         fasta_queue_spins = fasta_queue_spins.saturating_add(1);
                         backoff.snooze();
+                        if backoff.is_completed() {
+                            backoff.reset();
+                            std::thread::park();
+                        }
                     }
                 }
             }
