@@ -401,10 +401,11 @@ fn convert(
     let buf = generic_open_file_pb(pb, fasta_filename);
     let mut buf = buf.2;
 
-    let (s, r) = crossbeam::channel::bounded(128);
+    let (s, r) = crossbeam::channel::bounded(16);
 
-    let io_thread = std::thread::spawn(move || {
-        let mut buffer: [u8; 256 * 1024] = [0; 256 * 1024];
+    let io_thread = std::thread::Builder::new().name("IO_Thread".to_string()).stack_size(2 * 1024 * 1024).spawn(move || {
+	let mut buf = BufReader::new(buf);
+        let mut buffer: [u8; 1024 * 1024] = [0; 1024 * 1024];
         while let Ok(bytes_read) = buf.read(&mut buffer) {
             if bytes_read == 0 {
                 s.send(libsfasta::utils::ReaderData::EOF).unwrap();
@@ -412,7 +413,7 @@ fn convert(
             }
             s.send(libsfasta::utils::ReaderData::Data(buffer[..bytes_read].to_vec())).unwrap();
         }
-    });
+    }).unwrap();
 
     // TODO: Handle all of the compression options...
     // TODO: Warn if more than one compression option specified

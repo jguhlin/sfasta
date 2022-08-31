@@ -445,7 +445,7 @@ where
     thread::scope(|s| {
         let fasta_thread = s.spawn(|_| {
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
-            let mut in_buf_reader = BufReader::with_capacity(512 * 1024, in_buf);
+            let mut in_buf_reader = BufReader::with_capacity(8 * 1024, in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
 
             let backoff = Backoff::new();
@@ -721,7 +721,7 @@ where
         // Sequence thread....
         let fastq_thread = s.spawn(|_| {
             // Convert reader into buffered reader then into the Fastq struct (and iterator)
-            let mut in_buf_reader = BufReader::with_capacity(512 * 1024, in_buf);
+            let mut in_buf_reader = BufReader::with_capacity(8 * 1024, in_buf);
             let fastq = Fastq::from_buffer(&mut in_buf_reader);
 
             let backoff = Backoff::new();
@@ -801,7 +801,7 @@ where
 
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
-        let mut block_locs = Vec::with_capacity(512 * 1024);
+        let mut block_locs = Vec::with_capacity(8192);
         let mut pos = out_buf
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
@@ -846,7 +846,7 @@ where
         // Write FASTQ scores here...
         let fastq_thread = s.spawn(|_| {
             // Convert reader into buffered reader then into the Fastq struct (and iterator)
-            let mut in_buf_reader = BufReader::with_capacity(512 * 1024, in_buf);
+            let mut in_buf_reader = BufReader::with_capacity(8 * 1024, in_buf);
             let fastq = Fastq::from_buffer(&mut in_buf_reader);
 
             let backoff = Backoff::new();
@@ -922,7 +922,7 @@ where
 
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
-        let mut block_locs = Vec::with_capacity(512 * 1024);
+        let mut block_locs = Vec::with_capacity(8192);
         let mut pos = out_buf
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
