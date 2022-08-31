@@ -401,16 +401,16 @@ fn convert(
     let buf = generic_open_file_pb(pb, fasta_filename);
     let mut buf = buf.2;
 
-    let (s, r) = crossbeam::channel::bounded(32);
+    let (s, r) = crossbeam::channel::bounded(128);
 
     let io_thread = std::thread::spawn(move || {
-        let mut buffer: [u8; 8192] = [0; 8 * 1024];
+        let mut buffer: [u8; 256 * 1024] = [0; 256 * 1024];
         while let Ok(bytes_read) = buf.read(&mut buffer) {
             if bytes_read == 0 {
                 s.send(libsfasta::utils::ReaderData::EOF).unwrap();
                 break;
             }
-            s.send(libsfasta::utils::ReaderData::Data(buffer.to_vec())).unwrap();
+            s.send(libsfasta::utils::ReaderData::Data(buffer[..bytes_read].to_vec())).unwrap();
 
         }
     });
