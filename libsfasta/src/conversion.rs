@@ -418,8 +418,7 @@ where
 {
     let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-    let main_thread = std::thread::current();
-    let mut sb = CompressionStreamBuffer::from_config(sb_config).with_main_thread(main_thread.clone());
+    let mut sb = CompressionStreamBuffer::from_config(sb_config);
 
     // Get a handle for the output queue from the sequence compressor
     let oq = sb.get_output_queue();
@@ -454,7 +453,6 @@ where
 
             for x in fasta {
                 let mut d = Work::FastaPayload(x);
-                main_thread.unpark();
                 while let Err(z) = fasta_queue_in.push(d) {
                     d = z;
                     backoff.snooze();
@@ -469,10 +467,10 @@ where
             while fasta_queue_in.push(Work::Shutdown).is_err() {
                 backoff.snooze();
             }
+
             log::debug!("fasta_thread_spins: {}", fasta_thread_spins);
         });
 
-        let main_thread = std::thread::current();
         let fasta_thread_clone = fasta_thread.thread().clone();
         let mut out_buf = BufWriter::new(&mut out_fh);
         let reader_handle = s.spawn(move |_| {
@@ -495,7 +493,6 @@ where
 
             let mut fasta_queue_spins: usize = 0;
             loop {
-                main_thread.unpark();
                 fasta_thread_clone.unpark();
                 match fasta_queue_out.pop() {
                     Some(Work::FastaPayload(seq)) => {
