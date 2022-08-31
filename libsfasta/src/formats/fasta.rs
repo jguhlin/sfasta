@@ -71,6 +71,8 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                             .expect("Invalid UTF-8 encoding...")
                             .to_string();
 
+                        let next_id = next_id.trim();
+
                         self.buffer.clear();
                         let split: Vec<&str> = next_id.splitn(2, ' ').collect();
                         let next_id = split[0].trim().to_string();
