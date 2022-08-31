@@ -670,6 +670,8 @@ where
             end_time - start_time
         );
 
+        out_buf.flush().expect("Unable to flush output buffer");
+
         // TODO: Comes out about 20% smaller but about 2x as long in time...
         /*
 
