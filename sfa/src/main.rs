@@ -327,19 +327,17 @@ fn view(input: &str) {
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(512 * 1024, in_buf), true);
-
+    let mut sfasta = SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024, in_buf), true);
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty or corrupt");
     }
 
-    for i in 0..sfasta.len() {
-        let seqloc = &sfasta.get_seqloc(i);
-        let id = &sfasta.get_id(&seqloc.ids.as_ref().unwrap()).unwrap();
+    for seqloc in sfasta.seqlocs.as_mut().unwrap().data.take().unwrap().iter() {
+        let id = &sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
         if seqloc.headers.is_some() {
             let header = sfasta
-                .get_header(&seqloc.headers.as_ref().unwrap())
+                .get_header(seqloc.headers.as_ref().unwrap())
                 .expect("Unable to fetch header");
             println!(">{} {}", id, header);
         } else {
@@ -347,10 +345,11 @@ fn view(input: &str) {
         }
 
         let sequence = sfasta
-            .get_sequence(&seqloc)
+            .get_sequence(seqloc)
             .expect("Unable to fetch sequence");
 
         // 60 matches samtools faidx output
+        // But 80 is common elsewhere...
         print_sequence(&sequence, 80);
     }
 }

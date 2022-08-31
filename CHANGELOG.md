@@ -2,6 +2,7 @@
 ## Major Features
 Far better CPU handling
 Updated FASTQ file parser
+Prefetching for indices (SeqLocs for now) for speeding up viewing entire files
 
 ## Minor Changes
 Print out the correct version from cargo.toml
