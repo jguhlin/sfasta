@@ -7,11 +7,11 @@ use std::io::BufRead;
 pub struct Sequence {
     pub seq: Vec<u8>,
     pub id: String,
-    pub header: String,
+    pub header: Option<String>,
 }
 
 impl Sequence {
-    pub fn into_parts(self) -> (String, String, Vec<u8>) {
+    pub fn into_parts(self) -> (String, Option<String>, Vec<u8>) {
         {
             (self.id, self.header, self.seq)
         }
@@ -50,7 +50,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                     let seq = Sequence {
                         seq: self.seqbuffer[..self.seqlen].to_vec(),
                         id: self.next_seqid.take().unwrap(),
-                        header: self.next_header.take().unwrap(),
+                        header: self.next_header.take(),
                     };
                     self.seqlen = 0;
                     return Some(seq);
@@ -74,27 +74,27 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                         self.buffer.clear();
                         let split: Vec<&str> = next_id.splitn(2, ' ').collect();
                         let next_id = split[0].trim().to_string();
-                        let next_header = if split.len() == 2 {
-                            split[1].trim().to_string()
+                        let mut header = if split.len() == 2 {
+                            Some(split[1].trim().to_string())
                         } else {
-                            "".to_string()
+                            None
                         };
 
                         let id = self.next_seqid.replace(next_id);
-                        let header = self.next_header.replace(next_header);
+                        std::mem::swap(&mut header, &mut self.next_header);
 
                         if self.seqlen > 0 {
                             assert!(id.is_some());
 
                             // Use the last seqlen as the new buffer's size
-                            let seqbuf = Vec::with_capacity(self.seqlen);
-                            let mut seq: Vec<u8> = std::mem::replace(&mut self.seqbuffer, seqbuf);
-                            seq.shrink_to_fit();
+                            let mut seqbuf = Vec::with_capacity(self.seqlen);
+                            std::mem::swap(&mut self.seqbuffer, &mut seqbuf);
+                            seqbuf.truncate(self.seqlen);
 
                             let seq = Sequence {
-                                seq,
+                                seq: seqbuf,
                                 id: id.unwrap(),
-                                header: header.unwrap_or_else(|| "".to_string()),
+                                header,
                             };
                             self.seqbuffer.clear();
                             self.seqlen = 0;
@@ -189,7 +189,7 @@ mod tests {
         let mut fasta = Fasta::from_buffer(&mut inner);
         let s = fasta.next().unwrap();
         println!("{:#?}", s.header);
-        assert!(&s.header == "I have more information in the rest of the FASTA header");
+        assert!(&s.header == &Some("I have more information in the rest of the FASTA header".to_string()));
     }
 
     #[test]

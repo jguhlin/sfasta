@@ -13,8 +13,7 @@ use std::time::Instant;
 use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
 use crate::data_types::*;
 use crate::dual_level_index::*;
-use crate::fasta::*;
-use crate::format::Sfasta;
+use crate::formats::*;
 use crate::utils::*;
 use crate::CompressionType;
 
@@ -395,7 +394,8 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 
 #[derive(Debug)]
 enum Work {
-    Payload(Sequence),
+    FastaPayload(fasta::Sequence),
+    FastqPayload(fastq::Sequence),
     Shutdown,
 }
 
@@ -451,7 +451,7 @@ where
             let backoff = Backoff::new();
 
             for x in fasta {
-                let mut d = Work::Payload(x);
+                let mut d = Work::FastaPayload(x);
                 while let Err(z) = fasta_queue_in.push(d) {
                     d = z;
                     backoff.snooze();
@@ -484,7 +484,7 @@ where
 
             loop {
                 match fasta_queue_out.pop() {
-                    Some(Work::Payload(seq)) => {
+                    Some(Work::FastaPayload(seq)) => {
                         let (seqid, seqheader, mut seq) = seq.into_parts();
                         let mut location = SeqLoc::new();
                         location.masking = masking.add_masking(&seq[..]);
@@ -492,13 +492,14 @@ where
                         let myid = std::sync::Arc::new(seqid);
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add_id(std::sync::Arc::clone(&myid));
-                        if !seqheader.is_empty() {
-                            location.headers = Some(headers.add_header(seqheader));
+                        if let Some(x) = seqheader {
+                            location.headers = Some(headers.add_header(x));
                         }
                         location.ids = Some(idloc);
                         location.sequence = Some(loc);
                         seq_locs.push(location);
                     }
+                    Some(Work::FastqPayload(_)) => panic!("Received FASTQ payload in FASTA thread"),
                     Some(Work::Shutdown) => break,
                     None => {
                         backoff.snooze();
@@ -558,7 +559,7 @@ where
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
-        debug_size.push(("Sequence Blocks".to_string(), (end-start) as usize));
+        debug_size.push(("Sequence Blocks".to_string(), (end - start) as usize));
 
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
@@ -673,12 +674,10 @@ where
 }
 
 // We have to iterate through the file twice...
-// Thus, we need two file handles for input... (must be done before this fn to handle compression)...
 // TODO:
 pub fn write_fastq_sequence<'write, W, R>(
     sb_config: CompressionStreamBufferConfig,
     in_buf: &mut R,
-    in_buf2: &mut R,
     mut out_fh: &mut W,
 ) -> (
     Vec<std::sync::Arc<String>>,
@@ -694,7 +693,7 @@ where
 {
     let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-    let mut sb = CompressionStreamBuffer::from_config(sb_config);
+    let mut sb = CompressionStreamBuffer::from_config(sb_config.clone());
 
     // Get a handle for the output queue from the sequence compressor
     let oq = sb.get_output_queue();
@@ -712,31 +711,36 @@ where
     let mut masking = None;
     let mut masking_location = None;
 
-    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192));
+    let fastq_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192));
 
-    let fasta_queue_in = Arc::clone(&fasta_queue);
-    let fasta_queue_out = Arc::clone(&fasta_queue);
+    let fastq_queue_in = Arc::clone(&fastq_queue);
+    let fastq_queue_out = Arc::clone(&fastq_queue);
 
-    // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
+    // Pop to a new thread that pushes FASTQ sequences into the sequence buffer...
     thread::scope(|s| {
-        let fasta_thread = s.spawn(|_| {
-            // Convert reader into buffered reader then into the Fasta struct (and iterator)
+        // Sequence thread....
+        let fastq_thread = s.spawn(|_| {
+            // Convert reader into buffered reader then into the Fastq struct (and iterator)
             let mut in_buf_reader = BufReader::with_capacity(512 * 1024, in_buf);
-            let fasta = Fasta::from_buffer(&mut in_buf_reader);
+            let fastq = Fastq::from_buffer(&mut in_buf_reader);
 
             let backoff = Backoff::new();
 
-            for x in fasta {
-                let mut d = Work::Payload(x);
-                while let Err(z) = fasta_queue_in.push(d) {
+            for mut x in fastq {
+                x.scores.clear(); // No need to send scores across threads when we aren't using them yet...
+                let mut d = Work::FastqPayload(x);
+                while let Err(z) = fastq_queue_in.push(d) {
                     d = z;
                     backoff.snooze();
                 }
             }
 
-            while fasta_queue_in.push(Work::Shutdown).is_err() {
+            while fastq_queue_in.push(Work::Shutdown).is_err() {
                 backoff.snooze();
             }
+
+            // Return the in_buf
+            in_buf_reader.into_inner()
         });
 
         let mut out_buf = BufWriter::new(&mut out_fh);
@@ -759,21 +763,24 @@ where
             let backoff = Backoff::new();
 
             loop {
-                match fasta_queue_out.pop() {
-                    Some(Work::Payload(seq)) => {
-                        let (seqid, seqheader, mut seq) = seq.into_parts();
+                match fastq_queue_out.pop() {
+                    Some(Work::FastqPayload(seq)) => {
+                        let (seqid, seqheader, mut seq, _) = seq.into_parts();
                         let mut location = SeqLoc::new();
                         location.masking = masking.add_masking(&seq[..]);
                         let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
                         let myid = std::sync::Arc::new(seqid);
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add_id(std::sync::Arc::clone(&myid));
-                        if !seqheader.is_empty() {
-                            location.headers = Some(headers.add_header(seqheader));
+                        if let Some(header) = seqheader {
+                            location.headers = Some(headers.add_header(header));
                         }
                         location.ids = Some(idloc);
                         location.sequence = Some(loc);
                         seq_locs.push(location);
+                    }
+                    Some(Work::FastaPayload(_)) => {
+                        panic!("Received Fastq Payload in FASTQ thread.");
                     }
                     Some(Work::Shutdown) => break,
                     None => {
@@ -830,10 +837,136 @@ where
             }
         }
 
-        fasta_thread.join().unwrap();
+        let mut in_buf = fastq_thread.join().unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        // Write FASTQ scores here...
+        let fastq_thread = s.spawn(|_| {
+            // Convert reader into buffered reader then into the Fastq struct (and iterator)
+            let mut in_buf_reader = BufReader::with_capacity(512 * 1024, in_buf);
+            let fastq = Fastq::from_buffer(&mut in_buf_reader);
+
+            let backoff = Backoff::new();
+
+            for mut x in fastq {
+                x.seq.clear(); // No need to send seqs across threads when we are done with that...
+                let mut d = Work::FastqPayload(x);
+                while let Err(z) = fastq_queue_in.push(d) {
+                    d = z;
+                    backoff.snooze();
+                }
+            }
+
+            while fastq_queue_in.push(Work::Shutdown).is_err() {
+                backoff.snooze();
+            }
+        });
+
+        let mut sb = CompressionStreamBuffer::from_config(sb_config);
+        let fastq_queue_in = Arc::clone(&fastq_queue);
+        let fastq_queue_out = Arc::clone(&fastq_queue);
+   
+
+        let reader_handle = s.spawn(move |_| {
+            sb.initialize();
+
+            // Store the ID of the sequence and the Location (SeqLocs)
+            // TODO: Auto adjust based off of size of input FASTA file
+            let mut seq_locs: Vec<SeqLoc> = Vec::with_capacity(1024);
+
+            let mut headers = Headers::default();
+            let mut ids = Ids::default();
+            let mut ids_string = Vec::new();
+            let mut masking = Masking::default();
+
+            // For each Sequence in the fasta file, make it upper case (masking is stored separately)
+            // Add the sequence, get the SeqLocs and store them in Location struct
+            // And store that in seq_locs Vec...
+
+            let backoff = Backoff::new();
+
+            let mut idx = 0;
+
+            loop {
+                match fastq_queue_out.pop() {
+                    Some(Work::FastqPayload(seq)) => {
+                        idx += 1;
+                        let (_, _, _, mut scores) = seq.into_parts();
+                        let loc = sb.add_sequence(&mut scores[..]).unwrap(); // Destructive, capitalizes everything...
+                        seq_locs[idx].scores = Some(loc);
+                    }
+                    Some(Work::FastaPayload(_)) => {
+                        panic!("Received Fastq Payload in FASTQ thread.");
+                    }
+                    Some(Work::Shutdown) => break,
+                    None => {
+                        backoff.snooze();
+                    }
+                }
+            }
+
+            // Finalize pushes the last block, which is likely smaller than the complete block size
+            match sb.finalize() {
+                Ok(()) => (),
+                Err(x) => panic!("Unable to finalize sequence buffer, {:#?}", x),
+            };
+
+            // Return seq_locs to the main thread
+            (seq_locs, headers, ids, ids_string, masking)
+        });
+
+        // FASTQ sequence blocks, etc...
+        // All the following is TODO
+
+        // Store the location of the Sequence Blocks...
+        // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
+        let mut block_locs = Vec::with_capacity(512 * 1024);
+        let mut pos = out_buf
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API");
+
+        let mut result;
+
+        // For each entry processed by the sequence buffer, pop it out, write the block, and write the block id
+        // FORMAT: Write each sequence block to file
+
+        // This writes out the sequence blocks (seqblockcompressed)
+        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
+        loop {
+            result = oq.pop();
+
+            match result {
+                None => {
+                    if oq.is_empty() && shutdown.load(Ordering::Relaxed) {
+                        break;
+                    }
+                }
+                Some((block_id, sb)) => {
+                    bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
+                        .expect("Unable to write to bincode output");
+                    // log::debug!("Writer wrote block {}", block_id);
+
+                    block_locs.push((block_id, pos));
+
+                    pos = out_buf
+                        .seek(SeekFrom::Current(0))
+                        .expect("Unable to work with seek API");
+                }
+            }
+        }
+
+        let mut in_buf = fastq_thread.join().unwrap();
+
+        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+
+
+
+        
 
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
@@ -954,7 +1087,7 @@ mod tests {
         let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
-            File::open("libsfasta/test_data/test_convert.fasta").expect("Unable to open testing file"),
+            File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
         let converter = Converter::default().with_threads(6).with_block_size(8192);

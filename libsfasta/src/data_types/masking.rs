@@ -68,8 +68,7 @@ impl Masking {
 
         let mut bitpacked_len: u64 = 0;
 
-        bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config)
-            .unwrap();
+        bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
 
         for bp in packed {
@@ -148,7 +147,7 @@ impl Masking {
     {
         if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
             let (block_num, data) = self.cache.as_ref().unwrap();
-                return &self.cache.as_ref().unwrap().1
+            return &self.cache.as_ref().unwrap().1;
         } else {
             let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
@@ -157,7 +156,7 @@ impl Masking {
             let bp: Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
             let unpacked = bp.unpack(self.num_bits);
             self.cache = Some((block, unpacked));
-            return &self.cache.as_ref().unwrap().1
+            return &self.cache.as_ref().unwrap().1;
         }
     }
 

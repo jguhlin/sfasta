@@ -60,6 +60,8 @@ impl Ml32bit {
     }
 }
 
+// TODO: Could we match all combinations by using a const fn to generate a lookup table?
+// And would it be faster?
 pub fn parse_ml32bit(ml: u32) -> Vec<Ml32bit> {
     let ml = ml.view_bits::<Lsb0>();
 

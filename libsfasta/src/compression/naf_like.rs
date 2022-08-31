@@ -14,7 +14,6 @@ const fn acceptable_bytes_2bit() -> [u8; 256] {
     }
 
     acceptable_bytes
-    
 }
 
 // No for loops in const fns
@@ -28,7 +27,6 @@ const fn acceptable_bytes_4bit() -> [u8; 256] {
     }
 
     acceptable_bytes
-    
 }
 
 pub fn can_encode_2bit(seq: &[u8]) -> bool {
@@ -40,7 +38,6 @@ pub fn can_encode_4bit(seq: &[u8]) -> bool {
     let acceptable_bytes = acceptable_bytes_4bit();
     seq.iter().all(|&b| acceptable_bytes[b as usize] == 1)
 }
-
 
 #[cfg(tests)]
 mod tests {
@@ -61,5 +58,4 @@ mod tests {
         assert!(!can_encode_4bit(b"ACGTURYSWKMBDHjuyteeartVN-?"));
         assert!(!can_encode_4bit(b"acgturyswkmbdhvfdsafadsfdsan-?"));
     }
-
 }

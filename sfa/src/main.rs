@@ -404,7 +404,7 @@ fn convert(
     // TODO: Handle all of the compression options...
     // TODO: Warn if more than one compression option specified
     let mut compression_type = CompressionType::default();
-    
+
     if zstd {
         compression_type = CompressionType::ZSTD;
     } else if lz4 {

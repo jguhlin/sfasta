@@ -151,7 +151,10 @@ impl Ids {
         let mut id = String::with_capacity(64);
 
         if self.cache.is_some() {
-            for (block, (start, end)) in loc.iter().map(|x| x.original_format(self.block_size as u32)) {
+            for (block, (start, end)) in loc
+                .iter()
+                .map(|x| x.original_format(self.block_size as u32))
+            {
                 let cache = self.cache.as_mut().unwrap();
                 if block == cache.0 {
                     let start = start as usize;
@@ -179,7 +182,10 @@ impl Ids {
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor.include_magicbytes(false).unwrap();
 
-            for (block, (start, end)) in loc.iter().map(|x| x.original_format(self.block_size as u32)) {
+            for (block, (start, end)) in loc
+                .iter()
+                .map(|x| x.original_format(self.block_size as u32))
+            {
                 let block_location = block_locations[block as usize];
                 in_buf.seek(SeekFrom::Start(block_location)).unwrap();
                 let compressed_block: Vec<u8> =

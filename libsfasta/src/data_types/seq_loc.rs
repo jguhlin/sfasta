@@ -311,18 +311,18 @@ impl SeqLoc {
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Hash)]
 pub enum Loc {
-    Loc(u32, u32, u32), // Block, start, end...
+    Loc(u32, u32, u32),  // Block, start, end...
     FromStart(u32, u32), // Block, length...
-    ToEnd(u32, u32), // Block, start,
-    EntireBlock(u32) // Entire block belongs to this seq...
-    // pub block: u32,
-    // pub start: u32,
-    // pub end: u32,
+    ToEnd(u32, u32),     // Block, start,
+    EntireBlock(u32),    // Entire block belongs to this seq...
+                         // pub block: u32,
+                         // pub start: u32,
+                         // pub end: u32,
 }
 
 impl Loc {
     /// The ultimate in lazy programming. This was once a type (tuple) and is now a enum....
-    pub fn original_format(&self, block_size: u32,) -> (u32, (u32, u32)) {
+    pub fn original_format(&self, block_size: u32) -> (u32, (u32, u32)) {
         match self {
             Loc::Loc(block, start, end) => (*block, (*start, *end)),
             Loc::FromStart(block, length) => (*block, (0, *length)),

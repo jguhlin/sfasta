@@ -31,6 +31,7 @@ impl Default for Headers {
 
 impl Headers {
     pub fn add_header(&mut self, header: String) -> Vec<Loc> {
+        assert!(header.len() > 0);
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
@@ -158,7 +159,10 @@ impl Headers {
 
         if self.cache.is_some() {
             let cache = self.cache.as_mut().unwrap();
-            for (block, (start, end)) in loc.iter().map(|x| x.original_format(self.block_size as u32)) {
+            for (block, (start, end)) in loc
+                .iter()
+                .map(|x| x.original_format(self.block_size as u32))
+            {
                 if block == cache.0 {
                     let start = start as usize;
                     let end = end as usize;
@@ -179,7 +183,10 @@ impl Headers {
             }
         } else {
             // TODO: Repetitive code...
-            for (block, (start, end)) in loc.iter().map(|x| x.original_format(self.block_size as u32)) {
+            for (block, (start, end)) in loc
+                .iter()
+                .map(|x| x.original_format(self.block_size as u32))
+            {
                 let block_location = block_locations[block as usize];
                 in_buf.seek(SeekFrom::Start(block_location)).unwrap();
                 let compressed_block: Vec<u8> =

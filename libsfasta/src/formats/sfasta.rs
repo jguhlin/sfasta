@@ -159,13 +159,28 @@ impl Sfasta {
         let locs = seqloc.sequence.as_ref().unwrap();
 
         // Basic sanity checks
-        let max_block = locs.iter().map(|x| x.original_format(self.parameters.block_size)).map(|(x, _)| x).max().unwrap();
-        assert!(self.sequenceblocks.as_ref().unwrap().block_locs.len() > max_block as usize, "Requested block is larger than the total number of blocks.");
+        let max_block = locs
+            .iter()
+            .map(|x| x.original_format(self.parameters.block_size))
+            .map(|(x, _)| x)
+            .max()
+            .unwrap();
+        assert!(
+            self.sequenceblocks.as_ref().unwrap().block_locs.len() > max_block as usize,
+            "Requested block is larger than the total number of blocks."
+        );
 
         let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 
-        for (block, (start, end)) in locs.iter().map(|x| x.original_format(self.parameters.block_size)) {
-            let seqblock = self.sequenceblocks.as_mut().unwrap().get_block(&mut *buf, block);
+        for (block, (start, end)) in locs
+            .iter()
+            .map(|x| x.original_format(self.parameters.block_size))
+        {
+            let seqblock = self
+                .sequenceblocks
+                .as_mut()
+                .unwrap()
+                .get_block(&mut *buf, block);
             seq.extend_from_slice(&seqblock[start as usize..end as usize]);
         }
 
@@ -218,7 +233,10 @@ impl SfastaParser {
         in_buf
             .read_exact(&mut sfasta_marker)
             .expect("Unable to read SFASTA Marker");
-        assert!(sfasta_marker == "sfasta".as_bytes());
+        assert!(
+            sfasta_marker == "sfasta".as_bytes(),
+            "File is missing sfasta magic bytes"
+        );
 
         let mut sfasta = Sfasta {
             version: match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
@@ -289,7 +307,10 @@ impl SfastaParser {
         };
 
         std::mem::forget(block_locs_u32);
-        sfasta.sequenceblocks = Some(SequenceBlocks::new(block_locs, sfasta.parameters.compression_type));
+        sfasta.sequenceblocks = Some(SequenceBlocks::new(
+            block_locs,
+            sfasta.parameters.compression_type,
+        ));
 
         if sfasta.directory.headers_loc.is_some() {
             sfasta.headers = Some(Headers::from_buffer(
@@ -331,7 +352,7 @@ mod tests {
         let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
-            File::open("libsfasta/test_data/test_convert.fasta").expect("Unable to open testing file"),
+            File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
         let converter = Converter::default()
@@ -341,16 +362,12 @@ mod tests {
 
         let mut out_buf = converter.convert_fasta(in_buf, out_buf);
 
-        println!("here...0");
-
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
         let mut sfasta = SfastaParser::open_from_buffer(out_buf);
         sfasta.index_len();
-
-        println!("here...1");
 
         assert_eq!(sfasta.index_len(), 3001);
 
@@ -362,12 +379,7 @@ mod tests {
             .expect("Unable to find-0")
             .expect("Unable to find-1");
 
-        println!("here...2");
-
         let output = &sfasta.find("needle_last").unwrap().unwrap();
-
-        println!("here...3");
-        println!("{:#?}", output);
 
         let sequence = sfasta.get_sequence(output).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
@@ -379,7 +391,7 @@ mod tests {
         let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
-            File::open("libsfasta/test_data/test_sequence_conversion.fasta")
+            File::open("test_data/test_sequence_conversion.fasta")
                 .expect("Unable to open testing file"),
         );
 
@@ -413,7 +425,6 @@ mod tests {
         let last_ten = sequence.len() - 10;
         assert!(&sequence[last_ten..] == "ATGTACAGCG");
         assert_eq!(sequence.len(), 48598);
-        
     }
 
     #[test]
@@ -421,7 +432,7 @@ mod tests {
         let out_buf = Cursor::new(Vec::new());
 
         let in_buf = BufReader::new(
-            File::open("libsfasta/test_data/test_sequence_conversion.fasta")
+            File::open("test_data/test_sequence_conversion.fasta")
                 .expect("Unable to open testing file"),
         );
 

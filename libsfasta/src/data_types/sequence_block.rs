@@ -1,12 +1,10 @@
-// TODO: Make a Sequences struct to handle sequences, like SeqLocs struct...
-
 use crate::data_types::structs::{default_compression_level, CompressionType};
 
-use std::io::{Read, Write, Seek, SeekFrom};
+use std::io::{Read, Seek, SeekFrom, Write};
 
+use flate2::write::{GzDecoder, GzEncoder};
 use log::{debug, error, info, trace, warn};
 use xz::read::{XzDecoder, XzEncoder};
-use flate2::write::{GzDecoder, GzEncoder};
 
 pub struct SequenceBlocks {
     pub block_locs: Vec<u64>,
@@ -27,26 +25,25 @@ impl SequenceBlocks {
     where
         R: Read + Seek,
     {
-
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
             return self.cache.as_ref().unwrap().1.as_slice();
         } else {
             let byte_loc = self.block_locs[block as usize];
-            in_buf.seek(SeekFrom::Start(byte_loc))
+            in_buf
+                .seek(SeekFrom::Start(byte_loc))
                 .expect("Unable to work with seek API");
             let sbc: SequenceBlockCompressed =
                 bincode::decode_from_std_read(&mut *in_buf, bincode_config)
-                .expect("Unable to parse SequenceBlockCompressed");
+                    .expect("Unable to parse SequenceBlockCompressed");
 
             let sb = sbc.decompress(self.compression_type);
             self.cache = Some((block, sb.seq));
-            return self.cache.as_ref().unwrap().1.as_slice()
+            return self.cache.as_ref().unwrap().1.as_slice();
         }
     }
 }
-
 
 #[derive(Debug, Default)]
 pub struct SequenceBlock {
@@ -133,6 +130,10 @@ impl SequenceBlock {
                     brotli::CompressorReader::new(&self.seq[..], 2 * 1024 * 1024, level as u32, 22);
                 compressor.read_to_end(&mut cseq).unwrap();
             }
+            _ => {
+                error!("Unsupported compression type: {:?}", compression_type);
+                panic!("Unsupported compression type: {:?}", compression_type);
+            }
         }
 
         //debug!("Compressed sequence block to length: {}", cseq.len());
@@ -151,7 +152,7 @@ impl SequenceBlock {
     }
 }
 
-#[derive(Debug, Default, bincode::Encode, bincode::Decode, Clone,)]
+#[derive(Debug, Default, bincode::Encode, bincode::Decode, Clone)]
 pub struct SequenceBlockCompressed {
     pub compressed_seq: Vec<u8>,
 }
@@ -172,38 +173,37 @@ impl SequenceBlockCompressed {
                     Ok(x) => x,
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
-            },
+            }
             CompressionType::XZ => {
                 let mut decompressor = XzDecoder::new(&self.compressed_seq[..]);
                 decompressor
                     .read_to_end(&mut seq)
                     .expect("Unable to XZ compress");
-            },
+            }
             CompressionType::BROTLI => {
-                let mut decompressor = brotli::Decompressor::new(&self.compressed_seq[..], 2 * 1024 * 1024);
+                let mut decompressor =
+                    brotli::Decompressor::new(&self.compressed_seq[..], 2 * 1024 * 1024);
                 decompressor.read_to_end(&mut seq).unwrap();
-            },
+            }
             CompressionType::LZ4 => {
                 let mut decompressor = lz4_flex::frame::FrameDecoder::new(&self.compressed_seq[..]);
                 decompressor
                     .read_to_end(&mut seq)
                     .expect("Unable to decompress with LZ4");
-            },
+            }
             CompressionType::SNAPPY => {
                 let mut decompressor = snap::read::FrameDecoder::new(&self.compressed_seq[..]);
                 decompressor
                     .read_to_end(&mut seq)
                     .expect("Unable to decompress with Snappy");
-            },
+            }
             CompressionType::GZIP => {
                 let mut decompressor = GzDecoder::new(&mut seq);
                 decompressor
                     .write_all(&self.compressed_seq[..])
                     .expect("Unable to decompress with GZIP");
-            },
-            CompressionType::NONE => {
-                seq = self.compressed_seq
             }
+            CompressionType::NONE => seq = self.compressed_seq,
             _ => {
                 unimplemented!()
             }

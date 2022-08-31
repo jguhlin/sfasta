@@ -15,9 +15,7 @@ mod compression_stream_buffer;
 mod conversion;
 pub mod data_types;
 pub mod dual_level_index;
-mod fasta;
-mod fastq;
-mod format;
+mod formats;
 mod io;
 pub mod masking;
 mod utils;
@@ -25,6 +23,5 @@ mod utils;
 pub mod prelude;
 
 pub use crate::data_types::structs::*;
-pub use crate::fasta::*;
 pub use crate::io::*;
 pub use crate::utils::*;
