@@ -461,7 +461,7 @@ where
                     fasta_thread_spins = fasta_thread_spins.saturating_add(1);
 
                     if backoff.is_completed() {
-                        std::thread::park();
+                        backoff.reset();
                     }
                 }
             }
