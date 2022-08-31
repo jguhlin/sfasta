@@ -282,7 +282,9 @@ impl SfastaParser {
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
             let mut seqlocs = SeqLocs::from_buffer(&mut in_buf, seqlocs_loc);
-            seqlocs.prefetch(&mut in_buf);
+            if prefetch {
+                seqlocs.prefetch(&mut in_buf);
+            }
             sfasta.seqlocs = Some(seqlocs);
         }
 

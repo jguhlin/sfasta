@@ -52,6 +52,8 @@ impl SeqLocs {
         }
 
         self.data = Some(data);
+
+        log::debug!("Prefetched {} seqlocs", self.len());
     }
 
     pub fn with_data(data: Vec<SeqLoc>) -> Self {
