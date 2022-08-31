@@ -544,14 +544,20 @@ where
 
         // This writes out the sequence blocks (seqblockcompressed)
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let backoff = Backoff::new();
 
+        let mut output_spins: usize = 0;
         loop {
             result = oq.pop();
 
             match result {
                 None => {
                     if oq.is_empty() && shutdown.load(Ordering::Relaxed) {
+                        log::debug!("output_spins: {}", output_spins);
                         break;
+                    } else {
+                        output_spins = output_spins.saturating_add(1);
+                        backoff.snooze();
                     }
                 }
                 Some((block_id, sb)) => {
