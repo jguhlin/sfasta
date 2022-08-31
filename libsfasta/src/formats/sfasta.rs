@@ -349,9 +349,9 @@ mod tests {
 
     #[test]
     pub fn test_sfasta_find_and_retrieve_sequence() {
-        let out_buf = Cursor::new(Vec::new());
+        let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
-        let in_buf = BufReader::new(
+        let mut in_buf = BufReader::new(
             File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
@@ -360,7 +360,7 @@ mod tests {
             .with_block_size(8 * 1024)
             .with_index();
 
-        let mut out_buf = converter.convert_fasta(in_buf, out_buf);
+        converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
@@ -388,9 +388,9 @@ mod tests {
 
     #[test]
     pub fn test_parse_multiple_blocks() {
-        let out_buf = Cursor::new(Vec::new());
+        let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
-        let in_buf = BufReader::new(
+        let mut in_buf = BufReader::new(
             File::open("test_data/test_sequence_conversion.fasta")
                 .expect("Unable to open testing file"),
         );
@@ -400,7 +400,7 @@ mod tests {
             .with_block_size(512)
             .with_index();
 
-        let mut out_buf = converter.convert_fasta(in_buf, out_buf);
+        converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
@@ -429,9 +429,9 @@ mod tests {
 
     #[test]
     pub fn test_find_does_not_trigger_infinite_loops() {
-        let out_buf = Cursor::new(Vec::new());
+        let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
-        let in_buf = BufReader::new(
+        let mut in_buf = BufReader::new(
             File::open("test_data/test_sequence_conversion.fasta")
                 .expect("Unable to open testing file"),
         );
@@ -441,7 +441,7 @@ mod tests {
             .with_block_size(512)
             .with_threads(8);
 
-        let mut out_buf = converter.convert_fasta(in_buf, out_buf);
+        converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)

@@ -456,10 +456,13 @@ fn convert(
         converter = converter.without_index();
     }
 
-    let buf = libsfasta::utils::CrossbeamReader::from_channel(r);
+    let mut buf = libsfasta::utils::CrossbeamReader::from_channel(r);
+    let mut out_fh = Box::new(output);
 
-    converter.convert_fasta(buf, output);
+    converter.convert_fasta(&mut buf, &mut out_fh);
+    log::debug!("Joining IO thread");
     io_thread.join().expect("Unable to join IO thread");
+    log::debug!("IO thread joined");
 }
 
 pub fn generic_open_file_pb(

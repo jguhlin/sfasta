@@ -105,7 +105,7 @@ impl Converter {
         self
     }
 
-    pub fn write_headers<W>(&self, mut out_fh: &mut W, sfasta: &Sfasta) -> u64
+    pub fn write_headers<W>(&self, mut out_fh: &mut Box<W>, sfasta: &Sfasta) -> u64
     where
         W: Write + Seek,
     {
@@ -144,9 +144,9 @@ impl Converter {
 
     /// Main conversion function
     // TODO: Switch R and W into borrows
-    pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, mut out_fh: W) -> W
+    pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, mut out_fh: &mut Box<W>)
     where
-        W: WriteAndSeek + 'convert + std::fmt::Debug,
+        W: WriteAndSeek + 'static,
         R: Read + Send + 'convert,
     {
         let fn_start_time = std::time::Instant::now();
@@ -350,7 +350,6 @@ impl Converter {
         let fn_end_time = std::time::Instant::now();
         log::debug!("Conversion time: {:?}", fn_end_time - fn_start_time);
 
-        out_buf.into_inner().unwrap()
     }
 }
 
@@ -399,10 +398,10 @@ enum Work {
     Shutdown,
 }
 
-pub fn write_fasta_sequence<'write, W, R>(
+pub fn write_fasta_sequence<'convert, W, R>(
     sb_config: CompressionStreamBufferConfig,
     in_buf: &mut R,
-    mut out_fh: &mut W,
+    mut out_fh: &mut Box<W>,
     mut debug_size: &mut Vec<(String, usize)>,
 ) -> (
     Vec<std::sync::Arc<String>>,
@@ -413,8 +412,8 @@ pub fn write_fasta_sequence<'write, W, R>(
     Option<NonZeroU64>,
 )
 where
-    W: WriteAndSeek + 'write,
-    R: Read + Send + 'write,
+    W: WriteAndSeek + 'convert,
+    R: Read + Send + 'convert,
 {
     let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
@@ -1104,15 +1103,15 @@ mod tests {
     pub fn test_create_sfasta() {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let out_buf = Cursor::new(Vec::new());
+        let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
-        let in_buf = BufReader::new(
+        let mut in_buf = BufReader::new(
             File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
 
         let converter = Converter::default().with_threads(6).with_block_size(8192);
 
-        let mut out_buf = converter.convert_fasta(in_buf, out_buf);
+        converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
