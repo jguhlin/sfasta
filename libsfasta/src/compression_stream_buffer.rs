@@ -94,9 +94,9 @@ impl Default for CompressionStreamBuffer {
             initialized: false,
             workers: Vec::<JoinHandle<()>>::new(),
             sort_worker: None,
-            sort_queue: Arc::new(ArrayQueue::new(128)),
-            compress_queue: Arc::new(ArrayQueue::new(256)),
-            output_queue: Arc::new(ArrayQueue::new(64)),
+            sort_queue: Arc::new(ArrayQueue::new(512)),
+            compress_queue: Arc::new(ArrayQueue::new(512)),
+            output_queue: Arc::new(ArrayQueue::new(128)),
             shutdown: Arc::new(AtomicBool::new(false)),
             finalized: false,
             total_entries: Arc::new(AtomicUsize::new(0)),
@@ -160,6 +160,10 @@ impl CompressionStreamBuffer {
         while self.sorted_entries.load(Ordering::Relaxed)
             < self.total_entries.load(Ordering::Relaxed)
         {
+            self.sort_worker.as_ref().unwrap().thread().unpark();
+            for i in self.workers.iter() {
+                i.thread().unpark();
+            }
             backoff.snooze();
         }
 
@@ -237,8 +241,9 @@ impl CompressionStreamBuffer {
     }
 
     pub fn emit_block(&mut self) {
-        let newbuf = Vec::with_capacity(self.block_size as usize);
-        let seq = std::mem::replace(&mut self.buffer, newbuf);
+        let backoff = Backoff::new();
+        let mut seq = Vec::with_capacity(self.block_size as usize);
+        std::mem::swap(&mut self.buffer, &mut seq);
 
         let x = SequenceBlock { seq };
 
@@ -250,9 +255,15 @@ impl CompressionStreamBuffer {
 
         let mut entry = (self.cur_block_id, x);
         while let Err(x) = self.compress_queue.push(entry) {
+            backoff.snooze();
             entry = x;
         }
         self.cur_block_id += 1;
+
+        for i in self.workers.iter() {
+            i.thread().unpark();
+        }
+        self.sort_worker.as_ref().unwrap().thread().unpark();
     }
 
     // Convenience functions
@@ -302,6 +313,7 @@ fn _compression_worker_thread(
     compression_type: CompressionType,
 ) {
     let mut result;
+    let backoff = Backoff::new();
 
     loop {
         result = compress_queue.pop();
@@ -310,9 +322,14 @@ fn _compression_worker_thread(
             None => {
                 if shutdown.load(Ordering::Relaxed) {
                     return;
+                } else {
+                    backoff.snooze();
+                    if backoff.is_completed() {
+                        thread::park();
+                        backoff.reset();
+                    }
                 }
-            }
-
+            },
             Some((block_id, sb)) => {
                 let sbc = sb.compress(compression_type);
 
@@ -338,13 +355,12 @@ fn _sorter_worker_thread(
     let backoff = Backoff::new();
 
     loop {
-        backoff.reset();
         while !queue.is_empty() && queue.contains_key(&expected_block) {
             let sbc = queue.remove(&expected_block).unwrap();
 
             let mut entry = (expected_block, sbc);
             while let Err(x) = output_queue.push(entry) {
-                backoff.spin();
+                backoff.snooze();
                 entry = x;
             }
 
@@ -353,10 +369,15 @@ fn _sorter_worker_thread(
         }
 
         while sort_queue.is_empty() {
-            backoff.spin();
+            backoff.snooze();
 
             if shutdown.load(Ordering::Relaxed) {
                 return;
+            }
+
+            if backoff.is_completed() {
+                thread::park();
+                backoff.reset();
             }
         }
 
