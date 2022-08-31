@@ -38,10 +38,6 @@ impl SeqLocs {
     where
         R: Read + Seek
     {
-        if self.data.is_none() {
-            return;
-        }
-
         let mut data = Vec::with_capacity(self.len());
 
         for i in 0..self.len() {
