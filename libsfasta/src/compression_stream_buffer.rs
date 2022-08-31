@@ -82,6 +82,7 @@ pub struct CompressionStreamBuffer {
     sorted_entries: Arc<AtomicUsize>,
     finalized: bool,
     compression_type: CompressionType,
+    emit_block_spins: usize,
 }
 
 impl Default for CompressionStreamBuffer {
@@ -102,6 +103,7 @@ impl Default for CompressionStreamBuffer {
             total_entries: Arc::new(AtomicUsize::new(0)),
             sorted_entries: Arc::new(AtomicUsize::new(0)),
             compression_type: CompressionType::ZSTD,
+            emit_block_spins: 0,
         }
     }
 }
@@ -176,6 +178,8 @@ impl CompressionStreamBuffer {
         let writer_handle = std::mem::replace(&mut self.sort_worker, None);
 
         writer_handle.unwrap().join().unwrap();
+        log::debug!("CompressionStreamBuffer finalized");
+        log::debug!("Emit block spins: {}", self.emit_block_spins);
         Ok(())
     }
 
@@ -255,6 +259,7 @@ impl CompressionStreamBuffer {
 
         let mut entry = (self.cur_block_id, x);
         while let Err(x) = self.compress_queue.push(entry) {
+            self.emit_block_spins = self.emit_block_spins.saturating_add(1);
             backoff.snooze();
             entry = x;
         }
@@ -354,12 +359,17 @@ fn _sorter_worker_thread(
     let mut result;
     let backoff = Backoff::new();
 
+    let mut sorter_worker_empty_spins: usize = 0;
+    let mut sorter_worker_have_blocks_spins: usize = 0;
+    let mut sorter_worker_output_spins: usize = 0;
+
     loop {
         while !queue.is_empty() && queue.contains_key(&expected_block) {
             let sbc = queue.remove(&expected_block).unwrap();
 
             let mut entry = (expected_block, sbc);
             while let Err(x) = output_queue.push(entry) {
+                sorter_worker_output_spins = sorter_worker_output_spins.saturating_add(1);
                 backoff.snooze();
                 entry = x;
             }
@@ -369,10 +379,22 @@ fn _sorter_worker_thread(
         }
 
         while sort_queue.is_empty() {
+            if shutdown.load(Ordering::Relaxed) {
+                log::debug!(
+                    "Sorter worker empty spins: {}, have blocks spins: {}, output spins: {}",
+                    sorter_worker_empty_spins,
+                    sorter_worker_have_blocks_spins,
+                    sorter_worker_output_spins
+                );
+                return;
+            }
+
             backoff.snooze();
 
-            if shutdown.load(Ordering::Relaxed) {
-                return;
+            if queue.is_empty() {
+                sorter_worker_empty_spins = sorter_worker_empty_spins.saturating_add(1);
+            } else {
+                sorter_worker_have_blocks_spins = sorter_worker_have_blocks_spins.saturating_add(1);
             }
 
             if backoff.is_completed() {
@@ -386,6 +408,12 @@ fn _sorter_worker_thread(
         match result {
             None => {
                 if shutdown.load(Ordering::Relaxed) {
+                    log::debug!(
+                        "Sorter worker empty spins: {}, have blocks spins: {}, output spins: {}",
+                        sorter_worker_empty_spins,
+                        sorter_worker_have_blocks_spins,
+                        sorter_worker_output_spins
+                    );
                     return;
                 }
             }
@@ -393,7 +421,8 @@ fn _sorter_worker_thread(
                 if block_id == expected_block {
                     let mut entry = (expected_block, sbc);
                     while let Err(x) = output_queue.push(entry) {
-                        backoff.spin();
+                        sorter_worker_output_spins = sorter_worker_output_spins.saturating_add(1);
+                        backoff.snooze();
                         entry = x;
                     }
                     expected_block += 1;

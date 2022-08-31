@@ -436,7 +436,7 @@ where
     let mut masking = None;
     let mut masking_location = None;
 
-    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192));
+    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(1024));
 
     let fasta_queue_in = Arc::clone(&fasta_queue);
     let fasta_queue_out = Arc::clone(&fasta_queue);
@@ -444,8 +444,9 @@ where
     // Pop to a new thread that pushes FASTA sequences into the sequence buffer...
     thread::scope(|s| {
         let fasta_thread = s.spawn(|_| {
+            let mut fasta_thread_spins: usize = 0;
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
-            let mut in_buf_reader = BufReader::with_capacity(8 * 1024, in_buf);
+            let mut in_buf_reader = BufReader::with_capacity(64 * 1024, in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
 
             let backoff = Backoff::new();
@@ -455,12 +456,14 @@ where
                 while let Err(z) = fasta_queue_in.push(d) {
                     d = z;
                     backoff.snooze();
+                    fasta_thread_spins = fasta_thread_spins.saturating_add(1);
                 }
             }
 
             while fasta_queue_in.push(Work::Shutdown).is_err() {
                 backoff.snooze();
             }
+            log::debug!("fasta_thread_spins: {}", fasta_thread_spins);
         });
 
         let mut out_buf = BufWriter::new(&mut out_fh);
@@ -482,6 +485,7 @@ where
 
             let backoff = Backoff::new();
 
+            let mut fasta_queue_spins: usize = 0;
             loop {
                 match fasta_queue_out.pop() {
                     Some(Work::FastaPayload(seq)) => {
@@ -502,6 +506,7 @@ where
                     Some(Work::FastqPayload(_)) => panic!("Received FASTQ payload in FASTA thread"),
                     Some(Work::Shutdown) => break,
                     None => {
+                        fasta_queue_spins = fasta_queue_spins.saturating_add(1);
                         backoff.snooze();
                     }
                 }
@@ -512,6 +517,8 @@ where
                 Ok(()) => (),
                 Err(x) => panic!("Unable to finalize sequence buffer, {:#?}", x),
             };
+
+            log::debug!("fasta_queue_spins: {}", fasta_queue_spins);
 
             // Return seq_locs to the main thread
             (seq_locs, headers, ids, ids_string, masking)

@@ -134,7 +134,7 @@ fn main() {
             none,
             blocksize,
         } => convert(
-            &input,
+            input,
             *threads as usize,
             *zstd,
             *lz4,
