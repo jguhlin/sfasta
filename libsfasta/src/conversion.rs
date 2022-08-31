@@ -227,7 +227,7 @@ impl Converter {
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer = crate::dual_level_index::DualIndexBuilder::with_capacity(seq_locs.len());
 
-        let mut out_buf = BufWriter::with_capacity(128 * 1024, out_fh);
+        let mut out_buf = BufWriter::with_capacity(256 * 1024, out_fh);
 
         let start_time = std::time::Instant::now();
 
@@ -346,6 +346,8 @@ impl Converter {
         log::debug!("Directory write time: {:?}", end_time - start_time);
 
         log::debug!("DEBUG: {:?}", debug_size);
+
+        out_buf.flush().expect("Unable to flush output file");
 
         let fn_end_time = std::time::Instant::now();
         log::debug!("Conversion time: {:?}", fn_end_time - fn_start_time);
