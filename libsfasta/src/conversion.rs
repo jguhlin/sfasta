@@ -561,6 +561,7 @@ where
                         log::debug!("output_spins: {}", output_spins);
                         break;
                     } else {
+                        reader_handle.thread().unpark();
                         output_spins = output_spins.saturating_add(1);
                         backoff.snooze();
                     }
