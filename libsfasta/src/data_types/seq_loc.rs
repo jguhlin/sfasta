@@ -36,11 +36,13 @@ impl SeqLocs {
 
     pub fn prefetch<R>(&mut self, mut in_buf: &mut R)
     where
-        R: Read + Seek
+        R: Read + Seek,
     {
         let mut data = Vec::with_capacity(self.len());
+        log::debug!("Total SeqLoc Blocks: {}", self.block_locations.as_ref().unwrap().len());
 
         for i in 0..self.len() {
+            log::debug!("Prefetching seqloc: {}", i);
             assert!(i < std::u32::MAX as usize);
             assert!(i < self.len());
             let seq_loc = self.get_block_uncached(&mut in_buf, i as u32);
@@ -268,15 +270,14 @@ impl SeqLocs {
 
         if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
             let cache = self.cache.as_ref().unwrap();
-                &cache.1
+            &cache.1
         } else {
             let seqlocs = self.get_block_uncached(in_buf, block);
-       
-                self.cache = Some((block as u32, seqlocs));
-        
-                &self.cache.as_ref().unwrap().1
+
+            self.cache = Some((block as u32, seqlocs));
+
+            &self.cache.as_ref().unwrap().1
         }
-        
     }
 
     fn get_block_uncached<R>(&self, mut in_buf: &mut R, block: u32) -> Vec<SeqLoc>
@@ -286,22 +287,22 @@ impl SeqLocs {
         let block_locations = self.block_locations.as_ref().unwrap();
         let block_location = block_locations[block as usize];
         in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-        
+
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let compressed_block: Vec<u8> = bincode::decode_from_std_read(&mut in_buf, bincode_config)
             .expect("Unable to read block");
-            let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
-            decompressor.include_magicbytes(false).unwrap();
-    
-            let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
-    
-            decompressor.read_to_end(&mut decompressed).unwrap();
-    
-            let seqlocs: Vec<SeqLoc> =
-                bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
-                    .expect("Unable to read block");
-            seqlocs
+        let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
+        decompressor.include_magicbytes(false).unwrap();
+
+        let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
+
+        decompressor.read_to_end(&mut decompressed).unwrap();
+
+        let seqlocs: Vec<SeqLoc> =
+            bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
+                .expect("Unable to read block");
+        seqlocs
     }
 
     pub fn get_seqloc<R>(&mut self, in_buf: &mut R, index: u32) -> SeqLoc

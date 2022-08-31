@@ -201,16 +201,24 @@ impl Ids {
         id
     }
 
-    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32)
+    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<u8>
     where
         R: Read + Seek,
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
         let block_locations = self.block_locations.as_ref().unwrap();
 
-        let mut id = String::with_capacity(64);
+        let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
+        decompressor.include_magicbytes(false).unwrap();
 
+        let block_location = block_locations[block as usize];
+        in_buf.seek(SeekFrom::Start(block_location)).unwrap();
+        let compressed_block: Vec<u8> =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
+        decompressor
+            .decompress(&compressed_block, self.block_size)
+            .unwrap()
     }
 
     // TODO: Repetitive code...
