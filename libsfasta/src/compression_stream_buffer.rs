@@ -319,6 +319,7 @@ fn _compression_worker_thread(
 ) {
     let mut result;
     let backoff = Backoff::new();
+    let mut compression_worker_spins: usize = 0;
 
     loop {
         result = compress_queue.pop();
@@ -326,9 +327,11 @@ fn _compression_worker_thread(
         match result {
             None => {
                 if shutdown.load(Ordering::Relaxed) {
+                    log::debug!("Compression worker thread spins: {}", compression_worker_spins);
                     return;
                 } else {
                     backoff.snooze();
+                    compression_worker_spins = compression_worker_spins.saturating_add(1);
                     if backoff.is_completed() {
                         thread::park();
                         backoff.reset();
