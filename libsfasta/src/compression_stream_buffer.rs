@@ -329,7 +329,7 @@ fn _compression_worker_thread(
                         backoff.reset();
                     }
                 }
-            },
+            }
             Some((block_id, sb)) => {
                 let sbc = sb.compress(compression_type);
 

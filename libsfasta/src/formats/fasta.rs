@@ -191,7 +191,10 @@ mod tests {
         let mut fasta = Fasta::from_buffer(&mut inner);
         let s = fasta.next().unwrap();
         println!("{:#?}", s.header);
-        assert!(&s.header == &Some("I have more information in the rest of the FASTA header".to_string()));
+        assert!(
+            &s.header
+                == &Some("I have more information in the rest of the FASTA header".to_string())
+        );
     }
 
     #[test]

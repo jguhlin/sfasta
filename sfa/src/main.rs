@@ -411,7 +411,6 @@ fn convert(
                 break;
             }
             s.send(libsfasta::utils::ReaderData::Data(buffer[..bytes_read].to_vec())).unwrap();
-
         }
     });
 
