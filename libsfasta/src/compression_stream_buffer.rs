@@ -126,6 +126,13 @@ impl CompressionStreamBuffer {
         buffer
     }
 
+    pub fn wakeup(&self) {
+        self.sort_worker.as_ref().unwrap().thread().unpark();
+        for i in self.workers.iter() {
+            i.thread().unpark();
+        }
+    }
+
     pub fn initialize(&mut self) {
         for _ in 0..self.threads {
             let shutdown_copy = Arc::clone(&self.shutdown);
@@ -327,7 +334,10 @@ fn _compression_worker_thread(
         match result {
             None => {
                 if shutdown.load(Ordering::Relaxed) {
-                    log::debug!("Compression worker thread spins: {}", compression_worker_spins);
+                    log::debug!(
+                        "Compression worker thread spins: {}",
+                        compression_worker_spins
+                    );
                     return;
                 } else {
                     backoff.snooze();
