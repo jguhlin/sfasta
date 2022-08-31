@@ -1,6 +1,3 @@
-// TODO: Add caching
-// This is not even a good copy of headers... could it be generic?
-
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::data_types::{zstd_encoder, CompressionType, Loc};
@@ -15,6 +12,7 @@ pub struct Masking {
     pub data: Option<Vec<u32>>, // Only stored for writing
     num_bits: u8,
     cache: Option<(u32, Vec<u32>)>,
+    total_blocks: u32,
 }
 
 impl Default for Masking {
@@ -25,6 +23,7 @@ impl Default for Masking {
             data: None,
             num_bits: 0,
             cache: None,
+            total_blocks: 0,
         }
     }
 }
@@ -70,8 +69,10 @@ impl Masking {
 
         bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
 
         for bp in packed {
+            self.total_blocks = self.total_blocks.saturating_add(1);
             let len = bincode::encode_into_std_write(&bp, &mut out_buf, bincode_config).unwrap();
             if bitpacked_len == 0 && bp.is_packed() {
                 bitpacked_len = len as u64;
@@ -85,6 +86,7 @@ impl Masking {
 
         bincode::encode_into_std_write(&bitpacked_len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
 
         // Back to the end so we don't interfere with anything...
         out_buf.seek(SeekFrom::Start(end)).unwrap();
@@ -137,61 +139,78 @@ impl Masking {
 
         masking.bitpack_len = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
         masking.num_bits = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        masking.total_blocks = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
         masking
     }
 
-    pub fn get_block<R>(&mut self, mut in_buf: &mut R, block: u32) -> &[u32]
+    pub fn prefetch<R>(&mut self, in_buf: &mut R)
+    where
+        R: Read + Seek,
+    {
+        let mut data = Vec::new();
+        for i in 0..self.total_blocks {
+            data.extend(self.get_block_uncached(in_buf, i as u32));
+        }
+    }
+
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[u32]
     where
         R: Read + Seek,
     {
         if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
-            let (block_num, data) = self.cache.as_ref().unwrap();
-            return &self.cache.as_ref().unwrap().1;
+            &self.cache.as_ref().unwrap().1
         } else {
-            let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-            let block_position = self.location + 8 + 1 + (block as u64 * self.bitpack_len);
-            in_buf.seek(SeekFrom::Start(block_position)).unwrap();
-            let bp: Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-            let unpacked = bp.unpack(self.num_bits);
-            self.cache = Some((block, unpacked));
-            return &self.cache.as_ref().unwrap().1;
+            let blockdata = self.get_block_uncached(in_buf, block);
+            self.cache = Some((block, blockdata));
+            &self.cache.as_ref().unwrap().1
         }
     }
 
-    /// Masks the sequence in place
-    pub fn mask_sequence<R>(&mut self, mut in_buf: &mut R, loc: (u32, u32), mut seq: &mut [u8])
+    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<u32>
     where
         R: Read + Seek,
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        // Skip over the bitpack_len and num_bits
-        in_buf.seek(SeekFrom::Start(self.location + 8 + 1)).unwrap();
+        let block_position = self.location + 8 + 1 + 4 + (block as u64 * self.bitpack_len);
+        in_buf.seek(SeekFrom::Start(block_position)).unwrap();
+        let bp: Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        bp.unpack(self.num_bits)
+    }
 
-        let starting_block = loc.0 / BitPacker8x::BLOCK_LEN as u32;
-        let ending_block = (loc.0 + loc.1 - 1) / BitPacker8x::BLOCK_LEN as u32;
-        let mut in_block_pos = loc.0 % BitPacker8x::BLOCK_LEN as u32;
-
-        let mut to_fetch = loc.1;
+    /// Masks the sequence in place
+    pub fn mask_sequence<R>(&mut self, mut in_buf: &mut R, loc: (u32, u32), seq: &mut [u8])
+    where
+        R: Read + Seek,
+    {
         let mut u32s: Vec<u32> = Vec::new();
 
-        for block in starting_block..=ending_block {
-            assert!(to_fetch > 0);
-            let unpacked = self.get_block(&mut in_buf, block);
-            let mut end = std::cmp::min(BitPacker8x::BLOCK_LEN, to_fetch as usize);
-            end = std::cmp::min(end, unpacked.len() - in_block_pos as usize);
+        if self.data.is_some() {
+            u32s.extend(
+                self.data.as_ref().unwrap()[loc.0 as usize..(loc.0 + loc.1) as usize].iter(),
+            );
+        } else {
+            let starting_block = loc.0 / BitPacker8x::BLOCK_LEN as u32;
+            let ending_block = (loc.0 + loc.1 - 1) / BitPacker8x::BLOCK_LEN as u32;
+            let mut in_block_pos = loc.0 % BitPacker8x::BLOCK_LEN as u32;
 
-            println!("End: {}", end);
+            let mut to_fetch = loc.1;
 
-            u32s.extend(&unpacked[in_block_pos as usize..in_block_pos as usize + end]);
-            to_fetch = to_fetch.saturating_sub(end as u32);
-            in_block_pos = 0;
+            for block in starting_block..=ending_block {
+                assert!(to_fetch > 0);
+                let unpacked = self.get_block(&mut in_buf, block);
+                let mut end = std::cmp::min(BitPacker8x::BLOCK_LEN, to_fetch as usize);
+                end = std::cmp::min(end, unpacked.len() - in_block_pos as usize);
+
+                u32s.extend(&unpacked[in_block_pos as usize..in_block_pos as usize + end]);
+                to_fetch = to_fetch.saturating_sub(end as u32);
+                in_block_pos = 0;
+            }
         }
 
         let commands = convert_u32_to_commands(&u32s);
-        mask_sequence(&commands, &mut seq);
+        mask_sequence(&commands, seq);
     }
 }
 

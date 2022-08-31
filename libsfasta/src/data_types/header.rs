@@ -156,7 +156,7 @@ impl Headers {
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             data.extend(self.get_block_uncached(in_buf, i as u32));
         }
-        log::debug!("ID Prefetching done: {}", data.len());
+        log::debug!("Header Prefetching done: {}", data.len());
         self.data = Some(data);
     }
 
@@ -206,13 +206,13 @@ impl Headers {
             let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
             header.push_str(
-                std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..end as usize])
+                std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..=end as usize])
                     .unwrap(),
             );
         } else {
             for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
                 let block = self.get_block(in_buf, block as u32);
-                header.push_str(std::str::from_utf8(&block[start as usize..end as usize]).unwrap());
+                header.push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
             }
         }
 

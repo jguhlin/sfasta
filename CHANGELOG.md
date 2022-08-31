@@ -1,8 +1,9 @@
-# 0.3.4 UNRELEASED
+# 0.3.4 UNRELEASED BREAKING FILE FORMAT
 ## Major Features
+Breaks file format, please convert to FASTA then back to SFA
 Far better CPU handling
 Updated FASTQ file parser
-Prefetching for indices (SeqLocs for now) for speeding up viewing entire files
+Prefetching data for speeding up viewing entire files
 
 ## Minor Changes
 Print out the correct version from cargo.toml

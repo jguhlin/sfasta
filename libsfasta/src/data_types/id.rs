@@ -202,13 +202,13 @@ impl Ids {
             let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
             id.push_str(
-                std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..end as usize])
+                std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..=end as usize])
                     .unwrap(),
             );
         } else {
             for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
                 let block = self.get_block(in_buf, block as u32);
-                id.push_str(std::str::from_utf8(&block[start as usize..end as usize]).unwrap());
+                id.push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
             }
         }
 
@@ -222,7 +222,7 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
-    fn test_add_header() {
+    fn test_add_id() {
         let mut ids = Ids {
             block_size: 10,
             ..Default::default()
