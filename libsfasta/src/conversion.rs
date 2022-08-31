@@ -349,7 +349,6 @@ impl Converter {
 
         let fn_end_time = std::time::Instant::now();
         log::debug!("Conversion time: {:?}", fn_end_time - fn_start_time);
-
     }
 }
 

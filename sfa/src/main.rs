@@ -399,7 +399,7 @@ fn convert(
     };
 
     let buf = generic_open_file_pb(pb, fasta_filename);
-    let mut buf = buf.2;
+    let buf = buf.2;
 
     let (s, r) = crossbeam::channel::bounded(16);
 
