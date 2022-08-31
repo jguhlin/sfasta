@@ -103,7 +103,6 @@ impl Masking {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         self.location = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        // let (num_bits, packed) = bitpack_u32(&self.data.as_ref().unwrap());
 
         for chunk in self.data.take().unwrap().chunks(2 * 1024) {
             let mut encoder = zstd_encoder(1);
