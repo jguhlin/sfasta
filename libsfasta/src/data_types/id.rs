@@ -140,6 +140,21 @@ impl Ids {
         ids
     }
 
+    // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
+    pub fn prefetch<R>(&mut self, in_buf: &mut R)
+    where
+        R: Read + Seek,
+    {
+        let mut data =
+            Vec::with_capacity(self.block_size * self.block_locations.as_ref().unwrap().len());
+
+        for i in 0..self.block_locations.as_ref().unwrap().len() {
+            data.extend(self.get_block_uncached(in_buf, i as u32));
+        }
+        log::debug!("ID Prefetching done: {}", data.len());
+        self.data = Some(data);
+    }
+
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
     where
         R: Read + Seek,
@@ -172,62 +187,28 @@ impl Ids {
             .unwrap()
     }
 
-    // TODO: Repetitive code...
-    pub fn get_id<R>(&mut self, mut in_buf: &mut R, loc: &[Loc]) -> String
+    pub fn get_id<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-        let block_locations = self.block_locations.as_ref().unwrap();
-
         let mut id = String::with_capacity(64);
 
-        if self.cache.is_some() {
-            for (block, (start, end)) in loc
-                .iter()
-                .map(|x| x.original_format(self.block_size as u32))
-            {
-                let cache = self.cache.as_mut().unwrap();
-                if block == cache.0 {
-                    let start = start as usize;
-                    let end = end as usize;
-                    id.push_str(std::str::from_utf8(&cache.1[start..=end]).unwrap());
-                } else {
-                    let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
-                    decompressor.include_magicbytes(false).unwrap();
+        let block_size = self.block_size as u32;
 
-                    for i in loc {
-                        let block_location = block_locations[block as usize];
-                        in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-                        let compressed_block: Vec<u8> =
-                            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-                        let decompressed_block = decompressor
-                            .decompress(&compressed_block, self.block_size)
-                            .unwrap();
-                        let start = start as usize;
-                        let end = end as usize;
-                        id.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
-                    }
-                }
-            }
+        if self.data.is_some() {
+            let loc0 = loc[0].original_format(block_size);
+            let loc1 = loc[loc.len() - 1].original_format(block_size);
+
+            let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
+            let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
+            id.push_str(
+                std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..end as usize])
+                    .unwrap(),
+            );
         } else {
-            let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
-            decompressor.include_magicbytes(false).unwrap();
-
-            for (block, (start, end)) in loc
-                .iter()
-                .map(|x| x.original_format(self.block_size as u32))
-            {
-                let block_location = block_locations[block as usize];
-                in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-                let compressed_block: Vec<u8> =
-                    bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-                let decompressed_block = decompressor
-                    .decompress(&compressed_block, self.block_size)
-                    .unwrap();
-                let start = start as usize;
-                let end = end as usize;
-                id.push_str(std::str::from_utf8(&decompressed_block[start..=end]).unwrap());
+            for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
+                let block = self.get_block(in_buf, block as u32);
+                id.push_str(std::str::from_utf8(&block[start as usize..end as usize]).unwrap());
             }
         }
 

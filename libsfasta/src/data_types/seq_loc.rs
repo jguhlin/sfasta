@@ -39,7 +39,10 @@ impl SeqLocs {
         R: Read + Seek,
     {
         let mut data = Vec::with_capacity(self.len());
-        log::debug!("Total SeqLoc Blocks: {}", self.block_locations.as_ref().unwrap().len());
+        log::debug!(
+            "Total SeqLoc Blocks: {}",
+            self.block_locations.as_ref().unwrap().len()
+        );
 
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             log::debug!("Reading SeqLoc Block: {}", i);

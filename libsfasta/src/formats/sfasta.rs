@@ -324,10 +324,12 @@ impl SfastaParser {
         }
 
         if sfasta.directory.ids_loc.is_some() {
-            sfasta.ids = Some(Ids::from_buffer(
-                &mut in_buf,
-                sfasta.directory.ids_loc.unwrap().get() as u64,
-            ));
+            let mut ids =
+                Ids::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64);
+            if prefetch {
+                ids.prefetch(&mut in_buf);
+            }
+            sfasta.ids = Some(ids);
         }
 
         if sfasta.directory.masking_loc.is_some() {
