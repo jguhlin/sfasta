@@ -13,7 +13,7 @@ use git_version::git_version;
 
 use std::fs;
 use std::fs::{metadata, File};
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Write};
 use std::path::Path;
 
 use clap::{arg, command, Command, Parser, Subcommand};
@@ -282,11 +282,11 @@ fn main() {
     } */
 }
 
-fn print_sequence(seq: &[u8], line_length: usize) {
+fn print_sequence(stdout: &mut std::io::StdoutLock, seq: &[u8], line_length: usize) {
     let mut i = 0;
     while i < seq.len() {
         let end = std::cmp::min(i + line_length, seq.len());
-        println!("{}", from_utf8(&seq[i..end]).unwrap());
+        writeln!(stdout, "{}", from_utf8(&seq[i..end]).unwrap());
         i += line_length;
     }
 }
@@ -300,6 +300,10 @@ fn faidx(input: &str, ids: &Vec<String>) {
     let mut sfasta =
         SfastaParser::open_from_buffer(BufReader::with_capacity(128 * 1024, in_buf), false);
 
+    use std::io::Write;
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+
     for i in ids {
         let result = sfasta
             .find(i)
@@ -310,9 +314,9 @@ fn faidx(input: &str, ids: &Vec<String>) {
             let header = sfasta
                 .get_header(&result.headers.as_ref().unwrap())
                 .expect("Unable to fetch header");
-            println!(">{} {}", i, header);
+            writeln!(stdout, ">{} {}", i, header);
         } else {
-            println!(">{}", i);
+            writeln!(stdout, ">{}", i);
         }
 
         let mut sequence = sfasta
@@ -320,7 +324,7 @@ fn faidx(input: &str, ids: &Vec<String>) {
             .expect("Unable to fetch sequence");
 
         // 60 matches samtools faidx output
-        print_sequence(&sequence, 60);
+        print_sequence(&mut stdout, &sequence, 60);
     }
 }
 
@@ -335,15 +339,18 @@ fn view(input: &str) {
         panic!("File is empty or corrupt");
     }
 
+    let stdout = std::io::stdout();
+    let mut stdout = stdout.lock();
+
     for seqloc in sfasta.seqlocs.as_mut().unwrap().data.take().unwrap().iter() {
         let id = &sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
         if seqloc.headers.is_some() {
             let header = sfasta
                 .get_header(seqloc.headers.as_ref().unwrap())
                 .expect("Unable to fetch header");
-            println!(">{} {}", id, header);
+            writeln!(stdout, ">{} {}", id, header).expect("Unable to write ID");
         } else {
-            println!(">{}", id);
+            writeln!(stdout, ">{}", id).expect("Unable to write ID");
         }
 
         let sequence = sfasta
@@ -352,7 +359,7 @@ fn view(input: &str) {
 
         // 60 matches samtools faidx output
         // But 80 is common elsewhere...
-        print_sequence(&sequence, 80);
+        print_sequence(&mut stdout, &sequence, 80);
     }
 }
 

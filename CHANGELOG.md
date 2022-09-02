@@ -1,5 +1,5 @@
 # 0.3.4 UNRELEASED BREAKING FILE FORMAT
-## Major Features
+## Major Changes
 Breaks file format, please convert to FASTA then back to SFA
 Far better CPU handling
 Updated FASTQ file parser
