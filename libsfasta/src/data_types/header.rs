@@ -212,7 +212,8 @@ impl Headers {
         } else {
             for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
                 let block = self.get_block(in_buf, block as u32);
-                header.push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
+                header
+                    .push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
             }
         }
 

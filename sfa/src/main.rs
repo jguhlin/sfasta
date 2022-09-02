@@ -13,7 +13,7 @@ use git_version::git_version;
 
 use std::fs;
 use std::fs::{metadata, File};
-use std::io::{BufReader, Read, Write};
+use std::io::{BufReader, IoSlice, Read, Write};
 use std::path::Path;
 
 use clap::{arg, command, Command, Parser, Subcommand};
@@ -283,12 +283,18 @@ fn main() {
 }
 
 fn print_sequence(stdout: &mut std::io::StdoutLock, seq: &[u8], line_length: usize) {
-    let mut i = 0;
-    while i < seq.len() {
+    // let mut i = 0;
+
+    seq.chunks(line_length).for_each(|x| {
+        stdout.write_all(x).expect("Unable to write to stdout");
+        stdout.write_all(b"\n").expect("Unable to write to stdout");
+    });
+
+    /*while i < seq.len() {
         let end = std::cmp::min(i + line_length, seq.len());
-        writeln!(stdout, "{}", from_utf8(&seq[i..end]).unwrap());
+        writeln!(&mut stdout, "{}", from_utf8(&seq[i..end]).unwrap()).expect("Unable to write to stdout");
         i += line_length;
-    }
+    }*/
 }
 
 // TODO: Subsequence support
@@ -300,7 +306,6 @@ fn faidx(input: &str, ids: &Vec<String>) {
     let mut sfasta =
         SfastaParser::open_from_buffer(BufReader::with_capacity(128 * 1024, in_buf), false);
 
-    use std::io::Write;
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 
@@ -319,12 +324,13 @@ fn faidx(input: &str, ids: &Vec<String>) {
             writeln!(stdout, ">{}", i);
         }
 
-        let mut sequence = sfasta
+        let sequence = sfasta
             .get_sequence(&result)
             .expect("Unable to fetch sequence");
 
         // 60 matches samtools faidx output
         print_sequence(&mut stdout, &sequence, 60);
+        stdout.flush();
     }
 }
 
@@ -348,9 +354,14 @@ fn view(input: &str) {
             let header = sfasta
                 .get_header(seqloc.headers.as_ref().unwrap())
                 .expect("Unable to fetch header");
-            writeln!(stdout, ">{} {}", id, header).expect("Unable to write ID");
+            stdout
+                .write_all(format!(">{} {}\n", id, header).as_bytes())
+                .expect("Unable to write to stdout");
+            // stdout.write_all(format!(">{} {}", id, header).as_bytes()).unwrap();
+            // writeln!(stdout, ">{} {}", id, header).expect("Unable to write ID");
         } else {
-            writeln!(stdout, ">{}", id).expect("Unable to write ID");
+            stdout.write_all(format!(">{}\n", id).as_bytes()).unwrap();
+            // writeln!(stdout, ">{}", id).expect("Unable to write ID");
         }
 
         let sequence = sfasta
@@ -360,6 +371,7 @@ fn view(input: &str) {
         // 60 matches samtools faidx output
         // But 80 is common elsewhere...
         print_sequence(&mut stdout, &sequence, 80);
+        stdout.flush();
     }
 }
 

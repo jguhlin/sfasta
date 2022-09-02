@@ -26,8 +26,6 @@ use rayon::prelude::*;
 
 // Goal is to fit as many commands into a u32 as possible
 
-
-
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Ml32bit {
     Pass,            // Not a command. When reached, ignore the rest of the u32
@@ -65,18 +63,18 @@ impl Ml32bit {
 
     pub const fn important_bits(&self) -> &'static str {
         match self {
-            Ml32bit::SkipAheadu4(_)  => "1000____",
-            Ml32bit::SkipAheadu8(_)  => "0100________",
+            Ml32bit::SkipAheadu4(_) => "1000____",
+            Ml32bit::SkipAheadu8(_) => "0100________",
             Ml32bit::SkipAheadu16(_) => "0101________________",
             Ml32bit::SkipAheadu20(_) => "0010____________________",
             Ml32bit::SkipAheadu24(_) => "0011________________________",
-            Ml32bit::Masku4(_)       => "1001____",
-            Ml32bit::Masku8(_)       => "1010________",
-            Ml32bit::Masku16(_)      => "1011________________",
-            Ml32bit::Masku20(_)      => "1100____________________",
-            Ml32bit::Masku24(_)      => "1101________________________",
-            Ml32bit::Pass            => "0000",
-            Ml32bit::Stop            => "1111",
+            Ml32bit::Masku4(_) => "1001____",
+            Ml32bit::Masku8(_) => "1010________",
+            Ml32bit::Masku16(_) => "1011________________",
+            Ml32bit::Masku20(_) => "1100____________________",
+            Ml32bit::Masku24(_) => "1101________________________",
+            Ml32bit::Pass => "0000",
+            Ml32bit::Stop => "1111",
         }
     }
 }
@@ -454,77 +452,83 @@ impl BitPattern {
 
 // Probably the worst way to get a speedup....
 pub fn convert_u32_to_commands2(u32s: &[u32]) -> Vec<Ml32bit> {
-    u32s.par_iter().map(|cur_u32| {
-        let cur_u32_bits = cur_u32.view_bits::<Lsb0>();
-        let mut i = 0;
-        let mut commands = Vec::new();
-        while i < 32 {
-            let command = match cur_u32_bits[i..i + 4].load::<u8>() {
-                0b0000 => {
-                    // PASS command indicates skip to next u32
-                    i = 32;
-                    continue;
-                }
-                0b1000 => {
-                    let len = cur_u32_bits[i + 4..i + 8].load::<u8>();
-                    i += 8;
-                    Ml32bit::SkipAheadu4(len)
-                }
-                0b0100 => {
-                    let len = cur_u32_bits[i + 4..i + 12].load::<u8>();
-                    i += 12;
-                    Ml32bit::SkipAheadu8(len)
-                }
-                0b0101 => {
-                    let len = cur_u32_bits[i + 4..i + 20].load::<u16>();
-                    i += 20;
-                    Ml32bit::SkipAheadu16(len)
-                }
-                0b0010 => {
-                    let len = cur_u32_bits[i + 4..i + 24].load::<u32>();
-                    i += 24;
-                    Ml32bit::SkipAheadu20(len)
-                }
-                0b0011 => {
-                    let len = cur_u32_bits[i + 4..i + 28].load::<u32>();
-                    i += 28;
-                    Ml32bit::SkipAheadu24(len)
-                }
-                0b1001 => {
-                    let len = cur_u32_bits[i + 4..i + 8].load::<u8>();
-                    i += 8;
-                    Ml32bit::Masku4(len)
-                }
-                0b0110 => {
-                    let len = cur_u32_bits[i + 4..i + 12].load::<u8>();
-                    i += 12;
-                    Ml32bit::Masku8(len)
-                }
-                0b0111 => {
-                    let len = cur_u32_bits[i + 4..i + 20].load::<u16>();
-                    i += 20;
-                    Ml32bit::Masku16(len)
-                }
-                0b1100 => {
-                    let len = cur_u32_bits[i + 4..i + 24].load::<u32>();
-                    i += 24;
-                    Ml32bit::Masku20(len)
-                }
-                0b1101 => {
-                    let len = cur_u32_bits[i + 4..i + 28].load::<u32>();
-                    i += 28;
-                    Ml32bit::Masku24(len)
-                }
-                0b1111 => {
-                    // We don't need the stop command AND it means the end of the commands...
-                    break;
-                }
-                _ => panic!("Invalid command"),
-            };
-            commands.push(command);
-        };
-        commands
-    }).collect::<Vec<Vec<Ml32bit>>>().iter().flatten().cloned().collect()
+    u32s.par_iter()
+        .map(|cur_u32| {
+            let cur_u32_bits = cur_u32.view_bits::<Lsb0>();
+            let mut i = 0;
+            let mut commands = Vec::new();
+            while i < 32 {
+                let command = match cur_u32_bits[i..i + 4].load::<u8>() {
+                    0b0000 => {
+                        // PASS command indicates skip to next u32
+                        i = 32;
+                        continue;
+                    }
+                    0b1000 => {
+                        let len = cur_u32_bits[i + 4..i + 8].load::<u8>();
+                        i += 8;
+                        Ml32bit::SkipAheadu4(len)
+                    }
+                    0b0100 => {
+                        let len = cur_u32_bits[i + 4..i + 12].load::<u8>();
+                        i += 12;
+                        Ml32bit::SkipAheadu8(len)
+                    }
+                    0b0101 => {
+                        let len = cur_u32_bits[i + 4..i + 20].load::<u16>();
+                        i += 20;
+                        Ml32bit::SkipAheadu16(len)
+                    }
+                    0b0010 => {
+                        let len = cur_u32_bits[i + 4..i + 24].load::<u32>();
+                        i += 24;
+                        Ml32bit::SkipAheadu20(len)
+                    }
+                    0b0011 => {
+                        let len = cur_u32_bits[i + 4..i + 28].load::<u32>();
+                        i += 28;
+                        Ml32bit::SkipAheadu24(len)
+                    }
+                    0b1001 => {
+                        let len = cur_u32_bits[i + 4..i + 8].load::<u8>();
+                        i += 8;
+                        Ml32bit::Masku4(len)
+                    }
+                    0b0110 => {
+                        let len = cur_u32_bits[i + 4..i + 12].load::<u8>();
+                        i += 12;
+                        Ml32bit::Masku8(len)
+                    }
+                    0b0111 => {
+                        let len = cur_u32_bits[i + 4..i + 20].load::<u16>();
+                        i += 20;
+                        Ml32bit::Masku16(len)
+                    }
+                    0b1100 => {
+                        let len = cur_u32_bits[i + 4..i + 24].load::<u32>();
+                        i += 24;
+                        Ml32bit::Masku20(len)
+                    }
+                    0b1101 => {
+                        let len = cur_u32_bits[i + 4..i + 28].load::<u32>();
+                        i += 28;
+                        Ml32bit::Masku24(len)
+                    }
+                    0b1111 => {
+                        // We don't need the stop command AND it means the end of the commands...
+                        break;
+                    }
+                    _ => panic!("Invalid command"),
+                };
+                commands.push(command);
+            }
+            commands
+        })
+        .collect::<Vec<Vec<Ml32bit>>>()
+        .iter()
+        .flatten()
+        .cloned()
+        .collect()
 }
 
 pub fn convert_u32_to_commands(u32s: &[u32]) -> Vec<Ml32bit> {
