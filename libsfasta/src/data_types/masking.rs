@@ -1,3 +1,7 @@
+// TODO: Just store masking as Vec<Commands> and ignore u32 and benchmark
+// TODO: And while benchmarking, go ahead and store as bits of 0's and 1's for entire seq length
+// and compare...
+
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::data_types::{zstd_encoder, CompressionType, Loc};

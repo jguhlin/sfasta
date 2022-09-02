@@ -1,4 +1,5 @@
 use bitvec::prelude::*;
+use rayon::prelude::*;
 
 // 32-bit masking language
 // Goal is to create masking language that fits in 32-bit words (so we can perform bitpacking)
@@ -25,6 +26,8 @@ use bitvec::prelude::*;
 
 // Goal is to fit as many commands into a u32 as possible
 
+
+
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum Ml32bit {
     Pass,            // Not a command. When reached, ignore the rest of the u32
@@ -42,9 +45,9 @@ pub enum Ml32bit {
 }
 
 impl Ml32bit {
+    #[inline]
     pub fn bitsize(&self) -> usize {
         match self {
-            Ml32bit::Pass => 4,
             Ml32bit::SkipAheadu4(_) => 8,
             Ml32bit::SkipAheadu8(_) => 12,
             Ml32bit::SkipAheadu16(_) => 20,
@@ -55,14 +58,49 @@ impl Ml32bit {
             Ml32bit::Masku16(_) => 20,
             Ml32bit::Masku20(_) => 24,
             Ml32bit::Masku24(_) => 28,
+            Ml32bit::Pass => 4,
             Ml32bit::Stop => 4,
+        }
+    }
+
+    pub const fn important_bits(&self) -> &'static str {
+        match self {
+            Ml32bit::SkipAheadu4(_)  => "1000____",
+            Ml32bit::SkipAheadu8(_)  => "0100________",
+            Ml32bit::SkipAheadu16(_) => "0101________________",
+            Ml32bit::SkipAheadu20(_) => "0010____________________",
+            Ml32bit::SkipAheadu24(_) => "0011________________________",
+            Ml32bit::Masku4(_)       => "1001____",
+            Ml32bit::Masku8(_)       => "1010________",
+            Ml32bit::Masku16(_)      => "1011________________",
+            Ml32bit::Masku20(_)      => "1100____________________",
+            Ml32bit::Masku24(_)      => "1101________________________",
+            Ml32bit::Pass            => "0000",
+            Ml32bit::Stop            => "1111",
         }
     }
 }
 
+pub const fn Ml32bitPossibilities() -> [Ml32bit; 12] {
+    [
+        Ml32bit::Pass,
+        Ml32bit::SkipAheadu4(0),
+        Ml32bit::SkipAheadu8(0),
+        Ml32bit::SkipAheadu16(0),
+        Ml32bit::SkipAheadu20(0),
+        Ml32bit::SkipAheadu24(0),
+        Ml32bit::Masku4(0),
+        Ml32bit::Masku8(0),
+        Ml32bit::Masku16(0),
+        Ml32bit::Masku20(0),
+        Ml32bit::Masku24(0),
+        Ml32bit::Stop,
+    ]
+}
+
 // TODO: Could we match all combinations by using a const fn to generate a lookup table?
 // And would it be faster?
-pub fn parse_ml32bit(ml: u32) -> Vec<Ml32bit> {
+pub fn _parse_ml32bit(ml: u32) -> Vec<Ml32bit> {
     let ml = ml.view_bits::<Lsb0>();
 
     let mut commands = Vec::new();
@@ -284,6 +322,7 @@ pub fn convert_ranges_to_ml32bit(ranges: &[(usize, usize)]) -> Vec<Ml32bit> {
     commands
 }
 
+#[inline]
 pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
     let mut u32s = Vec::new();
     let mut i = 0;
@@ -292,13 +331,6 @@ pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
 
     for command in commands {
         match command {
-            Ml32bit::Pass => {
-                cur_u32_bits[i..i + 4].store(0b0000);
-                u32s.push(cur_u32);
-                cur_u32 = 0u32;
-                cur_u32_bits = cur_u32.view_bits_mut::<Lsb0>();
-                i = 0;
-            }
             Ml32bit::SkipAheadu4(len) => {
                 cur_u32_bits[i..i + 4].store(0b1000);
                 cur_u32_bits[i + 4..i + 8].store(*len);
@@ -356,6 +388,13 @@ pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
                 cur_u32_bits = cur_u32.view_bits_mut::<Lsb0>();
                 i = 0;
             }
+            Ml32bit::Pass => {
+                cur_u32_bits[i..i + 4].store(0b0000);
+                u32s.push(cur_u32);
+                cur_u32 = 0u32;
+                cur_u32_bits = cur_u32.view_bits_mut::<Lsb0>();
+                i = 0;
+            }
         }
 
         if i >= 32 {
@@ -371,6 +410,121 @@ pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
     }
 
     u32s
+}
+
+// From: https://play.rust-lang.org/?version=beta&mode=release&edition=2018&gist=2ff849086024a0a01b958060c3434570
+struct BitPattern {
+    expected: u32,
+    mask: u32,
+}
+
+impl BitPattern {
+    /// Accepts a bit pattern as a string literal.
+    /// - '0' matches a 0 bit
+    /// - '1' matches a 1 bit
+    /// - any other char means "ignore this bit"
+    const fn new(s: &str) -> Self {
+        let mut expected = 0;
+        let mut mask = !0;
+
+        let mut cur_bit = 1 << (s.len() - 1);
+
+        let mut i = 0;
+        while i < s.len() {
+            let val: u8 = s.as_bytes()[i];
+            i += 1;
+
+            if val == b'1' {
+                expected |= cur_bit;
+            } else if val == b'0' {
+                // do nothing
+            } else {
+                mask &= !cur_bit;
+            }
+
+            cur_bit >>= 1;
+        }
+
+        Self { expected, mask }
+    }
+    const fn matches(&self, val: u32) -> bool {
+        (val & self.mask) == self.expected
+    }
+}
+
+// Probably the worst way to get a speedup....
+pub fn convert_u32_to_commands2(u32s: &[u32]) -> Vec<Ml32bit> {
+    u32s.par_iter().map(|cur_u32| {
+        let cur_u32_bits = cur_u32.view_bits::<Lsb0>();
+        let mut i = 0;
+        let mut commands = Vec::new();
+        while i < 32 {
+            let command = match cur_u32_bits[i..i + 4].load::<u8>() {
+                0b0000 => {
+                    // PASS command indicates skip to next u32
+                    i = 32;
+                    continue;
+                }
+                0b1000 => {
+                    let len = cur_u32_bits[i + 4..i + 8].load::<u8>();
+                    i += 8;
+                    Ml32bit::SkipAheadu4(len)
+                }
+                0b0100 => {
+                    let len = cur_u32_bits[i + 4..i + 12].load::<u8>();
+                    i += 12;
+                    Ml32bit::SkipAheadu8(len)
+                }
+                0b0101 => {
+                    let len = cur_u32_bits[i + 4..i + 20].load::<u16>();
+                    i += 20;
+                    Ml32bit::SkipAheadu16(len)
+                }
+                0b0010 => {
+                    let len = cur_u32_bits[i + 4..i + 24].load::<u32>();
+                    i += 24;
+                    Ml32bit::SkipAheadu20(len)
+                }
+                0b0011 => {
+                    let len = cur_u32_bits[i + 4..i + 28].load::<u32>();
+                    i += 28;
+                    Ml32bit::SkipAheadu24(len)
+                }
+                0b1001 => {
+                    let len = cur_u32_bits[i + 4..i + 8].load::<u8>();
+                    i += 8;
+                    Ml32bit::Masku4(len)
+                }
+                0b0110 => {
+                    let len = cur_u32_bits[i + 4..i + 12].load::<u8>();
+                    i += 12;
+                    Ml32bit::Masku8(len)
+                }
+                0b0111 => {
+                    let len = cur_u32_bits[i + 4..i + 20].load::<u16>();
+                    i += 20;
+                    Ml32bit::Masku16(len)
+                }
+                0b1100 => {
+                    let len = cur_u32_bits[i + 4..i + 24].load::<u32>();
+                    i += 24;
+                    Ml32bit::Masku20(len)
+                }
+                0b1101 => {
+                    let len = cur_u32_bits[i + 4..i + 28].load::<u32>();
+                    i += 28;
+                    Ml32bit::Masku24(len)
+                }
+                0b1111 => {
+                    // We don't need the stop command AND it means the end of the commands...
+                    break;
+                }
+                _ => panic!("Invalid command"),
+            };
+            commands.push(command);
+        };
+        commands
+    }).collect::<Vec<Vec<Ml32bit>>>().iter().flatten().cloned().collect()
 }
 
 pub fn convert_u32_to_commands(u32s: &[u32]) -> Vec<Ml32bit> {
@@ -1039,11 +1193,11 @@ mod tests {
             let commands = get_masking_ranges(&seq);
             let ml = convert_ranges_to_ml32bit(&commands);
             let ml_padded = pad_commands_to_u32(&ml);
-            println!("{:#?}", ml_padded);
             let u32s = convert_commands_to_u32(&ml_padded);
             for i in u32s.iter() {
-                println!("{:#034b}", i);
+                println!("{}, {:#034b}, {}", i, i, (i & 4) == 4);
             }
+
             println!("Seq Length: {}", seq.len());
             println!("Length: {}", u32s.len());
             println!("Total Bits: {}", u32s.len() * 32);
@@ -1052,7 +1206,6 @@ mod tests {
             let (num_bits, packed) = bitpack_u32(&u32s);
             println!("Num Bits: {}", num_bits);
             println!("Packed Length: {}", packed.len());
-            println!("{:#?}", packed);
 
             let mut seq = test_seqs[i].as_bytes().to_ascii_uppercase();
             // Remove whitespace
@@ -1063,11 +1216,7 @@ mod tests {
                 .collect::<Vec<u8>>();
             // Apply commands to mask
             let commands = convert_u32_to_commands(&u32s);
-            println!("{:#?}", commands);
             mask_sequence(&commands, &mut seq);
-
-            println!("{}", test_seqs[i]);
-            println!("{}", String::from_utf8(seq.clone()).unwrap());
 
             assert_eq!(
                 seq,
