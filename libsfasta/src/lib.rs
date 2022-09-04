@@ -6,10 +6,6 @@ extern crate rayon;
 #[macro_use]
 extern crate itertools;
 
-extern crate flate2;
-extern crate lz4_flex;
-extern crate zstd;
-
 pub mod compression;
 mod compression_stream_buffer;
 mod conversion;

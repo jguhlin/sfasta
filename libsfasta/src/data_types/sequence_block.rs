@@ -4,6 +4,8 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 use flate2::write::{GzDecoder, GzEncoder};
 use log::{debug, error, info, trace, warn};
+
+#[cfg(not(target_arch = "wasm32"))]
 use xz::read::{XzDecoder, XzEncoder};
 
 pub struct SequenceBlocks {
@@ -31,7 +33,7 @@ impl SequenceBlocks {
             return self.cache.as_ref().unwrap().1.as_slice();
         } else {
             if self.cache == None {
-               self.cache = Some((block, Vec::with_capacity(2 * 1024 * 1024)));
+                self.cache = Some((block, Vec::with_capacity(2 * 1024 * 1024)));
             }
             let byte_loc = self.block_locs[block as usize];
             in_buf
@@ -123,11 +125,16 @@ impl SequenceBlock {
             CompressionType::NONE => {
                 cseq = self.seq;
             }
+            #[cfg(not(target_arch = "wasm32"))]
             CompressionType::XZ => {
                 let mut compressor = XzEncoder::new(&self.seq[..], level as u32);
                 compressor
                     .read_to_end(&mut cseq)
                     .expect("Unable to XZ compress");
+            }
+            #[cfg(target_arch = "wasm32")]
+            CompressionType::XZ => {
+                unimplemented!();
             }
             CompressionType::BROTLI => {
                 let mut compressor =
