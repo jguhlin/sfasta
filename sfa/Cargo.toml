@@ -1,0 +1,47 @@
+[package]
+name = "sfasta"
+version = "0.3.3"
+authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Better FASTA sequence compression and querying"
+repository = "https://github.com/jguhlin/sfasta"
+categories = ["science", "command-line-utilities", "filesystem", "compression"]
+keywords = ["bioinformatics", "fasta", "compression"]
+exclude = [
+	"**/*.fasta",
+	"libsfasta/test_data/",
+	"*.profdata",
+	
+]
+
+[[bin]]
+name = "sfa"
+path = "src/main.rs"
+
+[dependencies]
+libsfasta = { path = "../libsfasta" }
+crossbeam = "0.8.1"
+sigpipe = "0.1.3"
+rand = "0.8.5"
+rand_core = "0.6.3"
+rand_chacha = "0.3.1"
+log = "0.4.17"
+simdutf8 = "0.1.4"
+git-version = "0.3.5" # TODO: Print this out in the library in a version call
+mimalloc = { version = "0.1.29", default-features = false }
+env_logger = "0.9.0"
+
+# Compression algorithms
+lz4_flex = "0.9.4"
+zstd = { version="0.11.2", default-features = false, features=["arrays", "legacy", "zstdmt", "experimental"] } # { git = "https://github.com/gyscos/zstd-rs", features = [ "experimental" ] }
+xz = "0.1.0"
+flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
+snap = "1.0.5"
+brotli = "3.3.4"
+bitpacking = { version = "0.8.4", features = ["bitpacker8x"] }
+indicatif = "0.17.0"
+
+[dependencies.clap]
+version = "3.2.8"
+features = [ "suggestions", "derive", "cargo", "color", "wrap_help"]

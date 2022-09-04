@@ -1,0 +1,66 @@
+[package]
+name = "libsfasta"
+version = "0.3.3"
+authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "Better FASTA sequence compression and querying"
+repository = "https://github.com/jguhlin/sfasta"
+categories = ["science", "command-line-utilities", "filesystem", "compression"]
+keywords = ["bioinformatics", "fasta", "compression"]
+exclude = [
+	"**/*.fasta",
+	"libsfasta/test_data/",
+	"*.profdata",
+	
+]
+[lib]
+crate-type = ["rlib", "cdylib"]
+name = "libsfasta"
+path = "src/lib.rs"
+
+[[bench]]
+name = "ml32bit"
+harness = false
+
+[dependencies]
+rand = "0.8.5"
+rand_core = "0.6.3"
+rand_chacha = "0.3.1"
+log = "0.4.17"
+crossbeam = "0.8.1"
+static_assertions = "1.1.0"
+bincode = { version = "2.0.0-rc.1" } #, features = ["serde"] }
+bytelines = "2.4.0"
+simdutf8 = "0.1.4"
+rayon = "1.5.3"
+itertools = "0.10.3"
+bitvec = "1.0.1"
+env_logger = "0.9.0"
+getrandom = { version = "0.2.7", features = ["js"] }
+
+# Hashers
+twox-hash = "1.6.3"
+ 
+# Compression algorithms
+bitpacking = { version = "0.8.4", features = ["bitpacker8x"] }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+flate2 = { version = "1.0.24", features = ["rust_backend"], default-features = false }
+ruzstd = "0.3.0"
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
+xz = "0.1.0"
+zstd = { version="0.11.2", default-features = false, features=["arrays", "legacy", "zstdmt", "experimental"] } # { git = "https://github.com/gyscos/zstd-rs", features = [ "experimental" ] }
+lz4_flex = "0.9.4"
+brotli = "3.3.4"
+snap = "1.0.5"
+
+[dev-dependencies]
+criterion = "0.3.5"
+humansize = "1.1.1"
+generic-array = "0.14.5"
+numeric-array = "0.5.2"
+num-traits = "0.2.15"
