@@ -32,7 +32,7 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 8,
-            block_size: 4 * 1024 * 1024,    // 1Mb
+            block_size: 4 * 1024 * 1024,    // 4Mb
             seqlocs_chunk_size: 128 * 1024, // 128k
             index: true,
             masking: false,
