@@ -1,11 +1,9 @@
-use std::fs::File;
-use std::io::Read;
-
 use simdutf8::basic::from_utf8;
 
 use crate::data_types::structs::*;
 
 /// Return type of the file format detection function
+#[allow(dead_code)]
 pub enum FileFormat {
     FASTA,
     FASTQ,
@@ -14,6 +12,7 @@ pub enum FileFormat {
 }
 
 /// Detect the file format of a file. Prefer to use the file extension when available instead.
+#[allow(dead_code)]
 pub fn detect_file_format(buffer: &[u8]) -> Result<FileFormat, &'static str> {
     let buffer = from_utf8(&buffer).expect("Unable to parse file as UTF-8");
     if buffer.starts_with(">") {
@@ -29,6 +28,7 @@ pub fn detect_file_format(buffer: &[u8]) -> Result<FileFormat, &'static str> {
 }
 
 /// Return the compression type of a file
+#[allow(dead_code)]
 pub fn detect_compression_format(buffer: &[u8]) -> Result<CompressionType, &'static str> {
     Ok(match buffer {
         [0x1F, 0x8B, ..] => CompressionType::GZIP,

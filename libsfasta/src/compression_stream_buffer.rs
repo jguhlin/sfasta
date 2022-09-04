@@ -30,6 +30,7 @@ impl Default for CompressionStreamBufferConfig {
     }
 }
 
+#[allow(dead_code)]
 impl CompressionStreamBufferConfig {
     pub fn new(
         block_size: u32,
@@ -117,6 +118,7 @@ impl Drop for CompressionStreamBuffer {
     }
 }
 
+#[allow(dead_code)]
 impl CompressionStreamBuffer {
     pub fn from_config(config: CompressionStreamBufferConfig) -> Self {
         let mut buffer = Self::default();

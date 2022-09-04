@@ -79,6 +79,7 @@ impl Ml32bit {
     }
 }
 
+#[allow(non_snake_case)]
 pub const fn Ml32bitPossibilities() -> [Ml32bit; 12] {
     [
         Ml32bit::Pass,
@@ -411,11 +412,13 @@ pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
 }
 
 // From: https://play.rust-lang.org/?version=beta&mode=release&edition=2018&gist=2ff849086024a0a01b958060c3434570
+#[allow(dead_code)]
 struct BitPattern {
     expected: u32,
     mask: u32,
 }
 
+#[allow(dead_code)]
 impl BitPattern {
     /// Accepts a bit pattern as a string literal.
     /// - '0' matches a 0 bit

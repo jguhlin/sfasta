@@ -9,16 +9,13 @@ extern crate indicatif;
 extern crate rand;
 extern crate rand_chacha;
 
-use git_version::git_version;
-
 use std::fs;
 use std::fs::{metadata, File};
-use std::io::{BufReader, IoSlice, Read, Write};
+use std::io::{BufReader, Read, Write};
 use std::path::Path;
 
-use clap::{arg, command, Command, Parser, Subcommand};
+use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
-use simdutf8::basic::from_utf8;
 
 use libsfasta::prelude::*;
 

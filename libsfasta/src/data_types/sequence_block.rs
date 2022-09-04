@@ -3,7 +3,7 @@ use crate::data_types::structs::{default_compression_level, CompressionType};
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use flate2::write::{GzDecoder, GzEncoder};
-use log::{debug, error, info, trace, warn};
+use log::error;
 
 #[cfg(not(target_arch = "wasm32"))]
 use xz::read::{XzDecoder, XzEncoder};
@@ -79,7 +79,7 @@ pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
     encoder
         .include_contentsize(false)
         .expect("Unable to set ZSTD Content Size Flag");
-    encoder.include_dictid(false);
+    encoder.include_dictid(false).expect("Unable to set dictid");
     encoder
 }
 
@@ -134,7 +134,7 @@ impl SequenceBlock {
             }
             #[cfg(target_arch = "wasm32")]
             CompressionType::XZ => {
-                unimplemented!();
+                panic!("XZ compression is not supported on wasm32");
             }
             CompressionType::BROTLI => {
                 let mut compressor =
@@ -223,7 +223,7 @@ impl SequenceBlockCompressed {
         SequenceBlock { seq }
     }
 
-    pub fn decompress_to_buffer(self, compression_type: CompressionType, mut buffer: &mut Vec<u8>) {
+    pub fn decompress_to_buffer(self, compression_type: CompressionType, buffer: &mut Vec<u8>) {
         buffer.clear();
         match compression_type {
             CompressionType::ZSTD => {

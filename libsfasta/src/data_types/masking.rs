@@ -4,7 +4,7 @@
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::data_types::{zstd_encoder, CompressionType, Loc};
+use crate::data_types::zstd_encoder;
 use crate::masking::ml32bit::*;
 use crate::*;
 

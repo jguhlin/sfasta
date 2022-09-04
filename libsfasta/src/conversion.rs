@@ -713,6 +713,7 @@ where
 
 // We have to iterate through the file twice...
 // TODO:
+#[allow(dead_code)]
 pub fn write_fastq_sequence<'write, W, R>(
     sb_config: CompressionStreamBufferConfig,
     in_buf: &mut R,
@@ -875,12 +876,13 @@ where
             }
         }
 
-        let mut in_buf = fastq_thread.join().unwrap();
+        let in_buf = fastq_thread.join().unwrap();
+        reader_handle.join().unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
 
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let _start = out_buf.seek(SeekFrom::Current(0)).unwrap();
         // Write FASTQ scores here...
         let fastq_thread = s.spawn(|_| {
             // Convert reader into buffered reader then into the Fastq struct (and iterator)
@@ -904,7 +906,7 @@ where
         });
 
         let mut sb = CompressionStreamBuffer::from_config(sb_config);
-        let fastq_queue_in = Arc::clone(&fastq_queue);
+        let _fastq_queue_in = Arc::clone(&fastq_queue);
         let fastq_queue_out = Arc::clone(&fastq_queue);
 
         let reader_handle = s.spawn(move |_| {

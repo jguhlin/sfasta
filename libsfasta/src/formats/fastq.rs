@@ -1,5 +1,3 @@
-use bytelines::ByteLines;
-use bytelines::ByteLinesReader;
 use simdutf8::basic::from_utf8;
 
 use std::io::BufRead;
@@ -12,6 +10,7 @@ pub struct Sequence {
     pub scores: Vec<u8>,
 }
 
+#[allow(dead_code)]
 impl Sequence {
     pub fn into_parts(self) -> (String, Option<String>, Vec<u8>, Vec<u8>) {
         {
@@ -31,6 +30,7 @@ pub struct Fastq<'fastq, R: BufRead> {
     state: State,
 }
 
+#[allow(dead_code)]
 impl<'fastq, R: BufRead> Fastq<'fastq, R> {
     pub fn from_buffer(in_buf: &'fastq mut R) -> Fastq<'fastq, R> {
         Fastq {
@@ -152,7 +152,6 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                 }
             }
         }
-        unreachable!();
     }
 }
 
