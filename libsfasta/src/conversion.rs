@@ -144,7 +144,7 @@ impl Converter {
 
     /// Main conversion function
     // TODO: Switch R and W into borrows
-    pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, mut out_fh: &mut Box<W>)
+    pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, out_fh: &mut Box<W>)
     where
         W: WriteAndSeek + 'static,
         R: Read + Send + 'convert,

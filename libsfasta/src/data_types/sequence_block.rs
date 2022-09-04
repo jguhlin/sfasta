@@ -56,6 +56,7 @@ pub struct SequenceBlock {
     pub seq: Vec<u8>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
     let mut encoder = zstd::bulk::Compressor::new(compression_level).unwrap();
     encoder
@@ -83,6 +84,11 @@ pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
     encoder
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
+    unimplemented!("ZSTD encoding is not supported on wasm32");
+}
+
 impl SequenceBlock {
     pub fn compress(self, compression_type: CompressionType) -> SequenceBlockCompressed {
         let level = default_compression_level(compression_type);
@@ -92,11 +98,18 @@ impl SequenceBlock {
         //debug!("Compressing sequence block with length: {}", self.seq.len());
 
         match compression_type {
-            CompressionType::NAFLike => {}
+            CompressionType::NAFLike => {
+                todo!();
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
                 // TODO: Find a way to reuse this context...
                 let mut compressor = zstd_encoder(level);
                 compressor.compress_to_buffer(&self.seq, &mut cseq).unwrap();
+            }
+            #[cfg(target_arch = "wasm32")]
+            CompressionType::ZSTD => {
+                unimplemented!("ZSTD encoding is not supported on wasm32");            
             }
             CompressionType::LZ4 => {
                 let mut compressor = lz4_flex::frame::FrameEncoder::new(cseq);
@@ -174,6 +187,10 @@ impl SequenceBlockCompressed {
         let mut seq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
 
         match compression_type {
+            CompressionType::NAFLike => {
+                todo!();
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
                 let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
                 decoder
@@ -185,12 +202,30 @@ impl SequenceBlockCompressed {
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
             }
+
+            #[cfg(target_arch = "wasm32")]
+            CompressionType::ZSTD => {
+                let mut decoder = ruzstd::StreamingDecoder::new(&self.compressed_seq[..]).unwrap();
+
+                match decoder.read_to_end(&mut seq) {
+                    Ok(x) => x,
+                    Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                };
+            },
+
+
+            #[cfg(not(target_arch = "wasm32"))]
             CompressionType::XZ => {
                 let mut decompressor = XzDecoder::new(&self.compressed_seq[..]);
                 decompressor
                     .read_to_end(&mut seq)
                     .expect("Unable to XZ compress");
             }
+            #[cfg(target_arch = "wasm32")]
+            CompressionType::XZ => {
+                panic!("XZ compression is not supported on wasm32");
+            }
+
             CompressionType::BROTLI => {
                 let mut decompressor =
                     brotli::Decompressor::new(&self.compressed_seq[..], 2 * 1024 * 1024);
