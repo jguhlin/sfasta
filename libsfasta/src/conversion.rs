@@ -496,11 +496,11 @@ where
                 fasta_thread_clone.unpark();
                 match fasta_queue_out.pop() {
                     Some(Work::FastaPayload(seq)) => {
-                        let (seqid, seqheader, mut seq, _) = seq.into_parts();
+                        let (seqid, seqheader, seq, _) = seq.into_parts();
                         let mut location = SeqLoc::new();
-                        location.masking = masking.add_masking(&seq[..]);
-                        let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
-                        let myid = std::sync::Arc::new(seqid);
+                        location.masking = masking.add_masking(&seq.as_ref().unwrap()[..]);
+                        let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
+                        let myid = std::sync::Arc::new(seqid.unwrap());
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add_id(std::sync::Arc::clone(&myid));
                         if let Some(x) = seqheader {
@@ -806,9 +806,9 @@ where
                     Some(Work::FastqPayload(seq)) => {
                         let (seqid, seqheader, mut seq, _) = seq.into_parts();
                         let mut location = SeqLoc::new();
-                        location.masking = masking.add_masking(&seq[..]);
-                        let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
-                        let myid = std::sync::Arc::new(seqid);
+                        location.masking = masking.add_masking(&seq.as_ref().unwrap()[..]);
+                        let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
+                        let myid = std::sync::Arc::new(seqid.unwrap());
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add_id(std::sync::Arc::clone(&myid));
                         if let Some(header) = seqheader {
@@ -892,7 +892,7 @@ where
             let backoff = Backoff::new();
 
             for mut x in fastq {
-                x.sequence.clear(); // No need to send seqs across threads when we are done with that...
+                x.sequence.take(); // No need to send seqs across threads when we are done with that...
                 let mut d = Work::FastqPayload(x);
                 while let Err(z) = fastq_queue_in.push(d) {
                     d = z;

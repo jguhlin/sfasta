@@ -62,24 +62,31 @@ pub struct Header {
     pub compression_type: CompressionType,
 }
 
-#[derive(PartialEq, Eq, Clone, Debug)]
+#[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct Sequence {
-    pub sequence: Vec<u8>,
+    pub sequence: Option<Vec<u8>>,
     pub scores: Option<Vec<u8>>,
     pub header: Option<String>,
-    pub id: String,
+    pub id: Option<String>,
 }
 
 impl Sequence {
-    pub fn into_parts(self) -> (String, Option<String>, Vec<u8>, Option<Vec<u8>>) {
+    pub fn into_parts(
+        self,
+    ) -> (
+        Option<String>,
+        Option<String>,
+        Option<Vec<u8>>,
+        Option<Vec<u8>>,
+    ) {
         {
             (self.id, self.header, self.sequence, self.scores)
         }
     }
 
     pub fn new(
-        sequence: Vec<u8>,
-        id: String,
+        sequence: Option<Vec<u8>>,
+        id: Option<String>,
         header: Option<String>,
         scores: Option<Vec<u8>>,
     ) -> Sequence {
@@ -92,18 +99,18 @@ impl Sequence {
     }
 
     pub fn len(&self) -> usize {
-        self.sequence.len()
+        self.sequence.as_ref().unwrap().len()
     }
 
     pub fn make_uppercase(&mut self) {
-        self.sequence.make_ascii_uppercase();
+        self.sequence.as_mut().unwrap().make_ascii_uppercase();
     }
 
     pub fn make_lowercase(&mut self) {
-        self.sequence.make_ascii_lowercase();
+        self.sequence.as_mut().unwrap().make_ascii_lowercase();
     }
 
     pub fn is_empty(&self) -> bool {
-        self.sequence.is_empty()
+        self.sequence.as_ref().unwrap().is_empty()
     }
 }

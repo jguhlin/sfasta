@@ -55,8 +55,8 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                         if bytes_read == 0 {
                             if self.seqlen > 0 {
                                 let seq = Sequence {
-                                    sequence: self.seqbuffer[..self.seqlen].to_vec(),
-                                    id: self.seqid.take().unwrap(),
+                                    sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
+                                    id: Some(self.seqid.take().unwrap()),
                                     header: self.header.take(),
                                     scores: Some(self.scores_buffer[..self.seqlen].to_vec()),
                                 };
@@ -121,8 +121,8 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             scores_buffer.truncate(self.seqlen);
 
                             let seq = Sequence {
-                                sequence: seqbuffer,
-                                id: self.seqid.take().unwrap(),
+                                sequence: Some(seqbuffer),
+                                id: Some(self.seqid.take().unwrap()),
                                 header: self.header.take(),
                                 scores: Some(scores_buffer),
                             };
@@ -165,20 +165,20 @@ IIII
         let mut cursor = Cursor::new(fastq_data);
         let mut fastq = Fastq::from_buffer(&mut cursor);
         let seq = fastq.next().unwrap();
-        assert_eq!(seq.id, "seq1");
-        assert_eq!(seq.sequence, b"ACGT");
+        assert_eq!(seq.id.unwrap(), "seq1");
+        assert_eq!(seq.sequence.unwrap(), b"ACGT");
         assert_eq!(seq.scores, Some(b"IIII".to_vec()));
         let seq = fastq.next().unwrap();
-        assert_eq!(seq.id, "seq2");
-        assert_eq!(seq.sequence, b"ACGT");
+        assert_eq!(seq.id.unwrap(), "seq2");
+        assert_eq!(seq.sequence.unwrap(), b"ACGT");
         assert_eq!(seq.scores.unwrap(), b"IIII");
         let seq = fastq.next().unwrap();
-        assert_eq!(seq.id, "seq3");
-        assert_eq!(seq.sequence, b"ACGT");
+        assert_eq!(seq.id.unwrap(), "seq3");
+        assert_eq!(seq.sequence.unwrap(), b"ACGT");
         assert_eq!(seq.scores, Some(b"IIII".to_vec()));
         let seq = fastq.next().unwrap();
-        assert_eq!(seq.id, "seq4");
-        assert_eq!(seq.sequence, b"ACGT");
+        assert_eq!(seq.id.unwrap(), "seq4");
+        assert_eq!(seq.sequence.unwrap(), b"ACGT");
         assert_eq!(seq.scores, Some(b"IIII".to_vec()));
         assert!(fastq.next().is_none());
     }

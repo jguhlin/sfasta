@@ -35,8 +35,8 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
             if bytes_read == 0 {
                 if self.seqlen > 0 {
                     let seq = Sequence {
-                        sequence: self.seqbuffer[..self.seqlen].to_vec(),
-                        id: self.next_seqid.take().unwrap(),
+                        sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
+                        id: Some(self.next_seqid.take().unwrap()),
                         header: self.next_header.take(),
                         scores: None,
                     };
@@ -82,8 +82,8 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                             seqbuf.truncate(self.seqlen);
 
                             let seq = Sequence {
-                                sequence: seqbuf,
-                                id: id.unwrap(),
+                                sequence: Some(seqbuf),
+                                id: Some(id.unwrap()),
                                 header,
                                 scores: None,
                             };

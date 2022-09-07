@@ -1,6 +1,8 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::RwLock;
 
+use rand::prelude::*;
+use rand_chacha::ChaCha20Rng;
 use rayon::prelude::*;
 
 use crate::datatypes::*;
@@ -17,7 +19,7 @@ pub struct Sfasta {
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
-    buf: Option<RwLock<Box<dyn ReadAndSeek>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
+    buf: Option<RwLock<Box<dyn ReadAndSeek + Send>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
     pub sequenceblocks: Option<SequenceBlocks>,
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<Headers>,
@@ -360,20 +362,101 @@ impl SfastaParser {
     }
 }
 
+#[derive(PartialEq, Eq, Clone, Copy, Debug)]
+pub enum SeqMode {
+    Linear,
+    Random,
+}
+
+impl Default for SeqMode {
+    fn default() -> Self {
+        SeqMode::Linear
+    }
+}
+
 pub struct Sequences {
     sfasta: Sfasta,
-    i: usize,
+    cur_idx: usize,
+    mode: SeqMode,
+    remaining_index: Option<Vec<usize>>,
+    with_header: bool,
+    with_scores: bool,
+    with_ids: bool,
+    with_sequences: bool,
+    seed: Option<u64>,
 }
 
 #[allow(dead_code)]
 impl Sequences {
     pub fn new(sfasta: Sfasta) -> Sequences {
-        Sequences { sfasta, i: 0 }
+        Sequences {
+            sfasta,
+            cur_idx: 0,
+            mode: SeqMode::default(),
+            remaining_index: None,
+            with_header: false,
+            with_scores: false,
+            with_ids: true,
+            with_sequences: true,
+            seed: None,
+        }
+    }
+
+    // Resets the iterator to the beginning of the sequences
+    pub fn set_mode(&mut self, mode: SeqMode) {
+        self.mode = mode;
+        self.remaining_index = None;
+        self.cur_idx = 0;
     }
 
     /// Convenience function. Likely to be less performant. Prefetch is off by default.
     pub fn from_file(path: &str) -> Sequences {
         Sequences::new(SfastaParser::open(path).expect("Unable to open file"))
+    }
+
+    pub fn with_header(mut self) -> Sequences {
+        self.with_header = true;
+        self
+    }
+
+    pub fn without_header(mut self) -> Sequences {
+        self.with_header = false;
+        self
+    }
+
+    pub fn with_scores(mut self) -> Sequences {
+        self.with_scores = true;
+        self
+    }
+
+    pub fn without_scores(mut self) -> Sequences {
+        self.with_scores = false;
+        self
+    }
+
+    pub fn with_seed(mut self, seed: u64) -> Sequences {
+        self.seed = Some(seed);
+        self
+    }
+
+    pub fn with_ids(mut self) -> Sequences {
+        self.with_ids = true;
+        self
+    }
+
+    pub fn without_ids(mut self) -> Sequences {
+        self.with_ids = false;
+        self
+    }
+
+    pub fn with_sequences(mut self) -> Sequences {
+        self.with_sequences = true;
+        self
+    }
+
+    pub fn without_sequences(mut self) -> Sequences {
+        self.with_sequences = false;
+        self
     }
 }
 
@@ -381,30 +464,68 @@ impl Iterator for Sequences {
     type Item = Sequence;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.sfasta.index.is_none() || self.i >= self.sfasta.len() {
+        if self.sfasta.index.is_none() || self.cur_idx >= self.sfasta.len() {
             return None;
         }
 
-        let seqloc = self.sfasta.seqlocs.as_ref().unwrap().data.as_ref().unwrap()[self.i].clone();
+        if self.mode == SeqMode::Random {
+            if self.remaining_index.is_none() {
+                let mut rng = if let Some(seed) = self.seed {
+                    ChaCha20Rng::seed_from_u64(seed)
+                } else {
+                    ChaCha20Rng::from_entropy()
+                };
 
-        let id = self.sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
-        let mut header = None;
-        if seqloc.headers.is_some() {
-            header = Some(
+                let mut remaining_index: Vec<usize> = (0..self.sfasta.len()).collect();
+                remaining_index.shuffle(&mut rng);
+                self.remaining_index = Some(remaining_index);
+            }
+
+            let idx = self.remaining_index.as_mut().unwrap().pop().unwrap();
+            self.cur_idx = idx;
+        }
+
+        let seqloc =
+            self.sfasta.seqlocs.as_ref().unwrap().data.as_ref().unwrap()[self.cur_idx].clone();
+
+        let id = if self.with_ids {
+            Some(self.sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap())
+        } else {
+            None
+        };
+
+        let header = if self.with_header && seqloc.headers.is_some() {
+            Some(
                 self.sfasta
                     .get_header(seqloc.headers.as_ref().unwrap())
                     .expect("Unable to fetch header"),
-            );
-        }
+            )
+        } else {
+            None
+        };
 
-        let sequence = self
-            .sfasta
-            .get_sequence(&seqloc)
-            .expect("Unable to fetch sequence");
+        /*
+        let scores = if self.with_scores && seqloc.scores.is_some() {
+            todo!();
+        } else {
+            None
+        }; */
+
+        let sequence = if self.with_sequences && seqloc.sequence.is_some() {
+            Some(
+                self.sfasta
+                    .get_sequence(&seqloc)
+                    .expect("Unable to fetch sequence"),
+            )
+        } else {
+            None
+        };
 
         // TODO: Scores
 
-        self.i += 1;
+        if self.mode == SeqMode::Linear {
+            self.cur_idx += 1;
+        }
 
         Some(Sequence {
             id,
