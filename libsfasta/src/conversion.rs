@@ -11,7 +11,7 @@ use std::sync::Arc;
 use std::time::Instant;
 
 use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
-use crate::data_types::*;
+use crate::datatypes::*;
 use crate::dual_level_index::*;
 use crate::formats::*;
 use crate::utils::*;
@@ -394,8 +394,8 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 
 #[derive(Debug)]
 enum Work {
-    FastaPayload(fasta::Sequence),
-    FastqPayload(fastq::Sequence),
+    FastaPayload(crate::datatypes::Sequence),
+    FastqPayload(crate::datatypes::Sequence),
     Shutdown,
 }
 
@@ -496,7 +496,7 @@ where
                 fasta_thread_clone.unpark();
                 match fasta_queue_out.pop() {
                     Some(Work::FastaPayload(seq)) => {
-                        let (seqid, seqheader, mut seq) = seq.into_parts();
+                        let (seqid, seqheader, mut seq, _) = seq.into_parts();
                         let mut location = SeqLoc::new();
                         location.masking = masking.add_masking(&seq[..]);
                         let loc = sb.add_sequence(&mut seq[..]).unwrap(); // Destructive, capitalizes everything...
@@ -766,7 +766,7 @@ where
             let backoff = Backoff::new();
 
             for mut x in fastq {
-                x.scores.clear(); // No need to send scores across threads when we aren't using them yet...
+                x.scores.take(); // No need to send scores across threads when we aren't using them yet...
                 let mut d = Work::FastqPayload(x);
                 while let Err(z) = fastq_queue_in.push(d) {
                     d = z;
@@ -892,7 +892,7 @@ where
             let backoff = Backoff::new();
 
             for mut x in fastq {
-                x.seq.clear(); // No need to send seqs across threads when we are done with that...
+                x.sequence.clear(); // No need to send seqs across threads when we are done with that...
                 let mut d = Work::FastqPayload(x);
                 while let Err(z) = fastq_queue_in.push(d) {
                     d = z;
@@ -934,7 +934,7 @@ where
                     Some(Work::FastqPayload(seq)) => {
                         idx += 1;
                         let (_, _, _, mut scores) = seq.into_parts();
-                        let loc = sb.add_sequence(&mut scores[..]).unwrap(); // Destructive, capitalizes everything...
+                        let loc = sb.add_sequence(&mut scores.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
                         seq_locs[idx].scores = Some(loc);
                     }
                     Some(Work::FastaPayload(_)) => {
@@ -1112,7 +1112,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data_types::*;
+    use crate::datatypes::*;
     use std::io::Cursor;
 
     #[test]

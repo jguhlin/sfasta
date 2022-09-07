@@ -1,10 +1,10 @@
-// This is not even a good copy of headers... could it be generic?
+// TODO: This is the same as ID with the names changed....
+
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::sync::Arc;
 
-use crate::data_types::{zstd_encoder, CompressionType, Loc};
+use crate::datatypes::{zstd_encoder, CompressionType, Loc};
 
-pub struct Ids {
+pub struct Headers {
     location: u64,
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
@@ -14,13 +14,13 @@ pub struct Ids {
     cache: Option<(u32, Vec<u8>)>,
 }
 
-impl Default for Ids {
+impl Default for Headers {
     fn default() -> Self {
-        Ids {
+        Headers {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            block_size: 2 * 1024 * 1024,
+            block_size: 4 * 1024 * 1024,
             data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
@@ -28,8 +28,9 @@ impl Default for Ids {
     }
 }
 
-impl Ids {
-    pub fn add_id(&mut self, id: Arc<String>) -> Vec<Loc> {
+impl Headers {
+    pub fn add_header(&mut self, header: String) -> Vec<Loc> {
+        assert!(header.len() > 0);
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
@@ -37,7 +38,7 @@ impl Ids {
         let data = self.data.as_mut().unwrap();
 
         let mut start = data.len();
-        data.extend(id.as_bytes());
+        data.extend_from_slice(header.as_bytes());
         let end = data.len() - 1;
         let starting_block = start / self.block_size;
         let ending_block = end / self.block_size;
@@ -59,7 +60,7 @@ impl Ids {
     }
 
     fn emit_blocks(&mut self) -> Vec<Vec<u8>> {
-        let data = self.data.as_ref().unwrap();
+        let data = self.data.take().unwrap();
         let mut blocks = Vec::new();
         let len = data.len();
 
@@ -92,7 +93,7 @@ impl Ids {
 
         let mut block_locations = Vec::new();
 
-        let mut compressor = zstd_encoder(7);
+        let mut compressor = zstd_encoder(3);
 
         for block in blocks {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -125,19 +126,23 @@ impl Ids {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let mut ids = Ids::default();
+        let mut headers = Headers::default();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        ids.compression_type = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        ids.block_index_pos = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        ids.block_size = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        ids.location = starting_pos;
+        headers.compression_type =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        headers.block_index_pos =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        headers.block_size = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        headers.location = starting_pos;
 
-        in_buf.seek(SeekFrom::Start(ids.block_index_pos)).unwrap();
-        ids.block_locations =
+        in_buf
+            .seek(SeekFrom::Start(headers.block_index_pos))
+            .unwrap();
+        headers.block_locations =
             Some(bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap());
 
-        ids
+        headers
     }
 
     // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
@@ -151,7 +156,7 @@ impl Ids {
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             data.extend(self.get_block_uncached(in_buf, i as u32));
         }
-        log::debug!("ID Prefetching done: {}", data.len());
+        log::debug!("Header Prefetching done: {}", data.len());
         self.data = Some(data);
     }
 
@@ -187,12 +192,11 @@ impl Ids {
             .unwrap()
     }
 
-    pub fn get_id<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
+    pub fn get_header<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
     where
         R: Read + Seek,
     {
-        let mut id = String::with_capacity(64);
-
+        let mut header = String::with_capacity(1024);
         let block_size = self.block_size as u32;
 
         if self.data.is_some() {
@@ -201,18 +205,19 @@ impl Ids {
 
             let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
-            id.push_str(
+            header.push_str(
                 std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..=end as usize])
                     .unwrap(),
             );
         } else {
             for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
                 let block = self.get_block(in_buf, block as u32);
-                id.push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
+                header
+                    .push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
             }
         }
 
-        id
+        header
     }
 }
 
@@ -222,32 +227,31 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
-    fn test_add_id() {
-        let mut ids = Ids {
+    fn test_add_header() {
+        let mut headers = Headers {
             block_size: 10,
             ..Default::default()
         };
 
-        let test_ids = vec![
-            "Medtr5g026775.t1",
-            "ARABIDOPSIS_SUPER_COOL_GENE",
-            "ID WITH A SPACE EVEN THOUGH ITS INVALID",
-            "same, but lowercase....",
-        ];
+        let test_headers =
+            vec!["This is my first header",
+        "second header",
+        "THIRD HEADER WOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOOW",
+        "fourth header"];
 
         let mut locs = Vec::new();
 
-        for id in test_ids.iter() {
-            locs.push(ids.add_id(Arc::new(id.to_string())));
+        for header in test_headers.iter() {
+            locs.push(headers.add_header(header.to_string()));
         }
 
         let mut buffer = Cursor::new(Vec::new());
-        ids.write_to_buffer(&mut buffer);
-        let mut ids = Ids::from_buffer(&mut buffer, 0);
+        headers.write_to_buffer(&mut buffer);
+        let mut headers = Headers::from_buffer(&mut buffer, 0);
 
-        for i in 0..test_ids.len() {
-            let id = ids.get_id(&mut buffer, &locs[i]);
-            assert_eq!(id, test_ids[i]);
+        for i in 0..test_headers.len() {
+            let header = headers.get_header(&mut buffer, &locs[i]);
+            assert_eq!(header, test_headers[i]);
         }
     }
 }

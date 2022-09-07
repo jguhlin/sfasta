@@ -3,7 +3,7 @@ use std::sync::RwLock;
 
 use rayon::prelude::*;
 
-use crate::data_types::*;
+use crate::datatypes::*;
 use crate::dual_level_index::*;
 use crate::*;
 
@@ -222,6 +222,16 @@ pub struct SfastaParser {
 }
 
 impl SfastaParser {
+    pub fn open(path: &str) -> Result<Sfasta, &'static str> {
+        let in_buf = std::fs::File::open(path).expect("Unable to open file");
+        let mut sfasta = SfastaParser::open_from_buffer(
+            std::io::BufReader::with_capacity(8 * 1024, in_buf),
+            false,
+        );
+
+        Ok(sfasta)
+    }
+
     // TODO: Can probably multithread parts of this...
     // Prefetch should probably be another name...
     pub fn open_from_buffer<R>(mut in_buf: R, prefetch: bool) -> Sfasta
@@ -355,9 +365,15 @@ pub struct Sequences {
     i: usize,
 }
 
+#[allow(dead_code)]
 impl Sequences {
     pub fn new(sfasta: Sfasta) -> Sequences {
         Sequences { sfasta, i: 0 }
+    }
+
+    /// Convenience function. Likely to be less performant. Prefetch is off by default.
+    pub fn from_file(path: &str) -> Sequences {
+        Sequences::new(SfastaParser::open(path).expect("Unable to open file"))
     }
 }
 
@@ -374,12 +390,15 @@ impl Iterator for Sequences {
         let id = self.sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
         let mut header = None;
         if seqloc.headers.is_some() {
-            header = Some(self.sfasta
-                .get_header(seqloc.headers.as_ref().unwrap())
-                .expect("Unable to fetch header"));
+            header = Some(
+                self.sfasta
+                    .get_header(seqloc.headers.as_ref().unwrap())
+                    .expect("Unable to fetch header"),
+            );
         }
 
-        let sequence = self.sfasta
+        let sequence = self
+            .sfasta
             .get_sequence(&seqloc)
             .expect("Unable to fetch sequence");
 
@@ -387,9 +406,13 @@ impl Iterator for Sequences {
 
         self.i += 1;
 
-        Some(Sequence { id, sequence, header, scores: None })
+        Some(Sequence {
+            id,
+            sequence,
+            header,
+            scores: None,
+        })
     }
-
 }
 
 #[cfg(test)]

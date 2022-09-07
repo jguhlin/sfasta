@@ -70,8 +70,19 @@ pub struct Sequence {
     pub id: String,
 }
 
-impl Sequence { 
-    pub fn new(sequence: Vec<u8>, id: String, header: Option<String>, scores: Option<Vec<u8>>) -> Sequence {
+impl Sequence {
+    pub fn into_parts(self) -> (String, Option<String>, Vec<u8>, Option<Vec<u8>>) {
+        {
+            (self.id, self.header, self.sequence, self.scores)
+        }
+    }
+
+    pub fn new(
+        sequence: Vec<u8>,
+        id: String,
+        header: Option<String>,
+        scores: Option<Vec<u8>>,
+    ) -> Sequence {
         Sequence {
             sequence,
             header,

@@ -8,7 +8,7 @@ use std::thread::JoinHandle;
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
-use crate::data_types::*;
+use crate::datatypes::*;
 use crate::CompressionType;
 
 #[derive(Clone, Copy)]

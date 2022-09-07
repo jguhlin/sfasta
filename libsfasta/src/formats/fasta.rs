@@ -3,20 +3,7 @@ use simdutf8::basic::from_utf8;
 
 use std::io::BufRead;
 
-#[derive(Debug)]
-pub struct Sequence {
-    pub seq: Vec<u8>,
-    pub id: String,
-    pub header: Option<String>,
-}
-
-impl Sequence {
-    pub fn into_parts(self) -> (String, Option<String>, Vec<u8>) {
-        {
-            (self.id, self.header, self.seq)
-        }
-    }
-}
+use crate::datatypes::Sequence;
 
 pub struct Fasta<'fasta, R> {
     reader: &'fasta mut R,
@@ -48,9 +35,10 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
             if bytes_read == 0 {
                 if self.seqlen > 0 {
                     let seq = Sequence {
-                        seq: self.seqbuffer[..self.seqlen].to_vec(),
+                        sequence: self.seqbuffer[..self.seqlen].to_vec(),
                         id: self.next_seqid.take().unwrap(),
                         header: self.next_header.take(),
+                        scores: None,
                     };
                     self.seqlen = 0;
                     return Some(seq);
@@ -94,9 +82,10 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                             seqbuf.truncate(self.seqlen);
 
                             let seq = Sequence {
-                                seq: seqbuf,
+                                sequence: seqbuf,
                                 id: id.unwrap(),
                                 header,
+                                scores: None,
                             };
                             self.seqbuffer.clear();
                             self.seqlen = 0;

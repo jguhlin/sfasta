@@ -1,44 +1,6 @@
 use std::fs::{metadata, File};
 use std::io::{BufReader, Read};
 
-pub struct Sequences {
-    reader: Box<dyn Read + Send>,
-}
-
-#[derive(PartialEq, Eq, bincode::Encode, bincode::Decode, Clone, Debug)]
-pub struct Sequence {
-    pub seq: Vec<u8>,
-    pub id: String,
-    pub location: usize,
-    pub end: usize,
-}
-
-// TODO: This is the right place to do this, but I feel it's happening somewhere
-// else and wasting CPU cycles...
-impl Sequence {
-    pub fn make_uppercase(&mut self) {
-        self.seq.make_ascii_uppercase();
-    }
-}
-
-impl Iterator for Sequences {
-    type Item = Sequence;
-
-    fn next(&mut self) -> Option<Sequence> {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-        let seq: Sequence =
-            match bincode::decode_from_std_read(&mut self.reader.as_mut(), bincode_config) {
-                Ok(x) => x,
-                Err(_) => {
-                    println!("SeqStop");
-                    return None;
-                }
-            };
-        Some(seq)
-    }
-}
-
 #[inline]
 pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) {
     let filesize = metadata(filename)

@@ -2,22 +2,7 @@ use simdutf8::basic::from_utf8;
 
 use std::io::BufRead;
 
-#[derive(Debug)]
-pub struct Sequence {
-    pub seq: Vec<u8>,
-    pub id: String,
-    pub header: Option<String>,
-    pub scores: Vec<u8>,
-}
-
-#[allow(dead_code)]
-impl Sequence {
-    pub fn into_parts(self) -> (String, Option<String>, Vec<u8>, Vec<u8>) {
-        {
-            (self.id, self.header, self.seq, self.scores)
-        }
-    }
-}
+use crate::datatypes::Sequence;
 
 pub struct Fastq<'fastq, R: BufRead> {
     reader: &'fastq mut R,
@@ -70,10 +55,10 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                         if bytes_read == 0 {
                             if self.seqlen > 0 {
                                 let seq = Sequence {
-                                    seq: self.seqbuffer[..self.seqlen].to_vec(),
+                                    sequence: self.seqbuffer[..self.seqlen].to_vec(),
                                     id: self.seqid.take().unwrap(),
                                     header: self.header.take(),
-                                    scores: self.scores_buffer[..self.seqlen].to_vec(),
+                                    scores: Some(self.scores_buffer[..self.seqlen].to_vec()),
                                 };
                                 self.buffer.clear();
                                 self.seqlen = 0;
@@ -81,23 +66,21 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             } else {
                                 return None;
                             }
-                        } else {
-                            if self.buffer[0] == b'@' {
-                                let idline = from_utf8(&self.buffer[1..]).unwrap().to_string();
-                                let idline = idline.trim();
+                        } else if self.buffer[0] == b'@' {
+                            let idline = from_utf8(&self.buffer[1..]).unwrap().to_string();
+                            let idline = idline.trim();
 
-                                let split: Vec<&str> = idline.splitn(2, ' ').collect();
-                                self.seqid = Some(split[0].to_string());
-                                if split.len() > 1 {
-                                    self.header = Some(split[1].to_string());
-                                } else {
-                                    self.header = Some("".to_string());
-                                }
-                                self.buffer.clear();
-                                self.state = State::Sequence;
+                            let split: Vec<&str> = idline.splitn(2, ' ').collect();
+                            self.seqid = Some(split[0].to_string());
+                            if split.len() > 1 {
+                                self.header = Some(split[1].to_string());
                             } else {
-                                panic!("Invalid FASTQ file");
+                                self.header = Some("".to_string());
                             }
+                            self.buffer.clear();
+                            self.state = State::Sequence;
+                        } else {
+                            panic!("Invalid FASTQ file");
                         }
                     }
                 }
@@ -138,10 +121,10 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             scores_buffer.truncate(self.seqlen);
 
                             let seq = Sequence {
-                                seq: seqbuffer,
+                                sequence: seqbuffer,
                                 id: self.seqid.take().unwrap(),
                                 header: self.header.take(),
-                                scores: scores_buffer,
+                                scores: Some(scores_buffer),
                             };
                             self.buffer.clear();
                             self.seqlen = 0;
@@ -183,20 +166,20 @@ IIII
         let mut fastq = Fastq::from_buffer(&mut cursor);
         let seq = fastq.next().unwrap();
         assert_eq!(seq.id, "seq1");
-        assert_eq!(seq.seq, b"ACGT");
-        assert_eq!(seq.scores, b"IIII");
+        assert_eq!(seq.sequence, b"ACGT");
+        assert_eq!(seq.scores, Some(b"IIII".to_vec()));
         let seq = fastq.next().unwrap();
         assert_eq!(seq.id, "seq2");
-        assert_eq!(seq.seq, b"ACGT");
-        assert_eq!(seq.scores, b"IIII");
+        assert_eq!(seq.sequence, b"ACGT");
+        assert_eq!(seq.scores.unwrap(), b"IIII");
         let seq = fastq.next().unwrap();
         assert_eq!(seq.id, "seq3");
-        assert_eq!(seq.seq, b"ACGT");
-        assert_eq!(seq.scores, b"IIII");
+        assert_eq!(seq.sequence, b"ACGT");
+        assert_eq!(seq.scores, Some(b"IIII".to_vec()));
         let seq = fastq.next().unwrap();
         assert_eq!(seq.id, "seq4");
-        assert_eq!(seq.seq, b"ACGT");
-        assert_eq!(seq.scores, b"IIII");
+        assert_eq!(seq.sequence, b"ACGT");
+        assert_eq!(seq.scores, Some(b"IIII".to_vec()));
         assert!(fastq.next().is_none());
     }
 }

@@ -1,4 +1,4 @@
-use crate::data_types::structs::{default_compression_level, CompressionType};
+use crate::datatypes::structs::{default_compression_level, CompressionType};
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -19,7 +19,7 @@ impl SequenceBlocks {
         SequenceBlocks {
             block_locs,
             cache: None,
-            compression_type
+            compression_type,
         }
     }
 
@@ -109,7 +109,7 @@ impl SequenceBlock {
             }
             #[cfg(target_arch = "wasm32")]
             CompressionType::ZSTD => {
-                unimplemented!("ZSTD encoding is not supported on wasm32");            
+                unimplemented!("ZSTD encoding is not supported on wasm32");
             }
             CompressionType::LZ4 => {
                 let mut compressor = lz4_flex::frame::FrameEncoder::new(cseq);
@@ -211,8 +211,7 @@ impl SequenceBlockCompressed {
                     Ok(x) => x,
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
-            },
-
+            }
 
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::XZ => {
