@@ -74,52 +74,50 @@ impl Sfasta {
         self
     }
 
-    pub fn decompress_all_ids(&mut self) {
-        assert!(
-            self.buf.is_some(),
-            "Sfasta buffer not yet present -- Are you creating a file?"
-        );
-        // let len = self.index.as_ref().unwrap().len();
-
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-        let len = 1000; // TODO: Ussing to make this compile...
-
-        let blocks = (len as f64 / IDX_CHUNK_SIZE as f64).ceil() as usize;
-
-        let mut buf = self.buf.as_ref().unwrap().write().unwrap();
-        buf.seek(SeekFrom::Start(self.directory.ids_loc.unwrap().get()))
-            .expect("Unable to work with seek API");
-
-        let mut ids: Vec<String> = Vec::with_capacity(len as usize);
-
-        // Multi-threaded
-        let mut compressed_blocks: Vec<Vec<u8>> = Vec::with_capacity(blocks);
-        for _i in 0..blocks {
-            compressed_blocks
-                .push(bincode::decode_from_std_read(&mut *buf, bincode_config).unwrap());
+    /// Get a Sequence object by ID.
+    /// Convenience function. Not optimized for speed. If you don't need the header, scores, or masking,
+    /// it's better to call more performant functions.
+    pub fn get_by_id(&mut self, id: &str) -> Result<Option<Sequence>, &str> {
+        let matches = self.find(id).expect("Unable to find entry");
+        if matches == None {
+            return Ok(None);
         }
 
-        let output: Vec<Vec<String>> = compressed_blocks
-            .par_iter()
-            .map(|x| {
-                let mut decoder = zstd::stream::Decoder::new(&x[..]).unwrap();
+        let matches = matches.unwrap();
 
-                let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
+        let id = if matches.ids.is_some() {
+            Some(self.get_id(matches.ids.as_ref().unwrap()).unwrap())
+        } else {
+            None
+        };
 
-                match decoder.read_to_end(&mut decompressed) {
-                    Ok(x) => x,
-                    Err(y) => panic!("Unable to decompress block: {:#?}", y),
-                };
+        let header = if matches.headers.is_some() {
+            Some(self.get_header(matches.headers.as_ref().unwrap()).unwrap())
+        } else {
+            None
+        };
 
-                let (r, _) = bincode::decode_from_slice(&decompressed, bincode_config).unwrap();
-                r
-            })
-            .collect();
+        let sequence = if matches.sequence.is_some() {
+            Some(self.get_sequence(&matches).unwrap())
+        } else {
+            None
+        };
 
-        output.into_iter().for_each(|x| ids.extend(x));
+        /*
+        // TODO
+        todo!();
+        let scores = if matches.scores.is_some() {
+            Some(self.get_scores(&matches))
+        } else {
+            None
+        }; */
 
-        // TODO: FIXME
-        // self.index.as_mut().unwrap().set_ids(ids);
+        Ok(Some(Sequence {
+            sequence,
+            id,
+            header,
+            scores: None,
+        }))
     }
 
     pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str> {
@@ -157,6 +155,53 @@ impl Sfasta {
             .sequence
             .as_ref()
             .expect("No locations passed, Vec<Loc> is empty");
+
+        let locs = seqloc.sequence.as_ref().unwrap();
+
+        // Basic sanity checks
+        let max_block = locs
+            .iter()
+            .map(|x| x.original_format(self.parameters.block_size))
+            .map(|(x, _)| x)
+            .max()
+            .unwrap();
+        assert!(
+            self.sequenceblocks.as_ref().unwrap().block_locs.len() > max_block as usize,
+            "Requested block is larger than the total number of blocks."
+        );
+
+        let mut buf = self.buf.as_ref().unwrap().write().unwrap();
+
+        for (block, (start, end)) in locs
+            .iter()
+            .map(|x| x.original_format(self.parameters.block_size))
+        {
+            let seqblock = self
+                .sequenceblocks
+                .as_mut()
+                .unwrap()
+                .get_block(&mut *buf, block);
+            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
+        }
+
+        if seqloc.masking.is_some() && self.masking.is_some() {
+            let masked_loc = seqloc.masking.as_ref().unwrap();
+            let masking = self.masking.as_mut().unwrap();
+            masking.mask_sequence(&mut *buf, *masked_loc, &mut seq);
+        }
+
+        Ok(seq)
+    }
+
+    pub fn get_sequence_by_index(&mut self, idx: usize) -> Result<Vec<u8>, &'static str> {
+        let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024); // TODO: We can calculate this
+
+        let seqloc = self.get_seqloc(idx);
+
+        seqloc
+            .sequence
+            .as_ref()
+            .expect("No locations found, Vec<Loc> is empty");
 
         let locs = seqloc.sequence.as_ref().unwrap();
 

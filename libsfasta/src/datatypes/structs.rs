@@ -114,3 +114,14 @@ impl Sequence {
         self.sequence.as_ref().unwrap().is_empty()
     }
 }
+
+impl From<Vec<u8>> for Sequence {
+    fn from(seq: Vec<u8>) -> Sequence {
+        Sequence {
+            sequence: Some(seq),
+            header: None,
+            id: None,
+            scores: None,
+        }
+    }
+}
