@@ -15,6 +15,7 @@ mod formats;
 mod io;
 pub mod masking;
 pub mod utils;
+pub mod convenience;
 
 pub mod prelude;
 

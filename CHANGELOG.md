@@ -11,6 +11,7 @@ Less allocations for FASTA file parser
 Util fn's to detect file type and some compression types
 Switch project back to using rust workspace
 Some refactoring for WASM support - WIP
+Added convenience functions
 
 # 0.3.3
 Remove requirement for nightly rust compiler.

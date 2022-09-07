@@ -350,6 +350,48 @@ impl SfastaParser {
     }
 }
 
+pub struct Sequences {
+    sfasta: Sfasta,
+    i: usize,
+}
+
+impl Sequences {
+    pub fn new(sfasta: Sfasta) -> Sequences {
+        Sequences { sfasta, i: 0 }
+    }
+}
+
+impl Iterator for Sequences {
+    type Item = Sequence;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.sfasta.index.is_none() || self.i >= self.sfasta.len() {
+            return None;
+        }
+
+        let seqloc = self.sfasta.seqlocs.as_ref().unwrap().data.as_ref().unwrap()[self.i].clone();
+
+        let id = self.sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
+        let mut header = None;
+        if seqloc.headers.is_some() {
+            header = Some(self.sfasta
+                .get_header(seqloc.headers.as_ref().unwrap())
+                .expect("Unable to fetch header"));
+        }
+
+        let sequence = self.sfasta
+            .get_sequence(&seqloc)
+            .expect("Unable to fetch sequence");
+
+        // TODO: Scores
+
+        self.i += 1;
+
+        Some(Sequence { id, sequence, header, scores: None })
+    }
+
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

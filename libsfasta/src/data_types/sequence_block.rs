@@ -19,7 +19,7 @@ impl SequenceBlocks {
         SequenceBlocks {
             block_locs,
             cache: None,
-            compression_type: compression_type,
+            compression_type
         }
     }
 

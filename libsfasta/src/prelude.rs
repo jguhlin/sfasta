@@ -4,3 +4,4 @@ pub use crate::dual_level_index::*;
 pub use crate::formats::fasta::*;
 pub use crate::formats::{Sfasta, SfastaParser};
 pub use crate::masking::*;
+pub use crate::convenience::*;

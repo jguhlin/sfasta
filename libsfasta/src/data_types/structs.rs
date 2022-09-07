@@ -61,3 +61,38 @@ pub struct Header {
     pub citation: Option<String>,
     pub compression_type: CompressionType,
 }
+
+#[derive(PartialEq, Eq, Clone, Debug)]
+pub struct Sequence {
+    pub sequence: Vec<u8>,
+    pub scores: Option<Vec<u8>>,
+    pub header: Option<String>,
+    pub id: String,
+}
+
+impl Sequence { 
+    pub fn new(sequence: Vec<u8>, id: String, header: Option<String>, scores: Option<Vec<u8>>) -> Sequence {
+        Sequence {
+            sequence,
+            header,
+            id,
+            scores,
+        }
+    }
+
+    pub fn len(&self) -> usize {
+        self.sequence.len()
+    }
+
+    pub fn make_uppercase(&mut self) {
+        self.sequence.make_ascii_uppercase();
+    }
+
+    pub fn make_lowercase(&mut self) {
+        self.sequence.make_ascii_lowercase();
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.sequence.is_empty()
+    }
+}
