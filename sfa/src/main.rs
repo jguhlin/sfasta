@@ -1,8 +1,20 @@
-extern crate mimalloc;
-use mimalloc::MiMalloc;
+#[cfg(feature = "mimalloc")]
+mod set_mimalloc {
+    extern crate mimalloc;
+    use mimalloc::MiMalloc;
 
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+    #[global_allocator]
+    static GLOBAL: MiMalloc = MiMalloc;
+}
+
+#[cfg(feature = "jemalloc")]
+#[cfg(not(target_env = "msvc"))]
+mod set_jemalloc {
+    use tikv_jemallocator::Jemalloc;
+
+    #[global_allocator]
+    static GLOBAL: Jemalloc = Jemalloc;
+}
 
 extern crate clap;
 extern crate indicatif;
