@@ -68,6 +68,8 @@ pub struct Sequence {
     pub scores: Option<Vec<u8>>,
     pub header: Option<String>,
     pub id: Option<String>,
+    /// Primarily used downstream, but when used for random access this is the offset from the start of the sequence
+    pub offset: usize,
 }
 
 impl Sequence {
@@ -95,6 +97,7 @@ impl Sequence {
             header,
             id,
             scores,
+            offset: 0,
         }
     }
 
@@ -122,6 +125,7 @@ impl From<Vec<u8>> for Sequence {
             header: None,
             id: None,
             scores: None,
+            offset: 0,
         }
     }
 }

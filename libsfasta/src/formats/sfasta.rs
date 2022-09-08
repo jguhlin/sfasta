@@ -118,6 +118,7 @@ impl Sfasta {
             id,
             header,
             scores: None,
+            offset: 0,
         }))
     }
 
@@ -172,6 +173,7 @@ impl Sfasta {
             id,
             header,
             scores: None,
+            offset: 0,
         }))
     }
 
@@ -536,12 +538,16 @@ impl Iterator for Sequences {
                 self.remaining_index = Some(remaining_index);
             }
 
-            let idx = self.remaining_index.as_mut().unwrap().pop().unwrap();
+            let idx = match self.remaining_index.as_mut().unwrap().pop() {
+                Some(idx) => idx,
+                None => return None,
+            };
+
             self.cur_idx = idx;
         }
 
         let seqloc =
-            self.sfasta.seqlocs.as_ref().unwrap().data.as_ref().unwrap()[self.cur_idx].clone();
+            self.sfasta.get_seqloc(self.cur_idx).expect("Unable to get sequence location").expect(".");
 
         let id = if self.with_ids {
             Some(self.sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap())
@@ -587,6 +593,7 @@ impl Iterator for Sequences {
             sequence,
             header,
             scores: None,
+            offset: 0,
         })
     }
 }

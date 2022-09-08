@@ -39,6 +39,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                         id: Some(self.next_seqid.take().unwrap()),
                         header: self.next_header.take(),
                         scores: None,
+                        offset: 0,
                     };
                     self.seqlen = 0;
                     return Some(seq);
@@ -86,6 +87,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                                 id: Some(id.unwrap()),
                                 header,
                                 scores: None,
+                                offset: 0,
                             };
                             self.seqbuffer.clear();
                             self.seqlen = 0;

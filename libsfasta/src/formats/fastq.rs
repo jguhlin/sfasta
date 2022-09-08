@@ -59,6 +59,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                                     id: Some(self.seqid.take().unwrap()),
                                     header: self.header.take(),
                                     scores: Some(self.scores_buffer[..self.seqlen].to_vec()),
+                                    offset: 0,
                                 };
                                 self.buffer.clear();
                                 self.seqlen = 0;
@@ -125,6 +126,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                                 id: Some(self.seqid.take().unwrap()),
                                 header: self.header.take(),
                                 scores: Some(scores_buffer),
+                                offset: 0,
                             };
                             self.buffer.clear();
                             self.seqlen = 0;
