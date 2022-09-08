@@ -86,7 +86,7 @@ enum Commands {
         lz4: bool,
         #[clap(short, long)]
         xz: bool,
-        #[clap(short, long)]
+        #[clap(long)]
         brotli: bool,
         #[clap(short, long)]
         snappy: bool,
