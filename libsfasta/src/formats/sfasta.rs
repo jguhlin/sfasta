@@ -69,6 +69,10 @@ impl Sfasta {
         self
     }
 
+    pub fn get_block_size(&self) -> u32 {
+        self.parameters.block_size
+    }
+
     // TODO: Does nothing right now...
     pub fn compression_type(mut self, compression: CompressionType) -> Self {
         self.parameters.compression_type = compression;
@@ -177,6 +181,25 @@ impl Sfasta {
         }))
     }
 
+    pub fn get_sequence_only_by_seqloc(
+        &mut self,
+        seqloc: &SeqLoc,
+    ) -> Result<Option<Sequence>, &'static str> {
+        let sequence = if seqloc.sequence.is_some() {
+            Some(self.get_sequence(seqloc).unwrap())
+        } else {
+            None
+        };
+
+        Ok(Some(Sequence {
+            sequence,
+            id: None,
+            header: None,
+            scores: None,
+            offset: 0,
+        }))
+    }
+
     // TODO: Should return Result<Option<Sequence>, &str>
     // TODO: Should actually be what get_sequence_by_seqloc is!
     pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
@@ -267,6 +290,17 @@ impl Sfasta {
             .get_seqloc(&mut buf, i as u32)
     }
 
+    /// Get all seqlocs
+    pub fn get_seqlocs(&mut self) -> Result<Option<Vec<SeqLoc>>, &'static str> {
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        self.seqlocs
+            .as_mut()
+            .unwrap()
+            .prefetch(&mut buf);
+
+        Ok(self.seqlocs.as_ref().unwrap().data.clone())
+    }
+
     pub fn index_len(&mut self) -> usize {
         if self.index.is_none() {
             return 0;
@@ -281,10 +315,12 @@ pub struct SfastaParser {
 }
 
 impl SfastaParser {
+    /// Convenience function to open a file and parse it.
+    /// Prefetch defaults to false
     pub fn open(path: &str) -> Result<Sfasta, &'static str> {
         let in_buf = std::fs::File::open(path).expect("Unable to open file");
-        let mut sfasta = SfastaParser::open_from_buffer(
-            std::io::BufReader::with_capacity(8 * 1024, in_buf),
+        let sfasta = SfastaParser::open_from_buffer(
+            std::io::BufReader::with_capacity(64 * 1024, in_buf),
             false,
         );
 

@@ -348,6 +348,18 @@ impl SeqLoc {
             ids: None,
         }
     }
+
+    pub fn len(&self, block_size: u32) -> usize {
+        let mut len = 0;
+        if self.sequence.is_some() {
+            len += self.sequence.as_ref().unwrap().iter().map(|x| x.len(block_size)).sum::<usize>()
+        } else if self.masking.is_some() {
+            len += self.masking.as_ref().unwrap().1 as usize;
+        } else if self.scores.is_some() {
+            len += self.scores.as_ref().unwrap().len();
+        }
+        len
+    }
 }
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Hash)]
@@ -369,6 +381,24 @@ impl Loc {
             Loc::FromStart(block, length) => (*block, (0, *length)),
             Loc::ToEnd(block, start) => (*block, (*start, block_size)),
             Loc::EntireBlock(block) => (*block, (0, block_size)),
+        }
+    }
+
+    pub fn len(&self, block_size: u32) -> usize {
+        match self {
+            Loc::Loc(_, start, end) => (*end - *start) as usize,
+            Loc::FromStart(_, length) => *length as usize,
+            Loc::ToEnd(_, start) => *start as usize,
+            Loc::EntireBlock(_) => block_size as usize,
+        }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            Loc::Loc(_, start, end) => *start == *end,
+            Loc::FromStart(_, length) => *length == 0,
+            Loc::ToEnd(_, start) => *start == 0,
+            Loc::EntireBlock(_) => false,
         }
     }
 }
