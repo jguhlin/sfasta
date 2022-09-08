@@ -42,9 +42,9 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                         offset: 0,
                     };
                     self.seqlen = 0;
-                    return Some(seq);
+                    return Some(seq)
                 } else {
-                    return None;
+                    return None
                 }
             } else {
                 match self.buffer[0] {
