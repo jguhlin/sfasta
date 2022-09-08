@@ -12,6 +12,7 @@ use crate::*;
 // TODO: Move these into parameters
 pub const IDX_CHUNK_SIZE: usize = 128 * 1024;
 
+/// Main Sfasta crate
 pub struct Sfasta {
     pub version: u64, // I'm going to regret this, but 18,446,744,073,709,551,615 versions should be enough for anybody.
     pub directory: Directory,
