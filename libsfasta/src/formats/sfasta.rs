@@ -203,7 +203,7 @@ impl Sfasta {
     // TODO: Should return Result<Option<Sequence>, &str>
     // TODO: Should actually be what get_sequence_by_seqloc is!
     pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
-        let mut seq: Vec<u8> = Vec::with_capacity(256 * 1024); // TODO: We can calculate this
+        let mut seq: Vec<u8> = Vec::with_capacity(self.parameters.block_size as usize);
 
         seqloc
             .sequence
@@ -320,7 +320,7 @@ impl SfastaParser {
     pub fn open(path: &str) -> Result<Sfasta, &'static str> {
         let in_buf = std::fs::File::open(path).expect("Unable to open file");
         let sfasta = SfastaParser::open_from_buffer(
-            std::io::BufReader::with_capacity(64 * 1024, in_buf),
+            std::io::BufReader::new(in_buf),
             false,
         );
 
