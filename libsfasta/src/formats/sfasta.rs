@@ -78,7 +78,7 @@ impl Sfasta {
     /// Get a Sequence object by ID.
     /// Convenience function. Not optimized for speed. If you don't need the header, scores, or masking,
     /// it's better to call more performant functions.
-    pub fn get_by_id(&mut self, id: &str) -> Result<Option<Sequence>, &str> {
+    pub fn get_sequence_by_id(&mut self, id: &str) -> Result<Option<Sequence>, &str> {
         let matches = self.find(id).expect("Unable to find entry");
         if matches == None {
             return Ok(None);
@@ -121,36 +121,64 @@ impl Sfasta {
         }))
     }
 
-    pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str> {
-        assert!(self.index.is_some(), "Sfasta index not present");
+    pub fn get_sequence_by_index(&mut self, idx: usize) -> Result<Option<Sequence>, &'static str> {
+        let seqloc = match self.get_seqloc(idx) {
+            Ok(Some(s)) => s,
+            Ok(None) => return Ok(None),
+            Err(e) => return Err(e),
+        };
 
-        let idx = self.index.as_mut().unwrap();
-        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
-        let found = idx.find(&mut buf, x);
-        let seqlocs = self.seqlocs.as_mut().unwrap();
+        seqloc
+            .sequence
+            .as_ref()
+            .expect("No locations found, Vec<Loc> is empty");
 
-        if found.is_none() {
-            return Ok(None);
-        }
-
-        // TODO: Allow returning multiple if there are multiple matches...
-        Ok(Some(seqlocs.get_seqloc(&mut buf, found.unwrap())))
+        self.get_sequence_by_seqloc(&seqloc)
     }
 
-    pub fn get_header(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
-        let headers = self.headers.as_mut().unwrap();
-        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
-        Ok(headers.get_header(&mut buf, locs))
+    pub fn get_sequence_by_seqloc(
+        &mut self,
+        seqloc: &SeqLoc,
+    ) -> Result<Option<Sequence>, &'static str> {
+        let id = if seqloc.ids.is_some() {
+            Some(self.get_id(seqloc.ids.as_ref().unwrap()).unwrap())
+        } else {
+            None
+        };
+
+        let header = if seqloc.headers.is_some() {
+            Some(self.get_header(seqloc.headers.as_ref().unwrap()).unwrap())
+        } else {
+            None
+        };
+
+        let sequence = if seqloc.sequence.is_some() {
+            Some(self.get_sequence(seqloc).unwrap())
+        } else {
+            None
+        };
+
+        /*
+        // TODO
+        todo!();
+        let scores = if matches.scores.is_some() {
+            Some(self.get_scores(&matches))
+        } else {
+            None
+        }; */
+
+        Ok(Some(Sequence {
+            sequence,
+            id,
+            header,
+            scores: None,
+        }))
     }
 
-    pub fn get_id(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
-        let ids = self.ids.as_mut().unwrap();
-        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
-        Ok(ids.get_id(&mut buf, locs))
-    }
-
+    // TODO: Should return Result<Option<Sequence>, &str>
+    // TODO: Should actually be what get_sequence_by_seqloc is!
     pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
-        let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024); // TODO: We can calculate this
+        let mut seq: Vec<u8> = Vec::with_capacity(256 * 1024); // TODO: We can calculate this
 
         seqloc
             .sequence
@@ -194,58 +222,39 @@ impl Sfasta {
         Ok(seq)
     }
 
-    pub fn get_sequence_by_index(&mut self, idx: usize) -> Result<Vec<u8>, &'static str> {
-        let mut seq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024); // TODO: We can calculate this
+    pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str> {
+        assert!(self.index.is_some(), "Sfasta index not present");
 
-        let seqloc = self.get_seqloc(idx);
+        let idx = self.index.as_mut().unwrap();
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        let found = idx.find(&mut buf, x);
+        let seqlocs = self.seqlocs.as_mut().unwrap();
 
-        seqloc
-            .sequence
-            .as_ref()
-            .expect("No locations found, Vec<Loc> is empty");
-
-        let locs = seqloc.sequence.as_ref().unwrap();
-
-        // Basic sanity checks
-        let max_block = locs
-            .iter()
-            .map(|x| x.original_format(self.parameters.block_size))
-            .map(|(x, _)| x)
-            .max()
-            .unwrap();
-        assert!(
-            self.sequenceblocks.as_ref().unwrap().block_locs.len() > max_block as usize,
-            "Requested block is larger than the total number of blocks."
-        );
-
-        let mut buf = self.buf.as_ref().unwrap().write().unwrap();
-
-        for (block, (start, end)) in locs
-            .iter()
-            .map(|x| x.original_format(self.parameters.block_size))
-        {
-            let seqblock = self
-                .sequenceblocks
-                .as_mut()
-                .unwrap()
-                .get_block(&mut *buf, block);
-            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
+        if found.is_none() {
+            return Ok(None);
         }
 
-        if seqloc.masking.is_some() && self.masking.is_some() {
-            let masked_loc = seqloc.masking.as_ref().unwrap();
-            let masking = self.masking.as_mut().unwrap();
-            masking.mask_sequence(&mut *buf, *masked_loc, &mut seq);
-        }
+        // TODO: Allow returning multiple if there are multiple matches...
+        seqlocs.get_seqloc(&mut buf, found.unwrap())
+    }
 
-        Ok(seq)
+    pub fn get_header(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
+        let headers = self.headers.as_mut().unwrap();
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        Ok(headers.get_header(&mut buf, locs))
+    }
+
+    pub fn get_id(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
+        let ids = self.ids.as_mut().unwrap();
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        Ok(ids.get_id(&mut buf, locs))
     }
 
     pub fn len(&self) -> usize {
         self.seqlocs.as_ref().unwrap().len()
     }
 
-    pub fn get_seqloc(&mut self, i: usize) -> SeqLoc {
+    pub fn get_seqloc(&mut self, i: usize) -> Result<Option<SeqLoc>, &'static str> {
         assert!(i < self.len(), "Index out of bounds");
         assert!(i < std::u32::MAX as usize, "Index out of bounds");
 

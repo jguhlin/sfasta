@@ -306,21 +306,25 @@ impl SeqLocs {
         seqlocs
     }
 
-    pub fn get_seqloc<R>(&mut self, in_buf: &mut R, index: u32) -> SeqLoc
+    pub fn get_seqloc<R>(
+        &mut self,
+        in_buf: &mut R,
+        index: u32,
+    ) -> Result<Option<SeqLoc>, &'static str>
     where
         R: Read + Seek,
     {
         if !self.is_initialized() {
-            panic!("Unable to get SeqLoc as SeqLocs are not initialized");
+            return Err("Unable to get SeqLoc as SeqLocs are not initialized");
         }
 
         if self.data.is_some() {
-            self.data.as_ref().unwrap()[index as usize].clone()
+            Ok(Some(self.data.as_ref().unwrap()[index as usize].clone()))
         } else {
             let block = index / self.chunk_size as u32;
             let block_index = index % self.chunk_size as u32;
             let seqlocs = self.get_block(in_buf, block);
-            seqlocs[block_index as usize].clone()
+            Ok(Some(seqlocs[block_index as usize].clone()))
         }
     }
 }

@@ -384,7 +384,11 @@ fn list(input: &str) {
     }
 
     for i in 0..sfasta.len() {
-        let seqloc = &sfasta.get_seqloc(i);
+        let seqloc = match sfasta.get_seqloc(i) {
+            Ok(Some(x)) => x,
+            Ok(None) => panic!("No SeqLoc found"),
+            Err(_) => panic!("Unable to fetch seqloc"),
+        };
         let id = &sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
         println!("{}", id);
     }
