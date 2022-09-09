@@ -1165,7 +1165,10 @@ mod tests {
 
         let b: SequenceBlockCompressed =
             bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
-        let b = b.decompress(CompressionType::ZSTD);
+        let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
+        zstd_decompressor.include_magicbytes(false).unwrap();
+
+        let b = b.decompress(CompressionType::ZSTD, 2 * 1024 * 1024, Some(zstd_decompressor).as_mut());
 
         assert!(b.len() == 8192);
     }

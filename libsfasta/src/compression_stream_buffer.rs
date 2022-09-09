@@ -336,6 +336,12 @@ fn _compression_worker_thread(
     let backoff = Backoff::new();
     let mut compression_worker_spins: usize = 0;
 
+    let mut zstd_compressor = if compression_type == CompressionType::ZSTD {
+        Some(zstd_encoder(compression_level as i32))
+    } else {
+        None
+    };
+
     loop {
         result = compress_queue.pop();
 
@@ -357,7 +363,7 @@ fn _compression_worker_thread(
                 }
             }
             Some((block_id, sb)) => {
-                let sbc = sb.compress(compression_type, compression_level);
+                let sbc = sb.compress(compression_type, compression_level, zstd_compressor.as_mut());
 
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
@@ -493,7 +499,9 @@ mod tests {
 
         assert!(oq.len() == 9);
         let g = oq.pop().unwrap();
-        let g = g.1.decompress(CompressionType::ZSTD);
+        let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
+        zstd_decompressor.include_magicbytes(false).unwrap();
+        let g = g.1.decompress(CompressionType::ZSTD, 8 * 1024 * 1024, Some(zstd_decompressor).as_mut());
         println!("{:#?}", g.len());
         assert!(g.len() == 524288);
         let seq = std::str::from_utf8(&g.seq[0..100]).unwrap();

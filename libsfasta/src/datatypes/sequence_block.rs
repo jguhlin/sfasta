@@ -8,48 +8,83 @@ use log::error;
 #[cfg(not(target_arch = "wasm32"))]
 use xz::read::{XzDecoder, XzEncoder};
 
-pub struct SequenceBlocks {
+pub struct SequenceBlocks<'a> {
     pub block_locs: Vec<u64>,
     cache: Option<(u32, Vec<u8>)>,
     pub compression_type: CompressionType,
     pub compression_level: i8,
-
+    caching: bool,
+    block_size: usize,
+    zstd_decompressor: Option<zstd::bulk::Decompressor<'a>>,
 }
 
-impl SequenceBlocks {
-    pub fn new(block_locs: Vec<u64>, compression_type: CompressionType) -> Self {
-        SequenceBlocks {
-            block_locs,
-            cache: None,
-            compression_type,
-            compression_level: default_compression_level(compression_type),
+impl<'a> SequenceBlocks<'a> {
+    pub fn new(block_locs: Vec<u64>, compression_type: CompressionType, block_size: usize) -> Self {
+
+        if compression_type == CompressionType::ZSTD {
+            let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
+            zstd_decompressor.include_magicbytes(false)
+                .expect("Unable to disable magicbytes in decoder");
+
+            Self {
+                block_locs,
+                cache: None,
+                compression_type,
+                compression_level: default_compression_level(compression_type),
+                caching: false,
+                block_size,
+                zstd_decompressor: Some(zstd_decompressor),
+            }
+        } else {
+            Self {
+                block_locs,
+                cache: None,
+                compression_type,
+                compression_level: default_compression_level(compression_type),
+                caching: false,
+                block_size,
+                zstd_decompressor: None,
+            }
         }
     }
 
-    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[u8]
+    pub fn without_caching(mut self) -> Self {
+        self.caching = false;
+        self
+    }
+
+    pub fn _get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
     where
         R: Read + Seek,
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let byte_loc = self.block_locs[block as usize];
+        in_buf
+            .seek(SeekFrom::Start(byte_loc))
+            .expect("Unable to work with seek API");
+        let sbc: SequenceBlockCompressed =
+            bincode::decode_from_std_read(&mut *in_buf, bincode_config)
+                .expect("Unable to parse SequenceBlockCompressed");
 
-        if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
-            return self.cache.as_ref().unwrap().1.as_slice();
+        let mut buffer = Vec::with_capacity(self.block_size);
+        sbc.decompress_to_buffer(self.compression_type, &mut buffer, self.zstd_decompressor.as_mut());
+        buffer
+    }
+
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
+    where
+        R: Read + Seek,
+    {
+        if self.caching && self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
+            self.cache.as_ref().unwrap().1.clone()
         } else {
-            if self.cache == None {
-                self.cache = Some((block, Vec::with_capacity(2 * 1024 * 1024)));
+            let buffer = self._get_block(in_buf, block);
+            if self.caching {
+                self.cache = Some((block, buffer));
+                self.cache.as_ref().unwrap().1.clone()
+            } else {
+                buffer
             }
-            let byte_loc = self.block_locs[block as usize];
-            in_buf
-                .seek(SeekFrom::Start(byte_loc))
-                .expect("Unable to work with seek API");
-            let sbc: SequenceBlockCompressed =
-                bincode::decode_from_std_read(&mut *in_buf, bincode_config)
-                    .expect("Unable to parse SequenceBlockCompressed");
-
-            let cache = self.cache.as_mut().unwrap();
-            sbc.decompress_to_buffer(self.compression_type, &mut cache.1);
-            cache.0 = block;
-            return self.cache.as_ref().unwrap().1.as_slice();
         }
     }
 }
@@ -75,7 +110,7 @@ pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
         .long_distance_matching(true)
         .expect("Unable to set ZSTD Long Distance Matching");
     encoder
-        .window_log(27)
+        .window_log(21)
         .expect("Unable to set ZSTD Window Log");
     encoder
         .include_magicbytes(false)
@@ -93,19 +128,17 @@ pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
 }
 
 impl SequenceBlock {
-    pub fn compress(self, compression_type: CompressionType, compression_level: i8) -> SequenceBlockCompressed {
-        let mut cseq: Vec<u8> = Vec::with_capacity(self.seq.len());
+    pub fn compress(self, compression_type: CompressionType, compression_level: i8, zstd_compressor: Option<&mut zstd::bulk::Compressor>) -> SequenceBlockCompressed {
+        let len = std::cmp::max(512 * 1024, self.seq.len()); // Mostly for some tests...
+        let mut cseq: Vec<u8> = Vec::with_capacity(len);
 
         //debug!("Compressing sequence block with length: {}", self.seq.len());
 
         match compression_type {
-            CompressionType::NAFLike => {
-                todo!();
-            }
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
-                // TODO: Find a way to reuse this context...
-                let mut compressor = zstd_encoder(compression_level as i32);
+                //let mut compressor = zstd_encoder(compression_level as i32);
+                let mut compressor = zstd_compressor.unwrap();
                 compressor.compress_to_buffer(&self.seq, &mut cseq).unwrap();
             }
             #[cfg(target_arch = "wasm32")]
@@ -135,6 +168,9 @@ impl SequenceBlock {
             }
             CompressionType::NAF => {
                 unimplemented!();
+            }
+            CompressionType::NAFLike => {
+                todo!();
             }
             CompressionType::NONE => {
                 cseq = self.seq;
@@ -183,9 +219,8 @@ pub struct SequenceBlockCompressed {
 }
 
 impl SequenceBlockCompressed {
-    pub fn decompress(self, compression_type: CompressionType) -> SequenceBlock {
-        // TODO: Capacity here should be set by block-size
-        let mut seq: Vec<u8> = Vec::with_capacity(4 * 1024 * 1024);
+    pub fn decompress(self, compression_type: CompressionType, block_size: usize, mut zstd_decompressor: Option<&mut zstd::bulk::Decompressor>) -> SequenceBlock {
+        let mut seq: Vec<u8> = Vec::with_capacity(block_size);
 
         match compression_type {
             CompressionType::NAFLike => {
@@ -193,13 +228,19 @@ impl SequenceBlockCompressed {
             }
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
-                let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
-                decoder
-                    .include_magicbytes(false)
-                    .expect("Unable to disable magicbytes in decoder");
+                //let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
+                //decoder
+                //    .include_magicbytes(false)
+                //    .expect("Unable to disable magicbytes in decoder");
 
-                match decoder.read_to_end(&mut seq) {
-                    Ok(x) => x,
+                //match decoder.read_to_end(&mut seq) {
+                //    Ok(x) => x,
+                 //   Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                //};
+                println!("Block Size: {}", block_size);
+                let zstd = zstd_decompressor.as_mut().unwrap();
+                match zstd.decompress_to_buffer(&self.compressed_seq, &mut seq) {
+                    Ok(_x) => _x,
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
             }
@@ -258,17 +299,23 @@ impl SequenceBlockCompressed {
         SequenceBlock { seq }
     }
 
-    pub fn decompress_to_buffer(self, compression_type: CompressionType, buffer: &mut Vec<u8>) {
+    pub fn decompress_to_buffer(self, compression_type: CompressionType, buffer: &mut Vec<u8>, mut zstd_decompressor: Option<&mut zstd::bulk::Decompressor>) {
         buffer.clear();
         match compression_type {
             CompressionType::ZSTD => {
-                let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
-                decoder
-                    .include_magicbytes(false)
-                    .expect("Unable to disable magicbytes in decoder");
+                //let mut decoder = zstd::stream::Decoder::new(&self.compressed_seq[..]).unwrap();
+                //decoder
+                  //  .include_magicbytes(false)
+                    //.expect("Unable to disable magicbytes in decoder");
 
-                match decoder.read_to_end(buffer) {
-                    Ok(x) => x,
+                //match decoder.read_to_end(buffer) {
+                    //Ok(x) => x,
+                    //Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                //};
+
+                let zstd = zstd_decompressor.as_mut().unwrap();
+                match zstd.decompress_to_buffer(&self.compressed_seq, buffer) {
+                    Ok(_x) => _x,
                     Err(y) => panic!("Unable to decompress block: {:#?}", y),
                 };
             }
@@ -343,8 +390,12 @@ mod tests {
             seq: test_bytes.clone(),
         };
 
-        let y = x.compress(CompressionType::ZSTD, 3);
-        let z = y.decompress(CompressionType::ZSTD);
+        let mut compressor = zstd_encoder(3);
+
+        let y = x.compress(CompressionType::ZSTD, 3, Some(&mut compressor));
+        let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
+        zstd_decompressor.include_magicbytes(false).unwrap();
+        let z = y.decompress(CompressionType::ZSTD, 8 * 1024 * 1024, Some(zstd_decompressor).as_mut());
         assert!(z.seq == test_bytes);
     }
 }
