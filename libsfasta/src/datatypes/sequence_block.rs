@@ -62,6 +62,7 @@ impl<'a> SequenceBlocks<'a> {
         in_buf
             .seek(SeekFrom::Start(byte_loc))
             .expect("Unable to work with seek API");
+
         let sbc: SequenceBlockCompressed =
             bincode::decode_from_std_read(&mut *in_buf, bincode_config)
                 .expect("Unable to parse SequenceBlockCompressed");
