@@ -99,7 +99,7 @@ enum Commands {
         #[clap(short, long)]
         blocksize: Option<u64>,
         #[clap(short, long)]
-        level: Option<u8>,
+        level: Option<i8>,
     },
     Summarize {
         input: String,
@@ -425,7 +425,7 @@ fn convert(
     none: bool,
     noindex: bool,
     blocksize: Option<u64>,
-    level: Option<u8>,
+    level: Option<i8>,
 ) {
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());
@@ -486,6 +486,10 @@ fn convert(
     let mut converter = Converter::default()
         .with_threads(threads)
         .with_compression_type(compression_type);
+
+    if let Some(level) = level {
+        converter = converter.with_compression_level(level);
+    }
 
     if let Some(size) = blocksize {
         converter = converter.with_block_size(size as usize * 1024);
