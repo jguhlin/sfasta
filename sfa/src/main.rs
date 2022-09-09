@@ -82,7 +82,7 @@ enum Commands {
         noindex: bool,
         #[clap(short, long)]
         zstd: bool,
-        #[clap(short, long)]
+        #[clap(long)]
         lz4: bool,
         #[clap(short, long)]
         xz: bool,
