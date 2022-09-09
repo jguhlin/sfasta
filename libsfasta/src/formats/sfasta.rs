@@ -3,14 +3,10 @@ use std::sync::RwLock;
 
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
-use rayon::prelude::*;
 
 use crate::datatypes::*;
 use crate::dual_level_index::*;
 use crate::*;
-
-// TODO: Move these into parameters
-pub const IDX_CHUNK_SIZE: usize = 128 * 1024;
 
 /// Main Sfasta crate
 pub struct Sfasta<'a> {

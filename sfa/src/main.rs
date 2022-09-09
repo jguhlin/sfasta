@@ -352,7 +352,7 @@ fn view(input: &str) {
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
     let mut sfasta =
-        SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024, in_buf), true);
+        SfastaParser::open_from_buffer(in_buf, true);
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty or corrupt");
@@ -370,8 +370,6 @@ fn view(input: &str) {
             stdout
                 .write_all(format!(">{} {}\n", id, header).as_bytes())
                 .expect("Unable to write to stdout");
-            // stdout.write_all(format!(">{} {}", id, header).as_bytes()).unwrap();
-            // writeln!(stdout, ">{} {}", id, header).expect("Unable to write ID");
         } else {
             stdout.write_all(format!(">{}\n", id).as_bytes()).unwrap();
             // writeln!(stdout, ">{}", id).expect("Unable to write ID");
@@ -384,7 +382,7 @@ fn view(input: &str) {
         // 60 matches samtools faidx output
         // But 80 is common elsewhere...
         print_sequence(&mut stdout, &sequence, 80);
-        stdout.flush();
+        stdout.flush().expect("Unable to flush stdout buffer");
     }
 }
 
