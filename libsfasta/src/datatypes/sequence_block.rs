@@ -53,10 +53,14 @@ impl<'a> SequenceBlocks<'a> {
         self
     }
 
-    pub fn _get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
+    pub fn _get_block<R>(&mut self, in_buf: &mut R, block: u32)
     where
         R: Read + Seek,
     {
+        if self.cache.is_none() {
+            self.cache = Some((block, vec![0; self.block_size]));
+        }
+
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
         let byte_loc = self.block_locs[block as usize];
         in_buf
@@ -67,25 +71,20 @@ impl<'a> SequenceBlocks<'a> {
             bincode::decode_from_std_read(&mut *in_buf, bincode_config)
                 .expect("Unable to parse SequenceBlockCompressed");
 
-        let mut buffer = Vec::with_capacity(self.block_size);
-        sbc.decompress_to_buffer(self.compression_type, &mut buffer, self.zstd_decompressor.as_mut());
-        buffer
+        // let mut buffer = Vec::with_capacity(self.block_size);
+        sbc.decompress_to_buffer(self.compression_type, &mut self.cache.as_mut().unwrap().1, self.zstd_decompressor.as_mut());
     }
 
-    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[u8]
     where
         R: Read + Seek,
     {
-        if self.caching && self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
-            self.cache.as_ref().unwrap().1.clone()
+        if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
+            self.cache.as_ref().unwrap().1.as_slice()
         } else {
-            let buffer = self._get_block(in_buf, block);
-            if self.caching {
-                self.cache = Some((block, buffer));
-                self.cache.as_ref().unwrap().1.clone()
-            } else {
-                buffer
-            }
+            self._get_block(in_buf, block);
+            self.cache.as_mut().unwrap().0 = block;
+            self.cache.as_ref().unwrap().1.as_slice()
         }
     }
 }
