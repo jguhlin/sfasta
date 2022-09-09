@@ -9,7 +9,7 @@ use crate::dual_level_index::*;
 use crate::*;
 
 /// Main Sfasta crate
-pub struct Sfasta<'a> {
+pub struct Sfasta {
     pub version: u64, // I'm going to regret this, but 18,446,744,073,709,551,615 versions should be enough for anybody.
     pub directory: Directory,
     pub parameters: Parameters,
@@ -17,14 +17,14 @@ pub struct Sfasta<'a> {
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
-    pub sequenceblocks: Option<SequenceBlocks<'a>>,
+    pub sequenceblocks: Option<SequenceBlocks<'static>>,
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<Headers>,
     pub ids: Option<Ids>,
     pub masking: Option<Masking>,
 }
 
-impl<'a> Default for Sfasta<'a> {
+impl Default for Sfasta {
     fn default() -> Self {
         Sfasta {
             version: 1,
@@ -43,7 +43,7 @@ impl<'a> Default for Sfasta<'a> {
     }
 }
 
-impl<'a> Sfasta<'a> {
+impl Sfasta {
     pub fn with_sequences(self) -> Self {
         // TODO: Should we really have SFASTA without sequences?!
         // self.directory = self.directory.with_sequences();
@@ -294,14 +294,14 @@ impl<'a> Sfasta<'a> {
     }
 }
 
-pub struct SfastaParser<'a> {
-    pub sfasta: Sfasta<'a>,
+pub struct SfastaParser {
+    pub sfasta: Sfasta
 }
 
-impl<'a> SfastaParser<'a> {
+impl SfastaParser {
     /// Convenience function to open a file and parse it.
     /// Prefetch defaults to false
-    pub fn open(path: &str) -> Result<Sfasta<'a>, &'static str> {
+    pub fn open(path: &str) -> Result<Sfasta, &'static str> {
         let in_buf = std::fs::File::open(path).expect("Unable to open file");
         let sfasta = SfastaParser::open_from_buffer(
             std::io::BufReader::new(in_buf),
@@ -313,7 +313,7 @@ impl<'a> SfastaParser<'a> {
 
     // TODO: Can probably multithread parts of this...
     // Prefetch should probably be another name...
-    pub fn open_from_buffer<R>(mut in_buf: R, prefetch: bool) -> Sfasta<'a>
+    pub fn open_from_buffer<R>(mut in_buf: R, prefetch: bool) -> Sfasta
     where
         R: 'static + Read + Seek + Send,
     {
@@ -452,8 +452,8 @@ impl Default for SeqMode {
     }
 }
 
-pub struct Sequences<'a> {
-    sfasta: Sfasta<'a>,
+pub struct Sequences {
+    sfasta: Sfasta,
     cur_idx: usize,
     mode: SeqMode,
     remaining_index: Option<Vec<usize>>,
@@ -465,7 +465,7 @@ pub struct Sequences<'a> {
 }
 
 #[allow(dead_code)]
-impl<'a> Sequences<'a> {
+impl Sequences {
     pub fn new(sfasta: Sfasta) -> Sequences {
         Sequences {
             sfasta,
@@ -492,53 +492,53 @@ impl<'a> Sequences<'a> {
         Sequences::new(SfastaParser::open(path).expect("Unable to open file"))
     }
 
-    pub fn with_header(mut self) -> Sequences<'a> {
+    pub fn with_header(mut self) -> Sequences {
         self.with_header = true;
         self
     }
 
-    pub fn without_header(mut self) -> Sequences<'a> {
+    pub fn without_header(mut self) -> Sequences {
         self.with_header = false;
         self
     }
 
-    pub fn with_scores(mut self) -> Sequences<'a> {
+    pub fn with_scores(mut self) -> Sequences {
         self.with_scores = true;
         self
     }
 
-    pub fn without_scores(mut self) -> Sequences<'a> {
+    pub fn without_scores(mut self) -> Sequences {
         self.with_scores = false;
         self
     }
 
-    pub fn with_seed(mut self, seed: u64) -> Sequences<'a> {
+    pub fn with_seed(mut self, seed: u64) -> Sequences {
         self.seed = Some(seed);
         self
     }
 
-    pub fn with_ids(mut self) -> Sequences<'a> {
+    pub fn with_ids(mut self) -> Sequences {
         self.with_ids = true;
         self
     }
 
-    pub fn without_ids(mut self) -> Sequences<'a> {
+    pub fn without_ids(mut self) -> Sequences {
         self.with_ids = false;
         self
     }
 
-    pub fn with_sequences(mut self) -> Sequences<'a> {
+    pub fn with_sequences(mut self) -> Sequences {
         self.with_sequences = true;
         self
     }
 
-    pub fn without_sequences(mut self) -> Sequences<'a> {
+    pub fn without_sequences(mut self) -> Sequences {
         self.with_sequences = false;
         self
     }
 }
 
-impl<'a> Iterator for Sequences<'a> {
+impl Iterator for Sequences {
     type Item = Sequence;
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -62,6 +62,8 @@ impl<'a> SequenceBlocks<'a> {
         }
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        self.cache.as_mut().unwrap().0 = block;       
         let byte_loc = self.block_locs[block as usize];
         in_buf
             .seek(SeekFrom::Start(byte_loc))
@@ -83,7 +85,6 @@ impl<'a> SequenceBlocks<'a> {
             self.cache.as_ref().unwrap().1.as_slice()
         } else {
             self._get_block(in_buf, block);
-            self.cache.as_mut().unwrap().0 = block;
             self.cache.as_ref().unwrap().1.as_slice()
         }
     }
@@ -138,7 +139,7 @@ impl SequenceBlock {
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
                 //let mut compressor = zstd_encoder(compression_level as i32);
-                let mut compressor = zstd_compressor.unwrap();
+                let compressor = zstd_compressor.unwrap();
                 compressor.compress_to_buffer(&self.seq, &mut cseq).unwrap();
             }
             #[cfg(target_arch = "wasm32")]

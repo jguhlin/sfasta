@@ -375,6 +375,7 @@ pub enum Loc {
 
 impl Loc {
     /// The ultimate in lazy programming. This was once a type (tuple) and is now a enum....
+    #[inline]
     pub fn original_format(&self, block_size: u32) -> (u32, (u32, u32)) {
         match self {
             Loc::Loc(block, start, end) => (*block, (*start, *end)),
