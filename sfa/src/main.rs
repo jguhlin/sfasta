@@ -98,6 +98,8 @@ enum Commands {
         /// 4Mb (4096) is the default
         #[clap(short, long)]
         blocksize: Option<u64>,
+        #[clap(short, long)]
+        level: Option<u8>,
     },
     Summarize {
         input: String,
@@ -142,6 +144,7 @@ fn main() {
             gzip,
             none,
             blocksize,
+            level,
         } => convert(
             input,
             *threads as usize,
@@ -154,6 +157,7 @@ fn main() {
             *none,
             *noindex,
             *blocksize,
+            *level,
         ),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
@@ -421,6 +425,7 @@ fn convert(
     none: bool,
     noindex: bool,
     blocksize: Option<u64>,
+    level: Option<u8>,
 ) {
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());

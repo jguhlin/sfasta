@@ -203,26 +203,14 @@ impl Sfasta {
     // TODO: Should return Result<Option<Sequence>, &str>
     // TODO: Should actually be what get_sequence_by_seqloc is!
     pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
-        let mut seq: Vec<u8> = Vec::with_capacity(self.parameters.block_size as usize);
+        let mut seq: Vec<u8> = Vec::with_capacity(seqloc.len(self.parameters.block_size));
 
         seqloc
             .sequence
             .as_ref()
-            .expect("No locations passed, Vec<Loc> is empty");
+            .expect("No locations passed, SeqLoc is empty");
 
         let locs = seqloc.sequence.as_ref().unwrap();
-
-        // Basic sanity checks
-        let max_block = locs
-            .iter()
-            .map(|x| x.original_format(self.parameters.block_size))
-            .map(|(x, _)| x)
-            .max()
-            .unwrap();
-        assert!(
-            self.sequenceblocks.as_ref().unwrap().block_locs.len() > max_block as usize,
-            "Requested block is larger than the total number of blocks."
-        );
 
         let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 

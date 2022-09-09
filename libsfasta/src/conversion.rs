@@ -25,20 +25,22 @@ pub struct Converter {
     seqlocs_chunk_size: usize,
     quality_scores: bool,
     compression_type: CompressionType,
+    compression_level: Option<i8>,
     dict: Option<Vec<u8>>,
 }
 
 impl Default for Converter {
     fn default() -> Self {
         Converter {
-            threads: 8,
-            block_size: 4 * 1024 * 1024,    // 4Mb
+            threads: 4,
+            block_size: 2 * 1024 * 1024,    // 2Mb
             seqlocs_chunk_size: 128 * 1024, // 128k
             index: true,
             masking: false,
             quality_scores: false,
             compression_type: CompressionType::ZSTD,
             dict: None,
+            compression_level: None,
         }
     }
 }
@@ -102,6 +104,11 @@ impl Converter {
 
     pub fn with_compression_type(mut self, ct: CompressionType) -> Self {
         self.compression_type = ct;
+        self
+    }
+
+    pub fn with_compression_level(mut self, level: i8) -> Self {
+        self.compression_level = Some(level);
         self
     }
 
@@ -188,10 +195,14 @@ impl Converter {
         let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         // Write sequences
-        let sb_config = CompressionStreamBufferConfig::default()
+        let mut sb_config = CompressionStreamBufferConfig::default()
             .with_block_size(self.block_size as u32)
             .with_compression_type(self.compression_type)
             .with_threads(self.threads as u16); // Effectively # of compression threads
+
+        if self.compression_level.is_some() {
+            sb_config = sb_config.with_compression_level(self.compression_level.unwrap());
+        }
 
         let start_time = std::time::Instant::now();
 

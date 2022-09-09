@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
-use std::thread;
+use std::{thread, default};
 use std::thread::JoinHandle;
 
 use crossbeam::queue::ArrayQueue;
@@ -15,14 +15,14 @@ use crate::CompressionType;
 pub struct CompressionStreamBufferConfig {
     pub block_size: u32,
     pub compression_type: CompressionType,
-    pub compression_level: i32,
+    pub compression_level: i8,
     pub num_threads: u16,
 }
 
 impl Default for CompressionStreamBufferConfig {
     fn default() -> Self {
         Self {
-            block_size: 4 * 1024 * 1024,
+            block_size: 2 * 1024 * 1024,
             compression_type: CompressionType::ZSTD,
             compression_level: 3,
             num_threads: 1,
@@ -35,7 +35,7 @@ impl CompressionStreamBufferConfig {
     pub fn new(
         block_size: u32,
         compression_type: CompressionType,
-        compression_level: i32,
+        compression_level: i8,
         num_threads: u16,
     ) -> Self {
         Self {
@@ -53,10 +53,11 @@ impl CompressionStreamBufferConfig {
 
     pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self.compression_type = compression_type;
+        self.compression_level = default_compression_level(compression_type);
         self
     }
 
-    pub fn with_compression_level(mut self, compression_level: i32) -> Self {
+    pub fn with_compression_level(mut self, compression_level: i8) -> Self {
         self.compression_level = compression_level;
         self
     }
@@ -83,6 +84,7 @@ pub struct CompressionStreamBuffer {
     sorted_entries: Arc<AtomicUsize>,
     finalized: bool,
     compression_type: CompressionType,
+    compression_level: i8,
     emit_block_spins: usize,
 }
 
@@ -104,6 +106,7 @@ impl Default for CompressionStreamBuffer {
             total_entries: Arc::new(AtomicUsize::new(0)),
             sorted_entries: Arc::new(AtomicUsize::new(0)),
             compression_type: CompressionType::ZSTD,
+            compression_level: default_compression_level(CompressionType::ZSTD),
             emit_block_spins: 0,
         }
     }
@@ -125,6 +128,7 @@ impl CompressionStreamBuffer {
         buffer.block_size = config.block_size;
         buffer.threads = config.num_threads;
         buffer.compression_type = config.compression_type;
+        buffer.compression_level = config.compression_level;
         buffer
     }
 
@@ -142,9 +146,10 @@ impl CompressionStreamBuffer {
             let wq = Arc::clone(&self.sort_queue);
 
             let ct = self.compression_type;
+            let cl = self.compression_level;
 
             let handle =
-                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct));
+                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct, cl));
             self.workers.push(handle);
         }
 
@@ -325,6 +330,7 @@ fn _compression_worker_thread(
     write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     shutdown: Arc<AtomicBool>,
     compression_type: CompressionType,
+    compression_level: i8,
 ) {
     let mut result;
     let backoff = Backoff::new();
@@ -351,7 +357,7 @@ fn _compression_worker_thread(
                 }
             }
             Some((block_id, sb)) => {
-                let sbc = sb.compress(compression_type);
+                let sbc = sb.compress(compression_type, compression_level);
 
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {

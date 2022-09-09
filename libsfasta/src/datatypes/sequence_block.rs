@@ -12,6 +12,8 @@ pub struct SequenceBlocks {
     pub block_locs: Vec<u64>,
     cache: Option<(u32, Vec<u8>)>,
     pub compression_type: CompressionType,
+    pub compression_level: i8,
+
 }
 
 impl SequenceBlocks {
@@ -20,6 +22,7 @@ impl SequenceBlocks {
             block_locs,
             cache: None,
             compression_type,
+            compression_level: default_compression_level(compression_type),
         }
     }
 
@@ -90,10 +93,8 @@ pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
 }
 
 impl SequenceBlock {
-    pub fn compress(self, compression_type: CompressionType) -> SequenceBlockCompressed {
-        let level = default_compression_level(compression_type);
-        // TODO: This needs to be at least as big as block_size!
-        let mut cseq: Vec<u8> = Vec::with_capacity(16 * 1024 * 1024);
+    pub fn compress(self, compression_type: CompressionType, compression_level: i8) -> SequenceBlockCompressed {
+        let mut cseq: Vec<u8> = Vec::with_capacity(self.seq.len());
 
         //debug!("Compressing sequence block with length: {}", self.seq.len());
 
@@ -104,7 +105,7 @@ impl SequenceBlock {
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
                 // TODO: Find a way to reuse this context...
-                let mut compressor = zstd_encoder(level);
+                let mut compressor = zstd_encoder(compression_level as i32);
                 compressor.compress_to_buffer(&self.seq, &mut cseq).unwrap();
             }
             #[cfg(target_arch = "wasm32")]
@@ -126,7 +127,7 @@ impl SequenceBlock {
                 cseq = compressor.into_inner().unwrap();
             }
             CompressionType::GZIP => {
-                let mut compressor = GzEncoder::new(cseq, flate2::Compression::new(level as u32));
+                let mut compressor = GzEncoder::new(cseq, flate2::Compression::new(compression_level as u32));
                 compressor
                     .write_all(&self.seq[..])
                     .expect("Unable to compress with GZIP");
@@ -140,7 +141,7 @@ impl SequenceBlock {
             }
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::XZ => {
-                let mut compressor = XzEncoder::new(&self.seq[..], level as u32);
+                let mut compressor = XzEncoder::new(&self.seq[..], compression_level as u32);
                 compressor
                     .read_to_end(&mut cseq)
                     .expect("Unable to XZ compress");
@@ -151,7 +152,7 @@ impl SequenceBlock {
             }
             CompressionType::BROTLI => {
                 let mut compressor =
-                    brotli::CompressorReader::new(&self.seq[..], 2 * 1024 * 1024, level as u32, 22);
+                    brotli::CompressorReader::new(&self.seq[..], 2 * 1024 * 1024, compression_level as u32, 22);
                 compressor.read_to_end(&mut cseq).unwrap();
             }
             _ => {
@@ -342,7 +343,7 @@ mod tests {
             seq: test_bytes.clone(),
         };
 
-        let y = x.compress(CompressionType::ZSTD);
+        let y = x.compress(CompressionType::ZSTD, 3);
         let z = y.decompress(CompressionType::ZSTD);
         assert!(z.seq == test_bytes);
     }
