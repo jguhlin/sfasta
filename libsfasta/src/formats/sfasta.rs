@@ -207,6 +207,8 @@ impl Sfasta {
 
         let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 
+        println!("{:#?}", seqloc);
+
         for (block, (start, end)) in locs
             .iter()
             .map(|x| x.original_format(self.parameters.block_size))
