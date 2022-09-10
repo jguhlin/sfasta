@@ -374,6 +374,10 @@ impl SeqLoc {
         let start_block_offset = range.start % block_size as usize;
         let end_block_offset = (range.end - 1) % block_size as usize;
 
+        let seqlen = self.len(block_size);
+        assert!(range.start < seqlen);
+        assert!(range.end <= seqlen);
+
         if start_block_ordinal == end_block_ordinal {
             let loc = &locs[start_block_ordinal as usize];
             let (block, (start, _end)) = loc.original_format(block_size);
