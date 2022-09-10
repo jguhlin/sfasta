@@ -368,6 +368,37 @@ impl SeqLoc {
         let locs = self.sequence.as_ref().unwrap();
         let mut new_locs = Vec::new();
         let slice_length = range.end - range.start;
+
+        let mut cumulative_len = 0;
+        for loc in locs {
+            cumulative_len += loc.len(block_size);
+            let (block, (start, end)) = loc.original_format(block_size);
+            
+            if range.start > cumulative_len {
+                // This loc does not contain the start of the slice yet...
+                continue;
+            } else if range.end < cumulative_len - loc.len(block_size) {
+                break;
+            } else {
+                //     x start            y end
+                // ---------------------------------
+                //      \_________________/
+                // ---------------------------------
+                //        x1 slicestart  y1 sliceend
+                
+                // Convert slice start and slice end to loc start and loc end
+                println!("start: {}, end: {}, cumulative_len: {}, slice_length: {}, loc: {}", start, end, cumulative_len, slice_length, loc.len(block_size));
+                let slice_start = range.start.saturating_sub(cumulative_len - loc.len(block_size)) + start as usize;
+                let slice_end = range.end.saturating_sub(cumulative_len - loc.len(block_size)) + start as usize;
+                if slice_end > block_size as usize{
+                    new_locs.push(Loc::Loc(block, slice_start as u32, block_size as u32));
+                } else if slice_end.saturating_sub(slice_start) > 0 {
+                    new_locs.push(Loc::Loc(block, slice_start as u32, slice_end as u32));
+                }
+            }
+        }
+
+        /*
         let start_block_ordinal = range.start / block_size as usize;
         let end_block_ordinal = (range.end - 1) / block_size as usize;
 
@@ -379,6 +410,7 @@ impl SeqLoc {
         assert!(range.end <= seqlen);
 
         if start_block_ordinal == end_block_ordinal {
+            println!("One");
             let loc = &locs[start_block_ordinal as usize];
             let (block, (start, _end)) = loc.original_format(block_size);
             println!("{} {} {}", block, start, _end);
@@ -388,6 +420,7 @@ impl SeqLoc {
                 start + end_block_offset as u32 + 1));
 
         } else {
+            println!("Two");
             let start_loc = &locs[start_block_ordinal as usize];
             let (block, (start, end)) = start_loc.original_format(block_size);
             new_locs.push(Loc::Loc(block, start + start_block_offset as u32, end));
@@ -400,6 +433,10 @@ impl SeqLoc {
             let (block, (start, _end)) = end_loc.original_format(block_size);
             new_locs.push(Loc::Loc(block, start, start + end_block_offset as u32 + 1));
         }
+        */
+
+        println!("new_locs: {:?}", new_locs);
+        println!("{}", new_locs.iter().map(|x| x.len(block_size)).sum::<usize>());
 
         assert!(new_locs.iter().map(|x| x.len(block_size)).sum::<usize>() == slice_length);
 
@@ -498,8 +535,6 @@ mod tests {
             Loc::FromStart(3097441, 1274),
         ]);
 
-        println!("Length: {}", seqloc.len(block_size));
-
         //                                  x 261735 ----------> 262144  (262144 - 261735) = 409
         //     -------------------------------------------------
         //     <----- 1274                                                                 = 1274
@@ -508,10 +543,26 @@ mod tests {
         //
         //     We want 104567 to 104840 -- how?
 
+        let slice = seqloc.slice(block_size, 0..20);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(3097440, 261735, 261755)]));
 
+        seqloc.sequence = Some(vec![
+            Loc::ToEnd(1652696, 260695),
+            Loc::FromStart(1652697, 28424)
+        ]);
 
-        let slice = seqloc.slice(block_size, 104567..104840);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(3097440, 261735, 262144), Loc::Loc(3097441, 0, 1274)]));
+        //                               x 260695 ----------> 262144  (262144 - 260695) = 1449
+        //    -------------------------------------------------
+        //    <----- 28424                                                              = 28424
+        //    -------------------------------------------------
+        //    So total is 1449 + 28424 = 29873
+        //    We want range 2679 to 2952
+        //    So should be the second block
+        //    (2, 2679, 2952)
+
+        let slice = seqloc.slice(block_size, 2679..2952);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1652696, 263374, 263447)]));
+
 
 
 
