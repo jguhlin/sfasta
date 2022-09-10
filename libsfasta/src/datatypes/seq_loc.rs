@@ -370,6 +370,7 @@ impl SeqLoc {
         let slice_length = range.end - range.start;
         let start_block_ordinal = range.start / block_size as usize;
         let end_block_ordinal = (range.end - 1) / block_size as usize;
+        
         let start_block_offset = range.start % block_size as usize;
         let end_block_offset = (range.end - 1) % block_size as usize;
 

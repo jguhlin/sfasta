@@ -209,6 +209,7 @@ impl Sfasta {
 
         println!("Block Size: {}", self.parameters.block_size);
         println!("{:#?}", seqloc);
+        println!("{:#?}", seqloc.sequence.as_ref().unwrap().iter().map(|l| l.original_format(self.parameters.block_size)));
 
         for (block, (start, end)) in locs
             .iter()
