@@ -373,9 +373,6 @@ impl SeqLoc {
         let start_block_offset = range.start % block_size as usize;
         let end_block_offset = (range.end - 1) % block_size as usize;
 
-        println!("Start block ordinal: {}", start_block_ordinal);
-        println!("End block ordinal: {}", end_block_ordinal);
-
         if start_block_ordinal == end_block_ordinal {
             let loc = &locs[start_block_ordinal as usize];
             let (block, (start, _end)) = loc.original_format(block_size);
@@ -397,10 +394,6 @@ impl SeqLoc {
             new_locs.push(Loc::Loc(block, start, start + end_block_offset as u32 + 1));
         }
 
-        println!("{:#?}", new_locs);
-        println!("Slice: {:?} -> {:?}", range, new_locs);
-        println!("Sliced Length: {:?}", new_locs.iter().map(|x| x.len(block_size)).sum::<usize>());
-        println!("Expected: {:?}", slice_length);
         assert!(new_locs.iter().map(|x| x.len(block_size)).sum::<usize>() == slice_length);
 
         SeqLoc {
