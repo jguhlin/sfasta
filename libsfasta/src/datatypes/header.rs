@@ -20,7 +20,7 @@ impl Default for Headers {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            block_size: 4 * 1024 * 1024,
+            block_size: 1024 * 1024,
             data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
