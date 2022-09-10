@@ -201,10 +201,7 @@ impl Sfasta {
     pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(seqloc.len(self.parameters.block_size));
 
-        seqloc
-            .sequence
-            .as_ref()
-            .expect("No locations passed, SeqLoc is empty");
+        assert!(seqloc.sequence.is_some());
 
         let locs = seqloc.sequence.as_ref().unwrap();
 

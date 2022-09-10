@@ -350,15 +350,67 @@ impl SeqLoc {
     }
 
     pub fn len(&self, block_size: u32) -> usize {
-        let mut len = 0;
         if self.sequence.is_some() {
-            len += self.sequence.as_ref().unwrap().iter().map(|x| x.len(block_size)).sum::<usize>()
+            self.sequence.as_ref().unwrap().iter().map(|x| x.len(block_size)).sum::<usize>()
         } else if self.masking.is_some() {
-            len += self.masking.as_ref().unwrap().1 as usize;
+            self.masking.as_ref().unwrap().1 as usize
         } else if self.scores.is_some() {
-            len += self.scores.as_ref().unwrap().len();
+            self.scores.as_ref().unwrap().len()
+        } else {
+            0
         }
-        len
+    }
+
+    // Convert range to locs to slice
+    // Have to map ranges to the Vec<Locs>
+    pub fn slice(&self, block_size: u32, range: std::ops::Range<usize>) -> SeqLoc {
+        assert!(self.sequence.is_some());
+        let locs = self.sequence.as_ref().unwrap();
+        let mut new_locs = Vec::new();
+        let slice_length = range.end - range.start;
+        let start_block_ordinal = range.start / block_size as usize;
+        let end_block_ordinal = (range.end - 1) / block_size as usize;
+        let start_block_offset = range.start % block_size as usize;
+        let end_block_offset = (range.end - 1) % block_size as usize;
+
+        println!("Start block ordinal: {}", start_block_ordinal);
+        println!("End block ordinal: {}", end_block_ordinal);
+
+        if start_block_ordinal == end_block_ordinal {
+            let loc = &locs[start_block_ordinal as usize];
+            let (block, (start, _end)) = loc.original_format(block_size);
+
+            new_locs.push(Loc::Loc(block, start + start_block_offset as u32,
+                start + end_block_offset as u32 + 1));
+
+        } else {
+            let start_loc = &locs[start_block_ordinal as usize];
+            let (block, (start, end)) = start_loc.original_format(block_size);
+            new_locs.push(Loc::Loc(block, start + start_block_offset as u32, end));
+
+            for i in start_block_ordinal + 1..end_block_ordinal {
+                new_locs.push(locs[i as usize].clone());
+            }
+
+            let end_loc = &locs[end_block_ordinal as usize];
+            let (block, (start, _end)) = end_loc.original_format(block_size);
+            new_locs.push(Loc::Loc(block, start, start + end_block_offset as u32 + 1));
+        }
+
+        println!("{:#?}", new_locs);
+        println!("Slice: {:?} -> {:?}", range, new_locs);
+        println!("Sliced Length: {:?}", new_locs.iter().map(|x| x.len(block_size)).sum::<usize>());
+        println!("Expected: {:?}", slice_length);
+        assert!(new_locs.iter().map(|x| x.len(block_size)).sum::<usize>() == slice_length);
+
+        SeqLoc {
+            sequence: Some(new_locs),
+            masking: None,
+            scores: None,
+            headers: self.headers.clone(),
+            ids: self.ids.clone(),
+        }
+
     }
 }
 
@@ -401,5 +453,31 @@ impl Loc {
             Loc::ToEnd(_, start) => *start == 0,
             Loc::EntireBlock(_) => false,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_seqloc_slice() {
+        let mut seqloc = SeqLoc::new();
+        seqloc.sequence = Some(vec![
+            Loc::Loc(0, 0, 10),
+            Loc::Loc(1, 0, 10),
+            Loc::Loc(2, 0, 10),
+            Loc::Loc(3, 0, 10),
+            Loc::Loc(4, 0, 10)]);
+        let slice = seqloc.slice(10, 0..10);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 0, 10)]));
+        let slice = seqloc.slice(10, 10..20);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1, 0, 10)]));
+        let slice = seqloc.slice(10, 20..30);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(2, 0, 10)]));
+        let slice = seqloc.slice(10, 15..35);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1, 5, 10), Loc::Loc(2, 0, 10), Loc::Loc(3, 0, 5)]));
+        let slice = seqloc.slice(10, 5..9);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 5, 9)]));
     }
 }
