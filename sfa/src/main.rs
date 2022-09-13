@@ -31,7 +31,6 @@ use std::path::Path;
 
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
-use itertools::*;
 
 use libsfasta::prelude::*;
 use libsfasta::CompressionType;

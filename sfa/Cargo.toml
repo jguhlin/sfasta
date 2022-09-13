@@ -31,7 +31,6 @@ simdutf8 = "0.1.4"
 git-version = "0.3.5" # TODO: Print this out in the library in a version call
 mimalloc = { version = "0.1.29", default-features = false, optional = true}
 env_logger = "0.9.0"
-itertools = "0.10.3"
 
 # Compression algorithms
 lz4_flex = "0.9.4"
