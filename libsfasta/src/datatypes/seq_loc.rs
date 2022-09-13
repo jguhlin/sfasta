@@ -350,7 +350,7 @@ impl SeqLoc {
     }
 
     // Convert Vec of Locs to the ranges of the sequence...
-    pub fn seq_locations(&self, block_size: u32) -> Vec<std::ops::Range<u32>> {
+    pub fn seq_location_splits(&self, block_size: u32) -> Vec<std::ops::Range<u32>> {
         let mut locations = Vec::new();
 
         let mut start = 0;
@@ -385,98 +385,56 @@ impl SeqLoc {
 
     // Convert range to locs to slice
     // Have to map ranges to the Vec<Locs>
-    pub fn slice(&self, block_size: u32, range: std::ops::Range<usize>) -> SeqLoc {
+    pub fn seq_slice(&self, block_size: u32, range: std::ops::Range<u32>) -> SeqLoc {
         assert!(self.sequence.is_some());
         let locs = self.sequence.as_ref().unwrap();
         let mut new_locs = Vec::new();
-        let slice_length = range.end - range.start;
+        let mut cumulative_n: usize = 0;
 
-        let mut cumulative_len = 0;
-        for loc in locs {
-            cumulative_len += loc.len(block_size);
-            let (block, (start, end)) = loc.original_format(block_size);
+        let splits = self.seq_location_splits(block_size);
 
-            if range.start > cumulative_len {
-                // This loc does not contain the start of the slice yet...
-                continue;
-            } else if range.end < cumulative_len - loc.len(block_size) {
-                break;
+        let end = range.end - 1;
+
+        for (i, split) in splits.iter().enumerate() {
+            
+            if split.contains(&range.start) && split.contains(&end) {
+                // This loc contains the entire range
+                // So for example, Loc is 1500..2000, and the range we want is 20..50 (translates to 1520..1550)
+                let start = range.start.saturating_sub(cumulative_n as u32);
+                let end = range.end.saturating_sub(cumulative_n as u32);
+                new_locs.push(Loc::Loc(locs[i].block(), start, end));
+                println!("Contains both, so stopping here! {} {:#?} {:#?}", cumulative_n, split, range);
+                break // We are done if it contains the entire range...
+            } else if split.contains(&range.start) {
+                // Loc contains the start of the range...
+                // For example, Loc is 1500..2000 (length 500 in this Loc) and the range we want is 450..550 (so 1950..2000 from this loc, and another 100 from the next loc)
+                let start = range.start.saturating_sub(cumulative_n as u32);
+                let end = range.end.saturating_sub(cumulative_n as u32);
+                cumulative_n = cumulative_n.saturating_add((end - start) as usize);
+                new_locs.push(Loc::Loc(locs[i].block(), start, end));
+                println!("Contains start, so continuing...");
+            } else if split.contains(&end) {
+                // Loc contains the end of the range...
+                // For example, Loc is 1500..2000 (length 500 in this Loc, starting at 1000) and the range we want is 900..1200 (so 1500..1700 from this loc)
+                let start = range.start.saturating_sub(cumulative_n as u32);
+                let end = range.end.saturating_sub(cumulative_n as u32);
+                new_locs.push(Loc::Loc(locs[i].block(), start, end));
+                println!("Contains end, so stopping here!");
+                break // We are done if it contains the end of the range...
+            } else if split.start < range.start && split.end > range.end {
+                // Loc contains the entire range...
+                // For example, Loc is 1500..2000 (length 500 in the Loc) and the range we want is 450..550 (so 1500..1550 from this loc, and another 100 from the previous loc)
+                new_locs.push(locs[i].clone());
+                cumulative_n = cumulative_n.saturating_add(locs[i].len(block_size));
+                println!("Contains entire range, so continuing...");
             } else {
-                //     x start            y end
-                // ---------------------------------
-                //      \_________________/
-                // ---------------------------------
-                //        x1 slicestart  y1 sliceend
-
-                // Convert slice start and slice end to loc start and loc end
-                println!(
-                    "start: {}, end: {}, cumulative_len: {}, slice_length: {}, loc: {}",
-                    start,
-                    end,
-                    cumulative_len,
-                    slice_length,
-                    loc.len(block_size)
-                );
-                let slice_start = range
-                    .start
-                    .saturating_sub(cumulative_len - loc.len(block_size))
-                    + start as usize;
-                let slice_end = range
-                    .end
-                    .saturating_sub(cumulative_len - loc.len(block_size))
-                    + start as usize;
-                if slice_end > block_size as usize {
-                    new_locs.push(Loc::Loc(block, slice_start as u32, block_size as u32));
-                } else if slice_end.saturating_sub(slice_start) > 0 {
-                    new_locs.push(Loc::Loc(block, slice_start as u32, slice_end as u32));
-                }
+                // Loc does not contain the range...
+                // For example, Loc is 1500..2000 (length 500 in the Loc) and the range we want is 250..350 (so 1750..1800 from this loc)
+                cumulative_n = cumulative_n.saturating_add(locs[i].len(block_size));
+                println!("Does not contain range, so continuing...");
             }
         }
-
-        /*
-        let start_block_ordinal = range.start / block_size as usize;
-        let end_block_ordinal = (range.end - 1) / block_size as usize;
-
-        let start_block_offset = range.start % block_size as usize;
-        let end_block_offset = (range.end - 1) % block_size as usize;
-
-        let seqlen = self.len(block_size);
-        assert!(range.start < seqlen);
-        assert!(range.end <= seqlen);
-
-        if start_block_ordinal == end_block_ordinal {
-            println!("One");
-            let loc = &locs[start_block_ordinal as usize];
-            let (block, (start, _end)) = loc.original_format(block_size);
-            println!("{} {} {}", block, start, _end);
-            println!("{} {} {} {}", start_block_ordinal, start_block_offset, end_block_ordinal, end_block_offset);
-
-            new_locs.push(Loc::Loc(block, start + start_block_offset as u32,
-                start + end_block_offset as u32 + 1));
-
-        } else {
-            println!("Two");
-            let start_loc = &locs[start_block_ordinal as usize];
-            let (block, (start, end)) = start_loc.original_format(block_size);
-            new_locs.push(Loc::Loc(block, start + start_block_offset as u32, end));
-
-            for i in start_block_ordinal + 1..end_block_ordinal {
-                new_locs.push(locs[i as usize].clone());
-            }
-
-            let end_loc = &locs[end_block_ordinal as usize];
-            let (block, (start, _end)) = end_loc.original_format(block_size);
-            new_locs.push(Loc::Loc(block, start, start + end_block_offset as u32 + 1));
-        }
-        */
-
-        println!("new_locs: {:?}", new_locs);
-        println!(
-            "{}",
-            new_locs.iter().map(|x| x.len(block_size)).sum::<usize>()
-        );
-
-        assert!(new_locs.iter().map(|x| x.len(block_size)).sum::<usize>() == slice_length);
+        println!("Done--------------------------");
 
         SeqLoc {
             sequence: Some(new_locs),
@@ -528,6 +486,15 @@ impl Loc {
             Loc::EntireBlock(_) => false,
         }
     }
+
+    pub fn block(&self) -> u32 {
+        match self {
+            Loc::Loc(block, _, _) => *block,
+            Loc::FromStart(block, _) => *block,
+            Loc::ToEnd(block, _) => *block,
+            Loc::EntireBlock(block) => *block,
+        }
+    }
 }
 
 #[cfg(test)]
@@ -556,13 +523,17 @@ mod tests {
             Loc::Loc(3, 0, 10),
             Loc::Loc(4, 0, 10),
         ]);
-        let slice = seqloc.slice(10, 0..10);
+        let slice = seqloc.seq_slice(10, 0..10);
         assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 0, 10)]));
-        let slice = seqloc.slice(10, 10..20);
+        let slice = seqloc.seq_slice(10, 5..7);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 5, 7)]));
+        let slice = seqloc.seq_slice(10, 15..17);
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1, 5, 7)]));
+        let slice = seqloc.seq_slice(10, 10..20);
         assert_eq!(slice.sequence, Some(vec![Loc::Loc(1, 0, 10)]));
-        let slice = seqloc.slice(10, 20..30);
+        let slice = seqloc.seq_slice(10, 20..30);
         assert_eq!(slice.sequence, Some(vec![Loc::Loc(2, 0, 10)]));
-        let slice = seqloc.slice(10, 15..35);
+        let slice = seqloc.seq_slice(10, 15..35);
         assert_eq!(
             slice.sequence,
             Some(vec![
@@ -571,7 +542,7 @@ mod tests {
                 Loc::Loc(3, 0, 5)
             ])
         );
-        let slice = seqloc.slice(10, 5..9);
+        let slice = seqloc.seq_slice(10, 5..9);
         assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 5, 9)]));
 
         let block_size = 262144;
@@ -588,7 +559,7 @@ mod tests {
         //
         //     We want 104567 to 104840 -- how?
 
-        let slice = seqloc.slice(block_size, 0..20);
+        let slice = seqloc.seq_slice(block_size, 0..20);
         assert_eq!(
             slice.sequence,
             Some(vec![Loc::Loc(3097440, 261735, 261755)])
@@ -608,7 +579,7 @@ mod tests {
         //    So should be the second block
         //    (2, 2679, 2952)
 
-        let slice = seqloc.slice(block_size, 2679..2952);
+        let slice = seqloc.seq_slice(block_size, 2679..2952);
         assert_eq!(
             slice.sequence,
             Some(vec![Loc::Loc(1652696, 263374, 263447)])
