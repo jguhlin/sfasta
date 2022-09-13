@@ -114,6 +114,8 @@ impl Default for CompressionStreamBuffer {
 
 impl Drop for CompressionStreamBuffer {
     fn drop(&mut self) {
+        self.wakeup();
+
         assert!(
             self.buffer.is_empty(),
             "SequenceBuffer was not empty. Finalize the buffer to emit the final block."
@@ -132,8 +134,11 @@ impl CompressionStreamBuffer {
         buffer
     }
 
+    #[inline(always)]
     pub fn wakeup(&self) {
-        self.sort_worker.as_ref().unwrap().thread().unpark();
+        if let Some(sort_worker) = &self.sort_worker {
+            sort_worker.thread().unpark();
+        }
         for i in self.workers.iter() {
             i.thread().unpark();
         }
@@ -170,16 +175,14 @@ impl CompressionStreamBuffer {
         // Emit the final block...
         self.emit_block();
         self.finalized = true;
+        self.wakeup();
 
         let backoff = Backoff::new();
 
         while self.sorted_entries.load(Ordering::Relaxed)
             < self.total_entries.load(Ordering::Relaxed)
         {
-            self.sort_worker.as_ref().unwrap().thread().unpark();
-            for i in self.workers.iter() {
-                i.thread().unpark();
-            }
+            self.wakeup();
             backoff.snooze();
         }
 
@@ -255,6 +258,8 @@ impl CompressionStreamBuffer {
             seq = &mut seq[end..];
         }
 
+        self.wakeup();
+
         Ok(locs)
     }
 
@@ -279,10 +284,7 @@ impl CompressionStreamBuffer {
         }
         self.cur_block_id += 1;
 
-        for i in self.workers.iter() {
-            i.thread().unpark();
-        }
-        self.sort_worker.as_ref().unwrap().thread().unpark();
+        self.wakeup();
     }
 
     // Convenience functions
@@ -475,7 +477,7 @@ mod tests {
 
         let test_block_size = 512 * 1024;
 
-        let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size);
+        let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size).with_threads(2);
         sb.initialize();
 
         let oq = sb.get_output_queue();
@@ -493,6 +495,7 @@ mod tests {
         let loc = sb.add_sequence(&mut largeseq).unwrap();
         locs.extend(loc);
 
+        sb.wakeup();
         // println!("Done adding seqs...");
         sb.finalize().expect("Unable to finalize SeqBuffer");
 
