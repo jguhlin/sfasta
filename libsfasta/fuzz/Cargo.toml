@@ -23,3 +23,9 @@ name = "parse_fasta"
 path = "fuzz_targets/parse_fasta.rs"
 test = false
 doc = false
+
+[[bin]]
+name = "parse_fastq"
+path = "fuzz_targets/parse_fastq.rs"
+test = false
+doc = false
