@@ -96,7 +96,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                     }
                     _ => {
                         let mut slice_end = bytes_read;
-                        
+
                         if self.buffer[bytes_read - 1] == b'\n' {
                             slice_end = slice_end.saturating_sub(1);
                         }
@@ -170,7 +170,9 @@ mod tests {
 
     #[test]
     pub fn test_weird_windows_error() {
-        let mut buffer = BufReader::new(std::fs::File::open("test_data/test_sequence_conversion.fasta").unwrap());
+        let mut buffer = BufReader::new(
+            std::fs::File::open("test_data/test_sequence_conversion.fasta").unwrap(),
+        );
         let mut fasta = Fasta::from_buffer(&mut buffer);
         fasta.next();
         fasta.next();
@@ -185,7 +187,7 @@ mod tests {
 
         assert!(&sequence_as_str[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
         assert!(&sequence_as_str[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
-        
+
         assert_eq!(sequence.len(), 48598);
         assert_eq!(&sequence[last_ten..], b"ATGTACAGCG");
     }
