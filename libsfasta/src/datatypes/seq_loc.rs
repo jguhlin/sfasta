@@ -389,7 +389,6 @@ impl SeqLoc {
         assert!(self.sequence.is_some());
         let locs = self.sequence.as_ref().unwrap();
         let mut new_locs = Vec::new();
-        let mut cumulative_n: usize = 0;
 
         let splits = self.seq_location_splits(block_size);
 
@@ -400,37 +399,35 @@ impl SeqLoc {
             if split.contains(&range.start) && split.contains(&end) {
                 // This loc contains the entire range
                 // So for example, Loc is 1500..2000, and the range we want is 20..50 (translates to 1520..1550)
-                let start = range.start.saturating_sub(cumulative_n as u32);
-                let end = range.end.saturating_sub(cumulative_n as u32);
-                new_locs.push(Loc::Loc(locs[i].block(), start, end));
-                println!("Contains both, so stopping here! {} {:#?} {:#?}", cumulative_n, split, range);
+                let start = range.start.saturating_sub(split.start);
+                let end = range.end.saturating_sub(split.start);
+                new_locs.push(locs[i].slice(block_size, start..end));
+                println!("Contains both, so stopping here! {:#?} {:#?} {} {}", split, range, start, end);
                 break // We are done if it contains the entire range...
             } else if split.contains(&range.start) {
                 // Loc contains the start of the range...
                 // For example, Loc is 1500..2000 (length 500 in this Loc) and the range we want is 450..550 (so 1950..2000 from this loc, and another 100 from the next loc)
-                let start = range.start.saturating_sub(cumulative_n as u32);
-                let end = range.end.saturating_sub(cumulative_n as u32);
-                cumulative_n = cumulative_n.saturating_add((end - start) as usize);
-                new_locs.push(Loc::Loc(locs[i].block(), start, end));
+                let start = range.start.saturating_sub(split.start);
+                let end = range.end.saturating_sub(split.start);
+                new_locs.push(locs[i].slice(block_size, start..end));
                 println!("Contains start, so continuing...");
             } else if split.contains(&end) {
                 // Loc contains the end of the range...
                 // For example, Loc is 1500..2000 (length 500 in this Loc, starting at 1000) and the range we want is 900..1200 (so 1500..1700 from this loc)
-                let start = range.start.saturating_sub(cumulative_n as u32);
-                let end = range.end.saturating_sub(cumulative_n as u32);
-                new_locs.push(Loc::Loc(locs[i].block(), start, end));
+                let start = range.start.saturating_sub(split.start);
+                let end = range.end.saturating_sub(split.start);
+                new_locs.push(locs[i].slice(block_size, start..end));
+                println!("{:#?} {:#?} {:#?} {}", split, range, start, end);
                 println!("Contains end, so stopping here!");
                 break // We are done if it contains the end of the range...
-            } else if split.start < range.start && split.end > range.end {
+            } else if split.start > range.start && split.end < range.end {
                 // Loc contains the entire range...
                 // For example, Loc is 1500..2000 (length 500 in the Loc) and the range we want is 450..550 (so 1500..1550 from this loc, and another 100 from the previous loc)
                 new_locs.push(locs[i].clone());
-                cumulative_n = cumulative_n.saturating_add(locs[i].len(block_size));
                 println!("Contains entire range, so continuing...");
             } else {
                 // Loc does not contain the range...
                 // For example, Loc is 1500..2000 (length 500 in the Loc) and the range we want is 250..350 (so 1750..1800 from this loc)
-                cumulative_n = cumulative_n.saturating_add(locs[i].len(block_size));
                 println!("Does not contain range, so continuing...");
             }
         }
@@ -459,7 +456,7 @@ pub enum Loc {
 
 impl Loc {
     /// The ultimate in lazy programming. This was once a type (tuple) and is now a enum....
-    #[inline]
+    #[inline(always)]
     pub fn original_format(&self, block_size: u32) -> (u32, (u32, u32)) {
         match self {
             Loc::Loc(block, start, end) => (*block, (*start, *end)),
@@ -469,6 +466,7 @@ impl Loc {
         }
     }
 
+    #[inline(always)]
     pub fn len(&self, block_size: u32) -> usize {
         match self {
             Loc::Loc(_, start, end) => (*end - *start) as usize,
@@ -478,6 +476,7 @@ impl Loc {
         }
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         match self {
             Loc::Loc(_, start, end) => *start == *end,
@@ -487,6 +486,7 @@ impl Loc {
         }
     }
 
+    #[inline(always)]
     pub fn block(&self) -> u32 {
         match self {
             Loc::Loc(block, _, _) => *block,
@@ -495,8 +495,41 @@ impl Loc {
             Loc::EntireBlock(block) => *block,
         }
     }
-}
 
+    #[inline(always)]
+    pub fn start(&self) -> u32 {
+        match self {
+            Loc::Loc(_, start, _) => *start,
+            Loc::FromStart(_, _) => 0,
+            Loc::ToEnd(_, start) => *start,
+            Loc::EntireBlock(_) => 0,
+        }
+    }
+
+    #[inline(always)]
+    pub fn end(&self, block_size: u32) -> u32 {
+        match self {
+            Loc::Loc(_, _, end) => *end,
+            Loc::FromStart(_, _) => block_size,
+            Loc::ToEnd(_, _) => block_size,
+            Loc::EntireBlock(_) => block_size,
+        }
+    }
+
+    #[inline(always)]
+    /// Slice a loc
+    /// Offset from the total sequence should be calculated before this step
+    /// But this handles calculating from inside the loc itself...
+    // TODO: Implement for RangeInclusive
+    pub fn slice(&self, block_size: u32, range: std::ops::Range<u32>) -> Loc {
+        println!("{} {}", self.start(), self.end(block_size));
+        return Loc::Loc(
+            self.block(), 
+            std::cmp::max(self.start().saturating_add(range.start), self.start()), 
+            std::cmp::min(self.start().saturating_add(range.end), self.end(block_size)))
+    }    
+
+}
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -579,10 +612,13 @@ mod tests {
         //    So should be the second block
         //    (2, 2679, 2952)
 
+        // 262144 - 260695 = 1449
+        // 2679 - 1449 = 1230
+
         let slice = seqloc.seq_slice(block_size, 2679..2952);
         assert_eq!(
             slice.sequence,
-            Some(vec![Loc::Loc(1652696, 263374, 263447)])
+            Some(vec![Loc::Loc(1652697, 1230, 1503)])
         );
     }
 }
