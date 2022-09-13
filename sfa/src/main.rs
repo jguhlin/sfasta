@@ -1,3 +1,6 @@
+#[cfg(nightly)]
+#[feature(write_all_vectored)]
+
 #[cfg(feature = "mimalloc")]
 mod set_mimalloc {
     extern crate mimalloc;
@@ -360,30 +363,38 @@ fn view(input: &str) {
     for seqloc in sfasta.seqlocs.as_mut().unwrap().data.take().unwrap().iter() {
         let id = sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
 
-        stdout.write(&common[..1]).unwrap();
-        stdout.write(id.as_bytes()).unwrap();
+        stdout.write_all(&common[..1]).unwrap();
+        stdout.write_all(id.as_bytes()).unwrap();
 
         if seqloc.headers.is_some() {
-            stdout.write(sfasta
+            stdout.write_all(sfasta
                 .get_header(seqloc.headers.as_ref().unwrap())
                 .expect("Unable to fetch header").as_bytes()).unwrap();
         }
 
-        stdout.write(b"\n").unwrap();
+        stdout.write_all(b"\n").unwrap();
 
         let sequence = sfasta
             .get_sequence(seqloc)
             .expect("Unable to fetch sequence");
 
-        let newlines = (0..1).map(|_| std::io::IoSlice::new(b"\n")).cycle();
+        #[cfg(nightly)] {
+            let newlines = (0..1).map(|_| std::io::IoSlice::new(b"\n")).cycle();
+            let x = sequence.chunks(line_length).map(|x| {
+                std::io::IoSlice::new(x)
+            }).zip(newlines).map(|x| {
+                [x.0, x.1]            
+            }).flatten().collect::<Vec<_>>();
+            stdout.write_all_vectored(&mut x).unwrap();
+        }
 
-        let x = sequence.chunks(line_length).map(|x| {
-            std::io::IoSlice::new(x)
-        }).zip(newlines).map(|x| {
-            [x.0, x.1]            
-        }).flatten().collect::<Vec<_>>();
-
-        stdout.write_vectored(&x).unwrap();
+        #[cfg(not(nightly))]
+        {
+            sequence.chunks(line_length).for_each(|x| {
+                stdout.write_all(x).unwrap();
+                stdout.write_all(b"\n").unwrap();
+            });
+        }
 
         // 60 matches samtools faidx output
         // But 80 is common elsewhere...
