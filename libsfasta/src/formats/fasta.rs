@@ -50,7 +50,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                 match self.buffer[0] {
                     // 62 is a > meaning we have a new sequence id.
                     62 => {
-                        let slice_end = if self.buffer[bytes_read - 1] == b'\n' {
+                        let slice_end = if self.buffer[bytes_read - 1] == b'\r' {
                             bytes_read.saturating_sub(1)
                         } else {
                             bytes_read
@@ -95,11 +95,16 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                         }
                     }
                     _ => {
-                        let slice_end = if self.buffer[bytes_read - 1] == b'\n' {
-                            bytes_read.saturating_sub(1)
-                        } else {
-                            bytes_read
-                        };
+                        let mut slice_end = bytes_read;
+                        
+                        if self.buffer[bytes_read - 1] == b'\n' {
+                            slice_end = slice_end.saturating_sub(1);
+                        }
+
+                        if self.buffer[slice_end - 1] == b'\r' {
+                            slice_end = slice_end.saturating_sub(1);
+                        }
+
                         // let slice_end = bytes_read; //.saturating_sub(1);
                         self.seqbuffer.extend_from_slice(&self.buffer[0..slice_end]);
                         self.seqlen = self.seqlen.saturating_add(slice_end);
@@ -112,6 +117,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
     }
 }
 
+// TODO: This needs a refresh
 pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<usize>) {
     let mut entries: usize = 0;
     let mut ids: Vec<String> = Vec::with_capacity(2 * 1024 * 1024);
@@ -163,14 +169,39 @@ mod tests {
     use std::io::BufReader;
 
     #[test]
+    pub fn test_weird_windows_error() {
+        let mut buffer = BufReader::new(std::fs::File::open("test_data/test_sequence_conversion.fasta").unwrap());
+        let mut fasta = Fasta::from_buffer(&mut buffer);
+        fasta.next();
+        fasta.next();
+        let third = fasta.next();
+        println!("{}", third.as_ref().unwrap().id.as_ref().unwrap());
+        let sequence = third.unwrap().sequence.unwrap();
+        let last_ten = sequence.len() - 10;
+        println!("{:#?}", std::str::from_utf8(&sequence[last_ten..]).unwrap());
+        println!("{:#?}", &sequence[last_ten..]);
+
+        let sequence_as_str = std::str::from_utf8(&sequence).unwrap();
+
+        assert!(&sequence_as_str[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
+        assert!(&sequence_as_str[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
+        
+        assert_eq!(sequence.len(), 48598);
+        assert_eq!(&sequence[last_ten..], b"ATGTACAGCG");
+    }
+
+    #[test]
     pub fn test_fasta_parse() {
         let fakefasta =
-            b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
+            b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n>Third  \nACTGCA\nACTGCA\nNNNNN".to_vec();
         let fakefasta_ = fakefasta.as_slice();
         let inner = &mut BufReader::new(fakefasta_);
         let mut fasta = Fasta::from_buffer(inner);
+        let j = fasta.next();
+        assert!(j.unwrap().sequence.unwrap() == b"ACTGCATCACTGACCTA".to_vec());
         let _j = fasta.next();
-        let _j = fasta.next();
+        let j = fasta.next();
+        assert!(j.unwrap().sequence.unwrap() == b"ACTGCAACTGCANNNNN");
     }
 
     #[test]
@@ -183,8 +214,7 @@ mod tests {
         let s = fasta.next().unwrap();
         println!("{:#?}", s.header);
         assert!(
-            &s.header
-                == &Some("I have more information in the rest of the FASTA header".to_string())
+            s.header == Some("I have more information in the rest of the FASTA header".to_string())
         );
     }
 

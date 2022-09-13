@@ -349,9 +349,10 @@ impl SeqLoc {
         }
     }
 
+    // Convert Vec of Locs to the ranges of the sequence...
     pub fn seq_locations(&self, block_size: u32) -> Vec<std::ops::Range<u32>> {
         let mut locations = Vec::new();
-        
+
         let mut start = 0;
 
         if let Some(seq) = &self.sequence {
@@ -362,9 +363,9 @@ impl SeqLoc {
             }
         }
         locations
-
     }
 
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self, block_size: u32) -> usize {
         if self.sequence.is_some() {
             self.sequence

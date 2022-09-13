@@ -690,13 +690,14 @@ mod tests {
 
         let sequence = sequence.trim();
 
-        println!("{:#?}", &sequence[48590..]);
-        println!("{:#?}", &sequence[48590..].as_bytes());
+        let last_ten = sequence.len() - 10;
+        println!("{:#?}", &sequence[last_ten..].as_bytes());
+        println!("{:#?}", &sequence[last_ten..]);
 
         assert!(&sequence[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
         assert!(&sequence[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
         // Last 10
-        let last_ten = sequence.len() - 10;
+        
         assert!(&sequence[last_ten..] == "ATGTACAGCG");
         assert_eq!(sequence.len(), 48598);
     }

@@ -1,6 +1,5 @@
 #[cfg(nightly)]
 #[feature(write_all_vectored)]
-
 #[cfg(feature = "mimalloc")]
 mod set_mimalloc {
     extern crate mimalloc;
@@ -366,9 +365,14 @@ fn view(input: &str) {
         stdout.write_all(id.as_bytes()).unwrap();
 
         if seqloc.headers.is_some() {
-            stdout.write_all(sfasta
-                .get_header(seqloc.headers.as_ref().unwrap())
-                .expect("Unable to fetch header").as_bytes()).unwrap();
+            stdout
+                .write_all(
+                    sfasta
+                        .get_header(seqloc.headers.as_ref().unwrap())
+                        .expect("Unable to fetch header")
+                        .as_bytes(),
+                )
+                .unwrap();
         }
 
         stdout.write_all(b"\n").unwrap();
@@ -377,13 +381,16 @@ fn view(input: &str) {
             .get_sequence(seqloc)
             .expect("Unable to fetch sequence");
 
-        #[cfg(nightly)] {
+        #[cfg(nightly)]
+        {
             let newlines = (0..1).map(|_| std::io::IoSlice::new(b"\n")).cycle();
-            let x = sequence.chunks(line_length).map(|x| {
-                std::io::IoSlice::new(x)
-            }).zip(newlines).map(|x| {
-                [x.0, x.1]            
-            }).flatten().collect::<Vec<_>>();
+            let x = sequence
+                .chunks(line_length)
+                .map(|x| std::io::IoSlice::new(x))
+                .zip(newlines)
+                .map(|x| [x.0, x.1])
+                .flatten()
+                .collect::<Vec<_>>();
             stdout.write_all_vectored(&mut x).unwrap();
         }
 
