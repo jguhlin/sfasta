@@ -349,6 +349,22 @@ impl SeqLoc {
         }
     }
 
+    pub fn seq_locations(&self, block_size: u32) -> Vec<std::ops::Range<u32>> {
+        let mut locations = Vec::new();
+        
+        let mut start = 0;
+
+        if let Some(seq) = &self.sequence {
+            for loc in seq {
+                let len = loc.len(block_size) as u32;
+                locations.push(start..start + len);
+                start += len;
+            }
+        }
+        locations
+
+    }
+
     pub fn len(&self, block_size: u32) -> usize {
         if self.sequence.is_some() {
             self.sequence
