@@ -28,9 +28,9 @@ use std::path::Path;
 
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
+use itertools::*;
 
 use libsfasta::prelude::*;
-
 use libsfasta::CompressionType;
 
 // const GIT_VERSION: &str = git_version!();
@@ -302,12 +302,6 @@ fn print_sequence(stdout: &mut std::io::StdoutLock, seq: &[u8], line_length: usi
         stdout.write_all(x).expect("Unable to write to stdout");
         stdout.write_all(b"\n").expect("Unable to write to stdout");
     });
-
-    /*while i < seq.len() {
-        let end = std::cmp::min(i + line_length, seq.len());
-        writeln!(&mut stdout, "{}", from_utf8(&seq[i..end]).unwrap()).expect("Unable to write to stdout");
-        i += line_length;
-    }*/
 }
 
 // TODO: Subsequence support
@@ -316,8 +310,7 @@ fn faidx(input: &str, ids: &Vec<String>) {
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
 
-    let mut sfasta =
-        SfastaParser::open_from_buffer(in_buf, false);
+    let mut sfasta = SfastaParser::open_from_buffer(in_buf, false);
 
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
@@ -347,42 +340,56 @@ fn faidx(input: &str, ids: &Vec<String>) {
     }
 }
 
+// TODO: Line length as an argument
 fn view(input: &str) {
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    let mut sfasta =
-        SfastaParser::open_from_buffer(BufReader::new(in_buf), true);
+    let mut sfasta = SfastaParser::open_from_buffer(BufReader::new(in_buf), true);
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty or corrupt");
     }
 
-    let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
+    let line_length = 80;
+
+    let mut stdout = std::io::stdout().lock();
+    let mut stdout = std::io::BufWriter::new(stdout);
+    let common = b"> \n";
 
     for seqloc in sfasta.seqlocs.as_mut().unwrap().data.take().unwrap().iter() {
-        let id = &sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
+        let id = sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
+
+        stdout.write(&common[..1]).unwrap();
+        stdout.write(id.as_bytes()).unwrap();
+
         if seqloc.headers.is_some() {
-            let header = sfasta
+            stdout.write(sfasta
                 .get_header(seqloc.headers.as_ref().unwrap())
-                .expect("Unable to fetch header");
-            stdout
-                .write_all(format!(">{} {}\n", id, header).as_bytes())
-                .expect("Unable to write to stdout");
-        } else {
-            stdout.write_all(format!(">{}\n", id).as_bytes()).unwrap();
-            // writeln!(stdout, ">{}", id).expect("Unable to write ID");
+                .expect("Unable to fetch header").as_bytes()).unwrap();
         }
+
+        stdout.write(b"\n").unwrap();
 
         let sequence = sfasta
             .get_sequence(seqloc)
             .expect("Unable to fetch sequence");
 
+        let newlines = (0..1).map(|_| std::io::IoSlice::new(b"\n")).cycle();
+
+        let x = sequence.chunks(line_length).map(|x| {
+            std::io::IoSlice::new(x)
+        }).zip(newlines).map(|x| {
+            [x.0, x.1]            
+        }).flatten().collect::<Vec<_>>();
+
+        stdout.write_vectored(&x).unwrap();
+
         // 60 matches samtools faidx output
         // But 80 is common elsewhere...
-        print_sequence(&mut stdout, &sequence, 80);
-        stdout.flush().expect("Unable to flush stdout buffer");
+
+        // print_sequence(&mut stdout, &sequence, 80);
+        // stdout.flush().expect("Unable to flush stdout buffer");
     }
 }
 
@@ -390,8 +397,7 @@ fn list(input: &str) {
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    let mut sfasta =
-        SfastaParser::open_from_buffer(in_buf, false);
+    let mut sfasta = SfastaParser::open_from_buffer(in_buf, false);
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty of corrupt");

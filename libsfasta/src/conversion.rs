@@ -1168,7 +1168,11 @@ mod tests {
         let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
         zstd_decompressor.include_magicbytes(false).unwrap();
 
-        let b = b.decompress(CompressionType::ZSTD, 2 * 1024 * 1024, Some(zstd_decompressor).as_mut());
+        let b = b.decompress(
+            CompressionType::ZSTD,
+            2 * 1024 * 1024,
+            Some(zstd_decompressor).as_mut(),
+        );
 
         assert!(b.len() == 8192);
     }

@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
-use std::{thread, default};
 use std::thread::JoinHandle;
+use std::{default, thread};
 
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
@@ -363,7 +363,11 @@ fn _compression_worker_thread(
                 }
             }
             Some((block_id, sb)) => {
-                let sbc = sb.compress(compression_type, compression_level, zstd_compressor.as_mut());
+                let sbc = sb.compress(
+                    compression_type,
+                    compression_level,
+                    zstd_compressor.as_mut(),
+                );
 
                 let mut entry = (block_id, sbc);
                 while let Err(x) = write_queue.push(entry) {
@@ -501,7 +505,11 @@ mod tests {
         let g = oq.pop().unwrap();
         let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
         zstd_decompressor.include_magicbytes(false).unwrap();
-        let g = g.1.decompress(CompressionType::ZSTD, 8 * 1024 * 1024, Some(zstd_decompressor).as_mut());
+        let g = g.1.decompress(
+            CompressionType::ZSTD,
+            8 * 1024 * 1024,
+            Some(zstd_decompressor).as_mut(),
+        );
         println!("{:#?}", g.len());
         assert!(g.len() == 524288);
         let seq = std::str::from_utf8(&g.seq[0..100]).unwrap();

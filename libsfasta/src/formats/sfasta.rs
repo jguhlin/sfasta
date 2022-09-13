@@ -207,10 +207,6 @@ impl Sfasta {
 
         let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 
-        println!("Block Size: {}", self.parameters.block_size);
-        println!("{:#?}", seqloc);
-        println!("{:#?}", seqloc.sequence.as_ref().unwrap().iter().map(|l| l.original_format(self.parameters.block_size)));
-
         for (block, (start, end)) in locs
             .iter()
             .map(|x| x.original_format(self.parameters.block_size))
@@ -278,10 +274,7 @@ impl Sfasta {
     /// Get all seqlocs
     pub fn get_seqlocs(&mut self) -> Result<Option<Vec<SeqLoc>>, &'static str> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
-        self.seqlocs
-            .as_mut()
-            .unwrap()
-            .prefetch(&mut buf);
+        self.seqlocs.as_mut().unwrap().prefetch(&mut buf);
 
         Ok(self.seqlocs.as_ref().unwrap().data.clone())
     }
@@ -296,7 +289,7 @@ impl Sfasta {
 }
 
 pub struct SfastaParser {
-    pub sfasta: Sfasta
+    pub sfasta: Sfasta,
 }
 
 impl SfastaParser {
@@ -304,10 +297,7 @@ impl SfastaParser {
     /// Prefetch defaults to false
     pub fn open(path: &str) -> Result<Sfasta, &'static str> {
         let in_buf = std::fs::File::open(path).expect("Unable to open file");
-        let sfasta = SfastaParser::open_from_buffer(
-            std::io::BufReader::new(in_buf),
-            false,
-        );
+        let sfasta = SfastaParser::open_from_buffer(in_buf, false);
 
         Ok(sfasta)
     }
@@ -568,8 +558,11 @@ impl Iterator for Sequences {
             self.cur_idx = idx;
         }
 
-        let seqloc =
-            self.sfasta.get_seqloc(self.cur_idx).expect("Unable to get sequence location").expect(".");
+        let seqloc = self
+            .sfasta
+            .get_seqloc(self.cur_idx)
+            .expect("Unable to get sequence location")
+            .expect(".");
 
         let id = if self.with_ids {
             Some(self.sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap())

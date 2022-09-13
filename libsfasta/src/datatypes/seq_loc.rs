@@ -351,7 +351,12 @@ impl SeqLoc {
 
     pub fn len(&self, block_size: u32) -> usize {
         if self.sequence.is_some() {
-            self.sequence.as_ref().unwrap().iter().map(|x| x.len(block_size)).sum::<usize>()
+            self.sequence
+                .as_ref()
+                .unwrap()
+                .iter()
+                .map(|x| x.len(block_size))
+                .sum::<usize>()
         } else if self.masking.is_some() {
             self.masking.as_ref().unwrap().1 as usize
         } else if self.scores.is_some() {
@@ -373,7 +378,7 @@ impl SeqLoc {
         for loc in locs {
             cumulative_len += loc.len(block_size);
             let (block, (start, end)) = loc.original_format(block_size);
-            
+
             if range.start > cumulative_len {
                 // This loc does not contain the start of the slice yet...
                 continue;
@@ -385,12 +390,25 @@ impl SeqLoc {
                 //      \_________________/
                 // ---------------------------------
                 //        x1 slicestart  y1 sliceend
-                
+
                 // Convert slice start and slice end to loc start and loc end
-                println!("start: {}, end: {}, cumulative_len: {}, slice_length: {}, loc: {}", start, end, cumulative_len, slice_length, loc.len(block_size));
-                let slice_start = range.start.saturating_sub(cumulative_len - loc.len(block_size)) + start as usize;
-                let slice_end = range.end.saturating_sub(cumulative_len - loc.len(block_size)) + start as usize;
-                if slice_end > block_size as usize{
+                println!(
+                    "start: {}, end: {}, cumulative_len: {}, slice_length: {}, loc: {}",
+                    start,
+                    end,
+                    cumulative_len,
+                    slice_length,
+                    loc.len(block_size)
+                );
+                let slice_start = range
+                    .start
+                    .saturating_sub(cumulative_len - loc.len(block_size))
+                    + start as usize;
+                let slice_end = range
+                    .end
+                    .saturating_sub(cumulative_len - loc.len(block_size))
+                    + start as usize;
+                if slice_end > block_size as usize {
                     new_locs.push(Loc::Loc(block, slice_start as u32, block_size as u32));
                 } else if slice_end.saturating_sub(slice_start) > 0 {
                     new_locs.push(Loc::Loc(block, slice_start as u32, slice_end as u32));
@@ -436,7 +454,10 @@ impl SeqLoc {
         */
 
         println!("new_locs: {:?}", new_locs);
-        println!("{}", new_locs.iter().map(|x| x.len(block_size)).sum::<usize>());
+        println!(
+            "{}",
+            new_locs.iter().map(|x| x.len(block_size)).sum::<usize>()
+        );
 
         assert!(new_locs.iter().map(|x| x.len(block_size)).sum::<usize>() == slice_length);
 
@@ -447,7 +468,6 @@ impl SeqLoc {
             headers: self.headers.clone(),
             ids: self.ids.clone(),
         }
-
     }
 }
 
@@ -517,7 +537,8 @@ mod tests {
             Loc::Loc(1, 0, 10),
             Loc::Loc(2, 0, 10),
             Loc::Loc(3, 0, 10),
-            Loc::Loc(4, 0, 10)]);
+            Loc::Loc(4, 0, 10),
+        ]);
         let slice = seqloc.slice(10, 0..10);
         assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 0, 10)]));
         let slice = seqloc.slice(10, 10..20);
@@ -525,7 +546,14 @@ mod tests {
         let slice = seqloc.slice(10, 20..30);
         assert_eq!(slice.sequence, Some(vec![Loc::Loc(2, 0, 10)]));
         let slice = seqloc.slice(10, 15..35);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1, 5, 10), Loc::Loc(2, 0, 10), Loc::Loc(3, 0, 5)]));
+        assert_eq!(
+            slice.sequence,
+            Some(vec![
+                Loc::Loc(1, 5, 10),
+                Loc::Loc(2, 0, 10),
+                Loc::Loc(3, 0, 5)
+            ])
+        );
         let slice = seqloc.slice(10, 5..9);
         assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 5, 9)]));
 
@@ -544,11 +572,14 @@ mod tests {
         //     We want 104567 to 104840 -- how?
 
         let slice = seqloc.slice(block_size, 0..20);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(3097440, 261735, 261755)]));
+        assert_eq!(
+            slice.sequence,
+            Some(vec![Loc::Loc(3097440, 261735, 261755)])
+        );
 
         seqloc.sequence = Some(vec![
             Loc::ToEnd(1652696, 260695),
-            Loc::FromStart(1652697, 28424)
+            Loc::FromStart(1652697, 28424),
         ]);
 
         //                               x 260695 ----------> 262144  (262144 - 260695) = 1449
@@ -561,10 +592,9 @@ mod tests {
         //    (2, 2679, 2952)
 
         let slice = seqloc.slice(block_size, 2679..2952);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1652696, 263374, 263447)]));
-
-
-
-
+        assert_eq!(
+            slice.sequence,
+            Some(vec![Loc::Loc(1652696, 263374, 263447)])
+        );
     }
 }
