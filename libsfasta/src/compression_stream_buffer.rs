@@ -482,7 +482,7 @@ mod tests {
             .with_threads(2);
 
         #[cfg(miri)]
-        let mut sb = sb.with_compression_type(CompressionType::None);
+        let mut sb = sb.with_compression_type(CompressionType::NONE);
 
         sb.initialize();
 
