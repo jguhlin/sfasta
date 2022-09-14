@@ -42,7 +42,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
         if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
             if bytes_read == 0 {
                 if self.seqlen > 0 {
-                    let seq = Sequence {
+                    /*let seq = Sequence {
                         sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
                         id: Some(self.seqid.take().unwrap()),
                         header: self.header.take(),
@@ -51,7 +51,8 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                     };
                     self.buffer.clear();
                     self.seqlen = 0;
-                    return Some(Ok(seq));
+                    return Some(Ok(seq)); */
+                    return Some(Err("File has ended but sequence still in buffer..."));
                 } else {
                     return None;
                 }
