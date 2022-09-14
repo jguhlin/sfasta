@@ -119,7 +119,7 @@ impl Ids {
         Some(starting_pos)
     }
 
-    pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Self
+    pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
     {
@@ -128,16 +128,30 @@ impl Ids {
         let mut ids = Ids::default();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        ids.compression_type = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        ids.block_index_pos = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        ids.block_size = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        ids.compression_type = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding compression type: {}", e)),
+        };
+        ids.block_index_pos = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding block index pos: {}", e)),
+        };
+        ids.block_size = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding block size: {}", e)),
+        };
+
         ids.location = starting_pos;
 
         in_buf.seek(SeekFrom::Start(ids.block_index_pos)).unwrap();
-        ids.block_locations =
-            Some(bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap());
 
-        ids
+        ids.block_locations =
+            Some(match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                Ok(x) => x,
+                Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+            });
+
+        Ok(ids)
     }
 
     // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
@@ -243,7 +257,7 @@ mod tests {
 
         let mut buffer = Cursor::new(Vec::new());
         ids.write_to_buffer(&mut buffer);
-        let mut ids = Ids::from_buffer(&mut buffer, 0);
+        let mut ids = Ids::from_buffer(&mut buffer, 0).unwrap();
 
         for i in 0..test_ids.len() {
             let id = ids.get_id(&mut buffer, &locs[i]);

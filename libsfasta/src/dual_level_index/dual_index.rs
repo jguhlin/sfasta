@@ -375,11 +375,16 @@ pub struct DualIndex {
     pub remainder_loc: u64,
     pub value_block_index: Option<Vec<(u64, u64)>>,
     pub hasher: Hashes,
-    pub len: usize,
+    pub len: u64,
 }
 
+//                      len, Hashes,
+// TODO:
+// type DualIndexConfig = (u64, Hashes, )
+// or make it a struct... reduce code complexity below...
+
 impl DualIndex {
-    pub fn new<R>(mut in_buf: &mut R, idx_start: u64) -> Self
+    pub fn new<R>(mut in_buf: &mut R, idx_start: u64) -> Result<Self, String>
     where
         R: Read + Seek,
     {
@@ -388,16 +393,64 @@ impl DualIndex {
         in_buf
             .seek(SeekFrom::Start(idx_start))
             .expect(format!("Unable to seek for DualIndex: {}", idx_start).as_str());
-        let len: usize = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        let hasher: Hashes = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        let chunk_size: u64 = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        let hash_index = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        let bitpacked_loc = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        let num_bits = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        let bitpacked_len = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        let remainder_loc = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
-        DualIndex {
+        let len: u64 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Unable to decode len: {}", e));
+            }
+        };
+
+        let hasher: Hashes = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Unable to decode hasher: {}", e));
+            }
+        };
+
+        let chunk_size: u64 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Unable to decode chunk_size: {}", e));
+            }
+        };
+
+        let hash_index = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Unable to decode hash_index: {}", e));
+            }
+        };
+
+        let bitpacked_loc = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Unable to decode bitpacked_loc: {}", e));
+            }
+        };
+
+        let num_bits = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Unable to decode num_bits: {}", e));
+            }
+        };
+
+        let bitpacked_len = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Unable to decode bitpacked_len: {}", e));
+            }
+        };
+
+        let remainder_loc = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Unable to decode remainder_loc: {}", e));
+            }
+        };
+
+        Ok(DualIndex {
             idx_start,
             chunk_size,
             hash_index,
@@ -408,7 +461,7 @@ impl DualIndex {
             value_block_index: None,
             hasher,
             len,
-        }
+        })
     }
 
     pub fn load_index<R>(&mut self, mut in_buf: &mut R)
@@ -486,7 +539,7 @@ impl DualIndex {
     }
 
     pub fn len(&self) -> usize {
-        self.len
+        self.len as usize
     }
 
     pub fn is_empty(&self) -> bool {
@@ -585,7 +638,7 @@ mod tests {
 
         let mut in_buf = Cursor::new(out_buf.into_inner());
 
-        let mut reader = DualIndex::new(&mut in_buf, 0);
+        let mut reader = DualIndex::new(&mut in_buf, 0).unwrap();
 
         // let ids = reader.all_ids(&mut in_buf);
         // assert_eq!(ids.len(), 10001);

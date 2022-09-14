@@ -477,7 +477,9 @@ mod tests {
 
         let test_block_size = 512 * 1024;
 
-        let mut sb = CompressionStreamBuffer::default().with_block_size(test_block_size).with_threads(2);
+        let mut sb = CompressionStreamBuffer::default()
+            .with_block_size(test_block_size)
+            .with_threads(2);
         sb.initialize();
 
         let oq = sb.get_output_queue();

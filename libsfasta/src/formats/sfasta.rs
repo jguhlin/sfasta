@@ -295,25 +295,32 @@ pub struct SfastaParser<'sfa> {
 impl<'sfa> SfastaParser<'sfa> {
     /// Convenience function to open a file and parse it.
     /// Prefetch defaults to false
-    pub fn open(path: &str) -> Result<Sfasta, &'static str> {
+    pub fn open(path: &str) -> Result<Sfasta, String> {
         let in_buf = std::fs::File::open(path).expect("Unable to open file");
         let sfasta = SfastaParser::open_from_buffer(in_buf, false);
 
-        Ok(sfasta)
+        sfasta
     }
 
     // TODO: Can probably multithread parts of this...
     // Prefetch should probably be another name...
-    pub fn open_from_buffer<R>(mut in_buf: R, prefetch: bool) -> Sfasta<'sfa>
+    pub fn open_from_buffer<R>(mut in_buf: R, prefetch: bool) -> Result<Sfasta<'sfa>, String>
     where
         R: 'sfa + Read + Seek + Send,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 8 * 1024 }>();
 
         let mut sfasta_marker: [u8; 6] = [0; 6];
-        in_buf
-            .read_exact(&mut sfasta_marker)
-            .expect("Unable to read SFASTA Marker");
+        match in_buf.read_exact(&mut sfasta_marker) {
+            Ok(_) => (),
+            Err(x) => return Result::Err(format!("Invalid file. {}", x)),
+        };
+
+        log::debug!("Sfasta marker: {:?}", sfasta_marker);
+
+        #[cfg(not(fuzzing))]
         assert!(
             sfasta_marker == "sfasta".as_bytes(),
             "File is missing sfasta magic bytes"
@@ -322,11 +329,12 @@ impl<'sfa> SfastaParser<'sfa> {
         let mut sfasta = Sfasta {
             version: match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
-                Err(y) => panic!("Error reading SFASTA directory: {}", y),
+                Err(y) => return Result::Err(format!("Error reading SFASTA directory: {}", y)),
             },
             ..Default::default()
         };
 
+        #[cfg(not(fuzzing))]
         assert!(sfasta.version <= 1); // 1 is the maximum version supported at this stage...
 
         // TODO: In the future, with different versions, we will need to do different things
@@ -335,37 +343,54 @@ impl<'sfa> SfastaParser<'sfa> {
         let dir: DirectoryOnDisk = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
         {
             Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA directory: {}", y),
+            Err(y) => return Result::Err(format!("Error reading SFASTA directory: {}", y)),
         };
 
         sfasta.directory = dir.into();
 
         sfasta.parameters = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA parameters: {}", y),
+            Err(y) => return Result::Err(format!("Error reading SFASTA parameters: {}", y)),
         };
 
         sfasta.metadata = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
-            Err(y) => panic!("Error reading SFASTA metadata: {}", y),
+            Err(y) => return Result::Err(format!("Error reading SFASTA metadata: {}", y)),
         };
 
         // Next are the sequence blocks, which aren't important right now...
         // The index is much more important to us...
 
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 128 * 1024 * 1024 }>();
+
         // TODO: Handle no index
-        sfasta.index = Some(DualIndex::new(
-            &mut in_buf,
-            sfasta.directory.index_loc.unwrap().get(),
-        ));
+        if sfasta.directory.index_loc.is_some() {
+            sfasta.index = match DualIndex::new(&mut in_buf, sfasta.directory.index_loc.unwrap().get())
+            {
+                Ok(x) => Some(x),
+                Err(y) => return Result::Err(format!("Error reading SFASTA index: {}", y)),
+            };
+        } else {
+            return Result::Err(format!("No index found in SFASTA file - Support for no index is not yet implemented."));
+        }
 
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
-            let mut seqlocs = SeqLocs::from_buffer(&mut in_buf, seqlocs_loc);
+            let mut seqlocs = match SeqLocs::from_buffer(&mut in_buf, seqlocs_loc) {
+                Ok(x) => x,
+                Err(y) => return Result::Err(format!("Error reading SFASTA seqlocs: {}", y)),
+            };
+
             if prefetch {
                 seqlocs.prefetch(&mut in_buf);
             }
             sfasta.seqlocs = Some(seqlocs);
+        }
+
+        if sfasta.directory.block_index_loc.is_none() {
+            return Result::Err(format!("No block index found in SFASTA file - Support for no block index is not yet implemented."));
         }
 
         in_buf
@@ -377,11 +402,16 @@ impl<'sfa> SfastaParser<'sfa> {
         //let block_locs_compressed: Vec<u8> =
         //bincode::decode_from_std_read(&mut in_buf, bincode_config)
         //.expect("Unable to parse block locs index");
-        let num_bits: u8 = bincode::decode_from_std_read(&mut in_buf, bincode_config)
-            .expect("Unable to parse block locs index");
+        let num_bits: u8 = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
+        {
+            Ok(x) => x,
+            Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
+        };
 
-        let bitpacked_u32: Vec<Packed> = bincode::decode_from_std_read(&mut in_buf, bincode_config)
-            .expect("Unable to parse block locs index");
+        let bitpacked_u32: Vec<Packed> = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
+        };
 
         let block_locs_staggered = bitpacked_u32.into_iter().map(|x| x.unpack(num_bits));
         let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
@@ -411,7 +441,10 @@ impl<'sfa> SfastaParser<'sfa> {
 
         if sfasta.directory.ids_loc.is_some() {
             let mut ids =
-                Ids::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64);
+                match Ids::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64) {
+                    Ok(x) => x,
+                    Err(y) => return Result::Err(format!("Error reading SFASTA ids: {}", y)),
+                };
             if prefetch {
                 ids.prefetch(&mut in_buf);
             }
@@ -427,7 +460,7 @@ impl<'sfa> SfastaParser<'sfa> {
 
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 
-        sfasta
+        Ok(sfasta)
     }
 }
 
@@ -640,7 +673,7 @@ mod tests {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false);
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
         sfasta.index_len();
 
         assert_eq!(sfasta.index_len(), 3001);
@@ -680,7 +713,7 @@ mod tests {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false);
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
         assert!(sfasta.index_len() == 10);
 
         let output = &sfasta.find("test3").unwrap().unwrap();
@@ -722,7 +755,7 @@ mod tests {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false);
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
         assert!(sfasta.index_len() == 10);
 
         let _output = &sfasta.find("test3").unwrap().unwrap();

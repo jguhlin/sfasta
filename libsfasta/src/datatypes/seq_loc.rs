@@ -9,7 +9,7 @@ pub struct SeqLocs {
     location: u64,
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
-    chunk_size: usize,
+    chunk_size: u32,
     pub data: Option<Vec<SeqLoc>>, // Primarily for writing...
     len: usize,
     cache: Option<(u32, Vec<SeqLoc>)>,
@@ -77,7 +77,7 @@ impl SeqLocs {
         self
     }
 
-    pub fn with_chunk_size(mut self, chunk_size: usize) -> Self {
+    pub fn with_chunk_size(mut self, chunk_size: u32) -> Self {
         self.chunk_size = chunk_size;
         self
     }
@@ -103,7 +103,7 @@ impl SeqLocs {
             .expect("Unable to work with seek API");
 
         let mut block_locations: Vec<u64> =
-            Vec::with_capacity((seq_locs.len() / self.chunk_size) + 1);
+            Vec::with_capacity((seq_locs.len() / self.chunk_size as usize) + 1);
 
         // Write out chunk sizes...
         bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config)
@@ -128,7 +128,7 @@ impl SeqLocs {
         for s in seq_locs
             .iter()
             .collect::<Vec<&SeqLoc>>()
-            .chunks(self.chunk_size)
+            .chunks(self.chunk_size as usize)
         {
             block_locations.push(
                 out_buf
@@ -204,41 +204,70 @@ impl SeqLocs {
         seqlocs_location
     }
 
-    pub fn from_buffer<R>(mut in_buf: &mut R, pos: u64) -> Self
+    pub fn from_buffer<R>(mut in_buf: &mut R, pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding().with_limit::<{8 * 1024 * 1024}>();
 
         in_buf
             .seek(SeekFrom::Start(pos))
             .expect("Unable to work with seek API");
 
-        let chunk_size: usize = bincode::decode_from_std_read(&mut in_buf, bincode_config)
-            .expect("Unable to read chunk size");
+        let chunk_size: u32 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(format!("Unable to read chunk size: {}", e));
+            }
+        };
+            
 
-        let block_index_pos = bincode::decode_from_std_read(&mut in_buf, bincode_config)
-            .expect("Unable to read block index pos");
-
-        let len: u64 = bincode::decode_from_std_read(&mut in_buf, bincode_config)
-            .expect("Unable to read block index pos");
+        let block_index_pos = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(format!("Unable to read block index pos: {}", e));
+            }
+        };
+           
+        let len: u64 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(format!("Unable to read block index pos: {}", e));
+            }
+        };
 
         in_buf.seek(SeekFrom::Start(block_index_pos)).unwrap();
+
         let compressed_block_locations: Vec<u8> =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config)
-                .expect("Unable to read block locations");
+            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                Ok(c) => c,
+                Err(e) => {
+                    return Err(format!("Unable to read block index pos: {}", e));
+                }
+            };
+
 
         let mut decompressor =
             zstd::stream::read::Decoder::new(&compressed_block_locations[..]).unwrap();
         decompressor.include_magicbytes(false).unwrap();
 
         let mut decompressed = Vec::new();
-        decompressor.read_to_end(&mut decompressed).unwrap();
+        match decompressor.read_to_end(&mut decompressed) {
+            Ok(_) => (),
+            Err(e) => {
+                return Err(format!("Unable to decompress block locations: {}", e));
+            },
+        }
 
         let block_locations: Vec<u64> =
-            bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
-                .expect("Unable to read block locations");
-        SeqLocs {
+            match bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config) {
+                Ok(c) => c,
+                Err(e) => {
+                    return Err(format!("Unable to read block index pos: {}", e));
+                }
+            };
+                
+        Ok(SeqLocs {
             location: pos,
             block_index_pos,
             block_locations: Some(block_locations),
@@ -246,7 +275,7 @@ impl SeqLocs {
             data: None, // Don't decompress anything until requested...
             len: len as usize,
             cache: None,
-        }
+        })
     }
 
     pub fn is_initialized(&self) -> bool {
@@ -385,6 +414,8 @@ impl SeqLoc {
 
     // Convert range to locs to slice
     // Have to map ranges to the Vec<Locs>
+    // TODO: Make generic over sequence, scores, and masking
+    // TODO: Should work on staggered Locs, even though they do not exist....
     pub fn seq_slice(&self, block_size: u32, range: std::ops::Range<u32>) -> SeqLoc {
         assert!(self.sequence.is_some());
         let locs = self.sequence.as_ref().unwrap();
@@ -395,15 +426,17 @@ impl SeqLoc {
         let end = range.end - 1;
 
         for (i, split) in splits.iter().enumerate() {
-            
             if split.contains(&range.start) && split.contains(&end) {
                 // This loc contains the entire range
                 // So for example, Loc is 1500..2000, and the range we want is 20..50 (translates to 1520..1550)
                 let start = range.start.saturating_sub(split.start);
                 let end = range.end.saturating_sub(split.start);
                 new_locs.push(locs[i].slice(block_size, start..end));
-                println!("Contains both, so stopping here! {:#?} {:#?} {} {}", split, range, start, end);
-                break // We are done if it contains the entire range...
+                println!(
+                    "Contains both, so stopping here! {:#?} {:#?} {} {}",
+                    split, range, start, end
+                );
+                break; // We are done if it contains the entire range...
             } else if split.contains(&range.start) {
                 // Loc contains the start of the range...
                 // For example, Loc is 1500..2000 (length 500 in this Loc) and the range we want is 450..550 (so 1950..2000 from this loc, and another 100 from the next loc)
@@ -419,7 +452,7 @@ impl SeqLoc {
                 new_locs.push(locs[i].slice(block_size, start..end));
                 println!("{:#?} {:#?} {:#?} {}", split, range, start, end);
                 println!("Contains end, so stopping here!");
-                break // We are done if it contains the end of the range...
+                break; // We are done if it contains the end of the range...
             } else if split.start > range.start && split.end < range.end {
                 // Loc contains the entire range...
                 // For example, Loc is 1500..2000 (length 500 in the Loc) and the range we want is 450..550 (so 1500..1550 from this loc, and another 100 from the previous loc)
@@ -524,11 +557,11 @@ impl Loc {
     pub fn slice(&self, block_size: u32, range: std::ops::Range<u32>) -> Loc {
         println!("{} {}", self.start(), self.end(block_size));
         return Loc::Loc(
-            self.block(), 
-            std::cmp::max(self.start().saturating_add(range.start), self.start()), 
-            std::cmp::min(self.start().saturating_add(range.end), self.end(block_size)))
-    }    
-
+            self.block(),
+            std::cmp::max(self.start().saturating_add(range.start), self.start()),
+            std::cmp::min(self.start().saturating_add(range.end), self.end(block_size)),
+        );
+    }
 }
 #[cfg(test)]
 mod tests {
@@ -577,7 +610,6 @@ mod tests {
         );
         let slice = seqloc.seq_slice(10, 5..9);
         assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 5, 9)]));
-
         let block_size = 262144;
         seqloc.sequence = Some(vec![
             Loc::ToEnd(3097440, 261735),
@@ -616,9 +648,6 @@ mod tests {
         // 2679 - 1449 = 1230
 
         let slice = seqloc.seq_slice(block_size, 2679..2952);
-        assert_eq!(
-            slice.sequence,
-            Some(vec![Loc::Loc(1652697, 1230, 1503)])
-        );
+        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1652697, 1230, 1503)]));
     }
 }
