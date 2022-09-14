@@ -413,9 +413,7 @@ impl<'sfa> SfastaParser<'sfa> {
                     Err(y) => return Result::Err(format!("Error reading SFASTA index: {}", y)),
                 };
         } else {
-            return Result::Err(format!(
-                "No index found in SFASTA file - Support for no index is not yet implemented."
-            ));
+            return Result::Err("No index found in SFASTA file - Support for no index is not yet implemented.".to_string());
         }
 
         if sfasta.directory.seqlocs_loc.is_some() {
@@ -432,7 +430,7 @@ impl<'sfa> SfastaParser<'sfa> {
         }
 
         if sfasta.directory.block_index_loc.is_none() {
-            return Result::Err(format!("No block index found in SFASTA file - Support for no block index is not yet implemented."));
+            return Result::Err("No block index found in SFASTA file - Support for no block index is not yet implemented.".to_string());
         }
 
         in_buf
@@ -449,24 +447,57 @@ impl<'sfa> SfastaParser<'sfa> {
             Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
         };
 
-        let bitpacked_u32: Vec<Packed> =
+        let x: (Option<u64>, u64) =
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
             };
 
-        let block_locs_staggered = bitpacked_u32.into_iter().map(|x| x.unpack(num_bits));
-        let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
-        let block_locs: Vec<u64> = unsafe {
-            std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len())
-                .to_vec()
-        };
+        // TODO: Not yet used, but eliminates the need to read all the block locs into memory (thus speeding up large files such as nt)
+        let compressed_size = x.0;
+        let blocks_count = x.1;
 
-        std::mem::forget(block_locs_u32);
+        println!("Num Bits: {}", num_bits);
+        println!("Compressed Size: {}", compressed_size.unwrap());
+        println!("Blocks Counts: {}", blocks_count);
+
+        let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
+
+        let block_locs = 
+            // TODO: Should be prefetch, but not yet working...
+            if true {
+                let mut packed = Vec::with_capacity(blocks_count as usize);
+                (0..blocks_count).for_each(|_| {
+                    let p: Packed = 
+                        match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                            Ok(x) => x,
+                            Err(y) => {
+                                panic!("Error reading SFASTA block index: {}", y);
+                            }
+                        };
+                    packed.push(p);
+                });
+
+                let block_locs_staggered = packed.into_iter().map(|x| x.unpack(num_bits));
+                let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
+                let block_locs: Vec<u64> = unsafe {
+                    std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len())
+                        .to_vec()
+                };
+                std::mem::forget(block_locs_u32);
+                Some(block_locs)
+            } else {
+                None
+            };
+
         sfasta.sequenceblocks = Some(SequenceBlocks::new(
             block_locs,
             sfasta.parameters.compression_type,
             sfasta.parameters.block_size as usize,
+            compressed_size,
+            blocks_count,
+            block_index_loc,
+            num_bits
         ));
 
         if sfasta.directory.headers_loc.is_some() {

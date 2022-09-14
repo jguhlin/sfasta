@@ -632,15 +632,40 @@ where
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
             .expect("Unable to write to bincode output");
 
+        let size_loc = out_buf
+            .seek(SeekFrom::Current(0))
+            .expect("Unable to work with seek API");
+
+        // (size of bitpacked data, total number of block locs)
+        let bitpacked_len = bitpacked.len() as u64;
+        bincode::encode_into_std_write((Some(0_u64), bitpacked_len), &mut out_buf, bincode_config)
+            .expect("Unable to write to bincode output");
+
+        let mut size = None;
+
         for i in bitpacked {
-            if let Ok(size) = bincode::encode_into_std_write(&i, &mut out_buf, bincode_config) {
-                log::debug!("Block Index Packed Size: {}", size);
+            if let Ok(x) = bincode::encode_into_std_write(&i, &mut out_buf, bincode_config) {
+                if i.is_packed() && size.is_none() {
+                    size = Some(x as u64);
+                } else if size.is_some() && i.is_packed() {
+                    assert!(x as u64 == size.unwrap());
+                }
             } else {
                 panic!("Unable to write to bincode output");
-            }                
+            }
         }
-        
+
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+
+        out_buf.seek(SeekFrom::Start(size_loc)).unwrap();
+        bincode::encode_into_std_write(
+            (size, bitpacked_len),
+            &mut out_buf,
+            bincode_config,
+        ).expect("Unable to write to bincode output");
+
+        out_buf.seek(SeekFrom::Start(end)).unwrap();
+
         log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
         debug_size.push(("Block Index".to_string(), (end - start) as usize));
 
