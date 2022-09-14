@@ -95,8 +95,8 @@ enum Commands {
         gzip: bool,
         #[clap(short, long)]
         none: bool,
-        /// Block size for sequence blocks / 1024
-        /// 4Mb (4096) is the default
+        /// Block size for sequence blocks * 1024
+        /// 2Mb (2048) is the default
         #[clap(short, long)]
         blocksize: Option<u64>,
         #[clap(short, long)]
@@ -354,7 +354,7 @@ fn view(input: &str) {
 
     let line_length = 80;
 
-    let mut stdout = std::io::stdout().lock();
+    let stdout = std::io::stdout().lock();
     let mut stdout = std::io::BufWriter::new(stdout);
     let common = b"> \n";
 
