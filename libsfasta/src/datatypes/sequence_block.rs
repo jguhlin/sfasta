@@ -64,6 +64,7 @@ impl<'a> SequenceBlocks<'a> {
         if self.cache.is_none() {
             self.cache = Some((block, vec![0; self.block_size]));
         }
+        assert!(block < self.block_locs.len() as u32);
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 

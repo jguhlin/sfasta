@@ -631,8 +631,15 @@ where
         let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
             .expect("Unable to write to bincode output");
-        bincode::encode_into_std_write(&bitpacked, &mut out_buf, bincode_config).unwrap();
 
+        for i in bitpacked {
+            if let Ok(size) = bincode::encode_into_std_write(&i, &mut out_buf, bincode_config) {
+                log::debug!("Block Index Packed Size: {}", size);
+            } else {
+                panic!("Unable to write to bincode output");
+            }                
+        }
+        
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
         debug_size.push(("Block Index".to_string(), (end - start) as usize));
