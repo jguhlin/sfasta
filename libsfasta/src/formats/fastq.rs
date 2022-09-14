@@ -124,6 +124,10 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             seqbuffer.truncate(self.seqlen);
                             scores_buffer.truncate(self.seqlen);
 
+                            if scores_buffer.len() != seqbuffer.len() {
+                                return Some(Err("Invalid FASTQ file"));
+                            }
+
                             let seq = Sequence {
                                 sequence: Some(seqbuffer),
                                 id: Some(self.seqid.take().unwrap()),
