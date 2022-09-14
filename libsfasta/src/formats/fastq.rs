@@ -55,7 +55,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                 } else {
                     return None;
                 }
-            } else if self.buffer[0] == b'@' {
+            } else if self.buffer[0] == b'@' && bytes_read > 1 {
                 let idline = match from_utf8(&self.buffer[1..]) {
                     Ok(idline) => idline.to_string(),
                     Err(_) => return Some(Err("Invalid UTF-8 in ID line")),
@@ -98,6 +98,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
         } else {
             return Some(Err("Error reading FASTQ file"));
         }
+
         if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.scores_buffer) {
             if bytes_read == 0 {
                 Some(Err("Invalid FASTQ file"))
