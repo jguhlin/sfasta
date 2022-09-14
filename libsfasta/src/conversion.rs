@@ -776,7 +776,8 @@ where
 
             let backoff = Backoff::new();
 
-            for mut x in fastq {
+            for x in fastq {
+                let mut x = x.unwrap();
                 x.scores.take(); // No need to send scores across threads when we aren't using them yet...
                 let mut d = Work::FastqPayload(x);
                 while let Err(z) = fastq_queue_in.push(d) {
@@ -902,7 +903,8 @@ where
 
             let backoff = Backoff::new();
 
-            for mut x in fastq {
+            for x in fastq {
+                let mut x = x.unwrap();
                 x.sequence.take(); // No need to send seqs across threads when we are done with that...
                 let mut d = Work::FastqPayload(x);
                 while let Err(z) = fastq_queue_in.push(d) {

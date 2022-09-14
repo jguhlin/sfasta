@@ -45,9 +45,9 @@ enum State {
 // TODO: This does extra moving by using a generic buffer
 // Place the "MATCH" before the while let.... (prob don't need while let anymore...)
 impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
-    type Item = Sequence;
+    type Item = Result<Sequence, &'static str>;
 
-    fn next(&mut self) -> Option<Sequence> {
+    fn next(&mut self) -> Option<Result<Sequence, &'static str>> {
         loop {
             match self.state {
                 State::ID => {
@@ -63,7 +63,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                                 };
                                 self.buffer.clear();
                                 self.seqlen = 0;
-                                return Some(seq);
+                                return Some(Ok(seq));
                             } else {
                                 return None;
                             }
@@ -81,14 +81,14 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             self.buffer.clear();
                             self.state = State::Sequence;
                         } else {
-                            panic!("Invalid FASTQ file");
+                            return Some(Err("Invalid FASTQ file"));
                         }
                     }
                 }
                 State::Sequence => {
                     if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.seqbuffer) {
                         if bytes_read == 0 {
-                            panic!("Invalid FASTQ file");
+                            return Some(Err("Invalid FASTQ file"));
                         } else {
                             let mut end = self.seqbuffer.len() - 1;
                             while self.seqbuffer[end].is_ascii_whitespace() {
@@ -102,7 +102,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                 State::Plus => {
                     if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
                         if bytes_read == 0 {
-                            panic!("Invalid FASTQ file");
+                            return Some(Err("Invalid FASTQ file"));
                         }
                         self.state = State::Scores;
                     }
@@ -110,7 +110,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                 State::Scores => {
                     if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.scores_buffer) {
                         if bytes_read == 0 {
-                            panic!("Invalid FASTQ file");
+                            return Some(Err("Invalid FASTQ file"));
                         } else {
                             assert!(self.seqid.is_some());
 
@@ -131,7 +131,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             self.buffer.clear();
                             self.seqlen = 0;
                             self.state = State::ID;
-                            return Some(seq);
+                            return Some(Ok(seq));
                         }
                     }
                 }
@@ -166,19 +166,19 @@ IIII
 ";
         let mut cursor = Cursor::new(fastq_data);
         let mut fastq = Fastq::from_buffer(&mut cursor);
-        let seq = fastq.next().unwrap();
+        let seq = fastq.next().unwrap().unwrap();
         assert_eq!(seq.id.unwrap(), "seq1");
         assert_eq!(seq.sequence.unwrap(), b"ACGT");
         assert_eq!(seq.scores, Some(b"IIII".to_vec()));
-        let seq = fastq.next().unwrap();
+        let seq = fastq.next().unwrap().unwrap();
         assert_eq!(seq.id.unwrap(), "seq2");
         assert_eq!(seq.sequence.unwrap(), b"ACGT");
         assert_eq!(seq.scores.unwrap(), b"IIII");
-        let seq = fastq.next().unwrap();
+        let seq = fastq.next().unwrap().unwrap();
         assert_eq!(seq.id.unwrap(), "seq3");
         assert_eq!(seq.sequence.unwrap(), b"ACGT");
         assert_eq!(seq.scores, Some(b"IIII".to_vec()));
-        let seq = fastq.next().unwrap();
+        let seq = fastq.next().unwrap().unwrap();
         assert_eq!(seq.id.unwrap(), "seq4");
         assert_eq!(seq.sequence.unwrap(), b"ACGT");
         assert_eq!(seq.scores, Some(b"IIII".to_vec()));
