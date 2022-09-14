@@ -103,11 +103,15 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                     _ => {
                         let mut slice_end = bytes_read;
 
-                        if self.buffer[bytes_read - 1] == b'\n' {
+                        if self.buffer.is_empty() {
+                            return Some(Result::Err("No sequence found"));
+                        }
+
+                        if self.buffer[bytes_read.saturating_sub(1)] == b'\n' {
                             slice_end = slice_end.saturating_sub(1);
                         }
 
-                        if self.buffer[slice_end - 1] == b'\r' {
+                        if self.buffer[slice_end.saturating_sub(1)] == b'\r' {
                             slice_end = slice_end.saturating_sub(1);
                         }
 
