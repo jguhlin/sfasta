@@ -463,7 +463,7 @@ where
             let backoff = Backoff::new();
 
             for x in fasta {
-                let mut d = Work::FastaPayload(x);
+                let mut d = Work::FastaPayload(x.unwrap());
                 while let Err(z) = fasta_queue_in.push(d) {
                     d = z;
                     backoff.snooze();

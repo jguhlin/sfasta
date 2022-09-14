@@ -28,11 +28,14 @@ impl<'fasta, R: BufRead> Fasta<'fasta, R> {
 }
 
 impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
-    type Item = Sequence;
+    type Item = Result<Sequence, &'static str>;
 
-    fn next(&mut self) -> Option<Sequence> {
+    fn next(&mut self) -> Option<Result<Sequence, &'static str>> {
         while let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
             if bytes_read == 0 {
+                if self.next_seqid.is_none() {
+                    return Some(Result::Err("No sequence found"));
+                }
                 if self.seqlen > 0 {
                     let seq = Sequence {
                         sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
@@ -42,7 +45,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                         offset: 0,
                     };
                     self.seqlen = 0;
-                    return Some(seq);
+                    return Some(Ok(seq));
                 } else {
                     return None;
                 }
@@ -91,7 +94,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                             };
                             self.seqbuffer.clear();
                             self.seqlen = 0;
-                            return Some(seq);
+                            return Some(Ok(seq));
                         }
                     }
                     _ => {
@@ -176,7 +179,7 @@ mod tests {
         let mut fasta = Fasta::from_buffer(&mut buffer);
         fasta.next();
         fasta.next();
-        let third = fasta.next();
+        let third = fasta.next().unwrap();
         println!("{}", third.as_ref().unwrap().id.as_ref().unwrap());
         let sequence = third.unwrap().sequence.unwrap();
         let last_ten = sequence.len() - 10;
@@ -199,10 +202,10 @@ mod tests {
         let fakefasta_ = fakefasta.as_slice();
         let inner = &mut BufReader::new(fakefasta_);
         let mut fasta = Fasta::from_buffer(inner);
-        let j = fasta.next();
+        let j = fasta.next().unwrap();
         assert!(j.unwrap().sequence.unwrap() == b"ACTGCATCACTGACCTA".to_vec());
-        let _j = fasta.next();
-        let j = fasta.next();
+        let _j = fasta.next().unwrap();
+        let j = fasta.next().unwrap();
         assert!(j.unwrap().sequence.unwrap() == b"ACTGCAACTGCANNNNN");
     }
 
@@ -213,7 +216,7 @@ mod tests {
         let fakefasta_ = fakefasta.as_slice();
         let mut inner = BufReader::new(fakefasta_);
         let mut fasta = Fasta::from_buffer(&mut inner);
-        let s = fasta.next().unwrap();
+        let s = fasta.next().unwrap().unwrap();
         println!("{:#?}", s.header);
         assert!(
             s.header == Some("I have more information in the rest of the FASTA header".to_string())
