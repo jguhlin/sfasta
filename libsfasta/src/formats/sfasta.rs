@@ -670,6 +670,9 @@ mod tests {
             .with_block_size(8 * 1024)
             .with_index();
 
+        #[cfg(miri)]
+        let mut converter = converter.with_compression_type(CompressionType::NONE);
+
         converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
