@@ -463,6 +463,10 @@ where
             let backoff = Backoff::new();
 
             for x in fasta {
+                if x.is_err() {
+                    panic!("Error reading FASTA file: {:?}", x);
+                }
+                
                 let mut d = Work::FastaPayload(x.unwrap());
                 while let Err(z) = fasta_queue_in.push(d) {
                     d = z;
