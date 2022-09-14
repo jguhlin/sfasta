@@ -367,13 +367,15 @@ impl<'sfa> SfastaParser<'sfa> {
 
         // TODO: Handle no index
         if sfasta.directory.index_loc.is_some() {
-            sfasta.index = match DualIndex::new(&mut in_buf, sfasta.directory.index_loc.unwrap().get())
-            {
-                Ok(x) => Some(x),
-                Err(y) => return Result::Err(format!("Error reading SFASTA index: {}", y)),
-            };
+            sfasta.index =
+                match DualIndex::new(&mut in_buf, sfasta.directory.index_loc.unwrap().get()) {
+                    Ok(x) => Some(x),
+                    Err(y) => return Result::Err(format!("Error reading SFASTA index: {}", y)),
+                };
         } else {
-            return Result::Err(format!("No index found in SFASTA file - Support for no index is not yet implemented."));
+            return Result::Err(format!(
+                "No index found in SFASTA file - Support for no index is not yet implemented."
+            ));
         }
 
         if sfasta.directory.seqlocs_loc.is_some() {
@@ -402,16 +404,16 @@ impl<'sfa> SfastaParser<'sfa> {
         //let block_locs_compressed: Vec<u8> =
         //bincode::decode_from_std_read(&mut in_buf, bincode_config)
         //.expect("Unable to parse block locs index");
-        let num_bits: u8 = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
-        {
+        let num_bits: u8 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
         };
 
-        let bitpacked_u32: Vec<Packed> = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(x) => x,
-            Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
-        };
+        let bitpacked_u32: Vec<Packed> =
+            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                Ok(x) => x,
+                Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
+            };
 
         let block_locs_staggered = bitpacked_u32.into_iter().map(|x| x.unpack(num_bits));
         let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
@@ -441,7 +443,8 @@ impl<'sfa> SfastaParser<'sfa> {
 
         if sfasta.directory.ids_loc.is_some() {
             let mut ids =
-                match Ids::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64) {
+                match Ids::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64)
+                {
                     Ok(x) => x,
                     Err(y) => return Result::Err(format!("Error reading SFASTA ids: {}", y)),
                 };

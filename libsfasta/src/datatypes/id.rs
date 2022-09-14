@@ -145,11 +145,12 @@ impl Ids {
 
         in_buf.seek(SeekFrom::Start(ids.block_index_pos)).unwrap();
 
-        ids.block_locations =
-            Some(match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+        ids.block_locations = Some(
+            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
                 Err(e) => return Err(format!("Error decoding block locations: {}", e)),
-            });
+            },
+        );
 
         Ok(ids)
     }

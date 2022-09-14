@@ -208,7 +208,9 @@ impl SeqLocs {
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding().with_limit::<{8 * 1024 * 1024}>();
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 8 * 1024 * 1024 }>();
 
         in_buf
             .seek(SeekFrom::Start(pos))
@@ -220,7 +222,6 @@ impl SeqLocs {
                 return Err(format!("Unable to read chunk size: {}", e));
             }
         };
-            
 
         let block_index_pos = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(c) => c,
@@ -228,7 +229,7 @@ impl SeqLocs {
                 return Err(format!("Unable to read block index pos: {}", e));
             }
         };
-           
+
         let len: u64 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(c) => c,
             Err(e) => {
@@ -246,7 +247,6 @@ impl SeqLocs {
                 }
             };
 
-
         let mut decompressor =
             zstd::stream::read::Decoder::new(&compressed_block_locations[..]).unwrap();
         decompressor.include_magicbytes(false).unwrap();
@@ -256,7 +256,7 @@ impl SeqLocs {
             Ok(_) => (),
             Err(e) => {
                 return Err(format!("Unable to decompress block locations: {}", e));
-            },
+            }
         }
 
         let block_locations: Vec<u64> =
@@ -266,7 +266,7 @@ impl SeqLocs {
                     return Err(format!("Unable to read block index pos: {}", e));
                 }
             };
-                
+
         Ok(SeqLocs {
             location: pos,
             block_index_pos,

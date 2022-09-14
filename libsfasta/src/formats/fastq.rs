@@ -12,7 +12,6 @@ pub struct Fastq<'fastq, R: BufRead> {
     seqid: Option<String>,
     header: Option<String>,
     seqlen: usize,
-    state: State,
 }
 
 #[allow(dead_code)]
@@ -26,7 +25,6 @@ impl<'fastq, R: BufRead> Fastq<'fastq, R> {
             seqid: None,
             header: None,
             seqlen: 0,
-            state: State::ID,
         }
     }
 
@@ -35,124 +33,103 @@ impl<'fastq, R: BufRead> Fastq<'fastq, R> {
     }
 }
 
-enum State {
-    ID,
-    Sequence,
-    Plus,
-    Scores,
-}
-
 // TODO: This does extra moving by using a generic buffer
 // Place the "MATCH" before the while let.... (prob don't need while let anymore...)
 impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
     type Item = Result<Sequence, &'static str>;
 
     fn next(&mut self) -> Option<Result<Sequence, &'static str>> {
-        loop {
-            match self.state {
-                State::ID => {
-                    if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
-                        if bytes_read == 0 {
-                            if self.seqlen > 0 {
-                                let seq = Sequence {
-                                    sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
-                                    id: Some(self.seqid.take().unwrap()),
-                                    header: self.header.take(),
-                                    scores: Some(self.scores_buffer[..self.seqlen].to_vec()),
-                                    offset: 0,
-                                };
-                                self.buffer.clear();
-                                self.seqlen = 0;
-                                return Some(Ok(seq));
-                            } else {
-                                return None;
-                            }
-                        } else if self.buffer[0] == b'@' {
-                            let idline = match from_utf8(&self.buffer[1..]) {
-                                Ok(idline) => idline.to_string(),
-                                Err(_) => return Some(Err("Invalid UTF-8 in ID line")),
-                            };
-                            let idline = idline.trim();
-
-                            let split: Vec<&str> = idline.splitn(2, ' ').collect();
-                            self.seqid = Some(split[0].to_string());
-                            if split.len() > 1 {
-                                self.header = Some(split[1].to_string());
-                            } else {
-                                self.header = Some("".to_string());
-                            }
-                            self.buffer.clear();
-                            self.state = State::Sequence;
-                        } else {
-                            return Some(Err("Invalid FASTQ file"));
-                        }
-                    } else {
-                        return Some(Err("Error reading FASTQ file"));
-                    }
+        if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
+            if bytes_read == 0 {
+                if self.seqlen > 0 {
+                    let seq = Sequence {
+                        sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
+                        id: Some(self.seqid.take().unwrap()),
+                        header: self.header.take(),
+                        scores: Some(self.scores_buffer[..self.seqlen].to_vec()),
+                        offset: 0,
+                    };
+                    self.buffer.clear();
+                    self.seqlen = 0;
+                    return Some(Ok(seq));
+                } else {
+                    return None;
                 }
-                State::Sequence => {
-                    if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.seqbuffer) {
-                        if bytes_read == 0 {
-                            return Some(Err("Invalid FASTQ file"));
-                        } else {
-                            let mut end = self.seqbuffer.len() - 1;
-                            while self.seqbuffer[end].is_ascii_whitespace() {
-                                end = end.saturating_sub(1);
-                            }
-                            self.seqlen = end + 1;
-                            self.state = State::Plus;
-                        }
-                    } else {
-                        return Some(Err("Error reading FASTQ file"));
-                    }
-                }
-                State::Plus => {
-                    if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
-                        if bytes_read == 0 {
-                            return Some(Err("Invalid FASTQ file"));
-                        }
-                        self.state = State::Scores;
-                    } else {
-                        return Some(Err("Error reading FASTQ file"));
-                    }
-                }
-                State::Scores => {
-                    if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.scores_buffer) {
-                        if bytes_read == 0 {
-                            return Some(Err("Invalid FASTQ file"));
-                        } else {
-                            if self.seqid.is_none() {
-                                return Some(Err("Invalid FASTQ file"));
-                            }
+            } else if self.buffer[0] == b'@' {
+                let idline = match from_utf8(&self.buffer[1..]) {
+                    Ok(idline) => idline.to_string(),
+                    Err(_) => return Some(Err("Invalid UTF-8 in ID line")),
+                };
+                let idline = idline.trim();
 
-                            let mut seqbuffer = Vec::with_capacity(self.seqlen);
-                            let mut scores_buffer = Vec::with_capacity(self.seqlen);
-                            std::mem::swap(&mut self.seqbuffer, &mut seqbuffer);
-                            std::mem::swap(&mut self.scores_buffer, &mut scores_buffer);
-                            seqbuffer.truncate(self.seqlen);
-                            scores_buffer.truncate(self.seqlen);
-
-                            if scores_buffer.len() != seqbuffer.len() {
-                                return Some(Err("Invalid FASTQ file"));
-                            }
-
-                            let seq = Sequence {
-                                sequence: Some(seqbuffer),
-                                id: Some(self.seqid.take().unwrap()),
-                                header: self.header.take(),
-                                scores: Some(scores_buffer),
-                                offset: 0,
-                            };
-                            self.buffer.clear();
-                            self.seqlen = 0;
-                            self.state = State::ID;
-                            return Some(Ok(seq));
-                        }
-                    } else {
-                        return Some(Err("Error reading FASTQ file"));
-                    }
+                let split: Vec<&str> = idline.splitn(2, ' ').collect();
+                self.seqid = Some(split[0].to_string());
+                if split.len() > 1 {
+                    self.header = Some(split[1].to_string());
+                } else {
+                    self.header = Some("".to_string());
                 }
+                self.buffer.clear();
+            } else {
+                return Some(Err("Invalid FASTQ file"));
             }
+        } else {
+            return Some(Err("Error reading FASTQ file"));
+        }
+
+        if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.seqbuffer) {
+            if bytes_read == 0 {
+                return Some(Err("Invalid FASTQ file"));
+            } else {
+                let mut end = self.seqbuffer.len() - 1;
+                while self.seqbuffer[end].is_ascii_whitespace() {
+                    end = end.saturating_sub(1);
+                }
+                self.seqlen = end + 1;
+            }
+        } else {
+            return Some(Err("Error reading FASTQ file"));
+        }
+
+        if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
+            if bytes_read == 0 {
+                return Some(Err("Invalid FASTQ file"));
+            }
+        } else {
+            return Some(Err("Error reading FASTQ file"));
+        }
+        if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.scores_buffer) {
+            if bytes_read == 0 {
+                Some(Err("Invalid FASTQ file"))
+            } else {
+                if self.seqid.is_none() {
+                    return Some(Err("Invalid FASTQ file"));
+                }
+
+                let mut seqbuffer = Vec::with_capacity(self.seqlen);
+                let mut scores_buffer = Vec::with_capacity(self.seqlen);
+                std::mem::swap(&mut self.seqbuffer, &mut seqbuffer);
+                std::mem::swap(&mut self.scores_buffer, &mut scores_buffer);
+                seqbuffer.truncate(self.seqlen);
+                scores_buffer.truncate(self.seqlen);
+
+                if scores_buffer.len() != seqbuffer.len() {
+                    return Some(Err("Invalid FASTQ file"));
+                }
+
+                let seq = Sequence {
+                    sequence: Some(seqbuffer),
+                    id: Some(self.seqid.take().unwrap()),
+                    header: self.header.take(),
+                    scores: Some(scores_buffer),
+                    offset: 0,
+                };
+                self.buffer.clear();
+                self.seqlen = 0;
+                Some(Ok(seq))
+            }
+        } else {
+            Some(Err("Error reading FASTQ file"))
         }
     }
 }
