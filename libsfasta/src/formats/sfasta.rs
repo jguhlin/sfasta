@@ -295,7 +295,7 @@ pub struct SfastaParser<'sfa> {
 impl<'sfa> SfastaParser<'sfa> {
     /// Convenience function to open a file and parse it.
     /// Prefetch defaults to false
-    pub fn open(path: &str) -> Result<Sfasta, String> {
+    pub fn open(path: String) -> Result<Sfasta<'sfa>, String> {
         let in_buf = std::fs::File::open(path).expect("Unable to open file");
         let sfasta = SfastaParser::open_from_buffer(in_buf, false);
 
@@ -515,7 +515,7 @@ impl<'sfa> Sequences<'sfa> {
     }
 
     /// Convenience function. Likely to be less performant. Prefetch is off by default.
-    pub fn from_file(path: &str) -> Sequences {
+    pub fn from_file(path: String) -> Sequences<'sfa> {
         Sequences::new(SfastaParser::open(path).expect("Unable to open file"))
     }
 
