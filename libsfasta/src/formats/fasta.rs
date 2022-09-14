@@ -33,9 +33,6 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
     fn next(&mut self) -> Option<Result<Sequence, &'static str>> {
         while let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
             if bytes_read == 0 {
-                if self.next_seqid.is_none() {
-                    return Some(Result::Err("No sequence found - empty file?"));
-                }
                 if self.seqlen > 0 {
                     let seq = Sequence {
                         sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
