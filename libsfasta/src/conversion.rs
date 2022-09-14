@@ -464,9 +464,14 @@ where
 
             for x in fasta {
                 if x.is_err() {
+                    while fasta_queue_in.push(Work::Shutdown).is_err() {
+                        backoff.snooze();
+                    }
+        
+                    log::error!("Error reading FASTA file: {:?}", x);
                     panic!("Error reading FASTA file: {:?}", x);
                 }
-                
+
                 let mut d = Work::FastaPayload(x.unwrap());
                 while let Err(z) = fasta_queue_in.push(d) {
                     d = z;
@@ -1138,6 +1143,7 @@ mod tests {
 
         let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
+        println!("test_Data/test_convert.fasta");
         let mut in_buf = BufReader::new(
             File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );
