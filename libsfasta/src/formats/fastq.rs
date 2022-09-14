@@ -95,7 +95,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                         } else {
                             let mut end = self.seqbuffer.len() - 1;
                             while self.seqbuffer[end].is_ascii_whitespace() {
-                                end -= 1;
+                                end = end.saturating_sub(1);
                             }
                             self.seqlen = end + 1;
                             self.state = State::Plus;

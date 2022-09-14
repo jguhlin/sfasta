@@ -78,7 +78,9 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                         std::mem::swap(&mut header, &mut self.next_header);
 
                         if self.seqlen > 0 {
-                            assert!(id.is_some());
+                            if id.is_none() {
+                                return Some(Result::Err("No sequence found"));
+                            }
 
                             // Use the last seqlen as the new buffer's size
                             let mut seqbuf = Vec::with_capacity(self.seqlen);
