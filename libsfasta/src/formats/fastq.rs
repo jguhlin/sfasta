@@ -52,7 +52,8 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                     self.buffer.clear();
                     self.seqlen = 0;
                     return Some(Ok(seq)); */
-                    return Some(Err("File has ended but sequence still in buffer..."));
+                    //return Some(Err("File has ended but sequence still in buffer..."));
+                    panic!("File has ended but sequence still in buffer!");
                 } else {
                     return None;
                 }
