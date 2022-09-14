@@ -87,6 +87,11 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                 while end > 0 && self.seqbuffer[end].is_ascii_whitespace() {
                     end = end.saturating_sub(1);
                 }
+
+                if end == 0 {
+                    return Some(Err("Invalid FASTQ file"));
+                }
+
                 self.seqlen = end + 1;
             }
         } else {
