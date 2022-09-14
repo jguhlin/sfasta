@@ -467,7 +467,7 @@ where
                     while fasta_queue_in.push(Work::Shutdown).is_err() {
                         backoff.snooze();
                     }
-        
+
                     log::error!("Error reading FASTA file: {:?}", x);
                     panic!("Error reading FASTA file: {:?}", x);
                 }

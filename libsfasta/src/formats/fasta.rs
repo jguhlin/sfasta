@@ -77,7 +77,9 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
 
                         if self.seqlen > 0 {
                             if id.is_none() {
-                                return Some(Result::Err("No sequence found - Sequence > 0 but no ID"));
+                                return Some(Result::Err(
+                                    "No sequence found - Sequence > 0 but no ID",
+                                ));
                             }
 
                             // Use the last seqlen as the new buffer's size
