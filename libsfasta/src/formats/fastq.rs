@@ -86,6 +86,8 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                         } else {
                             return Some(Err("Invalid FASTQ file"));
                         }
+                    } else {
+                        return Some(Err("Error reading FASTQ file"));
                     }
                 }
                 State::Sequence => {
@@ -100,6 +102,8 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             self.seqlen = end + 1;
                             self.state = State::Plus;
                         }
+                    } else {
+                        return Some(Err("Error reading FASTQ file"));
                     }
                 }
                 State::Plus => {
@@ -108,6 +112,8 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             return Some(Err("Invalid FASTQ file"));
                         }
                         self.state = State::Scores;
+                    } else {
+                        return Some(Err("Error reading FASTQ file"));
                     }
                 }
                 State::Scores => {
@@ -142,6 +148,8 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                             self.state = State::ID;
                             return Some(Ok(seq));
                         }
+                    } else {
+                        return Some(Err("Error reading FASTQ file"));
                     }
                 }
             }
