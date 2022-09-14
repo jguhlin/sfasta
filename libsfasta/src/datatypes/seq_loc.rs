@@ -432,10 +432,6 @@ impl SeqLoc {
                 let start = range.start.saturating_sub(split.start);
                 let end = range.end.saturating_sub(split.start);
                 new_locs.push(locs[i].slice(block_size, start..end));
-                println!(
-                    "Contains both, so stopping here! {:#?} {:#?} {} {}",
-                    split, range, start, end
-                );
                 break; // We are done if it contains the entire range...
             } else if split.contains(&range.start) {
                 // Loc contains the start of the range...
@@ -443,28 +439,22 @@ impl SeqLoc {
                 let start = range.start.saturating_sub(split.start);
                 let end = range.end.saturating_sub(split.start);
                 new_locs.push(locs[i].slice(block_size, start..end));
-                println!("Contains start, so continuing...");
             } else if split.contains(&end) {
                 // Loc contains the end of the range...
                 // For example, Loc is 1500..2000 (length 500 in this Loc, starting at 1000) and the range we want is 900..1200 (so 1500..1700 from this loc)
                 let start = range.start.saturating_sub(split.start);
                 let end = range.end.saturating_sub(split.start);
                 new_locs.push(locs[i].slice(block_size, start..end));
-                println!("{:#?} {:#?} {:#?} {}", split, range, start, end);
-                println!("Contains end, so stopping here!");
                 break; // We are done if it contains the end of the range...
             } else if split.start > range.start && split.end < range.end {
                 // Loc contains the entire range...
                 // For example, Loc is 1500..2000 (length 500 in the Loc) and the range we want is 450..550 (so 1500..1550 from this loc, and another 100 from the previous loc)
                 new_locs.push(locs[i].clone());
-                println!("Contains entire range, so continuing...");
             } else {
                 // Loc does not contain the range...
                 // For example, Loc is 1500..2000 (length 500 in the Loc) and the range we want is 250..350 (so 1750..1800 from this loc)
-                println!("Does not contain range, so continuing...");
             }
         }
-        println!("Done--------------------------");
 
         SeqLoc {
             sequence: Some(new_locs),
