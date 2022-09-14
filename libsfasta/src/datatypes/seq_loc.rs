@@ -545,12 +545,11 @@ impl Loc {
     /// But this handles calculating from inside the loc itself...
     // TODO: Implement for RangeInclusive
     pub fn slice(&self, block_size: u32, range: std::ops::Range<u32>) -> Loc {
-        println!("{} {}", self.start(), self.end(block_size));
-        return Loc::Loc(
+        Loc::Loc(
             self.block(),
             std::cmp::max(self.start().saturating_add(range.start), self.start()),
             std::cmp::min(self.start().saturating_add(range.end), self.end(block_size)),
-        );
+        )
     }
 }
 #[cfg(test)]
