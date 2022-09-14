@@ -68,7 +68,10 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                                 return None;
                             }
                         } else if self.buffer[0] == b'@' {
-                            let idline = from_utf8(&self.buffer[1..]).unwrap().to_string();
+                            let idline = match from_utf8(&self.buffer[1..]) {
+                                Ok(idline) => idline.to_string(),
+                                Err(_) => return Some(Err("Invalid UTF-8 in ID line")),
+                            };
                             let idline = idline.trim();
 
                             let split: Vec<&str> = idline.splitn(2, ' ').collect();
