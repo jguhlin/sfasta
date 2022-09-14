@@ -1143,7 +1143,7 @@ mod tests {
 
         let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
-        println!("test_Data/test_convert.fasta");
+        println!("test_data/test_convert.fasta");
         let mut in_buf = BufReader::new(
             File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
         );

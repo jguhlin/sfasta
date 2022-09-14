@@ -34,7 +34,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
         while let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
             if bytes_read == 0 {
                 if self.next_seqid.is_none() {
-                    return Some(Result::Err("No sequence found"));
+                    return Some(Result::Err("No sequence found - empty file?"));
                 }
                 if self.seqlen > 0 {
                     let seq = Sequence {
@@ -80,7 +80,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
 
                         if self.seqlen > 0 {
                             if id.is_none() {
-                                return Some(Result::Err("No sequence found"));
+                                return Some(Result::Err("No sequence found - Sequence > 0 but no ID"));
                             }
 
                             // Use the last seqlen as the new buffer's size
@@ -104,7 +104,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                         let mut slice_end = bytes_read;
 
                         if self.buffer.is_empty() {
-                            return Some(Result::Err("No sequence found"));
+                            return Some(Result::Err("No sequence found - Empty buffer"));
                         }
 
                         if self.buffer[bytes_read.saturating_sub(1)] == b'\n' {
