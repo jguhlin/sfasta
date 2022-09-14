@@ -115,7 +115,9 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                         if bytes_read == 0 {
                             return Some(Err("Invalid FASTQ file"));
                         } else {
-                            assert!(self.seqid.is_some());
+                            if self.seqid.is_none() {
+                                return Some(Err("Invalid FASTQ file"));
+                            }
 
                             let mut seqbuffer = Vec::with_capacity(self.seqlen);
                             let mut scores_buffer = Vec::with_capacity(self.seqlen);
