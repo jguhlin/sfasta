@@ -1,22 +1,13 @@
 #[cfg(nightly)]
 #[feature(write_all_vectored)]
-#[cfg(feature = "mimalloc")]
-mod set_mimalloc {
-    extern crate mimalloc;
-    use mimalloc::MiMalloc;
 
-    #[global_allocator]
-    static GLOBAL: MiMalloc = MiMalloc;
-}
+extern crate mimalloc;
+use mimalloc::MiMalloc;
 
-#[cfg(feature = "jemalloc")]
-#[cfg(not(target_env = "msvc"))]
-mod set_jemalloc {
-    use tikv_jemallocator::Jemalloc;
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
-    #[global_allocator]
-    static GLOBAL: Jemalloc = Jemalloc;
-}
+static MEM: &str = "Mimalloc";
 
 extern crate clap;
 extern crate indicatif;
@@ -127,6 +118,7 @@ enum Commands {
 fn main() {
     sigpipe::reset();
     env_logger::init();
+
     let cli = Cli::parse();
 
     match &cli.command {
