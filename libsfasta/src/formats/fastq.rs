@@ -84,7 +84,7 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
                 return Some(Err("Invalid FASTQ file"));
             } else {
                 let mut end = self.seqbuffer.len() - 1;
-                while self.seqbuffer[end].is_ascii_whitespace() {
+                while end > 0 && self.seqbuffer[end].is_ascii_whitespace() {
                     end = end.saturating_sub(1);
                 }
                 self.seqlen = end + 1;
