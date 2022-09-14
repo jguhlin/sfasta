@@ -59,9 +59,10 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                             bytes_read
                         };
 
-                        let next_id = from_utf8(&self.buffer[1..slice_end])
-                            .expect("Invalid UTF-8 encoding...")
-                            .to_string();
+                        let next_id = match from_utf8(&self.buffer[1..slice_end]) {
+                            Ok(id) => id.to_string(),
+                            Err(_) => return Some(Result::Err("Invalid UTF-8")),
+                        };
 
                         let next_id = next_id.trim();
 
