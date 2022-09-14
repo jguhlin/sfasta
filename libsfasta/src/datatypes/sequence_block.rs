@@ -73,6 +73,7 @@ impl<'a> SequenceBlocks<'a> {
             bincode::decode_from_std_read(&mut *in_buf, bincode_config)
                 .expect("Unable to parse SequenceBlockCompressed");
 
+        self.cache.as_mut().unwrap().1.clear();
         // let mut buffer = Vec::with_capacity(self.block_size);
         sbc.decompress_to_buffer(
             self.compression_type,

@@ -296,6 +296,10 @@ impl<'sfa> Sfasta<'sfa> {
         self.seqlocs.as_ref().unwrap().len()
     }
 
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     pub fn get_seqloc(&mut self, i: usize) -> Result<Option<SeqLoc>, &'static str> {
         assert!(i < self.len(), "Index out of bounds");
         assert!(i < std::u32::MAX as usize, "Index out of bounds");
