@@ -480,6 +480,10 @@ mod tests {
         let mut sb = CompressionStreamBuffer::default()
             .with_block_size(test_block_size)
             .with_threads(2);
+
+        #[cfg(miri)]
+        let mut sb = sb.with_compression_type(CompressionType::None);
+
         sb.initialize();
 
         let oq = sb.get_output_queue();
