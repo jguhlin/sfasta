@@ -92,6 +92,31 @@ impl<'a> SequenceBlocks<'a> {
             self.cache.as_ref().unwrap().1.as_slice()
         }
     }
+
+    pub fn get_block_uncached<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
+    where
+        R: Read + Seek,
+    {
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        let byte_loc = self.block_locs[block as usize];
+        in_buf
+            .seek(SeekFrom::Start(byte_loc))
+            .expect("Unable to work with seek API");
+
+        let sbc: SequenceBlockCompressed =
+            bincode::decode_from_std_read(&mut *in_buf, bincode_config)
+                .expect("Unable to parse SequenceBlockCompressed");
+
+        let mut buffer = Vec::with_capacity(self.block_size);
+        sbc.decompress_to_buffer(
+            self.compression_type,
+            &mut buffer,
+            self.zstd_decompressor.as_mut(),
+        );
+
+        buffer
+    }
 }
 
 #[derive(Debug, Default)]

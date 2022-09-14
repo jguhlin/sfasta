@@ -180,9 +180,14 @@ impl<'sfa> Sfasta<'sfa> {
     pub fn get_sequence_only_by_seqloc(
         &mut self,
         seqloc: &SeqLoc,
+        cache: bool,
     ) -> Result<Option<Sequence>, &'static str> {
         let sequence = if seqloc.sequence.is_some() {
-            Some(self.get_sequence(seqloc).unwrap())
+            if cache {
+                Some(self.get_sequence(seqloc).unwrap())
+            } else {
+                Some(self.get_sequence_nocache(seqloc).unwrap())
+            }
         } else {
             None
         };
@@ -207,6 +212,7 @@ impl<'sfa> Sfasta<'sfa> {
 
         let mut buf = self.buf.as_ref().unwrap().write().unwrap();
 
+        // Once stabilized, use write_all_vectored
         for (block, (start, end)) in locs
             .iter()
             .map(|x| x.original_format(self.parameters.block_size))
@@ -216,6 +222,36 @@ impl<'sfa> Sfasta<'sfa> {
                 .as_mut()
                 .unwrap()
                 .get_block(&mut *buf, block);
+            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
+        }
+
+        if seqloc.masking.is_some() && self.masking.is_some() {
+            let masked_loc = seqloc.masking.as_ref().unwrap();
+            let masking = self.masking.as_mut().unwrap();
+            masking.mask_sequence(&mut *buf, *masked_loc, &mut seq);
+        }
+
+        Ok(seq)
+    }
+
+    pub fn get_sequence_nocache(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
+        let mut seq: Vec<u8> = Vec::with_capacity(seqloc.len(self.parameters.block_size));
+
+        assert!(seqloc.sequence.is_some());
+
+        let locs = seqloc.sequence.as_ref().unwrap();
+
+        let mut buf = self.buf.as_ref().unwrap().write().unwrap();
+
+        for (block, (start, end)) in locs
+            .iter()
+            .map(|x| x.original_format(self.parameters.block_size))
+        {
+            let seqblock = self
+                .sequenceblocks
+                .as_mut()
+                .unwrap()
+                .get_block_uncached(&mut *buf, block);
             seq.extend_from_slice(&seqblock[start as usize..end as usize]);
         }
 
