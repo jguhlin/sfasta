@@ -642,12 +642,12 @@ where
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
+        let mut size = None;
+
         // (size of bitpacked data, total number of block locs)
         let bitpacked_len = bitpacked.len() as u64;
-        bincode::encode_into_std_write((Some(0_u64), bitpacked_len), &mut out_buf, bincode_config)
+        bincode::encode_into_std_write((size, bitpacked_len), &mut out_buf, bincode_config)
             .expect("Unable to write to bincode output");
-
-        let mut size = None;
 
         for i in bitpacked {
             if let Ok(x) = bincode::encode_into_std_write(&i, &mut out_buf, bincode_config) {
