@@ -356,10 +356,12 @@ impl<'a> SeqLocs<'a> {
             self.decompression_buffer = Some(vec![0; 16 * 1024 * 1024]);
         }
 
+        println!("{:#?}", self.decompression_buffer);
+
         let decompressed = self.decompression_buffer.as_mut().unwrap();
         let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
 
-        zstd_decompressor.decompress_to_buffer(&compressed_block[..], decompressed).unwrap();
+        zstd_decompressor.decompress_to_buffer(compressed_block, decompressed).unwrap();
 
         // decompressor.read_to_end(decompressed).unwrap();
 
