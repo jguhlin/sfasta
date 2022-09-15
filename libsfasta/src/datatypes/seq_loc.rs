@@ -345,10 +345,10 @@ impl<'a> SeqLocs<'a> {
 
         if self.zstd_decompressor.is_none() {
             let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
-                zstd_decompressor
-                    .include_magicbytes(false)
-                    .expect("Unable to disable magicbytes in decoder");
-                self.zstd_decompressor = Some(zstd_decompressor);
+            zstd_decompressor
+                .include_magicbytes(false)
+                .expect("Unable to disable magicbytes in decoder");
+            self.zstd_decompressor = Some(zstd_decompressor);
         }
 
         // let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
@@ -361,9 +361,10 @@ impl<'a> SeqLocs<'a> {
         let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
 
         let decompressed = self.decompression_buffer.as_mut().unwrap();
-        
 
-        zstd_decompressor.decompress_to_buffer(compressed_block, decompressed).unwrap();
+        zstd_decompressor
+            .decompress_to_buffer(compressed_block, decompressed)
+            .unwrap();
 
         // decompressor.read_to_end(decompressed).unwrap();
 

@@ -413,7 +413,10 @@ impl<'sfa> SfastaParser<'sfa> {
                     Err(y) => return Result::Err(format!("Error reading SFASTA index: {}", y)),
                 };
         } else {
-            return Result::Err("No index found in SFASTA file - Support for no index is not yet implemented.".to_string());
+            return Result::Err(
+                "No index found in SFASTA file - Support for no index is not yet implemented."
+                    .to_string(),
+            );
         }
 
         if sfasta.directory.seqlocs_loc.is_some() {
@@ -447,11 +450,10 @@ impl<'sfa> SfastaParser<'sfa> {
             Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
         };
 
-        let x: (u64, u64) =
-            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-                Ok(x) => x,
-                Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
-            };
+        let x: (u64, u64) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
+        };
 
         // TODO: Not yet used, but eliminates the need to read all the block locs into memory (thus speeding up large files such as nt)
         let compressed_size = x.0;
@@ -485,9 +487,11 @@ impl<'sfa> SfastaParser<'sfa> {
                 log::debug!("Number of block_locs_u32: {}", block_locs_u32.len());
 
                 let block_locs: Vec<u64> = unsafe {
-                    std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len())
-                        .to_vec()
-                };
+                    std::slice::from_raw_parts(
+                        block_locs_u32.as_ptr() as *const u64,
+                        block_locs_u32.len(),
+                    )
+                }.to_vec();
 
                 log::debug!("Finished something unsafe");
 
@@ -506,7 +510,7 @@ impl<'sfa> SfastaParser<'sfa> {
             compressed_size,
             blocks_count,
             block_index_loc,
-            num_bits
+            num_bits,
         ));
 
         log::debug!("Opening Headers");
