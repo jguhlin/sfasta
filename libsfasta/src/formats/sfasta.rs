@@ -533,6 +533,7 @@ impl<'sfa> SfastaParser<'sfa> {
             sfasta.headers = Some(headers);
         }
 
+        log::debug!("Opening IDs");
         if sfasta.directory.ids_loc.is_some() {
             let mut ids =
                 match Ids::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64)
@@ -546,6 +547,7 @@ impl<'sfa> SfastaParser<'sfa> {
             sfasta.ids = Some(ids);
         }
 
+        log::debug!("Opening Masking");
         if sfasta.directory.masking_loc.is_some() {
             sfasta.masking = Some(Masking::from_buffer(
                 &mut in_buf,
@@ -553,8 +555,10 @@ impl<'sfa> SfastaParser<'sfa> {
             ));
         }
 
+        log::debug!("Storing buf");
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 
+        log::debug!("Done!");
         Ok(sfasta)
     }
 }
