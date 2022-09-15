@@ -487,15 +487,22 @@ impl<'sfa> SfastaParser<'sfa> {
                 log::debug!("Number of block_locs_u32: {}", block_locs_u32.len());
 
                 let block_locs: Vec<u64> = unsafe {
+                    let mut block_locs_u32 = std::mem::ManuallyDrop::new(block_locs_u32);
+                    Vec::from_raw_parts(block_locs_u32.as_mut_ptr() as *mut u64,
+                    block_locs_u32.len(),
+                    block_locs_u32.capacity())
+                };
+
+/*                let block_locs: Vec<u64> = unsafe {
                     std::slice::from_raw_parts(
                         block_locs_u32.as_ptr() as *const u64,
                         block_locs_u32.len(),
                     )
-                }.to_vec();
+                }.to_vec(); */
 
                 log::debug!("Finished something unsafe");
 
-                std::mem::forget(block_locs_u32);
+                // std::mem::forget(block_locs_u32);
                 Some(block_locs)
             } else {
                 None
