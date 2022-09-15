@@ -490,6 +490,8 @@ impl<'sfa> SfastaParser<'sfa> {
                 None
             };
 
+        log::debug!("Creating Sequence Blocks");
+
         sfasta.sequenceblocks = Some(SequenceBlocks::new(
             block_locs,
             sfasta.parameters.compression_type,
@@ -500,6 +502,7 @@ impl<'sfa> SfastaParser<'sfa> {
             num_bits
         ));
 
+        log::debug!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {
             let mut headers = Headers::from_buffer(
                 &mut in_buf,
