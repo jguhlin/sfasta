@@ -13,6 +13,7 @@ pub struct SeqLocs {
     pub data: Option<Vec<SeqLoc>>, // Primarily for writing...
     len: usize,
     cache: Option<(u32, Vec<SeqLoc>)>,
+    decompression_buffer: Option<Vec<u8>>,
 }
 
 impl Default for SeqLocs {
@@ -25,6 +26,7 @@ impl Default for SeqLocs {
             data: None,
             len: 0,
             cache: None,
+            decompression_buffer: None,
         }
     }
 }
@@ -64,6 +66,7 @@ impl SeqLocs {
             data: Some(data),
             len: 0,
             cache: None,
+            decompression_buffer: None,
         }
     }
 
@@ -275,6 +278,7 @@ impl SeqLocs {
             data: None, // Don't decompress anything until requested...
             len: len as usize,
             cache: None,
+            decompression_buffer: None,
         })
     }
 
@@ -310,7 +314,7 @@ impl SeqLocs {
         }
     }
 
-    fn get_block_uncached<R>(&self, mut in_buf: &mut R, block: u32) -> Vec<SeqLoc>
+    fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<SeqLoc>
     where
         R: Read + Seek,
     {
@@ -325,9 +329,15 @@ impl SeqLocs {
         let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
         decompressor.include_magicbytes(false).unwrap();
 
-        let mut decompressed = Vec::with_capacity(8 * 1024 * 1024);
+        if self.decompression_buffer.is_none() {
+            self.decompression_buffer = Some(Vec::with_capacity(4 * 1024 * 1024));
+        } else {
+            self.decompression_buffer.as_mut().unwrap().clear();
+        }
 
-        decompressor.read_to_end(&mut decompressed).unwrap();
+        let decompressed = self.decompression_buffer.as_mut().unwrap();
+
+        decompressor.read_to_end(decompressed).unwrap();
 
         let seqlocs: Vec<SeqLoc> =
             bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
