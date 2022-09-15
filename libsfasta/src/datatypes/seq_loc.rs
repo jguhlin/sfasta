@@ -360,9 +360,6 @@ impl<'a> SeqLocs<'a> {
 
         let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
 
-        println!("Capacity: {}", self.decompression_buffer.as_ref().unwrap().capacity());
-        println!("Length of compressed: {}", compressed_block.len());
-
         let decompressed = self.decompression_buffer.as_mut().unwrap();
         
 
