@@ -457,9 +457,9 @@ impl<'sfa> SfastaParser<'sfa> {
         let compressed_size = x.0;
         let blocks_count = x.1;
 
-        println!("Num Bits: {}", num_bits);
-        println!("Compressed Size: {}", compressed_size.unwrap());
-        println!("Blocks Counts: {}", blocks_count);
+        log::debug!("Num Bits: {}", num_bits);
+        log::debug!("Compressed Size: {}", compressed_size.unwrap());
+        log::debug!("Blocks Counts: {}", blocks_count);
 
         let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
 
@@ -486,6 +486,9 @@ impl<'sfa> SfastaParser<'sfa> {
                     std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len())
                         .to_vec()
                 };
+
+                log::debug!("Finished something unsafe");
+
                 std::mem::forget(block_locs_u32);
                 Some(block_locs)
             } else {
