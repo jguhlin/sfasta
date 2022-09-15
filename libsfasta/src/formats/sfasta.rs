@@ -465,7 +465,7 @@ impl<'sfa> SfastaParser<'sfa> {
 
         let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        let block_locs = 
+        let block_locs =
             // TODO: Should be prefetch, but not yet working...
             if true {
                 let x = (0..blocks_count).map(|_| {
