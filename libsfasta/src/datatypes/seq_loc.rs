@@ -334,8 +334,6 @@ impl<'a> SeqLocs<'a> {
 
         if self.compressed_seq_buffer.is_none() {
             self.compressed_seq_buffer = Some(Vec::new());
-        } else {
-            self.compressed_seq_buffer.as_mut().unwrap().clear();
         }
 
         let compressed_block = self.compressed_seq_buffer.as_mut().unwrap();
@@ -356,8 +354,6 @@ impl<'a> SeqLocs<'a> {
 
         if self.decompression_buffer.is_none() {
             self.decompression_buffer = Some(vec![0; 8 * 1024 * 1024]);
-        } else {
-            self.decompression_buffer.as_mut().unwrap().clear();
         }
 
         let decompressed = self.decompression_buffer.as_mut().unwrap();
