@@ -18,7 +18,7 @@ pub struct Sfasta<'sfa> {
     pub index: Option<DualIndex>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + 'sfa>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
     pub sequenceblocks: Option<SequenceBlocks<'sfa>>,
-    pub seqlocs: Option<SeqLocs>,
+    pub seqlocs: Option<SeqLocs<'sfa>>,
     pub headers: Option<Headers>,
     pub ids: Option<Ids>,
     pub masking: Option<Masking>,

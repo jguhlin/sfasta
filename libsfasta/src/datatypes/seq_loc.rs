@@ -5,7 +5,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
 /// Handles access to SeqLocs
-pub struct SeqLocs {
+pub struct SeqLocs<'a> {
     location: u64,
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
@@ -14,9 +14,11 @@ pub struct SeqLocs {
     len: usize,
     cache: Option<(u32, Vec<SeqLoc>)>,
     decompression_buffer: Option<Vec<u8>>,
+    compressed_seq_buffer: Option<Vec<u8>>,
+    zstd_decompressor: Option<zstd::bulk::Decompressor<'a>>,
 }
 
-impl Default for SeqLocs {
+impl<'a> Default for SeqLocs<'a> {
     fn default() -> Self {
         SeqLocs {
             location: 0,
@@ -27,11 +29,13 @@ impl Default for SeqLocs {
             len: 0,
             cache: None,
             decompression_buffer: None,
+            compressed_seq_buffer: None,
+            zstd_decompressor: None,
         }
     }
 }
 
-impl SeqLocs {
+impl<'a> SeqLocs<'a> {
     pub fn new() -> Self {
         SeqLocs::default()
     }
@@ -67,6 +71,8 @@ impl SeqLocs {
             len: 0,
             cache: None,
             decompression_buffer: None,
+            compressed_seq_buffer: None,
+            zstd_decompressor: None,
         }
     }
 
@@ -279,6 +285,8 @@ impl SeqLocs {
             len: len as usize,
             cache: None,
             decompression_buffer: None,
+            compressed_seq_buffer: None,
+            zstd_decompressor: None,
         })
     }
 
@@ -324,10 +332,27 @@ impl SeqLocs {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let compressed_block: Vec<u8> = bincode::decode_from_std_read(&mut in_buf, bincode_config)
+        if self.compressed_seq_buffer.is_none() {
+            self.compressed_seq_buffer = Some(Vec::new());
+        } else {
+            self.compressed_seq_buffer.as_mut().unwrap().clear();
+        }
+
+        let compressed_block = self.compressed_seq_buffer.as_mut().unwrap();
+
+        *compressed_block = bincode::decode_from_std_read(&mut in_buf, bincode_config)
             .expect("Unable to read block");
-        let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
-        decompressor.include_magicbytes(false).unwrap();
+
+        if self.zstd_decompressor.is_none() {
+            let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
+                zstd_decompressor
+                    .include_magicbytes(false)
+                    .expect("Unable to disable magicbytes in decoder");
+                self.zstd_decompressor = Some(zstd_decompressor);
+        }
+
+        // let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
+        // decompressor.include_magicbytes(false).unwrap();
 
         if self.decompression_buffer.is_none() {
             self.decompression_buffer = Some(Vec::with_capacity(4 * 1024 * 1024));
@@ -336,8 +361,11 @@ impl SeqLocs {
         }
 
         let decompressed = self.decompression_buffer.as_mut().unwrap();
+        let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
 
-        decompressor.read_to_end(decompressed).unwrap();
+        zstd_decompressor.decompress_to_buffer(&compressed_block[..], decompressed).unwrap();
+
+        // decompressor.read_to_end(decompressed).unwrap();
 
         let seqlocs: Vec<SeqLoc> =
             bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
