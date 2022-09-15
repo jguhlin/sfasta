@@ -447,7 +447,7 @@ impl<'sfa> SfastaParser<'sfa> {
             Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
         };
 
-        let x: (Option<u64>, u64) =
+        let x: (u64, u64) =
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
@@ -458,7 +458,7 @@ impl<'sfa> SfastaParser<'sfa> {
         let blocks_count = x.1;
 
         log::debug!("Num Bits: {}", num_bits);
-        log::debug!("Compressed Size: {}", compressed_size.unwrap());
+        log::debug!("Compressed Size: {}", compressed_size);
         log::debug!("Blocks Counts: {}", blocks_count);
 
         let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -483,7 +483,7 @@ impl<'sfa> SfastaParser<'sfa> {
                 let block_locs_u32: Vec<u32> = x.collect();
 
                 log::debug!("Number of block_locs_u32: {}", block_locs_u32.len());
-                
+
                 let block_locs: Vec<u64> = unsafe {
                     std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len())
                         .to_vec()

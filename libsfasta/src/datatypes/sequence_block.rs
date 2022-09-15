@@ -12,7 +12,7 @@ use xz::read::{XzDecoder, XzEncoder};
 pub struct SequenceBlocks<'a> {
     pub block_locs: Option<Vec<u64>>,
     block_index_location: u64,
-    compressed_size: Option<u64>,
+    compressed_size: u64,
     num_bits: u8,
     total_blocks: u64,
     cache: Option<(u32, Vec<u8>)>,
@@ -27,7 +27,7 @@ pub struct SequenceBlocks<'a> {
 // TODO: Redundant code, clean it up
 impl<'a> SequenceBlocks<'a> {
     pub fn new(block_locs: Option<Vec<u64>>, compression_type: CompressionType, block_size: usize, 
-        compressed_size: Option<u64>, total_blocks: u64, block_index_location: u64, num_bits: u8
+        compressed_size: u64, total_blocks: u64, block_index_location: u64, num_bits: u8
     ) -> Self {
         let zstd_decompressor = 
             if compression_type == CompressionType::ZSTD {
@@ -79,7 +79,7 @@ impl<'a> SequenceBlocks<'a> {
             println!("Block: {}", block);
 
             in_buf
-                .seek(SeekFrom::Start(self.block_index_location + (block as u64 / 2 * self.compressed_size.unwrap() as u64)))
+                .seek(SeekFrom::Start(self.block_index_location + (block as u64 / 2 * self.compressed_size as u64)))
                 .unwrap();
             let p: crate::utils::Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Unable to decode block index");
             let p2: crate::utils::Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Unable to decode block index");
