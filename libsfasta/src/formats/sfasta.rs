@@ -466,23 +466,24 @@ impl<'sfa> SfastaParser<'sfa> {
         let block_locs = 
             // TODO: Should be prefetch, but not yet working...
             if true {
-                let mut packed = Vec::with_capacity(blocks_count as usize);
-                (0..=blocks_count).for_each(|_| {
-                    let p: Packed = 
-                        match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                let x = (0..blocks_count).map(|_| {
+                        match bincode::decode_from_std_read::<Packed, _, _>(&mut in_buf, bincode_config) {
                             Ok(x) => x,
                             Err(y) => {
                                 panic!("Error reading SFASTA block index: {}", y);
                             }
-                        };
-                    packed.push(p);
-                });
+                        }
+                        //};
+                }).into_iter().map(|x| x.unpack(num_bits)).into_iter().flatten();
 
                 log::debug!("Doing something unsafe...");
 
-                let block_locs_staggered = packed.into_iter().map(|x| x.unpack(num_bits));
-                let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
+                // let block_locs_staggered = x.into_iter().map(|x| x.unpack(num_bits));
+                // let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
+                let block_locs_u32: Vec<u32> = x.collect();
+
                 log::debug!("Number of block_locs_u32: {}", block_locs_u32.len());
+                
                 let block_locs: Vec<u64> = unsafe {
                     std::slice::from_raw_parts(block_locs_u32.as_ptr() as *const u64, block_locs_u32.len())
                         .to_vec()
