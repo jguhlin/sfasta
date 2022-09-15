@@ -179,6 +179,8 @@ impl CompressionStreamBuffer {
 
         let backoff = Backoff::new();
 
+        log::debug!("Waiting for compression workers to finish...");
+
         while self.sorted_entries.load(Ordering::Relaxed)
             < self.total_entries.load(Ordering::Relaxed)
         {
@@ -187,6 +189,10 @@ impl CompressionStreamBuffer {
         }
 
         self.shutdown.store(true, Ordering::Relaxed);
+
+        log::debug!("Joining workers");
+
+        self.wakeup();
 
         for i in self.workers.drain(..) {
             i.join().unwrap();

@@ -484,6 +484,8 @@ where
                 }
             }
 
+            log::debug!("FASTA reading complete...");
+
             while fasta_queue_in.push(Work::Shutdown).is_err() {
                 backoff.snooze();
             }
@@ -513,6 +515,7 @@ where
 
             let mut fasta_queue_spins: usize = 0;
             loop {
+                backoff.reset();
                 fasta_thread_clone.unpark();
                 match fasta_queue_out.pop() {
                     Some(Work::FastaPayload(seq)) => {
@@ -543,6 +546,7 @@ where
                 }
             }
 
+            log::debug!("Finalizing SequenceBuffer");
             // Finalize pushes the last block, which is likely smaller than the complete block size
             match sb.finalize() {
                 Ok(()) => (),
@@ -1169,8 +1173,14 @@ mod tests {
     use crate::datatypes::*;
     use std::io::Cursor;
 
+    fn init() {
+        let _ = env_logger::builder().is_test(true).try_init();
+    }
+
     #[test]
     pub fn test_create_sfasta() {
+        init();
+
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let mut out_buf = Box::new(Cursor::new(Vec::new()));
