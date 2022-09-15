@@ -353,7 +353,7 @@ impl<'a> SeqLocs<'a> {
         // decompressor.include_magicbytes(false).unwrap();
 
         if self.decompression_buffer.is_none() {
-            self.decompression_buffer = Some(vec![0; 16 * 1024 * 1024]);
+            self.decompression_buffer = Some(Vec::with_capacity(8 * 1024 * 1024));
         }
 
         let decompressed = self.decompression_buffer.as_mut().unwrap();
