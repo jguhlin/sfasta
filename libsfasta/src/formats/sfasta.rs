@@ -337,9 +337,7 @@ impl<'sfa> SfastaParser<'sfa> {
     /// Prefetch defaults to false
     pub fn open(path: String) -> Result<Sfasta<'sfa>, String> {
         let in_buf = std::fs::File::open(path).expect("Unable to open file");
-        let sfasta = SfastaParser::open_from_buffer(in_buf, false);
-
-        sfasta
+        SfastaParser::open_from_buffer(in_buf, false)
     }
 
     // TODO: Can probably multithread parts of this...
