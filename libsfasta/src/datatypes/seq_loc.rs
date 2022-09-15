@@ -355,7 +355,7 @@ impl<'a> SeqLocs<'a> {
         // decompressor.include_magicbytes(false).unwrap();
 
         if self.decompression_buffer.is_none() {
-            self.decompression_buffer = Some(Vec::with_capacity(4 * 1024 * 1024));
+            self.decompression_buffer = Some(vec![0; 8 * 1024 * 1024]);
         } else {
             self.decompression_buffer.as_mut().unwrap().clear();
         }
