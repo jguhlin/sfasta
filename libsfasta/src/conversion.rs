@@ -447,7 +447,7 @@ where
     let mut masking = None;
     let mut masking_location = None;
 
-    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(256));
+    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(2048));
 
     let fasta_queue_in = Arc::clone(&fasta_queue);
     let fasta_queue_out = Arc::clone(&fasta_queue);
@@ -457,7 +457,7 @@ where
         let fasta_thread = s.spawn(|_| {
             let mut fasta_thread_spins: usize = 0;
             // Convert reader into buffered reader then into the Fasta struct (and iterator)
-            let mut in_buf_reader = BufReader::with_capacity(128 * 1024, in_buf);
+            let mut in_buf_reader = BufReader::new(in_buf);
             let fasta = Fasta::from_buffer(&mut in_buf_reader);
 
             let backoff = Backoff::new();
@@ -945,7 +945,7 @@ where
         // Write FASTQ scores here...
         let fastq_thread = s.spawn(|_| {
             // Convert reader into buffered reader then into the Fastq struct (and iterator)
-            let mut in_buf_reader = BufReader::with_capacity(8 * 1024, in_buf);
+            let mut in_buf_reader = BufReader::new(in_buf);
             let fastq = Fastq::from_buffer(&mut in_buf_reader);
 
             let backoff = Backoff::new();
