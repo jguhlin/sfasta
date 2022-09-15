@@ -447,7 +447,7 @@ where
     let mut masking = None;
     let mut masking_location = None;
 
-    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(2048));
+    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192));
 
     let fasta_queue_in = Arc::clone(&fasta_queue);
     let fasta_queue_out = Arc::clone(&fasta_queue);
