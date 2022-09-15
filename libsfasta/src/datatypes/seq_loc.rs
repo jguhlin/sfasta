@@ -333,7 +333,9 @@ impl<'a> SeqLocs<'a> {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         if self.compressed_seq_buffer.is_none() {
-            self.compressed_seq_buffer = Some(Vec::new());
+            self.compressed_seq_buffer = Some(Vec::with_capacity(256 * 1024));
+        } else {
+            self.compressed_seq_buffer.as_mut().unwrap().clear();
         }
 
         let compressed_block = self.compressed_seq_buffer.as_mut().unwrap();
@@ -356,8 +358,13 @@ impl<'a> SeqLocs<'a> {
             self.decompression_buffer = Some(Vec::with_capacity(8 * 1024 * 1024));
         }
 
-        let decompressed = self.decompression_buffer.as_mut().unwrap();
         let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
+
+        println!("Capacity: {}", self.decompression_buffer.as_ref().unwrap().capacity());
+        println!("Upper Bound: {:#?}", zstd::bulk::Decompressor::<'a>::upper_bound(&compressed_block[..]).unwrap());
+
+        let decompressed = self.decompression_buffer.as_mut().unwrap();
+        
 
         zstd_decompressor.decompress_to_buffer(compressed_block, decompressed).unwrap();
 
