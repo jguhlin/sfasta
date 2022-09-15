@@ -478,6 +478,8 @@ impl<'sfa> SfastaParser<'sfa> {
                     packed.push(p);
                 });
 
+                log::debug!("Doing something unsafe...");
+
                 let block_locs_staggered = packed.into_iter().map(|x| x.unpack(num_bits));
                 let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
                 let block_locs: Vec<u64> = unsafe {
