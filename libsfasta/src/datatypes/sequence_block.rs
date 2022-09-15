@@ -114,8 +114,6 @@ impl<'a> SequenceBlocks<'a> {
             self.cache = Some((block, vec![0; self.block_size]));
         }
 
-        println!("Getting block {}", block);
-
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         self.cache.as_mut().unwrap().0 = block;
