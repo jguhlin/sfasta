@@ -50,6 +50,8 @@ impl<'a> SeqLocs<'a> {
             self.block_locations.as_ref().unwrap().len()
         );
 
+        // This is where it's getting slow....
+
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             // log::debug!("Reading SeqLoc Block: {}", i);
             let seq_loc = self.get_block_uncached(&mut in_buf, i as u32);

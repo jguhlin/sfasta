@@ -75,8 +75,6 @@ impl<'a> SequenceBlocks<'a> {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        println!("BitPacker Block Len: {}", BitPacker8x::BLOCK_LEN);
-
         if let Some(block_locs) = &self.block_locs {
             block_locs[block as usize]
         } else {
