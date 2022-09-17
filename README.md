@@ -22,6 +22,9 @@ I'm hopeful folks will check this out, play around, break it, and give feedback.
 ## FASTQ support
 It's now trivial to add the scores as another compression stream, and the struct that puts it all back together already has an entries for scores. I'll get to it soon.
 
+## TODO
+* Does Zstd dict support work for small block sizes (8kb, 16kb, 4kb)?
+
 # Usage
 ## Installation
 `cargo install sfasta` [Don't have cargo?](https://rustup.rs/)
