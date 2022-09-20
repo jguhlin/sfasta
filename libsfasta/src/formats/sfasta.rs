@@ -461,6 +461,10 @@ impl<'sfa> SfastaParser<'sfa> {
         log::debug!("Compressed Size: {}", compressed_size);
         log::debug!("Blocks Counts: {}", blocks_count);
 
+        if num_bits >= 255 {
+            return Result::Err(format!("Invalid num bits: {}", num_bits));
+        }
+
         let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
 
         let block_locs =
@@ -468,13 +472,14 @@ impl<'sfa> SfastaParser<'sfa> {
             if true {
                 let x = (0..blocks_count).map(|_| {
                         match bincode::decode_from_std_read::<Packed, _, _>(&mut in_buf, bincode_config) {
-                            Ok(x) => x,
+                            Ok(x) => Ok(x),
                             Err(y) => {
-                                panic!("Error reading SFASTA block index: {}", y);
+                                Result::Err(format!("Error reading SFASTA block index: {}", y))
                             }
                         }
-                        //};
-                }).into_iter().map(|x| x.unpack(num_bits)).into_iter().flatten();
+                }).collect::<Result<Vec<Packed>, String>>()?;
+
+                let x = x.into_iter().map(|x| x.unpack(num_bits)).into_iter().flatten();
 
                 log::debug!("Doing something unsafe...");
 
@@ -520,10 +525,14 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::debug!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {
-            let mut headers = Headers::from_buffer(
+            let mut headers = match Headers::from_buffer(
                 &mut in_buf,
                 sfasta.directory.headers_loc.unwrap().get() as u64,
-            );
+            ) {
+                Ok(x) => x,
+                Err(y) => return Result::Err(format!("Error reading SFASTA headers: {}", y)),
+            };
+
             if prefetch {
                 headers.prefetch(&mut in_buf);
             }
@@ -547,10 +556,13 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::debug!("Opening Masking");
         if sfasta.directory.masking_loc.is_some() {
-            sfasta.masking = Some(Masking::from_buffer(
+            sfasta.masking = match Masking::from_buffer(
                 &mut in_buf,
                 sfasta.directory.masking_loc.unwrap().get() as u64,
-            ));
+            ) {
+                Ok(x) => Some(x),
+                Err(y) => return Result::Err(format!("Error reading SFASTA masking: {}", y)),
+            };
         }
 
         log::debug!("Storing buf");

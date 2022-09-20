@@ -120,29 +120,44 @@ impl Headers {
         Some(starting_pos)
     }
 
-    pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Self
+    pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 32 * 1024 * 1024 }>();
 
         let mut headers = Headers::default();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        headers.compression_type =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        headers.block_index_pos =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        headers.block_size = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        headers.compression_type = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
+        {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding compression type: {}", e)),
+        };
+
+        headers.block_index_pos = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding block index pos: {}", e)),
+        };
+
+        headers.block_size = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding block size: {}", e)),
+        };
+
         headers.location = starting_pos;
 
         in_buf
             .seek(SeekFrom::Start(headers.block_index_pos))
             .unwrap();
-        headers.block_locations =
-            Some(bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap());
+        headers.block_locations = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => Some(x),
+            Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+        };
 
-        headers
+        Ok(headers)
     }
 
     // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
@@ -247,7 +262,7 @@ mod tests {
 
         let mut buffer = Cursor::new(Vec::new());
         headers.write_to_buffer(&mut buffer);
-        let mut headers = Headers::from_buffer(&mut buffer, 0);
+        let mut headers = Headers::from_buffer(&mut buffer, 0).unwrap();
 
         for i in 0..test_headers.len() {
             let header = headers.get_header(&mut buffer, &locs[i]);

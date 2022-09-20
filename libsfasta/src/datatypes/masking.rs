@@ -129,7 +129,7 @@ impl Masking {
         Some(self.location)
     }
 
-    pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Self
+    pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
     {
@@ -140,11 +140,20 @@ impl Masking {
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
         masking.location = starting_pos;
 
-        masking.bitpack_len = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        masking.num_bits = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        masking.total_blocks = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        masking.bitpack_len = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding bitpack_len: {}", e)),
+        };
+        masking.num_bits = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding num_bits: {}", e)),
+        };
+        masking.total_blocks = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding total_blocks: {}", e)),
+        };
 
-        masking
+        Ok(masking)
     }
 
     pub fn prefetch<R>(&mut self, in_buf: &mut R)
@@ -254,7 +263,7 @@ mod tests {
 
         let mut buffer = Cursor::new(Vec::new());
         masking.write_to_buffer(&mut buffer).unwrap();
-        let mut masking = Masking::from_buffer(&mut buffer, 0);
+        let mut masking = Masking::from_buffer(&mut buffer, 0).unwrap();
 
         let mut seq = test_seqs[0].as_bytes().to_ascii_uppercase();
         masking.mask_sequence(&mut buffer, loc, &mut seq);
