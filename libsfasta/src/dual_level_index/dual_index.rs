@@ -578,7 +578,7 @@ impl DualIndex {
 
         let actual_loc = pos.unwrap() as usize + block_num * self.chunk_size as usize;
         let bp = self.get_bitpacked_chunk_by_pos(&mut in_buf, actual_loc);
-        let value = bp.unpack(self.num_bits);
+        let value = bp.unpack(self.num_bits).unwrap();
 
         let bitpacked_pos = actual_loc % BitPacker8x::BLOCK_LEN;
 

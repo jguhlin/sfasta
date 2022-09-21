@@ -188,7 +188,7 @@ impl Masking {
         let block_position = self.location + 8 + 1 + 4 + (block as u64 * self.bitpack_len);
         in_buf.seek(SeekFrom::Start(block_position)).unwrap();
         let bp: Packed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-        bp.unpack(self.num_bits)
+        bp.unpack(self.num_bits).unwrap()
     }
 
     /// Masks the sequence in place

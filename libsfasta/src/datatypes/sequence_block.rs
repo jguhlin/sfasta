@@ -94,8 +94,8 @@ impl<'a> SequenceBlocks<'a> {
             let p2: crate::utils::Packed =
                 bincode::decode_from_std_read(&mut in_buf, bincode_config)
                     .expect("Unable to decode block index");
-            let mut p: Vec<u32> = p.unpack(self.num_bits);
-            let p2 = p2.unpack(self.num_bits);
+            let mut p: Vec<u32> = p.unpack(self.num_bits).unwrap();
+            let p2 = p2.unpack(self.num_bits).unwrap();
             p.extend(p2);
             let block_locs: Vec<u64> =
                 unsafe { std::slice::from_raw_parts(p.as_ptr() as *const u64, p.len()).to_vec() };

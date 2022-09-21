@@ -70,15 +70,21 @@ impl Packed {
         }
     }
 
-    pub fn unpack(&self, num_bits: u8) -> Vec<u32> {
+    pub fn unpack(&self, num_bits: u8) -> Result<Vec<u32>, String> {
         match self {
             Packed::Packed(packed) => {
                 let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
                 let bitpacker = BitPacker8x::new();
+                if packed.len() < 192 {
+                    return Err(format!(
+                        "Packed data is too small to be valid: {}",
+                        packed.len()
+                    ));
+                }
                 bitpacker.decompress(packed, &mut decompressed[..], num_bits);
-                decompressed
+                Ok(decompressed)
             }
-            Packed::Remainder(remainder) => remainder.clone(),
+            Packed::Remainder(remainder) => Ok(remainder.clone()),
         }
     }
 }

@@ -461,7 +461,7 @@ impl<'sfa> SfastaParser<'sfa> {
         log::debug!("Compressed Size: {}", compressed_size);
         log::debug!("Blocks Counts: {}", blocks_count);
 
-        if num_bits >= 255 {
+        if num_bits > 32 {
             return Result::Err(format!("Invalid num bits: {}", num_bits));
         }
 
@@ -479,7 +479,12 @@ impl<'sfa> SfastaParser<'sfa> {
                         }
                 }).collect::<Result<Vec<Packed>, String>>()?;
 
-                let x = x.into_iter().map(|x| x.unpack(num_bits)).into_iter().flatten();
+                let x = x.into_iter().map(|x| x.unpack(num_bits)).collect::<Result<Vec<Vec<u32>>, String>>();
+                if x.is_err() {
+                    return Result::Err(x.err().unwrap());
+                }
+
+                let x = x.unwrap().into_iter().flatten();
 
                 log::debug!("Doing something unsafe...");
 
