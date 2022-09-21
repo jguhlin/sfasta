@@ -75,7 +75,7 @@ impl Packed {
             Packed::Packed(packed) => {
                 let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
                 let bitpacker = BitPacker8x::new();
-                if packed.len() < 192 {
+                if packed.len() < BitPacker8x::BLOCK_LEN * num_bits as usize {
                     return Err(format!(
                         "Packed data is too small to be valid: {}",
                         packed.len()

@@ -198,6 +198,15 @@ Graph genome file format is in dire need of an optimized format
 ## Profile Guided Optimization
 Never mind. This somehow doubled the time it takes to compress binaries. Enable PGO for additional speed-ups
 
+# Fuzzing
+
+The following format parsers are fuzzed. To fuzz execute the following in the libsfasta directory:
+```
+cargo fuzz run parse_fastq  -- -max_len=8388608
+cargo fuzz run parse_fasta  -- -max_len=8388608
+cargo fuzz run parse_sfasta -- -detect_leaks=0 -rss_limit_mb=4096mb -max_len=8388608
+```
+
 # FAQ
 
 ## I get a strange symbol near the progress bar

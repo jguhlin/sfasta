@@ -123,7 +123,7 @@ impl Ids {
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding().with_limit::<{64 * 1024 * 1024}>();
 
         let mut ids = Ids::default();
 
@@ -186,7 +186,7 @@ impl Ids {
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding().with_limit::<{128 * 1024 * 1024}>();
         let block_locations = self.block_locations.as_ref().unwrap();
 
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();

@@ -197,7 +197,7 @@ impl DualIndexWriter {
     where
         W: Write + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding().with_limit::<{64 * 1024 * 1024}>();
 
         let len = self.hashes.len();
         let chunks = (len as f64 / (self.chunk_size as usize) as f64).ceil() as usize;
