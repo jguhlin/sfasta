@@ -447,7 +447,7 @@ where
     let mut masking = None;
     let mut masking_location = None;
 
-    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192*4));
+    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192 * 4));
 
     let fasta_queue_in = Arc::clone(&fasta_queue);
     let fasta_queue_out = Arc::clone(&fasta_queue);
@@ -496,6 +496,8 @@ where
 
         let fasta_thread_clone = fasta_thread.thread().clone();
         let mut out_buf = BufWriter::new(&mut out_fh);
+
+        // TODO: Multithread this part
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
 

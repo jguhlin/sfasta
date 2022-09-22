@@ -13,7 +13,7 @@ pub struct Fasta<'fasta, R> {
     next_header: Option<String>,
     seqlen: usize,
     moving_average: [u64; 8],
-    moving_average_pos: usize
+    moving_average_pos: usize,
 }
 
 impl<'fasta, R: BufRead> Fasta<'fasta, R> {
@@ -36,7 +36,8 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
 
     fn next(&mut self) -> Option<Result<Sequence, &'static str>> {
         while let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
-            if bytes_read == 0 { // File is finished
+            if bytes_read == 0 {
+                // File is finished
                 if self.seqlen > 0 && self.next_seqid.is_some() {
                     let seq = Sequence {
                         sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
@@ -90,7 +91,9 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                             // Use the last seqlen as the new buffer's size
                             self.moving_average[self.moving_average_pos] = self.seqlen as u64;
                             self.moving_average_pos = (self.moving_average_pos + 1) % 8;
-                            let mut seqbuf = Vec::with_capacity((self.moving_average.iter().sum::<u64>() / 8) as usize);
+                            let mut seqbuf = Vec::with_capacity(
+                                (self.moving_average.iter().sum::<u64>() / 8) as usize,
+                            );
                             std::mem::swap(&mut self.seqbuffer, &mut seqbuf);
                             seqbuf.truncate(self.seqlen);
 

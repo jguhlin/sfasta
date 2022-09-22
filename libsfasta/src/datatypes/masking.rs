@@ -48,7 +48,7 @@ impl Masking {
             self.data = Some(Vec::new());
         }
 
-        // Is any lowercase?
+        // Are any lowercase?
         if !seq.iter().any(|x| x.is_ascii_lowercase()) {
             return None;
         }

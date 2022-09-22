@@ -332,7 +332,9 @@ impl<'a> SeqLocs<'a> {
         let block_location = block_locations[block as usize];
         in_buf.seek(SeekFrom::Start(block_location)).unwrap();
 
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding().with_limit::<{8 * 1024 * 1024}>();
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 8 * 1024 * 1024 }>();
 
         if self.compressed_seq_buffer.is_none() {
             self.compressed_seq_buffer = Some(Vec::with_capacity(256 * 1024));

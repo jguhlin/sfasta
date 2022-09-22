@@ -440,7 +440,7 @@ fn _sorter_worker_thread(
                 backoff.reset();
             }
         }
-        
+
         result = sort_queue.pop();
 
         match result {
