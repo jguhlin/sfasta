@@ -397,16 +397,83 @@ pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
             }
         }
 
-        if i >= 32 {
+        if i == 32 {
             u32s.push(cur_u32);
             cur_u32 = 0u32;
             cur_u32_bits = cur_u32.view_bits_mut::<Lsb0>();
             i = 0;
+        } else if i > 32 {
+            // This doesn't happen because we've already done padding
+            panic!("i > 32");
         }
     }
 
     if i > 0 {
         u32s.push(cur_u32);
+    }
+
+    u32s
+}
+
+// Faster, but at a cost of file size
+#[allow(dead_code)]
+#[inline]
+pub fn convert_commands_to_u32_uncompressed(commands: &[Ml32bit]) -> Vec<u32> {
+    let mut u32s = Vec::with_capacity(commands.len());
+    let mut cur_u32 = 0u32;
+
+    for command in commands {
+        match command {
+            Ml32bit::SkipAheadu24(len) => {
+                cur_u32 = cur_u32 | 0b0111 << 28;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::SkipAheadu20(len) => {
+                cur_u32 = cur_u32 | 0b0111_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::SkipAheadu16(len) => {
+                cur_u32 = cur_u32 | 0b0111_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::SkipAheadu8(len) => {
+                cur_u32 = cur_u32 | 0b0111_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::SkipAheadu4(len) => {
+                cur_u32 = cur_u32 | 0b0111_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::Masku24(len) => {
+                cur_u32 = cur_u32 | 0b1001_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::Masku20(len) => {
+                cur_u32 = cur_u32 | 0b1001_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::Masku16(len) => {
+                cur_u32 = cur_u32 | 0b1001_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::Masku8(len) => {
+                cur_u32 = cur_u32 | 0b1001_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::Masku4(len) => {
+                cur_u32 = cur_u32 | 0b1001_0000_0000_0000_0000_0000_0000_0000;
+                cur_u32 += *len as u32;
+            }
+            Ml32bit::Stop => {
+                cur_u32 = cur_u32 | 0b1111_0000_0000_0000_0000_0000_0000_0000;
+            }
+            Ml32bit::Pass => {
+                cur_u32 = cur_u32 | 0b0000_0000_0000_0000_0000_0000_0000_0000;
+            }
+        }
+
+        u32s.push(cur_u32);
+        cur_u32 = 0u32;
     }
 
     u32s

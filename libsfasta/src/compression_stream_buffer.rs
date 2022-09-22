@@ -211,12 +211,13 @@ impl CompressionStreamBuffer {
         assert!(self.block_size > 0);
         assert!(!self.finalized, "SeqBuffer has been finalized.");
 
-        let mut locs = Vec::new();
-
         let block_size = self.block_size as usize;
+
+        let mut locs = Vec::with_capacity(x.len() / self.block_size as usize);
 
         // Remove whitespace
         let mut seq = x;
+        seq.make_ascii_uppercase();
 
         while !seq.is_empty() {
             let len = self.len();
@@ -228,7 +229,6 @@ impl CompressionStreamBuffer {
                 end = block_size - len;
             }
 
-            seq[0..end].make_ascii_uppercase();
             //self.buffer.extend_from_slice(seq[0..end].trim_ascii());
             // Until trim_ascii is stabilized...
 
@@ -440,7 +440,7 @@ fn _sorter_worker_thread(
                 backoff.reset();
             }
         }
-
+        
         result = sort_queue.pop();
 
         match result {

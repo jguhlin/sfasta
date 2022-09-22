@@ -9,6 +9,7 @@ use crate::masking::ml32bit::*;
 use crate::*;
 
 use bitpacking::{BitPacker, BitPacker8x};
+use bumpalo::Bump;
 
 pub struct Masking {
     location: u64,
@@ -17,6 +18,7 @@ pub struct Masking {
     num_bits: u8,
     cache: Option<(u32, Vec<u32>)>,
     total_blocks: u32,
+    bump: Option<Bump>,
 }
 
 impl Default for Masking {
@@ -28,12 +30,19 @@ impl Default for Masking {
             num_bits: 0,
             cache: None,
             total_blocks: 0,
+            bump: None,
         }
     }
 }
 
 impl Masking {
     pub fn add_masking(&mut self, seq: &[u8]) -> Option<(u32, u32)> {
+        if self.bump.is_none() {
+            self.bump = Some(Bump::new());
+        }
+
+        let mut bump = self.bump.as_mut().unwrap();
+
         // Start and LENGTH (not end)
         if self.data.is_none() {
             self.data = Some(Vec::new());
@@ -46,14 +55,16 @@ impl Masking {
 
         let data = self.data.as_mut().unwrap();
 
-        let ranges = get_masking_ranges(seq);
-        let ml32bit = convert_ranges_to_ml32bit(&ranges);
-        let ml32bit = pad_commands_to_u32(&ml32bit);
-        let commands = convert_commands_to_u32(&ml32bit);
+        let ranges = bump.alloc(get_masking_ranges(seq));
+        let ml32bit = bump.alloc(convert_ranges_to_ml32bit(&ranges));
+        let ml32bit = bump.alloc(pad_commands_to_u32(&ml32bit));
+        let commands = bump.alloc(convert_commands_to_u32(&ml32bit));
 
         let len = commands.len();
         let start = data.len();
-        data.extend(commands);
+        data.extend(commands.iter());
+
+        bump.reset();
 
         Some((start as u32, len as u32))
     }

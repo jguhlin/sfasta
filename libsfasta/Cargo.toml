@@ -38,6 +38,7 @@ itertools = "0.10.3"
 bitvec = "1.0.1"
 env_logger = "0.9.0"
 getrandom = { version = "0.2.7", features = ["js"] }
+bumpalo = "3.11.0"
 
 # Hashers
 twox-hash = "1.6.3"

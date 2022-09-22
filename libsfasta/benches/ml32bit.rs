@@ -48,6 +48,9 @@ fn criterion_benchmark(c: &mut Criterion) {
     group.bench_function("convert_commands_to_u32", |b| {
         b.iter(|| convert_commands_to_u32(black_box(&ml32bit_padded)))
     });
+    group.bench_function("convert_commands_to_u32_uncompressed", |b| {
+        b.iter(|| convert_commands_to_u32_uncompressed(black_box(&ml32bit_padded)))
+    });
     // group.bench_function("convert_commands_to_u32_orig", |b| {
     //b.iter(|| convert_commands_to_u32_orig(black_box(&ml32bit_padded)))
     //});
