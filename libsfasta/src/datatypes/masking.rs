@@ -45,11 +45,11 @@ impl Masking {
         }
 
         let data = self.data.as_mut().unwrap();
-        // BitPacker8x::BLOCK_LEN
 
-        let commands = convert_commands_to_u32(&pad_commands_to_u32(&convert_ranges_to_ml32bit(
-            &get_masking_ranges(seq),
-        )));
+        let ranges = get_masking_ranges(seq);
+        let ml32bit = convert_ranges_to_ml32bit(&ranges);
+        let ml32bit = pad_commands_to_u32(&ml32bit);
+        let commands = convert_commands_to_u32(&ml32bit);
 
         let len = commands.len();
         let start = data.len();

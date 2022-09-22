@@ -323,62 +323,63 @@ pub fn convert_ranges_to_ml32bit(ranges: &[(usize, usize)]) -> Vec<Ml32bit> {
 
 #[inline]
 pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
-    let mut u32s = Vec::new();
+    let mut u32s = Vec::with_capacity(commands.len());
     let mut i = 0;
     let mut cur_u32 = 0u32;
     let mut cur_u32_bits = cur_u32.view_bits_mut::<Lsb0>();
 
     for command in commands {
+        assert!(i <= 28);
         match command {
-            Ml32bit::SkipAheadu4(len) => {
-                cur_u32_bits[i..i + 4].store(0b1000);
-                cur_u32_bits[i + 4..i + 8].store(*len);
-                i += 8;
-            }
-            Ml32bit::SkipAheadu8(len) => {
-                cur_u32_bits[i..i + 4].store(0b0100);
-                cur_u32_bits[i + 4..i + 12].store(*len as u8);
-                i += 12;
-            }
-            Ml32bit::SkipAheadu16(len) => {
-                cur_u32_bits[i..i + 4].store(0b0101);
-                cur_u32_bits[i + 4..i + 20].store(*len as u16);
-                i += 20;
+            Ml32bit::SkipAheadu24(len) => {
+                cur_u32_bits[i..i + 4].store(0b0111);
+                cur_u32_bits[i + 4..i + 28].store(*len as u32);
+                i += 28;
             }
             Ml32bit::SkipAheadu20(len) => {
                 cur_u32_bits[i..i + 4].store(0b0110);
                 cur_u32_bits[i + 4..i + 24].store(*len as u32);
                 i += 24;
             }
-            Ml32bit::SkipAheadu24(len) => {
-                cur_u32_bits[i..i + 4].store(0b0111);
-                cur_u32_bits[i + 4..i + 28].store(*len as u32);
-                i += 28;
+            Ml32bit::SkipAheadu16(len) => {
+                cur_u32_bits[i..i + 4].store(0b0101);
+                cur_u32_bits[i + 4..i + 20].store(*len as u16);
+                i += 20;
             }
-            Ml32bit::Masku4(len) => {
-                cur_u32_bits[i..i + 4].store(0b1001);
-                cur_u32_bits[i + 4..i + 8].store(*len);
-                i += 8;
-            }
-            Ml32bit::Masku8(len) => {
-                cur_u32_bits[i..i + 4].store(0b0110);
+            Ml32bit::SkipAheadu8(len) => {
+                cur_u32_bits[i..i + 4].store(0b0100);
                 cur_u32_bits[i + 4..i + 12].store(*len as u8);
                 i += 12;
             }
-            Ml32bit::Masku16(len) => {
-                cur_u32_bits[i..i + 4].store(0b0111);
-                cur_u32_bits[i + 4..i + 20].store(*len as u16);
-                i += 20;
+            Ml32bit::SkipAheadu4(len) => {
+                cur_u32_bits[i..i + 4].store(0b1000);
+                cur_u32_bits[i + 4..i + 8].store(*len);
+                i += 8;
+            }
+            Ml32bit::Masku24(len) => {
+                cur_u32_bits[i..i + 4].store(0b1001);
+                cur_u32_bits[i + 4..i + 28].store(*len as u32);
+                i += 28;
             }
             Ml32bit::Masku20(len) => {
                 cur_u32_bits[i..i + 4].store(0b1000);
                 cur_u32_bits[i + 4..i + 24].store(*len as u32);
                 i += 24;
             }
-            Ml32bit::Masku24(len) => {
+            Ml32bit::Masku16(len) => {
+                cur_u32_bits[i..i + 4].store(0b0111);
+                cur_u32_bits[i + 4..i + 20].store(*len as u16);
+                i += 20;
+            }
+            Ml32bit::Masku8(len) => {
+                cur_u32_bits[i..i + 4].store(0b0110);
+                cur_u32_bits[i + 4..i + 12].store(*len as u8);
+                i += 12;
+            }
+            Ml32bit::Masku4(len) => {
                 cur_u32_bits[i..i + 4].store(0b1001);
-                cur_u32_bits[i + 4..i + 28].store(*len as u32);
-                i += 28;
+                cur_u32_bits[i + 4..i + 8].store(*len);
+                i += 8;
             }
             Ml32bit::Stop => {
                 cur_u32_bits[i..i + 4].store(0b1111);

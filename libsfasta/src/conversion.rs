@@ -447,7 +447,7 @@ where
     let mut masking = None;
     let mut masking_location = None;
 
-    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192));
+    let fasta_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192*4));
 
     let fasta_queue_in = Arc::clone(&fasta_queue);
     let fasta_queue_out = Arc::clone(&fasta_queue);
@@ -514,6 +514,10 @@ where
 
             let backoff = Backoff::new();
 
+            let mut masking_time = std::time::Duration::new(0, 0);
+            let mut adding_time = std::time::Duration::new(0, 0);
+            let mut seq_loc_time = std::time::Duration::new(0, 0);
+
             let mut fasta_queue_spins: usize = 0;
             loop {
                 backoff.reset();
@@ -522,8 +526,13 @@ where
                     Some(Work::FastaPayload(seq)) => {
                         let (seqid, seqheader, seq, _) = seq.into_parts();
                         let mut location = SeqLoc::new();
+                        let now = std::time::Instant::now();
                         location.masking = masking.add_masking(&seq.as_ref().unwrap()[..]);
+                        masking_time += now.elapsed();
+                        let now = std::time::Instant::now();
                         let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
+                        adding_time += now.elapsed();
+                        let now = std::time::Instant::now();
                         let myid = std::sync::Arc::new(seqid.unwrap());
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add_id(std::sync::Arc::clone(&myid));
@@ -532,6 +541,7 @@ where
                         }
                         location.ids = Some(idloc);
                         location.sequence = Some(loc);
+                        seq_loc_time += now.elapsed();
                         seq_locs.push(location);
                     }
                     Some(Work::FastqPayload(_)) => panic!("Received FASTQ payload in FASTA thread"),
@@ -548,6 +558,9 @@ where
                 }
             }
 
+            log::debug!("Masking time: {}", masking_time.as_millis());
+            log::debug!("Adding time: {}", adding_time.as_millis());
+            log::debug!("SeqLoc time: {}", seq_loc_time.as_millis());
             log::debug!("Finalizing SequenceBuffer");
             // Finalize pushes the last block, which is likely smaller than the complete block size
             match sb.finalize() {
