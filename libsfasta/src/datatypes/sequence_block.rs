@@ -19,6 +19,7 @@ pub struct SequenceBlocks<'a> {
     cache_sbc: SequenceBlockCompressed,
     pub compression_type: CompressionType,
     pub compression_level: i8,
+    compression_dict: Option<Vec<u8>>,
     caching: bool,
     block_size: usize,
     zstd_decompressor: Option<zstd::bulk::Decompressor<'a>>,
@@ -29,6 +30,7 @@ impl<'a> SequenceBlocks<'a> {
     pub fn new(
         block_locs: Option<Vec<u64>>,
         compression_type: CompressionType,
+        compression_dict: Option<Vec<u8>>,
         block_size: usize,
         compressed_size: u64,
         total_blocks: u64,
@@ -36,7 +38,12 @@ impl<'a> SequenceBlocks<'a> {
         num_bits: u8,
     ) -> Self {
         let zstd_decompressor = if compression_type == CompressionType::ZSTD {
-            let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
+            let mut zstd_decompressor = 
+              if let Some(dict) = &compression_dict {
+                zstd::bulk::Decompressor::with_dictionary(dict)
+              } else {
+                zstd::bulk::Decompressor::new()
+              }.unwrap();
             zstd_decompressor
                 .include_magicbytes(false)
                 .expect("Unable to disable magicbytes in decoder");
@@ -56,6 +63,7 @@ impl<'a> SequenceBlocks<'a> {
             cache_sbc: SequenceBlockCompressed {
                 compressed_seq: Vec::with_capacity(block_size),
             },
+            compression_dict,
             compressed_size,
             total_blocks,
             block_index_location,

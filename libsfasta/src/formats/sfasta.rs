@@ -521,6 +521,7 @@ impl<'sfa> SfastaParser<'sfa> {
         sfasta.sequenceblocks = Some(SequenceBlocks::new(
             block_locs,
             sfasta.parameters.compression_type,
+            sfasta.parameters.compression_dict.clone(),
             sfasta.parameters.block_size as usize,
             compressed_size,
             blocks_count,
