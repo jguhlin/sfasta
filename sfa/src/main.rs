@@ -93,7 +93,6 @@ enum Commands {
         #[clap(short, long)]
         level: Option<i8>,
         #[clap(long)]
-        #[clap(default_value_t = false)]
         dict: bool,
         /// Number of sample blocks to take for dictionary training
         #[clap(long)]
