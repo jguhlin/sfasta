@@ -24,7 +24,7 @@ impl<'a> Default for SeqLocs<'a> {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 64 * 1024,
+            chunk_size: 16 * 1024,
             data: None,
             len: 0,
             cache: None,
@@ -334,7 +334,7 @@ impl<'a> SeqLocs<'a> {
 
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 8 * 1024 * 1024 }>();
+            .with_limit::<{ 128 * 1024 * 1024 }>();
 
         if self.compressed_seq_buffer.is_none() {
             self.compressed_seq_buffer = Some(Vec::with_capacity(256 * 1024));
