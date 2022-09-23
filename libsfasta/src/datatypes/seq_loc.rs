@@ -136,6 +136,7 @@ impl<'a> SeqLocs<'a> {
 
         // FORMAT: Write sequence location blocks
         // TODO: Make a chunk for this, and split up strings + numbers, and bincode the numbers...
+        // TODO: Bumpalo
         for s in seq_locs
             .iter()
             .collect::<Vec<&SeqLoc>>()
@@ -151,7 +152,7 @@ impl<'a> SeqLocs<'a> {
 
             let mut bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
 
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 3)
+            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 7)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
