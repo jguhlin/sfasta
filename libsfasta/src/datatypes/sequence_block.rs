@@ -177,8 +177,13 @@ pub struct SequenceBlock {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
-    let mut encoder = zstd::bulk::Compressor::new(compression_level).unwrap();
+pub fn zstd_encoder(compression_level: i32, dict: Option<Vec<u8>>) -> zstd::bulk::Compressor<'static> {
+    let mut encoder = 
+    if let Some(dict) = dict {
+        zstd::bulk::Compressor::with_dictionary(compression_level, &dict).unwrap()
+    } else {
+        zstd::bulk::Compressor::new(compression_level).unwrap()
+    };
     encoder
         .set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
         .unwrap();
@@ -481,7 +486,7 @@ mod tests {
             seq: test_bytes.clone(),
         };
 
-        let mut compressor = zstd_encoder(3);
+        let mut compressor = zstd_encoder(3, None);
 
         let y = x.compress(CompressionType::ZSTD, 3, Some(&mut compressor));
         let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();

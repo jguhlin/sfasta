@@ -7,6 +7,13 @@ use std::path::Path;
 use bitpacking::{BitPacker, BitPacker8x};
 use crossbeam::channel;
 
+pub fn create_dict(input: &[u8], block_size: usize) -> Vec<u8> {
+    let block_counts = input.len() / block_size;
+    let input = &input[..block_counts * block_size];
+    let block_sizes = vec![block_size; block_counts];   
+    zstd::dict::from_continuous(input, &block_sizes, block_size).unwrap()
+}
+
 // From: https://stackoverflow.com/questions/72571846/crossbeam-receiver-to-bufread
 pub struct CrossbeamReader {
     input: channel::Receiver<ReaderData>,
@@ -75,10 +82,13 @@ impl Packed {
             Packed::Packed(packed) => {
                 let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
                 let bitpacker = BitPacker8x::new();
-                if packed.len() < BitPacker8x::BLOCK_LEN * num_bits as usize {
+                if packed.len() < (BitPacker8x::BLOCK_LEN * num_bits as usize) / 8 {
                     return Err(format!(
-                        "Packed data is too small to be valid: {}",
-                        packed.len()
+                        "Packed data is too small to be valid: {}, expected: {}, num_bits: {}",
+                        packed.len(),
+                        BitPacker8x::BLOCK_LEN * num_bits as usize,
+                        num_bits
+
                     ));
                 }
                 bitpacker.decompress(packed, &mut decompressed[..], num_bits);

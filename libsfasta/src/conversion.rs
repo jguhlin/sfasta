@@ -21,7 +21,7 @@ pub struct Converter {
     masking: bool,
     index: bool,
     threads: usize,
-    block_size: usize,
+    pub block_size: usize,
     seqlocs_chunk_size: usize,
     quality_scores: bool,
     compression_type: CompressionType,
@@ -173,6 +173,7 @@ impl Converter {
         }
 
         sfasta.parameters.compression_type = self.compression_type;
+        sfasta.parameters.compression_dict = self.dict.clone();
         sfasta.parameters.seqlocs_chunk_size = self.seqlocs_chunk_size as u32;
         sfasta.parameters.block_size = self.block_size as u32;
 
@@ -202,6 +203,10 @@ impl Converter {
 
         if self.compression_level.is_some() {
             sb_config = sb_config.with_compression_level(self.compression_level.unwrap());
+        }
+
+        if let Some(dict) = self.dict {
+            sb_config = sb_config.with_compression_dict(dict);
         }
 
         let start_time = std::time::Instant::now();

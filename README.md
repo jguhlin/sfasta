@@ -24,6 +24,9 @@ It's now trivial to add the scores as another compression stream, and the struct
 
 ## TODO
 * Does Zstd dict support work for small block sizes (8kb, 16kb, 4kb)?
+* less than 8kbp block sizes should use dicts by default
+* Masking as bitvec or [Bool; N]?
+
 
 # Usage
 ## Installation

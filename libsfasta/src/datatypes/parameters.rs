@@ -6,9 +6,11 @@ use super::*;
 pub struct Parameters {
     pub block_size: u32,
     pub compression_type: CompressionType,
+    pub compression_dict: Option<Vec<u8>>,
     pub index_compression_type: CompressionType,
     pub index_chunk_size: u32,
     pub seqlocs_chunk_size: u32,
+
 }
 
 impl Default for Parameters {
@@ -16,6 +18,7 @@ impl Default for Parameters {
         Parameters {
             block_size: 4 * 1024 * 1024, // 4 Mb
             compression_type: CompressionType::ZSTD,
+            compression_dict: None,
             index_compression_type: CompressionType::LZ4,
             index_chunk_size: 64 * 1024,   // 64k
             seqlocs_chunk_size: 64 * 1024, // 64k

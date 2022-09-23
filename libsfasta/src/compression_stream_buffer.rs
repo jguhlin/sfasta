@@ -3,7 +3,7 @@ use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
 use std::thread::JoinHandle;
-use std::{default, thread};
+use std::thread;
 
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
@@ -11,12 +11,13 @@ use crossbeam::utils::Backoff;
 use crate::datatypes::*;
 use crate::CompressionType;
 
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 pub struct CompressionStreamBufferConfig {
     pub block_size: u32,
     pub compression_type: CompressionType,
     pub compression_level: i8,
     pub num_threads: u16,
+    pub compression_dict: Option<Vec<u8>> // Only impl for Zstd aat this time
 }
 
 impl Default for CompressionStreamBufferConfig {
@@ -26,13 +27,14 @@ impl Default for CompressionStreamBufferConfig {
             compression_type: CompressionType::ZSTD,
             compression_level: 3,
             num_threads: 1,
+            compression_dict: None
         }
     }
 }
 
 #[allow(dead_code)]
 impl CompressionStreamBufferConfig {
-    pub fn new(
+    pub const fn new(
         block_size: u32,
         compression_type: CompressionType,
         compression_level: i8,
@@ -43,27 +45,33 @@ impl CompressionStreamBufferConfig {
             compression_type,
             compression_level,
             num_threads,
+            compression_dict: None
         }
     }
 
-    pub fn with_block_size(mut self, block_size: u32) -> Self {
+    pub const fn with_block_size(mut self, block_size: u32) -> Self {
         self.block_size = block_size;
         self
     }
 
-    pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
+    pub const fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self.compression_type = compression_type;
         self.compression_level = default_compression_level(compression_type);
         self
     }
 
-    pub fn with_compression_level(mut self, compression_level: i8) -> Self {
+    pub const fn with_compression_level(mut self, compression_level: i8) -> Self {
         self.compression_level = compression_level;
         self
     }
 
-    pub fn with_threads(mut self, num_threads: u16) -> Self {
+    pub const fn with_threads(mut self, num_threads: u16) -> Self {
         self.num_threads = num_threads;
+        self
+    }
+
+    pub fn with_compression_dict(mut self, compression_dict: Vec<u8>) -> Self {
+        self.compression_dict = Some(compression_dict);
         self
     }
 }
@@ -85,6 +93,7 @@ pub struct CompressionStreamBuffer {
     finalized: bool,
     compression_type: CompressionType,
     compression_level: i8,
+    compression_dict: Option<Vec<u8>>,
     emit_block_spins: usize,
 }
 
@@ -108,6 +117,7 @@ impl Default for CompressionStreamBuffer {
             compression_type: CompressionType::ZSTD,
             compression_level: default_compression_level(CompressionType::ZSTD),
             emit_block_spins: 0,
+            compression_dict: None
         }
     }
 }
@@ -131,6 +141,7 @@ impl CompressionStreamBuffer {
         buffer.threads = config.num_threads;
         buffer.compression_type = config.compression_type;
         buffer.compression_level = config.compression_level;
+        buffer.compression_dict = config.compression_dict;
         buffer
     }
 
@@ -152,9 +163,10 @@ impl CompressionStreamBuffer {
 
             let ct = self.compression_type;
             let cl = self.compression_level;
+            let cd = self.compression_dict.clone();
 
             let handle =
-                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct, cl));
+                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd));
             self.workers.push(handle);
         }
 
@@ -339,13 +351,14 @@ fn _compression_worker_thread(
     shutdown: Arc<AtomicBool>,
     compression_type: CompressionType,
     compression_level: i8,
+    compression_dict: Option<Vec<u8>>,
 ) {
     let mut result;
     let backoff = Backoff::new();
     let mut compression_worker_spins: usize = 0;
 
     let mut zstd_compressor = if compression_type == CompressionType::ZSTD {
-        Some(zstd_encoder(compression_level as i32))
+        Some(zstd_encoder(compression_level as i32, compression_dict))
     } else {
         None
     };

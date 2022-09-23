@@ -2,6 +2,7 @@
 #[feature(write_all_vectored)]
 extern crate mimalloc;
 use mimalloc::MiMalloc;
+use rand_core::block;
 
 #[global_allocator]
 static GLOBAL: MiMalloc = MiMalloc;
@@ -91,6 +92,13 @@ enum Commands {
         blocksize: Option<u64>,
         #[clap(short, long)]
         level: Option<i8>,
+        #[clap(long)]
+        #[clap(default_value_t = false)]
+        dict: bool,
+        /// Number of sample blocks to take for dictionary training
+        #[clap(long)]
+        #[clap(default_value_t = 1024)]
+        dict_samples: u64,
     },
     Summarize {
         input: String,
@@ -137,6 +145,8 @@ fn main() {
             none,
             blocksize,
             level,
+            dict,
+            dict_samples,
         } => convert(
             input,
             *threads as usize,
@@ -150,6 +160,8 @@ fn main() {
             *noindex,
             *blocksize,
             *level,
+            *dict,
+            *dict_samples,
         ),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
@@ -438,6 +450,8 @@ fn convert(
     noindex: bool,
     blocksize: Option<u64>,
     level: Option<i8>,
+    dict: bool,
+    dict_samples: u64,
 ) {
     let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());
@@ -448,6 +462,29 @@ fn convert(
     let output = match File::create(output_name) {
         Err(why) => panic!("couldn't create: {}", why),
         Ok(file) => file,
+    };
+
+    let dict = if dict {
+        // Assume small block size for dictionary
+        let bs = (blocksize.unwrap_or(8) * 1024) as usize;
+        let accumulate_length = bs * dict_samples as usize; 
+        let mut data = Vec::with_capacity(accumulate_length as usize);
+        let buf = generic_open_file(fasta_filename);
+        let mut buf = BufReader::new(buf.2);
+        let mut fasta = libsfasta::prelude::Fasta::from_buffer(&mut buf);
+        while data.len() < accumulate_length as usize {
+            if let Ok(record) = fasta.next().unwrap() {
+                if let Some(seq) = record.sequence {
+                    data.extend_from_slice(&seq);
+                }
+            } else {
+                break
+            }
+        }
+
+        Some(libsfasta::utils::create_dict(&data, bs))
+    } else {
+        None
     };
 
     let buf = generic_open_file_pb(pb, fasta_filename);
@@ -498,6 +535,10 @@ fn convert(
     let mut converter = Converter::default()
         .with_threads(threads)
         .with_compression_type(compression_type);
+
+    if let Some(dict) = dict {
+        converter = converter.with_dict(dict);
+    }
 
     if let Some(level) = level {
         converter = converter.with_compression_level(level);

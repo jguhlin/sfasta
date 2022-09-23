@@ -92,7 +92,7 @@ impl Ids {
 
         let mut block_locations = Vec::new();
 
-        let mut compressor = zstd_encoder(7);
+        let mut compressor = zstd_encoder(3, None);
 
         for block in blocks {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();

@@ -120,7 +120,7 @@ impl Masking {
         self.location = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
         for chunk in self.data.take().unwrap().chunks(2 * 1024) {
-            let mut encoder = zstd_encoder(1);
+            let mut encoder = zstd_encoder(1, None);
             let mut cseq: Vec<u8> = Vec::with_capacity(2 * 1024 * 32);
             let mut uncompressed = Vec::with_capacity(2 * 1024 * 32);
             bincode::encode_into_std_write(chunk.to_vec(), &mut uncompressed, bincode_config)
