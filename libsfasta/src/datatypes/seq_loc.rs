@@ -221,7 +221,7 @@ impl<'a> SeqLocs<'a> {
     {
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 8 * 1024 * 1024 }>();
+            .with_limit::<{ 64 * 1024 * 1024 }>();
 
         in_buf
             .seek(SeekFrom::Start(pos))
