@@ -348,7 +348,7 @@ impl<'sfa> SfastaParser<'sfa> {
     {
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 8 * 1024 }>();
+            .with_limit::<{ 2 * 1024 * 1024 }>();
 
         let mut sfasta_marker: [u8; 6] = [0; 6];
         match in_buf.read_exact(&mut sfasta_marker) {

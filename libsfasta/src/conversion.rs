@@ -7,7 +7,7 @@ use std::fs::{metadata, File};
 use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
-use std::sync::Arc;
+use std::sync::{Mutex, Arc};
 use std::time::Instant;
 
 use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
@@ -501,6 +501,8 @@ where
 
         let fasta_thread_clone = fasta_thread.thread().clone();
         let mut out_buf = BufWriter::new(&mut out_fh);
+
+        // let mut seq_locs = Arc::new(Mutex::new(Vec::with_capacity(1024)));
 
         // TODO: Multithread this part
         let reader_handle = s.spawn(move |_| {
