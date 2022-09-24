@@ -24,7 +24,7 @@ impl<'a> Default for SeqLocs<'a> {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 16 * 1024,
+            chunk_size: 8 * 1024,
             data: None,
             len: 0,
             cache: None,
