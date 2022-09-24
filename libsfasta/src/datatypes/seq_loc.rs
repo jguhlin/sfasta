@@ -1,6 +1,7 @@
 // TODO! Need tests...
 // TODO: Bitpack seqlocs instead of zstd compress...
 // TODO: When data gets too large, pre-emptively compress it into memory (such as nt db, >200Gb).
+// TODO: Flatten seqlocs into a single vec, then use ordinals to find appropritate ones
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
