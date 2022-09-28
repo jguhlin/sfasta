@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
-use std::thread::JoinHandle;
 use std::thread;
+use std::thread::JoinHandle;
 
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
@@ -17,7 +17,7 @@ pub struct CompressionStreamBufferConfig {
     pub compression_type: CompressionType,
     pub compression_level: i8,
     pub num_threads: u16,
-    pub compression_dict: Option<Vec<u8>> // Only impl for Zstd aat this time
+    pub compression_dict: Option<Vec<u8>>, // Only impl for Zstd aat this time
 }
 
 impl Default for CompressionStreamBufferConfig {
@@ -27,7 +27,7 @@ impl Default for CompressionStreamBufferConfig {
             compression_type: CompressionType::ZSTD,
             compression_level: 3,
             num_threads: 1,
-            compression_dict: None
+            compression_dict: None,
         }
     }
 }
@@ -45,7 +45,7 @@ impl CompressionStreamBufferConfig {
             compression_type,
             compression_level,
             num_threads,
-            compression_dict: None
+            compression_dict: None,
         }
     }
 
@@ -117,7 +117,7 @@ impl Default for CompressionStreamBuffer {
             compression_type: CompressionType::ZSTD,
             compression_level: default_compression_level(CompressionType::ZSTD),
             emit_block_spins: 0,
-            compression_dict: None
+            compression_dict: None,
         }
     }
 }
@@ -165,8 +165,9 @@ impl CompressionStreamBuffer {
             let cl = self.compression_level;
             let cd = self.compression_dict.clone();
 
-            let handle =
-                thread::spawn(move || _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd));
+            let handle = thread::spawn(move || {
+                _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd)
+            });
             self.workers.push(handle);
         }
 

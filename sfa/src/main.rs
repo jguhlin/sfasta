@@ -466,7 +466,7 @@ fn convert(
     let dict = if dict {
         // Assume small block size for dictionary
         let bs = (blocksize.unwrap_or(8) * 1024) as usize;
-        let accumulate_length = bs * dict_samples as usize; 
+        let accumulate_length = bs * dict_samples as usize;
         let mut data = Vec::with_capacity(accumulate_length as usize);
         let buf = generic_open_file(fasta_filename);
         let mut buf = BufReader::new(buf.2);
@@ -477,7 +477,7 @@ fn convert(
                     data.extend_from_slice(&seq);
                 }
             } else {
-                break
+                break;
             }
         }
 

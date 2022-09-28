@@ -10,7 +10,7 @@ use crossbeam::channel;
 pub fn create_dict(input: &[u8], block_size: usize) -> Vec<u8> {
     let block_counts = input.len() / block_size;
     let input = &input[..block_counts * block_size];
-    let block_sizes = vec![block_size; block_counts];   
+    let block_sizes = vec![block_size; block_counts];
     zstd::dict::from_continuous(input, &block_sizes, block_size).unwrap()
 }
 
@@ -88,7 +88,6 @@ impl Packed {
                         packed.len(),
                         BitPacker8x::BLOCK_LEN * num_bits as usize,
                         num_bits
-
                     ));
                 }
                 bitpacker.decompress(packed, &mut decompressed[..], num_bits);

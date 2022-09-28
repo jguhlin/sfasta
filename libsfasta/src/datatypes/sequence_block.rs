@@ -38,12 +38,12 @@ impl<'a> SequenceBlocks<'a> {
         num_bits: u8,
     ) -> Self {
         let zstd_decompressor = if compression_type == CompressionType::ZSTD {
-            let mut zstd_decompressor = 
-              if let Some(dict) = &compression_dict {
+            let mut zstd_decompressor = if let Some(dict) = &compression_dict {
                 zstd::bulk::Decompressor::with_dictionary(dict)
-              } else {
+            } else {
                 zstd::bulk::Decompressor::new()
-              }.unwrap();
+            }
+            .unwrap();
             zstd_decompressor
                 .include_magicbytes(false)
                 .expect("Unable to disable magicbytes in decoder");
@@ -185,9 +185,11 @@ pub struct SequenceBlock {
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn zstd_encoder(compression_level: i32, dict: Option<Vec<u8>>) -> zstd::bulk::Compressor<'static> {
-    let mut encoder = 
-    if let Some(dict) = dict {
+pub fn zstd_encoder(
+    compression_level: i32,
+    dict: Option<Vec<u8>>,
+) -> zstd::bulk::Compressor<'static> {
+    let mut encoder = if let Some(dict) = dict {
         zstd::bulk::Compressor::with_dictionary(compression_level, &dict).unwrap()
     } else {
         zstd::bulk::Compressor::new(compression_level).unwrap()

@@ -10,7 +10,6 @@ pub struct Parameters {
     pub index_compression_type: CompressionType,
     pub index_chunk_size: u32,
     pub seqlocs_chunk_size: u32,
-
 }
 
 impl Default for Parameters {
