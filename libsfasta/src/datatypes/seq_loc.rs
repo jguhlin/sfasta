@@ -197,6 +197,7 @@ impl<'a> SeqLocs<'a> {
     where
         W: Write + Seek,
     {
+        let bincode_config_fixed = bincode::config::standard().with_fixed_int_encoding();
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         if self.data.is_none() {
@@ -226,10 +227,8 @@ impl<'a> SeqLocs<'a> {
         );
 
         // Write out header
-        bincode::encode_into_std_write(&header, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(&header, &mut out_buf, bincode_config_fixed)
             .expect("Unable to write out chunk size");
-
-        let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
         // TODO: Add optional compression...
         bincode::encode_into_std_write(&seq_locs, &mut out_buf, bincode_config)
@@ -307,7 +306,7 @@ impl<'a> SeqLocs<'a> {
         header.1 = self.block_index_pos;
 
         // Write out updated header...
-        bincode::encode_into_std_write(&header, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(&header, &mut out_buf, bincode_config_fixed)
             .expect("Unable to write out chunk size");
 
         // Go back to the end of the file...
@@ -322,7 +321,7 @@ impl<'a> SeqLocs<'a> {
     {
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 64 * 1024 * 1024 }>();
+            .with_limit::<{ 2 * 1024 }>();
 
         in_buf
             .seek(SeekFrom::Start(pos))
