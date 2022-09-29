@@ -197,7 +197,7 @@ impl<'a> SeqLocs<'a> {
     where
         W: Write + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
         if self.data.is_none() {
             panic!("Unable to write SeqLocs as there are none");
@@ -319,7 +319,7 @@ impl<'a> SeqLocs<'a> {
         R: Read + Seek,
     {
         let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
+            .with_variable_int_encoding()
             .with_limit::<{ 64 * 1024 * 1024 }>();
 
         in_buf
