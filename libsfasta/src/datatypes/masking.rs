@@ -11,6 +11,11 @@ use crate::*;
 use bitpacking::{BitPacker, BitPacker8x};
 use bumpalo::Bump;
 
+pub enum MaskingStyle {
+    Ml32bit,
+    Binary,
+}
+
 pub struct Masking {
     location: u64,
     bitpack_len: u64,
