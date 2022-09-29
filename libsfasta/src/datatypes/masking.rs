@@ -125,7 +125,7 @@ impl Masking {
                 }
             }
         } else {*/
-            for chunk in self.data_binary.take().unwrap().chunks(2 * 1024) {
+            for chunk in self.data_binary.take().unwrap().chunks(512 * 1024) {
                 let mut encoder = zstd_encoder(7, None);
                 let mut cseq: Vec<u8> = Vec::with_capacity(2 * 1024 * 32);
                 let mut uncompressed = Vec::with_capacity(2 * 1024 * 32);
