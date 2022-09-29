@@ -70,8 +70,6 @@ impl Masking {
         let start: usize; 
         let len: usize;
 
-        log::debug!("Masking Style: {:#?}", self.style);
-
         if self.style == MaskingStyle::Ml32bit {
 
             let data = self.data.as_mut().unwrap();
