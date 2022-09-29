@@ -11,7 +11,7 @@ use crate::*;
 use bitpacking::{BitPacker, BitPacker8x};
 use bumpalo::Bump;
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Eq, PartialEq)]
 pub enum MaskingStyle {
     Ml32bit,
     Binary,
@@ -20,12 +20,13 @@ pub enum MaskingStyle {
 pub struct Masking {
     location: u64,
     bitpack_len: u64,
-    pub data: Option<Vec<u32>>, // Only stored for writing
+    data: Option<Vec<u32>>, // Only stored for writing
+    data_binary: Option<Vec<bool>>, // Only stored for writing   
     num_bits: u8,
     cache: Option<(u32, Vec<u32>)>,
     total_blocks: u32,
     bump: Option<Bump>,
-    pub masking_style: MaskingStyle,
+    pub style: MaskingStyle,
 }
 
 impl Default for Masking {
@@ -34,11 +35,12 @@ impl Default for Masking {
             location: 0,
             bitpack_len: 0,
             data: None,
+            data_binary: None,
             num_bits: 0,
             cache: None,
             total_blocks: 0,
             bump: None,
-            masking_style: MaskingStyle::Ml32bit,
+            style: MaskingStyle::Binary,
         }
     }
 }
@@ -52,8 +54,12 @@ impl Masking {
         let bump = self.bump.as_mut().unwrap();
 
         // Start and LENGTH (not end)
-        if self.data.is_none() {
-            self.data = Some(Vec::new());
+        if self.style == MaskingStyle::Ml32bit && self.data.is_none() {
+            self.data = Some(Vec::with_capacity(512 * 1024));
+        }
+
+        if self.style == MaskingStyle::Binary && self.data_binary.is_none() {
+            self.data_binary = Some(Vec::with_capacity(2 * 1024 * 1024));
         }
 
         // Are any lowercase?
@@ -61,18 +67,31 @@ impl Masking {
             return None;
         }
 
-        let data = self.data.as_mut().unwrap();
+        let start: usize; 
+        let len: usize;
 
-        let ranges = bump.alloc(get_masking_ranges(seq));
-        let ml32bit = bump.alloc(convert_ranges_to_ml32bit(ranges));
-        let ml32bit = bump.alloc(pad_commands_to_u32(ml32bit));
-        let commands = bump.alloc(convert_commands_to_u32(ml32bit));
+        log::debug!("Masking Style: {:#?}", self.style);
 
-        let len = commands.len();
-        let start = data.len();
-        data.extend(commands.iter());
+        if self.style == MaskingStyle::Ml32bit {
 
-        bump.reset();
+            let data = self.data.as_mut().unwrap();
+
+            let ranges = bump.alloc(get_masking_ranges(seq));
+            let ml32bit = bump.alloc(convert_ranges_to_ml32bit(ranges));
+            let ml32bit = bump.alloc(pad_commands_to_u32(ml32bit));
+            let commands = bump.alloc(convert_commands_to_u32(ml32bit));
+
+            len = commands.len();
+            start = data.len();
+            data.extend(commands.iter());
+
+            bump.reset();
+        } else {
+            let data = self.data_binary.as_mut().unwrap();
+            start = data.len();
+            data.extend(seq.iter().map(|x| x.is_ascii_lowercase()));
+            len = seq.len();
+        }
 
         Some((start as u32, len as u32))
     }
@@ -90,7 +109,7 @@ impl Masking {
 
         let mut bitpacked_len: u64 = 0;
 
-        bincode::encode_into_std_write(&self.masking_style, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(&self.style, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
@@ -108,7 +127,7 @@ impl Masking {
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(self.location)).unwrap();
 
-        bincode::encode_into_std_write(&self.masking_style, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(&self.style, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&bitpacked_len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
@@ -161,7 +180,7 @@ impl Masking {
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
         masking.location = starting_pos;
 
-        masking.masking_style = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+        masking.style = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(e) => return Err(format!("Error reading masking style: {}", e)),
         };
