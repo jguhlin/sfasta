@@ -98,22 +98,23 @@ impl Masking {
     where
         W: Write + Seek,
     {
-        self.data.as_ref()?;
+        // self.data.as_ref()?;
+        // self.data = Some(Vec::new());
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         self.location = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        let (num_bits, packed) = bitpack_u32(self.data.as_ref().unwrap());
+        // let (num_bits, packed) = bitpack_u32(self.data.as_ref().unwrap());
 
-        let mut bitpacked_len: u64 = 0;
+        // let mut bitpacked_len: u64 = 0;
 
         bincode::encode_into_std_write(&self.style, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
+        // bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
+        // bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
 
-        if self.style == MaskingStyle::Ml32bit {
+        /*if self.style == MaskingStyle::Ml32bit {
             for bp in packed {
                 self.total_blocks = self.total_blocks.saturating_add(1);
                 let len = bincode::encode_into_std_write(&bp, &mut out_buf, bincode_config).unwrap();
@@ -123,7 +124,7 @@ impl Masking {
                     assert_eq!(bitpacked_len, len as u64);
                 }
             }
-        } else {
+        } else {*/
             for chunk in self.data_binary.take().unwrap().chunks(2 * 1024) {
                 let mut encoder = zstd_encoder(7, None);
                 let mut cseq: Vec<u8> = Vec::with_capacity(2 * 1024 * 32);
@@ -135,14 +136,14 @@ impl Masking {
                     .unwrap();
                 bincode::encode_into_std_write(&cseq, &mut out_buf, bincode_config).unwrap();
             }
-        }
+        //}
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(self.location)).unwrap();
 
         bincode::encode_into_std_write(&self.style, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&bitpacked_len, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
+        // bincode::encode_into_std_write(&bitpacked_len, &mut out_buf, bincode_config).unwrap();
+        // bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
 
         // Back to the end so we don't interfere with anything...
