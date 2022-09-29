@@ -56,7 +56,7 @@ impl<'a> Default for SeqLocs<'a> {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 8 * 1024,
+            chunk_size: 256 * 1024,
             index: None,
             total_locs: 0,
             total_seqlocs: 0,
@@ -249,7 +249,7 @@ impl<'a> SeqLocs<'a> {
 
             let locs = s.to_vec();
 
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 3)
+            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 7)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
