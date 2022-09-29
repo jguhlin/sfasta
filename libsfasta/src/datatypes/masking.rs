@@ -103,7 +103,8 @@ impl Masking {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         self.location = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        let (num_bits, packed) = bitpack_u32(&self.data.as_ref().unwrap());
+
+        let (num_bits, packed) = bitpack_u32(self.data.as_ref().unwrap());
 
         let mut bitpacked_len: u64 = 0;
 
@@ -112,13 +113,27 @@ impl Masking {
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
 
-        for bp in packed {
-            self.total_blocks = self.total_blocks.saturating_add(1);
-            let len = bincode::encode_into_std_write(&bp, &mut out_buf, bincode_config).unwrap();
-            if bitpacked_len == 0 && bp.is_packed() {
-                bitpacked_len = len as u64;
-            } else if bp.is_packed() {
-                assert_eq!(bitpacked_len, len as u64);
+        if self.style == MaskingStyle::Ml32bit {
+            for bp in packed {
+                self.total_blocks = self.total_blocks.saturating_add(1);
+                let len = bincode::encode_into_std_write(&bp, &mut out_buf, bincode_config).unwrap();
+                if bitpacked_len == 0 && bp.is_packed() {
+                    bitpacked_len = len as u64;
+                } else if bp.is_packed() {
+                    assert_eq!(bitpacked_len, len as u64);
+                }
+            }
+        } else {
+            for chunk in self.data_binary.take().unwrap().chunks(2 * 1024) {
+                let mut encoder = zstd_encoder(7, None);
+                let mut cseq: Vec<u8> = Vec::with_capacity(2 * 1024 * 32);
+                let mut uncompressed = Vec::with_capacity(2 * 1024 * 32);
+                bincode::encode_into_std_write(chunk.to_vec(), &mut uncompressed, bincode_config)
+                    .unwrap();
+                encoder
+                    .compress_to_buffer(&uncompressed, &mut cseq)
+                    .unwrap();
+                bincode::encode_into_std_write(&cseq, &mut out_buf, bincode_config).unwrap();
             }
         }
 
