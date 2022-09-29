@@ -78,6 +78,7 @@ impl<'sfa> Sfasta<'sfa> {
     /// Get a Sequence object by ID.
     /// Convenience function. Not optimized for speed. If you don't need the header, scores, or masking,
     /// it's better to call more performant functions.
+    // TODO: Support multiple matches
     pub fn get_sequence_by_id(&mut self, id: &str) -> Result<Option<Sequence>, &str> {
         let matches = self.find(id).expect("Unable to find entry");
         if matches == None {
@@ -208,9 +209,11 @@ impl<'sfa> Sfasta<'sfa> {
 
         assert!(seqloc.sequence.is_some());
 
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let locs = seqloc.sequence.as_ref().unwrap();
 
-        let mut buf = self.buf.as_ref().unwrap().write().unwrap();
+        let seqlocs = self.seqlocs.as_mut().unwrap();
+        let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
 
         // Once stabilized, use write_all_vectored
         for (block, (start, end)) in locs
@@ -239,9 +242,11 @@ impl<'sfa> Sfasta<'sfa> {
 
         assert!(seqloc.sequence.is_some());
 
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let locs = seqloc.sequence.as_ref().unwrap();
 
-        let mut buf = self.buf.as_ref().unwrap().write().unwrap();
+        let seqlocs = self.seqlocs.as_mut().unwrap();
+        let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
 
         for (block, (start, end)) in locs
             .iter()
@@ -280,20 +285,28 @@ impl<'sfa> Sfasta<'sfa> {
         seqlocs.get_seqloc(&mut buf, found.unwrap())
     }
 
-    pub fn get_header(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
+    pub fn get_header(&mut self, locs: &(u64, u8)) -> Result<String, &'static str> {
         let headers = self.headers.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
-        Ok(headers.get_header(&mut buf, locs))
+
+        let seqlocs = self.seqlocs.as_mut().unwrap();
+        let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
+
+        Ok(headers.get_header(&mut buf, &locs))
     }
 
-    pub fn get_id(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
-        let ids = self.ids.as_mut().unwrap();
+    pub fn get_id(&mut self, locs: &(u64, u8)) -> Result<String, &'static str> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
-        Ok(ids.get_id(&mut buf, locs))
+        let seqlocs = self.seqlocs.as_mut().unwrap();
+        let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
+
+        let ids = self.ids.as_mut().unwrap();
+
+        Ok(ids.get_id(&mut buf, &locs))
     }
 
     pub fn len(&self) -> usize {
-        self.seqlocs.as_ref().unwrap().len()
+        self.seqlocs.as_ref().unwrap().total_seqlocs
     }
 
     pub fn is_empty(&self) -> bool {
@@ -316,7 +329,7 @@ impl<'sfa> Sfasta<'sfa> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.seqlocs.as_mut().unwrap().prefetch(&mut buf);
 
-        Ok(self.seqlocs.as_ref().unwrap().data.clone())
+        Ok(self.seqlocs.as_ref().unwrap().index.clone())
     }
 
     pub fn index_len(&mut self) -> usize {
@@ -834,15 +847,24 @@ mod tests {
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
         assert!(sfasta.index_len() == 10);
 
+        let output = &sfasta.find("test").unwrap().unwrap();
+        println!("'test' seqloc: {:#?}", output);
+        let sequence = sfasta.get_sequence(output).unwrap();
+        println!("'test' Sequence length: {}", sequence.len());
+
         let output = &sfasta.find("test3").unwrap().unwrap();
+        println!("'test3' seqloc: {:#?}", output);
 
         let sequence = sfasta.get_sequence(output).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
 
         let sequence = sequence.trim();
 
+        // println!("{:#?}", sequence);
+
+        println!("'test3' Sequence length: {}", sequence.len());
         let last_ten = sequence.len() - 10;
-        println!("{:#?}", &sequence[last_ten..].as_bytes());
+        // println!("{:#?}", &sequence[last_ten..].as_bytes());
         println!("{:#?}", &sequence[last_ten..]);
 
         assert!(&sequence[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");

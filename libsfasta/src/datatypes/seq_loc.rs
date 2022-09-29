@@ -5,18 +5,49 @@
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
+/*
+
+Inefficient storage of seqlocs.
+
+Should flatten and have it stored as:
+SeqLoc Index:
+(Option<(u64, u32)>, Option<(u32, u32)>, Option(<u64, u32>), Option<(u64, u8)>, Option<(u64, u8)>
+(Seq Start, # of Locs, Masking Start, Masking End, Scores Start, # of Scores Locs, Headers Start, # of Header Locs, IDs Start, # of ID Locs)
+
+Then SeqLoc blocks are flattened version
+
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]
+pub struct SeqLoc {
+    pub sequence: Option<Vec<Loc>>,
+    pub masking: Option<(u32, u32)>,
+    pub scores: Option<Vec<Loc>>,
+    pub headers: Option<Vec<Loc>>,
+    pub ids: Option<Vec<Loc>>,
+} */
+
 /// Handles access to SeqLocs
 pub struct SeqLocs<'a> {
     location: u64,
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
     chunk_size: u32,
-    pub data: Option<Vec<SeqLoc>>, // Primarily for writing...
-    len: usize,
-    cache: Option<(u32, Vec<SeqLoc>)>,
+    pub index: Option<Vec<SeqLoc>>,
+    pub data: Option<Vec<Loc>>,
+    total_locs: usize,
+    pub total_seqlocs: usize,
+    cache: Option<(u32, Vec<Loc>)>,
     decompression_buffer: Option<Vec<u8>>,
     compressed_seq_buffer: Option<Vec<u8>>,
     zstd_decompressor: Option<zstd::bulk::Decompressor<'a>>,
+    preloaded: bool,
+}
+
+impl<'a> std::ops::Index<usize> for SeqLocs<'a> {
+    type Output = Loc;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.data.as_ref().unwrap()[index]
+    }
 }
 
 impl<'a> Default for SeqLocs<'a> {
@@ -26,12 +57,15 @@ impl<'a> Default for SeqLocs<'a> {
             block_index_pos: 0,
             block_locations: None,
             chunk_size: 8 * 1024,
+            index: None,
+            total_locs: 0,
+            total_seqlocs: 0,
             data: None,
-            len: 0,
             cache: None,
             decompression_buffer: None,
             compressed_seq_buffer: None,
             zstd_decompressor: None,
+            preloaded: false,
         }
     }
 }
@@ -41,18 +75,79 @@ impl<'a> SeqLocs<'a> {
         SeqLocs::default()
     }
 
+    pub fn get_locs<R>(&mut self, mut in_buf: &mut R, start: usize, length: usize) -> Vec<Loc>
+    where
+        R: Read + Seek,
+    {
+        if self.data.is_some() {
+            self.data.as_ref().unwrap()[start..start + length].to_vec()
+        } else {
+            let chunk_size = self.chunk_size as usize;
+            let start_block = start / self.chunk_size as usize;
+            let end_block = (start + length) / self.chunk_size as usize;
+
+            let mut locs = Vec::new();
+            if start_block == end_block {
+                let block = self.get_block(&mut in_buf, start_block as u32);
+                locs.extend_from_slice(&block[start % chunk_size..start % chunk_size + length]);
+            } else {
+                for block in start_block..=end_block {
+                    let block_locs = self.get_block(&mut in_buf, block as u32);
+                    if start_block == block {
+                        locs.extend_from_slice(&block_locs[start % chunk_size as usize..]);
+                    } else if end_block == block {
+                        locs.extend_from_slice(&block_locs[..(start + length) % chunk_size as usize]);
+                    } else {
+                        locs.extend_from_slice(block_locs);
+                    }
+                }
+            }
+            locs
+        }
+    }
+
+    pub fn index_len(&self) -> usize {
+        self.total_seqlocs
+    }
+
+    pub fn add_to_index(&mut self, seqloc: SeqLoc) {
+        if self.index.is_none() {
+            self.index = Some(Vec::new());
+        }
+        self.index.as_mut().unwrap().push(seqloc);
+        self.total_seqlocs += 1;
+    }
+
+    pub fn add_locs(&mut self, locs: &[Loc]) -> (u64, u32) {
+        if self.data.is_none() {
+            self.data = Some(Vec::with_capacity(1024));
+        }
+
+        // If capacity >= 90% increase it by 20%
+        if self.data.as_ref().unwrap().capacity()
+            >= (self.data.as_ref().unwrap().len() as f32 * 0.9) as usize
+        {
+            let new_capacity = (self.data.as_ref().unwrap().capacity() as f64 * 0.2) as usize;
+            self.data.as_mut().unwrap().reserve(new_capacity);
+        }
+
+        let start = self.total_locs;
+        self.total_locs += locs.len();
+        self.data.as_mut().unwrap().extend_from_slice(locs);
+        (start as u64, locs.len() as u32)
+    }
+
     pub fn prefetch<R>(&mut self, mut in_buf: &mut R)
     where
         R: Read + Seek,
     {
-        let mut data = Vec::with_capacity(self.len());
+        let mut data = Vec::with_capacity(self.total_locs);
         log::debug!(
             "Total SeqLoc Blocks: {}",
             self.block_locations.as_ref().unwrap().len()
         );
 
         // This is where it's getting slow....
-
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             // log::debug!("Reading SeqLoc Block: {}", i);
             let seq_loc = self.get_block_uncached(&mut in_buf, i as u32);
@@ -60,22 +155,26 @@ impl<'a> SeqLocs<'a> {
         }
 
         self.data = Some(data);
+        self.preloaded = true;
 
-        log::debug!("Prefetched {} seqlocs", self.len());
+        log::debug!("Prefetched {} seqlocs", self.total_locs);
     }
 
-    pub fn with_data(data: Vec<SeqLoc>) -> Self {
+    pub fn with_data(index: Vec<SeqLoc>, data: Vec<Loc>) -> Self {
         SeqLocs {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
             chunk_size: 256 * 1024,
+            total_locs: data.len(),
+            total_seqlocs: index.len(),
+            index: Some(index),
             data: Some(data),
-            len: 0,
             cache: None,
             decompression_buffer: None,
             compressed_seq_buffer: None,
             zstd_decompressor: None,
+            preloaded: true,
         }
     }
 
@@ -106,8 +205,10 @@ impl<'a> SeqLocs<'a> {
 
         let starting_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        let seq_locs = self.data.take().unwrap();
+        let locs = self.data.take().unwrap();
+        let total_locs = locs.len() as u64;
 
+        let seq_locs = self.index.take().unwrap();
         let total_seq_locs = seq_locs.len() as u64;
 
         let seqlocs_location = out_buf
@@ -117,33 +218,27 @@ impl<'a> SeqLocs<'a> {
         let mut block_locations: Vec<u64> =
             Vec::with_capacity((seq_locs.len() / self.chunk_size as usize) + 1);
 
-        // Write out chunk sizes...
-        bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config)
+        let mut header = (
+            self.chunk_size,
+            self.block_index_pos,
+            total_seq_locs,
+            total_locs,
+        );
+
+        // Write out header
+        bincode::encode_into_std_write(&header, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
 
-        // Write out block index pos
-        bincode::encode_into_std_write(&self.block_index_pos, &mut out_buf, bincode_config)
+        // TODO: Add optional compression...
+        bincode::encode_into_std_write(&seq_locs, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
-
-        // Write out the number of sequences...
-        bincode::encode_into_std_write(&total_seq_locs, &mut out_buf, bincode_config)
-            .expect("Unable to write out chunk size");
-
-        // zstd level -3 for speed
-        // zstd appears to outperform lz4 for numeric data
-        //let mut compressor = zstd_encoder(9);
-        //let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3).unwrap();
-        // zstd::bulk::Compressor::new(9).unwrap();
 
         // FORMAT: Write sequence location blocks
-        // TODO: Make a chunk for this, and split up strings + numbers, and bincode the numbers...
-        // TODO: Bumpalo
-
         let mut bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
 
-        for s in seq_locs
+        for s in locs
             .iter()
-            .collect::<Vec<&SeqLoc>>()
+            .collect::<Vec<&Loc>>()
             .chunks(self.chunk_size as usize)
         {
             block_locations.push(
@@ -154,7 +249,7 @@ impl<'a> SeqLocs<'a> {
 
             let locs = s.to_vec();
 
-            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 7)
+            let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 3)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
@@ -206,17 +301,14 @@ impl<'a> SeqLocs<'a> {
 
         out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
 
-        // Write out chunk sizes...
-        bincode::encode_into_std_write(&self.chunk_size, &mut out_buf, bincode_config)
+        // let mut header = (self.chunk_size, self.block_index_pos, total_seq_locs, total_locs);
+        header.1 = self.block_index_pos;
+
+        // Write out updated header...
+        bincode::encode_into_std_write(&header, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
 
-        // Write out block index pos
-        bincode::encode_into_std_write(&self.block_index_pos, &mut out_buf, bincode_config)
-            .expect("Unable to write out chunk size");
-
-        bincode::encode_into_std_write(&total_seq_locs, &mut out_buf, bincode_config)
-            .expect("Unable to write out chunk size");
-
+        // Go back to the end of the file...
         out_buf.seek(SeekFrom::Start(end)).unwrap();
 
         seqlocs_location
@@ -234,26 +326,31 @@ impl<'a> SeqLocs<'a> {
             .seek(SeekFrom::Start(pos))
             .expect("Unable to work with seek API");
 
-        let chunk_size: u32 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(c) => c,
+        let header: (u32, u64, u64, u64) =
+            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                Ok(h) => h,
+                Err(e) => {
+                    return Err(format!("Unable to read header: {}", e));
+                }
+            };
+
+        let (chunk_size, block_index_pos, total_seq_locs, total_locs) = header;
+
+        let seq_locs: Vec<SeqLoc> = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
+        {
+            Ok(s) => s,
             Err(e) => {
-                return Err(format!("Unable to read chunk size: {}", e));
+                return Err(format!("Unable to read SeqLocs: {}", e));
             }
         };
 
-        let block_index_pos = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(c) => c,
-            Err(e) => {
-                return Err(format!("Unable to read block index pos: {}", e));
-            }
-        };
-
-        let len: u64 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(c) => c,
-            Err(e) => {
-                return Err(format!("Unable to read block index pos: {}", e));
-            }
-        };
+        if seq_locs.len() as u64 != total_seq_locs {
+            return Err(format!(
+                "SeqLocs length mismatch: {} != {}",
+                seq_locs.len(),
+                total_seq_locs
+            ));
+        }
 
         in_buf.seek(SeekFrom::Start(block_index_pos)).unwrap();
 
@@ -291,11 +388,14 @@ impl<'a> SeqLocs<'a> {
             block_locations: Some(block_locations),
             chunk_size,
             data: None, // Don't decompress anything until requested...
-            len: len as usize,
+            index: Some(seq_locs),
             cache: None,
+            total_locs: total_locs as usize,
+            total_seqlocs: total_seq_locs as usize,
             decompression_buffer: None,
             compressed_seq_buffer: None,
             zstd_decompressor: None,
+            preloaded: false,
         })
     }
 
@@ -303,15 +403,7 @@ impl<'a> SeqLocs<'a> {
         self.block_locations.is_some()
     }
 
-    pub fn len(&self) -> usize {
-        self.len
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[SeqLoc]
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[Loc]
     where
         R: Read + Seek,
     {
@@ -331,7 +423,7 @@ impl<'a> SeqLocs<'a> {
         }
     }
 
-    fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<SeqLoc>
+    fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<Loc>
     where
         R: Read + Seek,
     {
@@ -362,11 +454,8 @@ impl<'a> SeqLocs<'a> {
             self.zstd_decompressor = Some(zstd_decompressor);
         }
 
-        // let mut decompressor = zstd::stream::read::Decoder::new(&compressed_block[..]).unwrap();
-        // decompressor.include_magicbytes(false).unwrap();
-
         if self.decompression_buffer.is_none() {
-            self.decompression_buffer = Some(Vec::with_capacity(128 * 1024 * 1024));
+            self.decompression_buffer = Some(Vec::with_capacity(8 * 1024 * 1024));
         }
 
         let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
@@ -379,10 +468,10 @@ impl<'a> SeqLocs<'a> {
 
         // decompressor.read_to_end(decompressed).unwrap();
 
-        let seqlocs: Vec<SeqLoc> =
+        let locs: Vec<Loc> =
             bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
                 .expect("Unable to read block");
-        seqlocs
+        locs
     }
 
     pub fn get_seqloc<R>(
@@ -397,24 +486,25 @@ impl<'a> SeqLocs<'a> {
             return Err("Unable to get SeqLoc as SeqLocs are not initialized");
         }
 
-        if self.data.is_some() {
-            Ok(Some(self.data.as_ref().unwrap()[index as usize].clone()))
+        if index as usize >= self.index.as_ref().unwrap().len() {
+            return Err("Index out of bounds");
+        }
+
+        if self.index.is_some() {
+            Ok(Some(self.index.as_ref().unwrap()[index as usize].clone()))
         } else {
-            let block = index / self.chunk_size as u32;
-            let block_index = index % self.chunk_size as u32;
-            let seqlocs = self.get_block(in_buf, block);
-            Ok(Some(seqlocs[block_index as usize].clone()))
+            return Err("Unable to get SeqLoc as SeqLocs are not initialized");
         }
     }
 }
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]
 pub struct SeqLoc {
-    pub sequence: Option<Vec<Loc>>,
+    pub sequence: Option<(u64, u32)>,
     pub masking: Option<(u32, u32)>,
-    pub scores: Option<Vec<Loc>>,
-    pub headers: Option<Vec<Loc>>,
-    pub ids: Option<Vec<Loc>>,
+    pub scores: Option<(u64, u32)>,
+    pub headers: Option<(u64, u8)>,
+    pub ids: Option<(u64, u8)>,
 }
 
 impl SeqLoc {
@@ -428,13 +518,30 @@ impl SeqLoc {
         }
     }
 
+    #[allow(clippy::len_without_is_empty)]
+    pub fn len(&self, block_size: u32) -> usize {
+        if self.sequence.is_some() {
+            self.sequence.as_ref().unwrap().1 as usize
+        } else if self.masking.is_some() {
+            self.masking.as_ref().unwrap().1 as usize
+        } else if self.scores.is_some() {
+            self.scores.as_ref().unwrap().1 as usize
+        } else {
+            0
+        }
+    }
+
     // Convert Vec of Locs to the ranges of the sequence...
-    pub fn seq_location_splits(&self, block_size: u32) -> Vec<std::ops::Range<u32>> {
-        let mut locations = Vec::new();
+    pub fn seq_location_splits(block_size: u32, sequence: &[Loc]) -> Vec<std::ops::Range<u32>> {
+        let mut locations = Vec::with_capacity(sequence.len());
+
+        if sequence.is_empty() {
+            return locations;
+        }
 
         let mut start = 0;
 
-        if let Some(seq) = &self.sequence {
+        if let seq = sequence {
             for loc in seq {
                 let len = loc.len(block_size) as u32;
                 locations.push(start..start + len);
@@ -444,34 +551,29 @@ impl SeqLoc {
         locations
     }
 
-    #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self, block_size: u32) -> usize {
-        if self.sequence.is_some() {
-            self.sequence
-                .as_ref()
-                .unwrap()
-                .iter()
-                .map(|x| x.len(block_size))
-                .sum::<usize>()
-        } else if self.masking.is_some() {
-            self.masking.as_ref().unwrap().1 as usize
-        } else if self.scores.is_some() {
-            self.scores.as_ref().unwrap().len()
-        } else {
-            0
-        }
-    }
-
     // Convert range to locs to slice
     // Have to map ranges to the Vec<Locs>
     // TODO: Make generic over sequence, scores, and masking
     // TODO: Should work on staggered Locs, even though they do not exist....
-    pub fn seq_slice(&self, block_size: u32, range: std::ops::Range<u32>) -> SeqLoc {
-        assert!(self.sequence.is_some());
-        let locs = self.sequence.as_ref().unwrap();
+    pub fn seq_slice<R>(
+        &self,
+        seqlocs: &mut SeqLocs,
+        mut in_buf: &mut R,
+        block_size: u32,
+        range: std::ops::Range<u32>,
+    ) -> Vec<Loc>
+    where
+        R: Read + Seek,
+    {
         let mut new_locs = Vec::new();
 
-        let splits = self.seq_location_splits(block_size);
+        let locs = seqlocs.get_locs(
+            &mut in_buf,
+            self.sequence.as_ref().unwrap().0 as usize,
+            self.sequence.as_ref().unwrap().1 as usize,
+        );
+
+        let splits = SeqLoc::seq_location_splits(block_size, &locs);
 
         let end = range.end - 1;
 
@@ -506,13 +608,7 @@ impl SeqLoc {
             }
         }
 
-        SeqLoc {
-            sequence: Some(new_locs),
-            masking: None,
-            scores: None,
-            headers: self.headers.clone(),
-            ids: self.ids.clone(),
-        }
+        new_locs
     }
 }
 
@@ -620,40 +716,40 @@ mod tests {
 
     #[test]
     fn test_seqloc_slice() {
+        let mut seqlocs = SeqLocs::default();
         let mut seqloc = SeqLoc::new();
-        seqloc.sequence = Some(vec![
+
+        let mut dummy_buffer = std::io::Cursor::new(vec![0; 1024]);
+
+        seqloc.sequence = Some(seqlocs.add_locs(&[
             Loc::Loc(0, 0, 10),
             Loc::Loc(1, 0, 10),
             Loc::Loc(2, 0, 10),
             Loc::Loc(3, 0, 10),
             Loc::Loc(4, 0, 10),
-        ]);
-        let slice = seqloc.seq_slice(10, 0..10);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 0, 10)]));
-        let slice = seqloc.seq_slice(10, 5..7);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 5, 7)]));
-        let slice = seqloc.seq_slice(10, 15..17);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1, 5, 7)]));
-        let slice = seqloc.seq_slice(10, 10..20);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1, 0, 10)]));
-        let slice = seqloc.seq_slice(10, 20..30);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(2, 0, 10)]));
-        let slice = seqloc.seq_slice(10, 15..35);
+        ]));
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 0..10);
+        assert_eq!(slice, vec![Loc::Loc(0, 0, 10)]);
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 5..7);
+        assert_eq!(slice, vec![Loc::Loc(0, 5, 7)]);
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 15..17);
+        assert_eq!(slice, vec![Loc::Loc(1, 5, 7)]);
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 10..20);
+        assert_eq!(slice, vec![Loc::Loc(1, 0, 10)]);
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 20..30);
+        assert_eq!(slice, vec![Loc::Loc(2, 0, 10)]);
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 15..35);
         assert_eq!(
-            slice.sequence,
-            Some(vec![
-                Loc::Loc(1, 5, 10),
-                Loc::Loc(2, 0, 10),
-                Loc::Loc(3, 0, 5)
-            ])
+            slice,
+            vec![Loc::Loc(1, 5, 10), Loc::Loc(2, 0, 10), Loc::Loc(3, 0, 5)]
         );
-        let slice = seqloc.seq_slice(10, 5..9);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(0, 5, 9)]));
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 5..9);
+        assert_eq!(slice, vec![Loc::Loc(0, 5, 9)]);
         let block_size = 262144;
-        seqloc.sequence = Some(vec![
+        seqloc.sequence = Some(seqlocs.add_locs(&[
             Loc::ToEnd(3097440, 261735),
             Loc::FromStart(3097441, 1274),
-        ]);
+        ]));
 
         //                                  x 261735 ----------> 262144  (262144 - 261735) = 409
         //     -------------------------------------------------
@@ -663,16 +759,13 @@ mod tests {
         //
         //     We want 104567 to 104840 -- how?
 
-        let slice = seqloc.seq_slice(block_size, 0..20);
-        assert_eq!(
-            slice.sequence,
-            Some(vec![Loc::Loc(3097440, 261735, 261755)])
-        );
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, block_size, 0..20);
+        assert_eq!(slice, vec![Loc::Loc(3097440, 261735, 261755)]);
 
-        seqloc.sequence = Some(vec![
+        seqloc.sequence = Some(seqlocs.add_locs(&[
             Loc::ToEnd(1652696, 260695),
             Loc::FromStart(1652697, 28424),
-        ]);
+        ]));
 
         //                               x 260695 ----------> 262144  (262144 - 260695) = 1449
         //    -------------------------------------------------
@@ -686,7 +779,7 @@ mod tests {
         // 262144 - 260695 = 1449
         // 2679 - 1449 = 1230
 
-        let slice = seqloc.seq_slice(block_size, 2679..2952);
-        assert_eq!(slice.sequence, Some(vec![Loc::Loc(1652697, 1230, 1503)]));
+        let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, block_size, 2679..2952);
+        assert_eq!(slice, vec![Loc::Loc(1652697, 1230, 1503)]);
     }
 }

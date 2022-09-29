@@ -214,7 +214,7 @@ impl Converter {
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
-        let (ids, seq_locs, block_index_pos, headers_location, ids_location, masking_location) =
+        let (ids, mut seqlocs, block_index_pos, headers_location, ids_location, masking_location) =
             write_fasta_sequence(sb_config, &mut in_buf, out_fh, &mut debug_size);
 
         let end_time = std::time::Instant::now();
@@ -241,13 +241,12 @@ impl Converter {
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
-        let mut indexer = crate::dual_level_index::DualIndexBuilder::with_capacity(seq_locs.len());
+        let mut indexer =
+            crate::dual_level_index::DualIndexBuilder::with_capacity(seqlocs.index_len());
 
         let mut out_buf = BufWriter::with_capacity(256 * 1024, out_fh);
 
         let start_time = std::time::Instant::now();
-
-        let mut seqlocs = SeqLocs::with_data(seq_locs);
 
         let end_time = std::time::Instant::now();
 
@@ -422,7 +421,7 @@ pub fn write_fasta_sequence<'convert, W, R>(
     mut debug_size: &mut Vec<(String, usize)>,
 ) -> (
     Vec<std::sync::Arc<String>>,
-    Vec<SeqLoc>,
+    SeqLocs<'convert>,
     u64,
     Option<NonZeroU64>,
     Option<NonZeroU64>,
@@ -442,7 +441,7 @@ where
     // Get a handle to the shutdown flag...
     let shutdown = sb.get_shutdown_flag();
 
-    let mut seq_locs: Option<Vec<SeqLoc>> = None;
+    let mut seq_locs: Option<SeqLocs> = None;
     let mut block_index_pos = None;
     let mut headers = None;
     let mut headers_location = None;
@@ -508,11 +507,8 @@ where
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
 
-            // Store the ID of the sequence and the Location (SeqLocs)
-            // TODO: Auto adjust based off of size of input FASTA file
-            let mut seq_locs = Vec::with_capacity(1024);
-
             let mut headers = Headers::default();
+            let mut seqlocs = SeqLocs::default();
             let mut ids = Ids::default();
             let mut ids_string = Vec::new();
             let mut masking = Masking::default();
@@ -546,12 +542,14 @@ where
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add_id(std::sync::Arc::clone(&myid));
                         if let Some(x) = seqheader {
-                            location.headers = Some(headers.add_header(x));
+                            let x = seqlocs.add_locs(&headers.add_header(x));
+                            location.headers = Some((x.0, x.1 as u8));
                         }
-                        location.ids = Some(idloc);
-                        location.sequence = Some(loc);
+                        let x = seqlocs.add_locs(&idloc);
+                        location.ids = Some((x.0, x.1 as u8));
+                        location.sequence = Some(seqlocs.add_locs(&loc));
                         seq_loc_time += now.elapsed();
-                        seq_locs.push(location);
+                        seqlocs.add_to_index(location);
                     }
                     Some(Work::FastqPayload(_)) => panic!("Received FASTQ payload in FASTA thread"),
                     Some(Work::Shutdown) => break,
@@ -580,7 +578,7 @@ where
             log::debug!("fasta_queue_spins: {}", fasta_queue_spins);
 
             // Return seq_locs to the main thread
-            (seq_locs, headers, ids, ids_string, masking)
+            (seqlocs, headers, ids, ids_string, masking)
         });
 
         // Store the location of the Sequence Blocks...
@@ -796,7 +794,7 @@ pub fn write_fastq_sequence<'write, W, R>(
     mut out_fh: &mut W,
 ) -> (
     Vec<std::sync::Arc<String>>,
-    Vec<SeqLoc>,
+    SeqLocs<'write>,
     u64,
     Option<NonZeroU64>,
     Option<NonZeroU64>,
@@ -816,7 +814,7 @@ where
     // Get a handle to the shutdown flag...
     let shutdown = sb.get_shutdown_flag();
 
-    let mut seq_locs: Option<Vec<SeqLoc>> = None;
+    let mut seq_locs: Option<SeqLocs> = None;
     let mut block_index_pos = None;
     let mut headers = None;
     let mut headers_location = None;
@@ -865,8 +863,8 @@ where
 
             // Store the ID of the sequence and the Location (SeqLocs)
             // TODO: Auto adjust based off of size of input FASTA file
-            let mut seq_locs = Vec::with_capacity(1024);
 
+            let mut seqlocs = SeqLocs::default();
             let mut headers = Headers::default();
             let mut ids = Ids::default();
             let mut ids_string = Vec::new();
@@ -889,11 +887,14 @@ where
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add_id(std::sync::Arc::clone(&myid));
                         if let Some(header) = seqheader {
-                            location.headers = Some(headers.add_header(header));
+                            let x = headers.add_header(header);
+                            let x = seqlocs.add_locs(&x);
+                            location.headers = Some((x.0, x.1 as u8));
                         }
-                        location.ids = Some(idloc);
-                        location.sequence = Some(loc);
-                        seq_locs.push(location);
+                        let x = seqlocs.add_locs(&loc);
+                        location.ids = Some((x.0, x.1 as u8));
+                        location.sequence = Some(seqlocs.add_locs(&loc));
+                        seqlocs.add_to_index(location);
                     }
                     Some(Work::FastaPayload(_)) => {
                         panic!("Received Fastq Payload in FASTQ thread.");
@@ -912,7 +913,7 @@ where
             };
 
             // Return seq_locs to the main thread
-            (seq_locs, headers, ids, ids_string, masking)
+            (seqlocs, headers, ids, ids_string, masking)
         });
 
         // Store the location of the Sequence Blocks...
@@ -954,7 +955,7 @@ where
         }
 
         let in_buf = fastq_thread.join().unwrap();
-        reader_handle.join().unwrap();
+        let j = reader_handle.join().unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
@@ -987,17 +988,12 @@ where
         let _fastq_queue_in = Arc::clone(&fastq_queue);
         let fastq_queue_out = Arc::clone(&fastq_queue);
 
-        let reader_handle = s.spawn(move |_| {
+        let scores_handle = s.spawn(move |_| {
             sb.initialize();
 
             // Store the ID of the sequence and the Location (SeqLocs)
             // TODO: Auto adjust based off of size of input FASTA file
             let mut seq_locs: Vec<SeqLoc> = Vec::with_capacity(1024);
-
-            let mut headers = Headers::default();
-            let mut ids = Ids::default();
-            let mut ids_string = Vec::new();
-            let mut masking = Masking::default();
 
             // For each Sequence in the fasta file, make it upper case (masking is stored separately)
             // Add the sequence, get the SeqLocs and store them in Location struct
@@ -1012,8 +1008,10 @@ where
                     Some(Work::FastqPayload(seq)) => {
                         idx += 1;
                         let (_, _, _, mut scores) = seq.into_parts();
-                        let loc = sb.add_sequence(&mut scores.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
-                        seq_locs[idx].scores = Some(loc);
+                        let loc = sb.add_sequence(&mut scores.unwrap()[..]).unwrap();
+                        // Destructive, capitalizes everything...
+                        // TODO:
+                        // seqlocs.index.as_mut().unwrap().scores = Some(loc);
                     }
                     Some(Work::FastaPayload(_)) => {
                         panic!("Received Fastq Payload in FASTQ thread.");
@@ -1032,7 +1030,7 @@ where
             };
 
             // Return seq_locs to the main thread
-            (seq_locs, headers, ids, ids_string, masking)
+            seq_locs
         });
 
         // FASTQ sequence blocks, etc...
@@ -1109,7 +1107,7 @@ where
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
 
-        let j = reader_handle.join().expect("Unable to join thread");
+        // let j = reader_handle.join().expect("Unable to join thread");
         seq_locs = Some(j.0);
         headers = Some(j.1);
         ids = Some(j.2);
