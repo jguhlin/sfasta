@@ -125,16 +125,18 @@ impl Masking {
                 }
             }
         } else {*/
+            let mut encoder = zstd_encoder(3, None);
+            let mut cseq: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
+            let mut uncompressed = Vec::with_capacity(2 * 1024 * 1024);
             for chunk in self.data_binary.take().unwrap().chunks(512 * 1024) {
-                let mut encoder = zstd_encoder(7, None);
-                let mut cseq: Vec<u8> = Vec::with_capacity(2 * 1024 * 32);
-                let mut uncompressed = Vec::with_capacity(2 * 1024 * 32);
                 bincode::encode_into_std_write(chunk.to_vec(), &mut uncompressed, bincode_config)
                     .unwrap();
                 encoder
                     .compress_to_buffer(&uncompressed, &mut cseq)
                     .unwrap();
                 bincode::encode_into_std_write(&cseq, &mut out_buf, bincode_config).unwrap();
+                cseq.clear();
+                uncompressed.clear();
             }
         //}
 
