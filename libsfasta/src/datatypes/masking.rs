@@ -22,7 +22,8 @@ pub struct Masking {
     location: u64,
     bitpack_len: u64,
     data: Option<Vec<u32>>, // Only stored for writing
-    data_binary: Option<Vec<bool>>, // Only stored for writing   
+    data_binary: Option<Vec<bool>>, // Only stored for writing
+ // data_binary: Option<BitVec<u64, Lsb0>>, // Only stored for writing
     num_bits: u8,
     cache: Option<(u32, Vec<u32>)>,
     total_blocks: u32,
