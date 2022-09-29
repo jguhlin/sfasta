@@ -11,6 +11,7 @@ use crate::*;
 use bitpacking::{BitPacker, BitPacker8x};
 use bumpalo::Bump;
 
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 pub enum MaskingStyle {
     Ml32bit,
     Binary,
@@ -24,6 +25,7 @@ pub struct Masking {
     cache: Option<(u32, Vec<u32>)>,
     total_blocks: u32,
     bump: Option<Bump>,
+    pub masking_style: MaskingStyle,
 }
 
 impl Default for Masking {
@@ -36,6 +38,7 @@ impl Default for Masking {
             cache: None,
             total_blocks: 0,
             bump: None,
+            masking_style: MaskingStyle::Ml32bit,
         }
     }
 }
@@ -46,7 +49,7 @@ impl Masking {
             self.bump = Some(Bump::new());
         }
 
-        let mut bump = self.bump.as_mut().unwrap();
+        let bump = self.bump.as_mut().unwrap();
 
         // Start and LENGTH (not end)
         if self.data.is_none() {
@@ -87,6 +90,7 @@ impl Masking {
 
         let mut bitpacked_len: u64 = 0;
 
+        bincode::encode_into_std_write(&self.masking_style, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.bitpack_len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
@@ -104,6 +108,7 @@ impl Masking {
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(self.location)).unwrap();
 
+        bincode::encode_into_std_write(&self.masking_style, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&bitpacked_len, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.total_blocks, &mut out_buf, bincode_config).unwrap();
@@ -156,6 +161,10 @@ impl Masking {
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
         masking.location = starting_pos;
 
+        masking.masking_style = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error reading masking style: {}", e)),
+        };
         masking.bitpack_len = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(e) => return Err(format!("Error decoding bitpack_len: {}", e)),
