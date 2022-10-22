@@ -96,7 +96,9 @@ impl<'a> SeqLocs<'a> {
                     if start_block == block {
                         locs.extend_from_slice(&block_locs[start % chunk_size as usize..]);
                     } else if end_block == block {
-                        locs.extend_from_slice(&block_locs[..(start + length) % chunk_size as usize]);
+                        locs.extend_from_slice(
+                            &block_locs[..(start + length) % chunk_size as usize],
+                        );
                     } else {
                         locs.extend_from_slice(block_locs);
                     }
@@ -750,10 +752,8 @@ mod tests {
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 5..9);
         assert_eq!(slice, vec![Loc::Loc(0, 5, 9)]);
         let block_size = 262144;
-        seqloc.sequence = Some(seqlocs.add_locs(&[
-            Loc::ToEnd(3097440, 261735),
-            Loc::FromStart(3097441, 1274),
-        ]));
+        seqloc.sequence =
+            Some(seqlocs.add_locs(&[Loc::ToEnd(3097440, 261735), Loc::FromStart(3097441, 1274)]));
 
         //                                  x 261735 ----------> 262144  (262144 - 261735) = 409
         //     -------------------------------------------------
@@ -766,10 +766,8 @@ mod tests {
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, block_size, 0..20);
         assert_eq!(slice, vec![Loc::Loc(3097440, 261735, 261755)]);
 
-        seqloc.sequence = Some(seqlocs.add_locs(&[
-            Loc::ToEnd(1652696, 260695),
-            Loc::FromStart(1652697, 28424),
-        ]));
+        seqloc.sequence =
+            Some(seqlocs.add_locs(&[Loc::ToEnd(1652696, 260695), Loc::FromStart(1652697, 28424)]));
 
         //                               x 260695 ----------> 262144  (262144 - 260695) = 1449
         //    -------------------------------------------------

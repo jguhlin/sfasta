@@ -167,7 +167,6 @@ impl Converter {
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
 
         // Store masks as series of 0s and 1s... Vec<bool>
-        // TODO
         if self.masking {
             sfasta = sfasta.with_masking();
         }

@@ -360,7 +360,15 @@ fn view(input: &str) {
     let mut stdout = std::io::BufWriter::new(stdout);
     let common = b"> \n";
 
-    for seqloc in sfasta.seqlocs.as_mut().unwrap().index.take().unwrap().iter() {
+    for seqloc in sfasta
+        .seqlocs
+        .as_mut()
+        .unwrap()
+        .index
+        .take()
+        .unwrap()
+        .iter()
+    {
         let id = sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
 
         stdout.write_all(&common[..1]).unwrap();
