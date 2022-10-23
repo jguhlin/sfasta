@@ -2,9 +2,9 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
-use crate::datatypes::{zstd_encoder, CompressionType, Loc, BytesBlockStore};
+use crate::datatypes::{zstd_encoder, CompressionType, Loc};
 
-pub struct StringBlockStore {
+pub struct BytesBlockStore {
     location: u64,
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
@@ -12,12 +12,11 @@ pub struct StringBlockStore {
     pub data: Option<Vec<u8>>, // Only used for writing...
     pub compression_type: CompressionType,
     cache: Option<(u32, Vec<u8>)>,
-    inner: BytesBlockStore,
 }
 
-impl Default for StringBlockStore {
+impl Default for BytesBlockStore {
     fn default() -> Self {
-        StringBlockStore {
+        BytesBlockStore {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
@@ -25,19 +24,17 @@ impl Default for StringBlockStore {
             data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
-            inner: BytesBlockStore::default().with_block_size(2 * 1024 * 1024),
         }
     }
 }
 
-impl StringBlockStore {
+impl BytesBlockStore {
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.block_size = block_size;
-        self.inner = self.inner.with_block_size(block_size);
         self
     }
 
-    pub fn add<S: AsRef<str>>(&mut self, input: S) -> Vec<Loc> {
+    pub fn add<'b, I: IntoIterator<Item=&'b u8>>(&'b mut self, input: I) -> Vec<Loc> {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
@@ -45,7 +42,7 @@ impl StringBlockStore {
         let data = self.data.as_mut().unwrap();
 
         let mut start = data.len();
-        data.extend(input.as_ref().as_bytes());
+        data.extend(input);
         let end = data.len() - 1;
         let starting_block = start / self.block_size;
         let ending_block = end / self.block_size;
@@ -135,7 +132,7 @@ impl StringBlockStore {
             .with_fixed_int_encoding()
             .with_limit::<{ 64 * 1024 * 1024 }>();
 
-        let mut store = StringBlockStore::default();
+        let mut store = BytesBlockStore::default();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
         (store.compression_type, store.block_index_pos, store.block_size) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
@@ -168,7 +165,7 @@ impl StringBlockStore {
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             data.extend(self.get_block_uncached(in_buf, i as u32));
         }
-        log::debug!("String Block Store Prefetching done: {}", data.len());
+        log::debug!("Generic Block Store Prefetching done: {}", data.len());
         self.data = Some(data);
     }
 
@@ -206,11 +203,11 @@ impl StringBlockStore {
             .unwrap()
     }
 
-    pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
+    pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> Vec<u8>
     where
         R: Read + Seek,
     {
-        let mut result = String::with_capacity(64);
+        let mut result = Vec::with_capacity(64);
 
         let block_size = self.block_size as u32;
 
@@ -220,14 +217,11 @@ impl StringBlockStore {
 
             let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
-            result.push_str(
-                std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..=end as usize])
-                    .unwrap(),
-            );
+            result.extend(&self.data.as_ref().unwrap()[start as usize..=end as usize]);
         } else {
             for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
                 let block = self.get_block(in_buf, block as u32);
-                result.push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
+                result.extend(&block[start as usize..=end as usize]);
             }
         }
 
@@ -242,7 +236,7 @@ mod tests {
 
     #[test]
     fn test_add_id() {
-        let mut store = StringBlockStore {
+        let mut store = BytesBlockStore {
             block_size: 10,
             ..Default::default()
         };
@@ -257,16 +251,16 @@ mod tests {
         let mut locs = Vec::new();
 
         for id in test_ids.iter() {
-            locs.push(store.add(id));
+            locs.push(store.add(id.as_bytes()));
         }
 
         let mut buffer = Cursor::new(Vec::new());
         store.write_to_buffer(&mut buffer);
-        let mut store = StringBlockStore::from_buffer(&mut buffer, 0).unwrap();
+        let mut store = BytesBlockStore::from_buffer(&mut buffer, 0).unwrap();
 
         for i in 0..test_ids.len() {
             let id = store.get(&mut buffer, &locs[i]);
-            assert_eq!(id, test_ids[i]);
+            assert_eq!(id, test_ids[i].as_bytes());
         }
     }
 }

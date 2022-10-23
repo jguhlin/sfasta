@@ -7,6 +7,7 @@ pub mod seq_loc;
 pub mod sequence_block;
 pub mod structs;
 pub mod string_block_store;
+pub mod bytes_block_store;
 
 pub use directory::*;
 pub use index_directory::*;
@@ -17,3 +18,4 @@ pub use seq_loc::*;
 pub use sequence_block::*;
 pub use structs::*;
 pub use string_block_store::*;
+pub use bytes_block_store::*;
