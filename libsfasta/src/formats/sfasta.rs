@@ -19,8 +19,8 @@ pub struct Sfasta<'sfa> {
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + 'sfa>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
     pub sequenceblocks: Option<SequenceBlocks<'sfa>>,
     pub seqlocs: Option<SeqLocs<'sfa>>,
-    pub headers: Option<Headers>,
-    pub ids: Option<Ids>,
+    pub headers: Option<StringBlockStore>,
+    pub ids: Option<StringBlockStore>,
     pub masking: Option<Masking>,
 }
 
@@ -292,7 +292,7 @@ impl<'sfa> Sfasta<'sfa> {
         let seqlocs = self.seqlocs.as_mut().unwrap();
         let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
 
-        Ok(headers.get_header(&mut buf, &locs))
+        Ok(headers.get(&mut buf, &locs))
     }
 
     pub fn get_id(&mut self, locs: &(u64, u8)) -> Result<String, &'static str> {
@@ -302,7 +302,7 @@ impl<'sfa> Sfasta<'sfa> {
 
         let ids = self.ids.as_mut().unwrap();
 
-        Ok(ids.get_id(&mut buf, &locs))
+        Ok(ids.get(&mut buf, &locs))
     }
 
     pub fn len(&self) -> usize {
@@ -544,7 +544,7 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::debug!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {
-            let mut headers = match Headers::from_buffer(
+            let mut headers = match StringBlockStore::from_buffer(
                 &mut in_buf,
                 sfasta.directory.headers_loc.unwrap().get() as u64,
             ) {
@@ -562,7 +562,7 @@ impl<'sfa> SfastaParser<'sfa> {
         log::debug!("Opening IDs");
         if sfasta.directory.ids_loc.is_some() {
             let mut ids =
-                match Ids::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64)
+                match StringBlockStore::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64)
                 {
                     Ok(x) => x,
                     Err(y) => return Result::Err(format!("Error reading SFASTA ids: {}", y)),

@@ -1,6 +1,4 @@
 pub mod directory;
-pub mod header;
-pub mod id;
 pub mod index_directory;
 pub mod masking;
 pub mod metadata;
@@ -8,10 +6,9 @@ pub mod parameters;
 pub mod seq_loc;
 pub mod sequence_block;
 pub mod structs;
+pub mod string_block_store;
 
 pub use directory::*;
-pub use header::*;
-pub use id::*;
 pub use index_directory::*;
 pub use masking::*;
 pub use metadata::*;
@@ -19,3 +16,4 @@ pub use parameters::*;
 pub use seq_loc::*;
 pub use sequence_block::*;
 pub use structs::*;
+pub use string_block_store::*;

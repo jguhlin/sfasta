@@ -506,9 +506,9 @@ where
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
 
-            let mut headers = Headers::default();
+            let mut headers = StringBlockStore::default().with_block_size(1024 * 1024);
             let mut seqlocs = SeqLocs::default();
-            let mut ids = Ids::default();
+            let mut ids = StringBlockStore::default().with_block_size(512 * 1024);
             let mut ids_string = Vec::new();
             let mut masking = Masking::default();
 
@@ -539,9 +539,9 @@ where
                         let now = std::time::Instant::now();
                         let myid = std::sync::Arc::new(seqid.unwrap());
                         ids_string.push(std::sync::Arc::clone(&myid));
-                        let idloc = ids.add_id(std::sync::Arc::clone(&myid));
+                        let idloc = ids.add(&(*myid));
                         if let Some(x) = seqheader {
-                            let x = seqlocs.add_locs(&headers.add_header(x));
+                            let x = seqlocs.add_locs(&headers.add(x));
                             location.headers = Some((x.0, x.1 as u8));
                         }
                         let x = seqlocs.add_locs(&idloc);
@@ -864,8 +864,8 @@ where
             // TODO: Auto adjust based off of size of input FASTA file
 
             let mut seqlocs = SeqLocs::default();
-            let mut headers = Headers::default();
-            let mut ids = Ids::default();
+            let mut headers = StringBlockStore::default().with_block_size(1024 * 1024);
+            let mut ids = StringBlockStore::default().with_block_size(512 * 1024);
             let mut ids_string = Vec::new();
             let mut masking = Masking::default();
 
@@ -884,9 +884,9 @@ where
                         let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
                         let myid = std::sync::Arc::new(seqid.unwrap());
                         ids_string.push(std::sync::Arc::clone(&myid));
-                        let idloc = ids.add_id(std::sync::Arc::clone(&myid));
+                        let idloc = ids.add(&(*myid));
                         if let Some(header) = seqheader {
-                            let x = headers.add_header(header);
+                            let x = headers.add(header);
                             let x = seqlocs.add_locs(&x);
                             location.headers = Some((x.0, x.1 as u8));
                         }

@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use crate::datatypes::{zstd_encoder, CompressionType, Loc};
 
-pub struct Ids {
+pub struct StringBlockStore {
     location: u64,
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
@@ -14,9 +14,9 @@ pub struct Ids {
     cache: Option<(u32, Vec<u8>)>,
 }
 
-impl Default for Ids {
+impl Default for StringBlockStore {
     fn default() -> Self {
-        Ids {
+        StringBlockStore {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
@@ -28,8 +28,13 @@ impl Default for Ids {
     }
 }
 
-impl Ids {
-    pub fn add_id(&mut self, id: Arc<String>) -> Vec<Loc> {
+impl StringBlockStore {
+    pub fn with_block_size(mut self, block_size: usize) -> Self {
+        self.block_size = block_size;
+        self
+    }
+
+    pub fn add<S: AsRef<str>>(&mut self, input: S) -> Vec<Loc> {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
@@ -37,7 +42,7 @@ impl Ids {
         let data = self.data.as_mut().unwrap();
 
         let mut start = data.len();
-        data.extend(id.as_bytes());
+        data.extend(input.as_ref().as_bytes());
         let end = data.len() - 1;
         let starting_block = start / self.block_size;
         let ending_block = end / self.block_size;
@@ -127,34 +132,26 @@ impl Ids {
             .with_fixed_int_encoding()
             .with_limit::<{ 64 * 1024 * 1024 }>();
 
-        let mut ids = Ids::default();
+        let mut store = StringBlockStore::default();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        ids.compression_type = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+        (store.compression_type, store.block_index_pos, store.block_size) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
-            Err(e) => return Err(format!("Error decoding compression type: {}", e)),
-        };
-        ids.block_index_pos = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(x) => x,
-            Err(e) => return Err(format!("Error decoding block index pos: {}", e)),
-        };
-        ids.block_size = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(x) => x,
-            Err(e) => return Err(format!("Error decoding block size: {}", e)),
+            Err(e) => return Err(format!("Error decoding block store: {}", e)),
         };
 
-        ids.location = starting_pos;
+        store.location = starting_pos;
 
-        in_buf.seek(SeekFrom::Start(ids.block_index_pos)).unwrap();
+        in_buf.seek(SeekFrom::Start(store.block_index_pos)).unwrap();
 
-        ids.block_locations = Some(
+        store.block_locations = Some(
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
                 Err(e) => return Err(format!("Error decoding block locations: {}", e)),
             },
         );
 
-        Ok(ids)
+        Ok(store)
     }
 
     // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
@@ -168,7 +165,7 @@ impl Ids {
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             data.extend(self.get_block_uncached(in_buf, i as u32));
         }
-        log::debug!("ID Prefetching done: {}", data.len());
+        log::debug!("String Block Store Prefetching done: {}", data.len());
         self.data = Some(data);
     }
 
@@ -206,11 +203,11 @@ impl Ids {
             .unwrap()
     }
 
-    pub fn get_id<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
+    pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
     where
         R: Read + Seek,
     {
-        let mut id = String::with_capacity(64);
+        let mut result = String::with_capacity(64);
 
         let block_size = self.block_size as u32;
 
@@ -220,18 +217,18 @@ impl Ids {
 
             let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
-            id.push_str(
+            result.push_str(
                 std::str::from_utf8(&self.data.as_ref().unwrap()[start as usize..=end as usize])
                     .unwrap(),
             );
         } else {
             for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
                 let block = self.get_block(in_buf, block as u32);
-                id.push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
+                result.push_str(std::str::from_utf8(&block[start as usize..=end as usize]).unwrap());
             }
         }
 
-        id
+        result
     }
 }
 
@@ -242,7 +239,7 @@ mod tests {
 
     #[test]
     fn test_add_id() {
-        let mut ids = Ids {
+        let mut store = StringBlockStore {
             block_size: 10,
             ..Default::default()
         };
@@ -257,15 +254,15 @@ mod tests {
         let mut locs = Vec::new();
 
         for id in test_ids.iter() {
-            locs.push(ids.add_id(Arc::new(id.to_string())));
+            locs.push(store.add(id));
         }
 
         let mut buffer = Cursor::new(Vec::new());
-        ids.write_to_buffer(&mut buffer);
-        let mut ids = Ids::from_buffer(&mut buffer, 0).unwrap();
+        store.write_to_buffer(&mut buffer);
+        let mut store = StringBlockStore::from_buffer(&mut buffer, 0).unwrap();
 
         for i in 0..test_ids.len() {
-            let id = ids.get_id(&mut buffer, &locs[i]);
+            let id = store.get(&mut buffer, &locs[i]);
             assert_eq!(id, test_ids[i]);
         }
     }
