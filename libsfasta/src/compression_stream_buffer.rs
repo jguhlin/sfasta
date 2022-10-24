@@ -357,6 +357,7 @@ fn _compression_worker_thread(
     let mut result;
     let backoff = Backoff::new();
     let mut compression_worker_spins: usize = 0;
+    let mut work_units: usize = 0;
 
     let mut zstd_compressor = if compression_type == CompressionType::ZSTD {
         Some(zstd_encoder(compression_level as i32, compression_dict))
@@ -374,9 +375,13 @@ fn _compression_worker_thread(
                         "Compression worker thread spins: {}",
                         compression_worker_spins
                     );
+                    log::debug!(
+                        "Compression worker thread work units: {}",
+                        work_units
+                    );
                     return;
                 } else {
-                    backoff.snooze();
+                    backoff.spin();
                     compression_worker_spins = compression_worker_spins.saturating_add(1);
                     if backoff.is_completed() {
                         thread::park();
@@ -385,6 +390,7 @@ fn _compression_worker_thread(
                 }
             }
             Some((block_id, sb)) => {
+                work_units += 1;
                 let sbc = sb.compress(
                     compression_type,
                     compression_level,

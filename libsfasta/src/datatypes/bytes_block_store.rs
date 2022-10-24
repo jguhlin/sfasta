@@ -35,7 +35,7 @@ impl BytesBlockStore {
     }
 
     // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
-    pub fn add<'b, I: IntoIterator<Item=&'b u8>>(&'b mut self, input: I) -> Vec<Loc> {
+    pub fn add<'b, I: IntoIterator<Item = &'b u8>>(&'b mut self, input: I) -> Vec<Loc> {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
@@ -136,7 +136,11 @@ impl BytesBlockStore {
         let mut store = BytesBlockStore::default();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        (store.compression_type, store.block_index_pos, store.block_size) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+        (
+            store.compression_type,
+            store.block_index_pos,
+            store.block_size,
+        ) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(e) => return Err(format!("Error decoding block store: {}", e)),
         };
@@ -154,7 +158,6 @@ impl BytesBlockStore {
 
         Ok(store)
     }
-
 
     pub fn prefetch<R>(&mut self, in_buf: &mut R)
     where
@@ -233,8 +236,8 @@ impl BytesBlockStore {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Cursor;
     use bitvec::prelude::*;
+    use std::io::Cursor;
 
     // Testing bitvec stuff for masking
     // also: https://docs.rs/bitvec/latest/bitvec/slice/struct.BitValIter.html
@@ -243,11 +246,7 @@ mod tests {
         let a: u8 = 5;
         let bv: BitVec<u8, Lsb0> = BitVec::from_element(a);
         let b = bv[0..8].load::<u8>();
-
-
-
     }
-
 
     #[test]
     fn test_add_id() {

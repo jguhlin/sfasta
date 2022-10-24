@@ -2,6 +2,7 @@
 // TODO: Bitpack seqlocs instead of zstd compress...
 // TODO: When data gets too large, pre-emptively compress it into memory (such as nt db, >200Gb).
 // TODO: Flatten seqlocs into a single vec, then use ordinals to find appropritate ones
+// TODO: Can convert this to use ByteBlockStore?
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -507,7 +508,7 @@ impl<'a> SeqLocs<'a> {
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]
 pub struct SeqLoc {
     pub sequence: Option<(u64, u32)>,
-    pub masking: Option<(u32, u32)>,
+    pub masking: Option<(u64, u32)>,
     pub scores: Option<(u64, u32)>,
     pub headers: Option<(u64, u8)>,
     pub ids: Option<(u64, u8)>,

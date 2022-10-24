@@ -229,9 +229,11 @@ impl<'sfa> Sfasta<'sfa> {
         }
 
         if seqloc.masking.is_some() && self.masking.is_some() {
-            let masked_loc = seqloc.masking.as_ref().unwrap();
             let masking = self.masking.as_mut().unwrap();
-            masking.mask_sequence(&mut *buf, *masked_loc, &mut seq);
+            let seqlocs = self.seqlocs.as_mut().unwrap();
+            let locs = seqloc.masking.as_ref().unwrap();
+            let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
+            masking.mask_sequence(&mut *buf, &locs, &mut seq);
         }
 
         Ok(seq)
@@ -261,9 +263,11 @@ impl<'sfa> Sfasta<'sfa> {
         }
 
         if seqloc.masking.is_some() && self.masking.is_some() {
-            let masked_loc = seqloc.masking.as_ref().unwrap();
             let masking = self.masking.as_mut().unwrap();
-            masking.mask_sequence(&mut *buf, *masked_loc, &mut seq);
+            let seqlocs = self.seqlocs.as_mut().unwrap();
+            let locs = seqloc.masking.as_ref().unwrap();
+            let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
+            masking.mask_sequence(&mut *buf, &locs, &mut seq);
         }
 
         Ok(seq)
@@ -561,12 +565,13 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::debug!("Opening IDs");
         if sfasta.directory.ids_loc.is_some() {
-            let mut ids =
-                match StringBlockStore::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get() as u64)
-                {
-                    Ok(x) => x,
-                    Err(y) => return Result::Err(format!("Error reading SFASTA ids: {}", y)),
-                };
+            let mut ids = match StringBlockStore::from_buffer(
+                &mut in_buf,
+                sfasta.directory.ids_loc.unwrap().get() as u64,
+            ) {
+                Ok(x) => x,
+                Err(y) => return Result::Err(format!("Error reading SFASTA ids: {}", y)),
+            };
             if prefetch {
                 ids.prefetch(&mut in_buf);
             }

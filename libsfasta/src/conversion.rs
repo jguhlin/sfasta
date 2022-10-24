@@ -531,7 +531,11 @@ where
                         let (seqid, seqheader, seq, _) = seq.into_parts();
                         let mut location = SeqLoc::new();
                         let now = std::time::Instant::now();
-                        location.masking = masking.add_masking(&seq.as_ref().unwrap()[..]);
+                        let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
+                        if let Some(x) = masked {
+                            let x = seqlocs.add_locs(&x);
+                            location.masking = Some(x);
+                        }
                         masking_time += now.elapsed();
                         let now = std::time::Instant::now();
                         let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
@@ -880,7 +884,11 @@ where
                     Some(Work::FastqPayload(seq)) => {
                         let (seqid, seqheader, mut seq, _) = seq.into_parts();
                         let mut location = SeqLoc::new();
-                        location.masking = masking.add_masking(&seq.as_ref().unwrap()[..]);
+                        let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
+                        if let Some(x) = masked {
+                            let x = seqlocs.add_locs(&x);
+                            location.masking = Some(x);
+                        }
                         let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
                         let myid = std::sync::Arc::new(seqid.unwrap());
                         ids_string.push(std::sync::Arc::clone(&myid));

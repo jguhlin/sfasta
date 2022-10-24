@@ -32,7 +32,7 @@ crossbeam = "0.8.1"
 static_assertions = "1.1.0"
 bincode = { version = "2.0.0-rc.1" } #, features = ["serde"] }
 bytelines = "2.4.0"
-simdutf8 = "0.1.4"
+simdutf8 = {version = "0.1.4", features = ["aarch64_neon"] }
 rayon = "1.5.3"
 itertools = "0.10.3"
 bitvec = "1.0.1"

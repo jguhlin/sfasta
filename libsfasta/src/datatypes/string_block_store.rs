@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use simdutf8::basic::from_utf8;
 
-use crate::datatypes::{zstd_encoder, CompressionType, Loc, BytesBlockStore};
+use crate::datatypes::{zstd_encoder, BytesBlockStore, CompressionType, Loc};
 
 pub struct StringBlockStore {
     inner: BytesBlockStore,
@@ -42,7 +42,6 @@ impl StringBlockStore {
     where
         R: Read + Seek,
     {
-
         let inner = match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
             Ok(inner) => inner,
             Err(e) => return Err(e),
