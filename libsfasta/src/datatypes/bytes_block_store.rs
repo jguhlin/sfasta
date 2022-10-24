@@ -34,6 +34,7 @@ impl BytesBlockStore {
         self
     }
 
+    // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
     pub fn add<'b, I: IntoIterator<Item=&'b u8>>(&'b mut self, input: I) -> Vec<Loc> {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
@@ -63,7 +64,7 @@ impl BytesBlockStore {
         locs
     }
 
-    fn emit_blocks(&mut self) -> Vec<Vec<u8>> {
+    pub fn emit_blocks(&mut self) -> Vec<Vec<u8>> {
         let data = self.data.as_ref().unwrap();
         let mut blocks = Vec::new();
         let len = data.len();
@@ -154,7 +155,7 @@ impl BytesBlockStore {
         Ok(store)
     }
 
-    // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
+
     pub fn prefetch<R>(&mut self, in_buf: &mut R)
     where
         R: Read + Seek,
