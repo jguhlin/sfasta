@@ -234,6 +234,20 @@ impl BytesBlockStore {
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use bitvec::prelude::*;
+
+    // Testing bitvec stuff for masking
+    // also: https://docs.rs/bitvec/latest/bitvec/slice/struct.BitValIter.html
+    #[test]
+    fn test_bv_stuff() {
+        let a: u8 = 5;
+        let bv: BitVec<u8, Lsb0> = BitVec::from_element(a);
+        let b = bv[0..8].load::<u8>();
+
+
+
+    }
+
 
     #[test]
     fn test_add_id() {
