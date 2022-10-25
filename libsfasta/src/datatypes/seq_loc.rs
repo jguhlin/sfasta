@@ -290,9 +290,7 @@ impl<'a> SeqLocs<'a> {
         // let mut compressor =
         // zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
 
-        let mut bincoded: Vec<u8> = Vec::new();
-
-        bincode::encode_into_std_write(&block_locations, &mut bincoded, bincode_config)
+        let bincoded = bincode::encode_to_vec(&block_locations, bincode_config)
             .expect("Unable to bincode locs into compressor");
 
         let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
