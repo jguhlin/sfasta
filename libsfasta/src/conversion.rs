@@ -568,9 +568,9 @@ where
                 }
             }
 
-            log::debug!("Masking time: {}", masking_time.as_millis());
-            log::debug!("Adding time: {}", adding_time.as_millis());
-            log::debug!("SeqLoc time: {}", seq_loc_time.as_millis());
+            log::debug!("Masking time: {}ms", masking_time.as_millis());
+            log::debug!("Adding time: {}ms", adding_time.as_millis());
+            log::debug!("SeqLoc time: {}ms", seq_loc_time.as_millis());
             log::debug!("Finalizing SequenceBuffer");
             // Finalize pushes the last block, which is likely smaller than the complete block size
             match sb.finalize() {

@@ -7,6 +7,7 @@ use std::thread::JoinHandle;
 
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
+use rand::prelude::*;
 
 use crate::datatypes::*;
 use crate::CompressionType;
@@ -156,6 +157,8 @@ impl CompressionStreamBuffer {
     }
 
     pub fn initialize(&mut self) {
+        let mut rng = rand::thread_rng();
+
         for _ in 0..self.threads {
             let shutdown_copy = Arc::clone(&self.shutdown);
             let cq = Arc::clone(&self.compress_queue);
@@ -165,7 +168,12 @@ impl CompressionStreamBuffer {
             let cl = self.compression_level;
             let cd = self.compression_dict.clone();
 
+            
+            let sleep = std::time::Duration::from_micros(rng.gen_range(1..100));
+
             let handle = thread::spawn(move || {
+                
+                std::thread::sleep(sleep);
                 _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd)
             });
             self.workers.push(handle);
@@ -390,6 +398,7 @@ fn _compression_worker_thread(
                 }
             }
             Some((block_id, sb)) => {
+                backoff.reset();
                 work_units += 1;
                 let sbc = sb.compress(
                     compression_type,
@@ -422,6 +431,7 @@ fn _sorter_worker_thread(
     let mut sorter_worker_output_spins: usize = 0;
 
     loop {
+        backoff.reset();
         while !queue.is_empty() && queue.contains_key(&expected_block) {
             let sbc = queue.remove(&expected_block).unwrap();
 
@@ -456,7 +466,6 @@ fn _sorter_worker_thread(
             }
 
             if backoff.is_completed() {
-                thread::park();
                 backoff.reset();
             }
         }

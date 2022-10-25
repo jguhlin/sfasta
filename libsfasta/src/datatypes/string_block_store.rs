@@ -27,10 +27,6 @@ impl StringBlockStore {
         self.inner.add(input.as_ref().as_bytes())
     }
 
-    fn emit_blocks(&mut self) -> Vec<Vec<u8>> {
-        self.inner.emit_blocks()
-    }
-
     pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
     where
         W: Write + Seek,

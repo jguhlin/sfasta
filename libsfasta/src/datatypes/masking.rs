@@ -1,10 +1,10 @@
+// NOTE: I've spent lots of time converting this to bitvec so that bool would be 1bit instead of 8bits (1 bytes)
+// Compressed, this saves < 1Mbp on a 2.3Gbp uncompressed FASTA file... and triple the length for masking.
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::datatypes::{BytesBlockStore, Loc};
 use crate::*;
 
-use bitpacking::{BitPacker, BitPacker8x};
-use bitvec::prelude::*;
 use bumpalo::Bump;
 use pulp::Arch;
 
@@ -28,30 +28,16 @@ impl Masking {
 
     pub fn add_masking(&mut self, seq: &[u8]) -> Option<Vec<Loc>> {
         // If none are lowercase, nope out here...
-        let arch = Arch::new();
-
-        if !seq.iter().any(|x| x.is_ascii_lowercase()) {
+        if !seq.iter().any(|x| x < &b'a') {
             return None;
         }
 
-        let mut masked: BitVec<u64, Lsb0> =
-            BitVec::from_iter(seq.iter().map(|x| x.is_ascii_lowercase()));
+        let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
 
-        // Convert from bitvec to u8
-        let mut bytes = Vec::with_capacity(masked.len() / 8);
-        masked.force_align();
+        // let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        // let bytes = bincode::encode_to_vec(&masked, bincode_config).unwrap();
 
-        let mut chunks = masked.chunks_exact(8);
-        let remainder = chunks.remainder();
-        for chunk in chunks {
-            bytes.push(chunk.load_le::<u8>());
-        }
-
-        if !remainder.is_empty() {
-            bytes.push(remainder.load_le::<u8>());
-        }
-
-        Some(self.inner.add(&bytes))
+        Some(self.inner.add(&masked))
     }
 
     pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
@@ -76,27 +62,32 @@ impl Masking {
         self.inner.prefetch(in_buf)
     }
 
-    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> BitVec<u8, Lsb0>
-    where
-        R: Read + Seek,
-    {
-        let block = self.inner.get_block(in_buf, block);
-        BitVec::from_vec(block)
-    }
-
     /// Masks the sequence in place
     pub fn mask_sequence<R>(&mut self, in_buf: &mut R, loc: &[Loc], seq: &mut [u8])
     where
         R: Read + Seek,
     {
-        let mut mask = self.inner.get(in_buf, &loc);
-        let mut mask: BitVec<u8, Lsb0> = BitVec::from_vec(mask);
 
-        for (i, m) in mask.drain(..).enumerate() {
-            if m {
-                seq[i] = seq[i].to_ascii_lowercase();
+        let arch = Arch::new();
+
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let mut mask_raw = self.inner.get(in_buf, &loc);
+
+        // let mut mask: Vec<bool>;
+        // let size: usize;
+
+        // (mask, size) = bincode::decode_from_slice(&mut mask_raw[..], bincode_config).unwrap();
+
+        arch.dispatch(|| {
+            for (i, m) in mask_raw.drain(..).enumerate() {
+                seq[i] =
+                    if m == 1 {
+                        seq[i].to_ascii_lowercase()
+                    } else {
+                        seq[i]
+                    };
             }
-        }
+        })
     }
 }
 
@@ -104,6 +95,13 @@ impl Masking {
 mod tests {
     use super::*;
     use std::io::Cursor;
+
+    #[test]
+    fn test_masking_basics() {
+        let seq = b"actgACTG";
+        let value: Vec<bool> = seq.iter().map(|x| x >= &b'Z').collect();
+        assert!(value == vec![true, true, true, true, false, false, false, false]);
+    }
 
     #[test]
     fn test_masking() {

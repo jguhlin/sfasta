@@ -2,6 +2,8 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::Arc;
 
+use rayon::prelude::*;
+
 use crate::datatypes::{zstd_encoder, CompressionType, Loc};
 
 pub struct BytesBlockStore {
@@ -12,6 +14,7 @@ pub struct BytesBlockStore {
     pub data: Option<Vec<u8>>, // Only used for writing...
     pub compression_type: CompressionType,
     cache: Option<(u32, Vec<u8>)>,
+    compresesed_blocks: Option<Vec<u8>>,
 }
 
 impl Default for BytesBlockStore {
@@ -24,6 +27,7 @@ impl Default for BytesBlockStore {
             data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
+            compresesed_blocks: None,
         }
     }
 }
@@ -64,14 +68,14 @@ impl BytesBlockStore {
         locs
     }
 
-    pub fn emit_blocks(&mut self) -> Vec<Vec<u8>> {
+    pub fn emit_blocks(&mut self) -> Vec<&[u8]> {
         let data = self.data.as_ref().unwrap();
         let mut blocks = Vec::new();
         let len = data.len();
 
         for i in (0..len).step_by(self.block_size) {
             let end = std::cmp::min(i + self.block_size, data.len());
-            blocks.push(data[i..end].to_vec());
+            blocks.push(&data[i..end]);
         }
 
         blocks
@@ -96,9 +100,9 @@ impl BytesBlockStore {
 
         let blocks = self.emit_blocks();
 
-        let mut block_locations = Vec::new();
+        let mut block_locations = Vec::with_capacity(blocks.len());
 
-        let mut compressor = zstd_encoder(3, None);
+        let mut compressor = zstd_encoder(-1, None);
 
         for block in blocks {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -110,7 +114,7 @@ impl BytesBlockStore {
 
         block_locations_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
         bincode::encode_into_std_write(&block_locations, &mut out_buf, bincode_config).unwrap();
-        self.block_locations = Some(block_locations); // Probably not needed...
+        self.block_locations = Some(block_locations);
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
