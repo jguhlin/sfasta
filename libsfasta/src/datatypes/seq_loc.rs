@@ -350,8 +350,7 @@ impl<'a> SeqLocs<'a> {
         let (chunk_size, block_index_pos, total_seq_locs, total_locs) = header;
 
         let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
-            .with_limit::<{ 8 * 1024 * 1024 }>();
+            .with_fixed_int_encoding();
 
         let seq_locs_compressed_len: u64 = bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Unable to read SeqLocs Len");
         let seq_locs_compressed: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
