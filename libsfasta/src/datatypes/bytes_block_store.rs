@@ -102,7 +102,7 @@ impl BytesBlockStore {
 
         let mut block_locations = Vec::with_capacity(blocks.len());
 
-        let mut compressor = zstd_encoder(-1, None);
+        let mut compressor = zstd_encoder(1, None);
 
         for block in blocks {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
