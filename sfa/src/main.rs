@@ -31,7 +31,7 @@ use libsfasta::CompressionType;
 fn style_pb(pb: ProgressBar) -> ProgressBar {
     let style = ProgressStyle::default_bar()
         .template(
-            "[{spinner:.green}] 🧬 {bar:30.green/yellow} {bytes:.cyan}/{total_bytes:.blue} ({eta})",
+            "[{spinner:.green}] 🧬 {bar:25.green/yellow} {bytes:.cyan}/{total_bytes:.blue} ({eta})",
         )
         .unwrap()
         .progress_chars("█▇▆▅▄▃▂▁  ")
@@ -85,8 +85,8 @@ enum Commands {
         snappy: bool,
         #[clap(short, long)]
         gzip: bool,
-        #[clap(short, long)]
-        none: bool,
+        #[clap(long)]
+        nocompression: bool,
         /// Block size for sequence blocks * 1024
         /// 2Mb (2048) is the default
         #[clap(short, long)]
@@ -142,7 +142,7 @@ fn main() {
             brotli,
             snappy,
             gzip,
-            none,
+            nocompression,
             blocksize,
             level,
             dict,
@@ -156,7 +156,7 @@ fn main() {
             *gzip,
             *brotli,
             *snappy,
-            *none,
+            *nocompression,
             *noindex,
             *blocksize,
             *level,
@@ -454,7 +454,7 @@ fn convert(
     gzip: bool,
     brotli: bool,
     snappy: bool,
-    none: bool,
+    nocompression: bool,
     noindex: bool,
     blocksize: Option<u64>,
     level: Option<i8>,
@@ -536,7 +536,7 @@ fn convert(
         compression_type = CompressionType::GZIP;
     } else if snappy {
         compression_type = CompressionType::SNAPPY;
-    } else if none {
+    } else if nocompression {
         compression_type = CompressionType::NONE;
     }
 
