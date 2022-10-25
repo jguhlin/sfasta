@@ -6,14 +6,16 @@
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
-/*
+use crate::datatypes::{zstd_encoder};
 
+
+/*
 Inefficient storage of seqlocs.
 
 Should flatten and have it stored as:
 SeqLoc Index:
 (Option<(u64, u32)>, Option<(u32, u32)>, Option(<u64, u32>), Option<(u64, u8)>, Option<(u64, u8)>
-(Seq Start, # of Locs, Masking Start, Masking End, Scores Start, # of Scores Locs, Headers Start, # of Header Locs, IDs Start, # of ID Locs)
+(Seq Start, # of Locs, Masking Start, # of Masking Locs, Scores Start, # of Scores Locs, Headers Start, # of Header Locs, IDs Start, # of ID Locs)
 
 Then SeqLoc blocks are flattened version
 
@@ -232,9 +234,17 @@ impl<'a> SeqLocs<'a> {
         bincode::encode_into_std_write(&header, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
 
-        // TODO: Add optional compression...
-        bincode::encode_into_std_write(&seq_locs, &mut out_buf, bincode_config)
-            .expect("Unable to write out chunk size");
+        let mut compressor = zstd_encoder(-3, None);
+        
+        let as_bytes = bincode::encode_to_vec(&seq_locs, bincode_config).unwrap();
+        // bincode::encode_into_std_write(&seq_locs, &mut out_buf, bincode_config)
+            //.expect("Unable to write out chunk size");
+        
+        let compressed = compressor.compress(&as_bytes).unwrap();
+        bincode::encode_into_std_write(as_bytes.len() as u64, &mut out_buf, bincode_config)
+            .expect("Unable to write out SeqLocs");
+        bincode::encode_into_std_write(&compressed, &mut out_buf, bincode_config)
+            .expect("Unable to write out SeqLocs");
 
         // FORMAT: Write sequence location blocks
         let mut bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
@@ -255,7 +265,7 @@ impl<'a> SeqLocs<'a> {
             let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 7)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
-            compressor.long_distance_matching(true).unwrap();
+            //compressor.long_distance_matching(true).unwrap();
 
             bincode::encode_into_std_write(&locs, &mut bincoded, bincode_config)
                 .expect("Unable to bincode locs into compressor");
@@ -341,13 +351,26 @@ impl<'a> SeqLocs<'a> {
 
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 64 * 1024 * 1024 }>();
+            .with_limit::<{ 8 * 1024 * 1024 }>();
 
-        let seq_locs: Vec<SeqLoc> = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
+        let seq_locs_compressed_len: u64 = bincode::decode_from_std_read(&mut in_buf, bincode_config).expect("Unable to read SeqLocs Len");
+        let seq_locs_compressed: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
         {
             Ok(s) => s,
             Err(e) => {
                 return Err(format!("Unable to read SeqLocs: {}", e));
+            }
+        };
+
+        println!("SeqLocs Compressed Len: {}", seq_locs_compressed_len);
+
+        let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
+        decompressor.include_magicbytes(false).unwrap();
+
+        let (seq_locs, _size) = match decompressor.decompress(&seq_locs_compressed, seq_locs_compressed_len as usize) {
+            Ok(s) => bincode::decode_from_slice::<Vec<SeqLoc>, _>(&s, bincode_config).unwrap(),
+            Err(e) => {
+                return Err(format!("Unable to decompress SeqLocs: {}", e));
             }
         };
 
@@ -505,7 +528,7 @@ impl<'a> SeqLocs<'a> {
     }
 }
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, bincode::Encode, bincode::Decode, Default, PartialEq, Eq)]
 pub struct SeqLoc {
     pub sequence: Option<(u64, u32)>,
     pub masking: Option<(u64, u32)>,
