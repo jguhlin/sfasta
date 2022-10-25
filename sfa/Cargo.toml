@@ -1,6 +1,6 @@
 [package]
 name = "sfasta"
-version = "0.3.4"
+version = "0.3.5"
 authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
 edition = "2021"
 license = "MIT OR Apache-2.0"
