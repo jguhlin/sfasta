@@ -69,7 +69,6 @@ impl Masking {
     where
         R: Read + Seek,
     {
-
         let arch = Arch::new();
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
@@ -82,12 +81,11 @@ impl Masking {
 
         arch.dispatch(|| {
             for (i, m) in mask_raw.drain(..).enumerate() {
-                seq[i] =
-                    if m == 1 {
-                        seq[i].to_ascii_lowercase()
-                    } else {
-                        seq[i]
-                    };
+                seq[i] = if m == 1 {
+                    seq[i].to_ascii_lowercase()
+                } else {
+                    seq[i]
+                };
             }
         })
     }

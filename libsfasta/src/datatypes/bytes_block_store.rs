@@ -1,8 +1,5 @@
 // This is not even a good copy of headers... could it be generic?
 use std::io::{Read, Seek, SeekFrom, Write};
-use std::sync::Arc;
-
-use rayon::prelude::*;
 
 use crate::datatypes::{zstd_encoder, CompressionType, Loc};
 
@@ -14,7 +11,8 @@ pub struct BytesBlockStore {
     pub data: Option<Vec<u8>>, // Only used for writing...
     pub compression_type: CompressionType,
     cache: Option<(u32, Vec<u8>)>,
-    compresesed_blocks: Option<Vec<u8>>,
+    compressed_blocks: Option<Vec<u8>>,
+    compressed_block_lens: Option<Vec<usize>>,
 }
 
 impl Default for BytesBlockStore {
@@ -27,7 +25,8 @@ impl Default for BytesBlockStore {
             data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
-            compresesed_blocks: None,
+            compressed_blocks: None,
+            compressed_block_lens: None,
         }
     }
 }
@@ -38,10 +37,48 @@ impl BytesBlockStore {
         self
     }
 
+    fn compress_blocks(&mut self) {
+        let mut compressor = zstd_encoder(1, None);
+        if self.compressed_blocks.is_none() {
+                self.compressed_block_lens = Some(Vec::new());
+                self.compressed_blocks = Some(Vec::new());
+            }
+
+        while self.data.as_ref().unwrap().len() > self.block_size {
+            #[cfg(test)]
+            let mut compressed = Vec::with_capacity(1024);
+
+            #[cfg(not(test))]
+            let mut compressed = Vec::with_capacity(self.block_size);
+
+            let block = self
+                .data
+                .as_mut()
+                .unwrap()
+                .drain(..self.block_size)
+                .collect::<Vec<u8>>();
+
+            let compressed_size = compressor
+                .compress_to_buffer(&block, &mut compressed)
+                .unwrap();
+
+            self.compressed_block_lens
+                .as_mut()
+                .unwrap()
+                .push(compressed_size);
+
+            self.compressed_blocks.as_mut().unwrap().extend(compressed);
+        }
+    }
+
     // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
     pub fn add<'b, I: IntoIterator<Item = &'b u8>>(&'b mut self, input: I) -> Vec<Loc> {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
+        }
+
+        if self.data.as_ref().unwrap().len() > self.block_size {
+            self.compress_blocks();
         }
 
         let data = self.data.as_mut().unwrap();
@@ -49,8 +86,14 @@ impl BytesBlockStore {
         let mut start = data.len();
         data.extend(input);
         let end = data.len() - 1;
-        let starting_block = start / self.block_size;
-        let ending_block = end / self.block_size;
+
+        let compressed_blocks_count = match self.compressed_block_lens.as_ref() {
+            Some(v) => v.len(),
+            None => 0,
+        };
+
+        let starting_block = (start / self.block_size) + compressed_blocks_count;
+        let ending_block = (end / self.block_size) + compressed_blocks_count;
 
         let mut locs = Vec::new();
 
@@ -98,11 +141,23 @@ impl BytesBlockStore {
         bincode::encode_into_std_write(&block_locations_pos, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(&self.block_size, &mut out_buf, bincode_config).unwrap();
 
-        let blocks = self.emit_blocks();
-
-        let mut block_locations = Vec::with_capacity(blocks.len());
+        let mut block_locations = Vec::new();
 
         let mut compressor = zstd_encoder(1, None);
+
+        if self.compressed_blocks.is_some() {
+            let mut current_pos = 0;
+            let compressed_blocks = self.compressed_blocks.as_ref().unwrap();
+            for len in self.compressed_block_lens.as_ref().unwrap().iter() {
+                let block = &compressed_blocks[current_pos..current_pos + len];
+                let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+                bincode::encode_into_std_write(block, &mut out_buf, bincode_config).unwrap();
+                block_locations.push(block_start);
+                current_pos += len;
+            }
+        }
+
+        let blocks = self.emit_blocks();
 
         for block in blocks {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -274,10 +329,13 @@ mod tests {
 
         let mut buffer = Cursor::new(Vec::new());
         store.write_to_buffer(&mut buffer);
+
         let mut store = BytesBlockStore::from_buffer(&mut buffer, 0).unwrap();
 
         for i in 0..test_ids.len() {
             let id = store.get(&mut buffer, &locs[i]);
+            println!("Locs: {:#?}", locs[i]);
+            println!("{} {}", std::str::from_utf8(&id).unwrap(), test_ids[i]);
             assert_eq!(id, test_ids[i].as_bytes());
         }
     }

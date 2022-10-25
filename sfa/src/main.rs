@@ -1,6 +1,5 @@
 #[cfg(nightly)]
 #[feature(write_all_vectored)]
-
 extern crate mimalloc;
 use mimalloc::MiMalloc;
 use rand_core::block;

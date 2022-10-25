@@ -33,7 +33,7 @@ impl Default for Converter {
     fn default() -> Self {
         Converter {
             threads: 4,
-            block_size: 1024 * 1024,    // 1Mb
+            block_size: 4 * 1024 * 1024,        // 1Mb
             seqlocs_chunk_size: 128 * 1024, // 128k
             index: true,
             masking: false,
@@ -498,7 +498,7 @@ where
         });
 
         let fasta_thread_clone = fasta_thread.thread().clone();
-        let mut out_buf = BufWriter::new(&mut out_fh);
+        let mut out_buf = BufWriter::with_capacity(256 * 1024, &mut out_fh);
 
         // let mut seq_locs = Arc::new(Mutex::new(Vec::with_capacity(1024)));
 

@@ -4,8 +4,10 @@ use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
 use std::thread;
 use std::thread::JoinHandle;
+use std::time::Duration;
 
 use crossbeam::queue::ArrayQueue;
+use crossbeam::sync::{Parker, Unparker};
 use crossbeam::utils::Backoff;
 use rand::prelude::*;
 
@@ -18,7 +20,7 @@ pub struct CompressionStreamBufferConfig {
     pub compression_type: CompressionType,
     pub compression_level: i8,
     pub num_threads: u16,
-    pub compression_dict: Option<Vec<u8>>, // Only impl for Zstd aat this time
+    pub compression_dict: Option<Vec<u8>>, // Only impl for Zstd at this time
 }
 
 impl Default for CompressionStreamBufferConfig {
@@ -84,6 +86,7 @@ pub struct CompressionStreamBuffer {
     threads: u16,
     initialized: bool,
     workers: Vec<JoinHandle<()>>,
+    workers_unparkers: Vec<Unparker>,
     sort_worker: Option<JoinHandle<()>>,
     sort_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
@@ -107,10 +110,11 @@ impl Default for CompressionStreamBuffer {
             threads: 1,
             initialized: false,
             workers: Vec::<JoinHandle<()>>::new(),
+            workers_unparkers: Vec::<Unparker>::new(),
             sort_worker: None,
-            sort_queue: Arc::new(ArrayQueue::new(1024)),
-            compress_queue: Arc::new(ArrayQueue::new(1024)),
-            output_queue: Arc::new(ArrayQueue::new(1024)),
+            sort_queue: Arc::new(ArrayQueue::new(16)),
+            compress_queue: Arc::new(ArrayQueue::new(16)),
+            output_queue: Arc::new(ArrayQueue::new(16)),
             shutdown: Arc::new(AtomicBool::new(false)),
             finalized: false,
             total_entries: Arc::new(AtomicUsize::new(0)),
@@ -151,8 +155,9 @@ impl CompressionStreamBuffer {
         if let Some(sort_worker) = &self.sort_worker {
             sort_worker.thread().unpark();
         }
-        for i in self.workers.iter() {
-            i.thread().unpark();
+
+        for i in self.workers_unparkers.iter() {
+            i.unpark()
         }
     }
 
@@ -168,13 +173,15 @@ impl CompressionStreamBuffer {
             let cl = self.compression_level;
             let cd = self.compression_dict.clone();
 
-            
             let sleep = std::time::Duration::from_micros(rng.gen_range(1..100));
 
+            let parker = Parker::new();
+            let parker_thread = parker.unparker().clone();
+            self.workers_unparkers.push(parker_thread);
+
             let handle = thread::spawn(move || {
-                
                 std::thread::sleep(sleep);
-                _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd)
+                _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd, parker)
             });
             self.workers.push(handle);
         }
@@ -184,6 +191,8 @@ impl CompressionStreamBuffer {
             let wq = Arc::clone(&self.sort_queue);
             let we = Arc::clone(&self.sorted_entries);
             let oq = Arc::clone(&self.output_queue);
+            let parker = Parker::new();
+            let parker_thread = parker.unparker().clone();
             let handle = thread::spawn(move || _sorter_worker_thread(wq, oq, shutdown_copy, we));
 
             self.sort_worker = Some(handle);
@@ -296,6 +305,7 @@ impl CompressionStreamBuffer {
         std::mem::swap(&mut self.buffer, &mut seq);
 
         let x = SequenceBlock { seq };
+        self.wakeup();
 
         if x.is_empty() {
             return;
@@ -334,8 +344,6 @@ impl CompressionStreamBuffer {
     pub fn with_threads(mut self, threads: u16) -> Self {
         self._check_initialized();
         self.threads = threads;
-        self.compress_queue = Arc::new(ArrayQueue::new(threads as usize * 8));
-        self.sort_queue = Arc::new(ArrayQueue::new(threads as usize * 2));
         self
     }
 
@@ -356,11 +364,12 @@ impl CompressionStreamBuffer {
 
 fn _compression_worker_thread(
     compress_queue: Arc<ArrayQueue<(u32, SequenceBlock)>>,
-    write_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
+    sort_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     shutdown: Arc<AtomicBool>,
     compression_type: CompressionType,
     compression_level: i8,
     compression_dict: Option<Vec<u8>>,
+    parker: Parker,
 ) {
     let mut result;
     let backoff = Backoff::new();
@@ -373,6 +382,8 @@ fn _compression_worker_thread(
         None
     };
 
+    let mut rng = rand::thread_rng();
+
     loop {
         result = compress_queue.pop();
 
@@ -383,22 +394,19 @@ fn _compression_worker_thread(
                         "Compression worker thread spins: {}",
                         compression_worker_spins
                     );
-                    log::debug!(
-                        "Compression worker thread work units: {}",
-                        work_units
-                    );
+                    log::debug!("Compression worker thread work units: {}", work_units);
                     return;
                 } else {
                     backoff.spin();
                     compression_worker_spins = compression_worker_spins.saturating_add(1);
                     if backoff.is_completed() {
-                        thread::park();
+                        parker.park_timeout(Duration::from_millis(rng.gen_range(50..150)));
                         backoff.reset();
                     }
                 }
             }
+
             Some((block_id, sb)) => {
-                backoff.reset();
                 work_units += 1;
                 let sbc = sb.compress(
                     compression_type,
@@ -407,7 +415,8 @@ fn _compression_worker_thread(
                 );
 
                 let mut entry = (block_id, sbc);
-                while let Err(x) = write_queue.push(entry) {
+                while let Err(x) = sort_queue.push(entry) {
+                    log::debug!("Compression Worker Sort Queue Full");
                     entry = x;
                 }
             }
@@ -488,6 +497,7 @@ fn _sorter_worker_thread(
                 if block_id == expected_block {
                     let mut entry = (expected_block, sbc);
                     while let Err(x) = output_queue.push(entry) {
+                        log::debug!("Sorter Worker Output Queue Full");
                         sorter_worker_output_spins = sorter_worker_output_spins.saturating_add(1);
                         backoff.snooze();
                         entry = x;

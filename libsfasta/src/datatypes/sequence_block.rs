@@ -194,28 +194,13 @@ pub fn zstd_encoder(
     } else {
         zstd::bulk::Compressor::new(compression_level).unwrap()
     };
-    //encoder
-        //.set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
-        //.unwrap();
-    //encoder
-        //.set_parameter(zstd::stream::raw::CParameter::EnableDedicatedDictSearch(
-            //false,
-        //))
-        //.unwrap();
     encoder.include_checksum(false).unwrap();
-    //encoder
-        //.long_distance_matching(true)
-        //.expect("Unable to set ZSTD Long Distance Matching");
-    //encoder
-        //.window_log(21)
-        //.expect("Unable to set ZSTD Window Log");
     encoder
         .include_magicbytes(false)
         .expect("Unable to set ZSTD MagicBytes");
     encoder
         .include_contentsize(false)
         .expect("Unable to set ZSTD Content Size Flag");
-    encoder.include_dictid(false).expect("Unable to set dictid");
     encoder
 }
 
@@ -231,17 +216,21 @@ impl SequenceBlock {
         compression_level: i8,
         zstd_compressor: Option<&mut zstd::bulk::Compressor>,
     ) -> SequenceBlockCompressed {
-        let len = std::cmp::max(512 * 1024, self.seq.len()); // Mostly for some tests...
-        let mut cseq: Vec<u8> = Vec::with_capacity(len);
+        #[cfg(test)]
+        let mut cseq: Vec<u8> = Vec::with_capacity(512 * 1024);
 
-        //debug!("Compressing sequence block with length: {}", self.seq.len());
+        #[cfg(not(test))]
+        let mut cseq: Vec<u8> = Vec::with_capacity(self.seq.len());
+
+        // Destructure self
+        let SequenceBlock { seq } = self;
 
         match compression_type {
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
                 //let mut compressor = zstd_encoder(compression_level as i32);
                 let compressor = zstd_compressor.unwrap();
-                compressor.compress_to_buffer(&self.seq, &mut cseq).unwrap();
+                compressor.compress_to_buffer(&seq, &mut cseq).unwrap();
             }
             #[cfg(target_arch = "wasm32")]
             CompressionType::ZSTD => {
@@ -250,14 +239,14 @@ impl SequenceBlock {
             CompressionType::LZ4 => {
                 let mut compressor = lz4_flex::frame::FrameEncoder::new(cseq);
                 compressor
-                    .write_all(&self.seq[..])
+                    .write_all(&seq)
                     .expect("Unable to compress with LZ4");
                 cseq = compressor.finish().unwrap();
             }
             CompressionType::SNAPPY => {
                 let mut compressor = snap::write::FrameEncoder::new(cseq);
                 compressor
-                    .write_all(&self.seq[..])
+                    .write_all(&seq)
                     .expect("Unable to compress with Snappy");
                 cseq = compressor.into_inner().unwrap();
             }
@@ -265,7 +254,7 @@ impl SequenceBlock {
                 let mut compressor =
                     GzEncoder::new(cseq, flate2::Compression::new(compression_level as u32));
                 compressor
-                    .write_all(&self.seq[..])
+                    .write_all(&seq)
                     .expect("Unable to compress with GZIP");
                 cseq = compressor.finish().unwrap();
             }
@@ -276,11 +265,11 @@ impl SequenceBlock {
                 todo!();
             }
             CompressionType::NONE => {
-                cseq = self.seq;
+                cseq = seq;
             }
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::XZ => {
-                let mut compressor = XzEncoder::new(&self.seq[..], compression_level as u32);
+                let mut compressor = XzEncoder::new(&seq[..], compression_level as u32);
                 compressor
                     .read_to_end(&mut cseq)
                     .expect("Unable to XZ compress");
@@ -291,7 +280,7 @@ impl SequenceBlock {
             }
             CompressionType::BROTLI => {
                 let mut compressor = brotli::CompressorReader::new(
-                    &self.seq[..],
+                    &seq[..],
                     2 * 1024 * 1024,
                     compression_level as u32,
                     22,
