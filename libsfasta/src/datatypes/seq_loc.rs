@@ -361,8 +361,6 @@ impl<'a> SeqLocs<'a> {
             }
         };
 
-        println!("SeqLocs Compressed Len: {}", seq_locs_compressed_len);
-
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
 

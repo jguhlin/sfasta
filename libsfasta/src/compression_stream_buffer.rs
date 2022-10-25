@@ -24,7 +24,7 @@ pub struct CompressionStreamBufferConfig {
 impl Default for CompressionStreamBufferConfig {
     fn default() -> Self {
         Self {
-            block_size: 2 * 1024 * 1024,
+            block_size: 1024 * 1024,
             compression_type: CompressionType::ZSTD,
             compression_level: 3,
             num_threads: 1,
