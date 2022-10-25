@@ -32,9 +32,9 @@ impl Masking {
             return None;
         }
 
-        let arch = Arch::new();
+        // let arch = Arch::new();
 
-        let masked: Vec<u8> = arch.dispatch(|| seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect());
+        let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
 
         // let bincode_config = bincode::config::standard().with_fixed_int_encoding();
         // let bytes = bincode::encode_to_vec(&masked, bincode_config).unwrap();
