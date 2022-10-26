@@ -20,8 +20,8 @@ name = "sfa"
 path = "src/main.rs"
 
 [dependencies]
-#libsfasta = { path = "../libsfasta" }
-libsfasta = "0.3.3"
+libsfasta = { path = "../libsfasta" }
+# libsfasta = "0.3.3"
 crossbeam = "0.8.1"
 sigpipe = "0.1.3"
 rand = "0.8.5"
