@@ -395,6 +395,8 @@ impl<'sfa> SfastaParser<'sfa> {
         // TODO: In the future, with different versions, we will need to do different things
         // when we inevitabily introduce incompatabilities...
 
+        log::debug!("Parsing DirectoryOnDisk");
+
         let dir: DirectoryOnDisk = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
         {
             Ok(x) => x,
@@ -403,11 +405,14 @@ impl<'sfa> SfastaParser<'sfa> {
 
         sfasta.directory = dir.into();
 
+        log::debug!("Parsing Parameters");
+
         sfasta.parameters = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA parameters: {}", y)),
         };
 
+        log::debug!("Parsing Metadata");
         sfasta.metadata = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA metadata: {}", y)),
@@ -420,6 +425,7 @@ impl<'sfa> SfastaParser<'sfa> {
             .with_fixed_int_encoding()
             .with_limit::<{ 128 * 1024 * 1024 }>();
 
+        log::debug!("Index");
         // TODO: Handle no index
         if sfasta.directory.index_loc.is_some() {
             sfasta.index =
@@ -434,6 +440,8 @@ impl<'sfa> SfastaParser<'sfa> {
             );
         }
 
+        log::debug!("SeqLocs");
+
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
             let mut seqlocs = match SeqLocs::from_buffer(&mut in_buf, seqlocs_loc) {
@@ -446,6 +454,8 @@ impl<'sfa> SfastaParser<'sfa> {
             }
             sfasta.seqlocs = Some(seqlocs);
         }
+
+        log::debug!("Parsing Blocks");
 
         if sfasta.directory.block_index_loc.is_none() {
             return Result::Err("No block index found in SFASTA file - Support for no block index is not yet implemented.".to_string());
