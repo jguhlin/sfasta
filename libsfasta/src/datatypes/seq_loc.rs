@@ -288,11 +288,7 @@ impl<'a> SeqLocs<'a> {
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
-        // Does this need a dual index or bitpacking?
-        // Need to measure on large files...
-        // let mut compressor =
-        // zstd::stream::Encoder::new(Vec::with_capacity(8 * 1024 * 1024), -3).unwrap();
-
+        // This needs to be in small chunks and then with offsets for values (instead of absolute locations)
         let bincoded = bincode::encode_to_vec(&block_locations, bincode_config)
             .expect("Unable to bincode locs into compressor");
 
