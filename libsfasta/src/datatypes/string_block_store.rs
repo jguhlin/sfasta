@@ -51,6 +51,7 @@ impl StringBlockStore {
     where
         R: Read + Seek,
     {
+        log::debug!("Prefetching string block store");
         self.inner.prefetch(in_buf)
     }
 
