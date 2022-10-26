@@ -352,6 +352,7 @@ impl<'a> SeqLocs<'a> {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
+        log::debug!("Decompressing SeqLocs");
         let seq_locs_compressed_len: u64 =
             bincode::decode_from_std_read(&mut in_buf, bincode_config)
                 .expect("Unable to read SeqLocs Len");
@@ -365,8 +366,7 @@ impl<'a> SeqLocs<'a> {
 
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
-
-        log::debug!("Decompressing SeqLocs Compressed");
+        
         let (seq_locs, _size) =
             match decompressor.decompress(&seq_locs_compressed, seq_locs_compressed_len as usize) {
                 Ok(s) => bincode::decode_from_slice::<Vec<SeqLoc>, _>(&s, bincode_config).unwrap(),
@@ -386,7 +386,6 @@ impl<'a> SeqLocs<'a> {
         in_buf.seek(SeekFrom::Start(block_index_pos)).unwrap();
 
         log::debug!("Decompressing Compressed Block Locations");
-
         let compressed_block_locations: Vec<u8> =
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(c) => c,
