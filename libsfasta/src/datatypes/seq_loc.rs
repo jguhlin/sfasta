@@ -145,6 +145,9 @@ impl<'a> SeqLocs<'a> {
     where
         R: Read + Seek,
     {
+        
+        log::debug!("Prefetching SeqLocs");
+
         let mut data = Vec::with_capacity(self.total_locs);
         log::debug!(
             "Total SeqLoc Blocks: {}",
