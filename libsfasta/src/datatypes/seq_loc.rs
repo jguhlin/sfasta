@@ -605,7 +605,7 @@ impl<'a> SeqLocs<'a> {
 
             // TODO: Zero copy deserialization possible here?
             for offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
-                in_buf.seek(SeekFrom::Current(*offset as i64)).unwrap();
+                in_buf.seek(SeekFrom::Start(self.seqlocs_chunks_position as u64 + *offset as u64)).unwrap();
                 length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
                 let seqlocs_chunk_raw: &mut Vec<u8> = bump.alloc(bincode::decode_from_std_read(in_buf, bincode_config).unwrap());
                 let seqlocs_chunk_compressed: &mut Vec<u8> =
@@ -617,7 +617,6 @@ impl<'a> SeqLocs<'a> {
             }
             self.index = Some(seqlocs);
         }
-
         
         return Ok(self.index.as_ref());
     }
@@ -654,8 +653,6 @@ impl<'a> SeqLocs<'a> {
             let byte_offset = self.seqlocs_chunks_offsets.as_ref().unwrap()[chunk];
             in_buf.seek(SeekFrom::Current(byte_offset as i64)).unwrap();
             length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
-            println!("Length: {}", length);
-            println!("Offset: {}", byte_offset);
             let seqlocs_chunk_raw: Vec<u8> = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
             let seqlocs_chunk_compressed: Vec<u8> =
                 decompressor.decompress(&seqlocs_chunk_raw, length as usize).unwrap();
