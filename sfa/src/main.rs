@@ -360,14 +360,9 @@ fn view(input: &str) {
     let mut stdout = std::io::BufWriter::new(stdout);
     let common = b"> \n";
 
-    for seqloc in sfasta
-        .seqlocs
-        .as_mut()
-        .unwrap()
-        .index
-        .take()
-        .unwrap()
-        .iter()
+    let seqlocs = sfasta.get_seqlocs().unwrap().unwrap().to_vec();
+
+    for seqloc in seqlocs
     {
         let id = sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
 
@@ -388,7 +383,7 @@ fn view(input: &str) {
         stdout.write_all(b"\n").unwrap();
 
         let sequence = sfasta
-            .get_sequence(seqloc)
+            .get_sequence(&seqloc)
             .expect("Unable to fetch sequence");
 
         #[cfg(nightly)]

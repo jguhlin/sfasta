@@ -329,11 +329,12 @@ impl<'sfa> Sfasta<'sfa> {
     }
 
     /// Get all seqlocs
-    pub fn get_seqlocs(&mut self) -> Result<Option<Vec<SeqLoc>>, &'static str> {
+    pub fn get_seqlocs(&mut self) -> Result<Option<&Vec<SeqLoc>>, &'static str> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.seqlocs.as_mut().unwrap().prefetch(&mut buf);
 
-        Ok(self.seqlocs.as_ref().unwrap().index.clone())
+        // TODO: Fail is index is not initialized yet (prefetch does it here, but still)
+        Ok(self.seqlocs.as_mut().unwrap().get_all_seqlocs(&mut buf).unwrap())
     }
 
     pub fn index_len(&mut self) -> usize {
@@ -813,15 +814,18 @@ mod tests {
         #[cfg(miri)]
         let mut converter = converter.with_compression_type(CompressionType::NONE);
 
+        println!("Converting file...");
         converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
+        println!("Opening file...");
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
         sfasta.index_len();
 
+        println!("Checking index len...");
         assert_eq!(sfasta.index_len(), 3001);
 
         let output = sfasta.find("does-not-exist");

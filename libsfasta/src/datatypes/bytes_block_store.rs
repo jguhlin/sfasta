@@ -40,9 +40,9 @@ impl BytesBlockStore {
     fn compress_blocks(&mut self) {
         let mut compressor = zstd_encoder(1, None);
         if self.compressed_blocks.is_none() {
-                self.compressed_block_lens = Some(Vec::new());
-                self.compressed_blocks = Some(Vec::new());
-            }
+            self.compressed_block_lens = Some(Vec::new());
+            self.compressed_blocks = Some(Vec::new());
+        }
 
         while self.data.as_ref().unwrap().len() > self.block_size {
             #[cfg(test)]
