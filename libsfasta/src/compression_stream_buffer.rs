@@ -416,7 +416,6 @@ fn _compression_worker_thread(
 
                 let mut entry = (block_id, sbc);
                 while let Err(x) = sort_queue.push(entry) {
-                    log::debug!("Compression Worker Sort Queue Full");
                     entry = x;
                 }
             }
