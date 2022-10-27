@@ -187,7 +187,7 @@ impl Converter {
         // let in_buf = Arc::new(Mutex::new(in_buf));
         // let out_buf = Arc::new(Mutex::new(out_buf));
 
-        log::debug!(
+        log::info!(
             "Writing sequences start... {}",
             out_fh.seek(SeekFrom::Current(0)).unwrap()
         );
@@ -218,7 +218,7 @@ impl Converter {
 
         let end_time = std::time::Instant::now();
 
-        log::debug!(
+        log::info!(
             "Write Fasta Sequence write time: {:?}",
             end_time - start_time
         );
@@ -227,7 +227,7 @@ impl Converter {
 
         debug_size.push(("sequences".to_string(), (end - start) as usize));
 
-        log::debug!(
+        log::info!(
             "Writing sequences finished... {}",
             out_fh.seek(SeekFrom::Current(0)).unwrap()
         );
@@ -249,7 +249,7 @@ impl Converter {
 
         let end_time = std::time::Instant::now();
 
-        log::debug!("Create SeqLocs Struct time: {:?}", end_time - start_time);
+        log::info!("Create SeqLocs Struct time: {:?}", end_time - start_time);
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
@@ -275,7 +275,7 @@ impl Converter {
             }));
 
             // Use the main thread to write the sequence locations...
-            log::debug!(
+            log::info!(
                 "Writing SeqLocs to file. {}",
                 out_buf.seek(SeekFrom::Current(0)).unwrap()
             );
@@ -285,13 +285,13 @@ impl Converter {
             let start_time = std::time::Instant::now();
 
             seqlocs_location = seqlocs.write_to_buffer(&mut out_buf);
-            log::debug!(
+            log::info!(
                 "Writing SeqLocs to file: COMPLETE. {}",
                 out_buf.seek(SeekFrom::Current(0)).unwrap()
             );
 
             let end_time = std::time::Instant::now();
-            log::debug!("SeqLocs write time: {:?}", end_time - start_time);
+            log::info!("SeqLocs write time: {:?}", end_time - start_time);
 
             let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
@@ -302,7 +302,7 @@ impl Converter {
                     .expect("Unable to work with seek API");
 
                 let mut index = index_handle.unwrap().join().unwrap();
-                log::debug!(
+                log::info!(
                     "Writing index to file. {}",
                     out_buf.seek(SeekFrom::Current(0)).unwrap()
                 );
@@ -312,12 +312,12 @@ impl Converter {
                 let start_time = std::time::Instant::now();
                 index.write_to_buffer(&mut out_buf);
                 let end_time = std::time::Instant::now();
-                log::debug!("Index write time: {:?}", end_time - start_time);
+                log::info!("Index write time: {:?}", end_time - start_time);
 
                 let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
                 debug_size.push(("index".to_string(), (end - start) as usize));
 
-                log::debug!(
+                log::info!(
                     "Writing index to file: COMPLETE. {}",
                     out_buf.seek(SeekFrom::Current(0)).unwrap()
                 );
@@ -357,14 +357,14 @@ impl Converter {
 
         let end_time = std::time::Instant::now();
 
-        log::debug!("Directory write time: {:?}", end_time - start_time);
+        log::info!("Directory write time: {:?}", end_time - start_time);
 
-        log::debug!("DEBUG: {:?}", debug_size);
+        log::info!("DEBUG: {:?}", debug_size);
 
         out_buf.flush().expect("Unable to flush output file");
 
         let fn_end_time = std::time::Instant::now();
-        log::debug!("Conversion time: {:?}", fn_end_time - fn_start_time);
+        log::info!("Conversion time: {:?}", fn_end_time - fn_start_time);
     }
 }
 
@@ -488,13 +488,13 @@ where
                 }
             }
 
-            log::debug!("FASTA reading complete...");
+            log::info!("FASTA reading complete...");
 
             while fasta_queue_in.push(Work::Shutdown).is_err() {
                 backoff.snooze();
             }
 
-            log::debug!("fasta_thread_spins: {}", fasta_thread_spins);
+            log::info!("fasta_thread_spins: {}", fasta_thread_spins);
         });
 
         let fasta_thread_clone = fasta_thread.thread().clone();
@@ -568,17 +568,17 @@ where
                 }
             }
 
-            log::debug!("Masking time: {}ms", masking_time.as_millis());
-            log::debug!("Adding time: {}ms", adding_time.as_millis());
-            log::debug!("SeqLoc time: {}ms", seq_loc_time.as_millis());
-            log::debug!("Finalizing SequenceBuffer");
+            log::info!("Masking time: {}ms", masking_time.as_millis());
+            log::info!("Adding time: {}ms", adding_time.as_millis());
+            log::info!("SeqLoc time: {}ms", seq_loc_time.as_millis());
+            log::info!("Finalizing SequenceBuffer");
             // Finalize pushes the last block, which is likely smaller than the complete block size
             match sb.finalize() {
                 Ok(()) => (),
                 Err(x) => panic!("Unable to finalize sequence buffer, {:#?}", x),
             };
 
-            log::debug!("fasta_queue_spins: {}", fasta_queue_spins);
+            log::info!("fasta_queue_spins: {}", fasta_queue_spins);
 
             // Return seq_locs to the main thread
             (seqlocs, headers, ids, ids_string, masking)
@@ -607,7 +607,7 @@ where
             match result {
                 None => {
                     if oq.is_empty() && shutdown.load(Ordering::Relaxed) {
-                        log::debug!("output_spins: {}", output_spins);
+                        log::info!("output_spins: {}", output_spins);
                         break;
                     } else {
                         reader_handle.thread().unpark();
@@ -618,7 +618,7 @@ where
                 Some((block_id, sb)) => {
                     bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
                         .expect("Unable to write to bincode output");
-                    // log::debug!("Writer wrote block {}", block_id);
+                    // log::info!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 
@@ -632,7 +632,7 @@ where
         fasta_thread.join().unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+        log::info!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
         debug_size.push(("Sequence Blocks".to_string(), (end - start) as usize));
 
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -655,7 +655,7 @@ where
             )
         };
 
-        log::debug!("DEBUG: Wrote {} total blocks", block_locs.len());
+        log::info!("DEBUG: Wrote {} total blocks", block_locs.len());
 
         let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
         bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
@@ -691,7 +691,7 @@ where
 
         out_buf.seek(SeekFrom::Start(end)).unwrap();
 
-        log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
+        log::info!("DEBUG: Wrote {} bytes of block index", end - start);
         debug_size.push(("Block Index".to_string(), (end - start) as usize));
 
         reader_handle.thread().unpark();
@@ -717,7 +717,7 @@ where
 
         debug_size.push(("Headers".to_string(), (end - start) as usize));
 
-        log::debug!(
+        log::info!(
             "DEBUG: Wrote {} bytes of headers in {:#?}",
             end - start,
             end_time - start_time
@@ -735,7 +735,7 @@ where
         let end_time = Instant::now();
 
         debug_size.push(("IDs".to_string(), (end - start) as usize));
-        log::debug!(
+        log::info!(
             "DEBUG: Wrote {} bytes of ids in {:#?}",
             end - start,
             end_time - start_time
@@ -751,7 +751,7 @@ where
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         debug_size.push(("Masking".to_string(), (end - start) as usize));
         let end_time = Instant::now();
-        log::debug!(
+        log::info!(
             "DEBUG: Wrote {} bytes of masking in {:#?}",
             end - start,
             end_time - start_time
@@ -770,7 +770,7 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
-        log::debug!(
+        log::info!(
             "DEBUG: Wrote {} bytes of masking ZSTD in {:#?}",
             end - start,
             end_time - start_time
@@ -950,7 +950,7 @@ where
                 Some((block_id, sb)) => {
                     bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
                         .expect("Unable to write to bincode output");
-                    // log::debug!("Writer wrote block {}", block_id);
+                    // log::info!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 
@@ -965,7 +965,7 @@ where
         let j = reader_handle.join().unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+        log::info!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
 
         let _start = out_buf.seek(SeekFrom::Current(0)).unwrap();
         // Write FASTQ scores here...
@@ -1070,7 +1070,7 @@ where
                 Some((block_id, sb)) => {
                     bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
                         .expect("Unable to write to bincode output");
-                    // log::debug!("Writer wrote block {}", block_id);
+                    // log::info!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 
@@ -1084,7 +1084,7 @@ where
         fastq_thread.join().unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        log::debug!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
+        log::info!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
 
         let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
@@ -1112,7 +1112,7 @@ where
         bincode::encode_into_std_write(&bitpacked, &mut out_buf, bincode_config).unwrap();
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        log::debug!("DEBUG: Wrote {} bytes of block index", end - start);
+        log::info!("DEBUG: Wrote {} bytes of block index", end - start);
 
         // let j = reader_handle.join().expect("Unable to join thread");
         seq_locs = Some(j.0);
@@ -1129,7 +1129,7 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
-        log::debug!(
+        log::info!(
             "DEBUG: Wrote {} bytes of headers in {:#?}",
             end - start,
             end_time - start_time
@@ -1143,7 +1143,7 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
-        log::debug!(
+        log::info!(
             "DEBUG: Wrote {} bytes of ids in {:#?}",
             end - start,
             end_time - start_time
@@ -1157,7 +1157,7 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
-        log::debug!(
+        log::info!(
             "DEBUG: Wrote {} bytes of masking in {:#?}",
             end - start,
             end_time - start_time
@@ -1174,7 +1174,7 @@ where
         };
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
-        log::debug!(
+        log::info!(
             "DEBUG: Wrote {} bytes of masking ZSTD in {:#?}",
             end - start,
             end_time - start_time

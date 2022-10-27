@@ -49,7 +49,7 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
                     self.seqlen = 0;
                     return Some(Ok(seq));
                 } else {
-                    log::debug!("FASTA Reading complete, returning None");
+                    log::info!("FASTA Reading complete, returning None");
                     return None;
                 }
             } else {

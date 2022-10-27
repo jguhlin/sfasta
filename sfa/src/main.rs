@@ -559,9 +559,9 @@ fn convert(
     let mut out_fh = Box::new(output);
 
     converter.convert_fasta(&mut buf, &mut out_fh);
-    log::debug!("Joining IO thread");
+    log::info!("Joining IO thread");
     io_thread.join().expect("Unable to join IO thread");
-    log::debug!("IO thread joined");
+    log::info!("IO thread joined");
 }
 
 pub fn generic_open_file_pb(

@@ -158,7 +158,7 @@ impl<'a> SeqLocs<'a> {
         self.get_all_seqlocs(&mut in_buf);
 
         let mut data = Vec::with_capacity(self.total_locs);
-        log::debug!(
+        log::info!(
             "Total Loc Blocks: {}",
             self.block_locations.as_ref().unwrap().len()
         );
@@ -171,7 +171,7 @@ impl<'a> SeqLocs<'a> {
         self.data = Some(data);
         self.preloaded = true;
 
-        log::debug!("Prefetched {} seqlocs", self.total_locs);
+        log::info!("Prefetched {} seqlocs", self.total_locs);
     }
 
     /*pub fn with_data(index: Vec<SeqLoc>, data: Vec<Loc>) -> Self {
@@ -335,7 +335,7 @@ impl<'a> SeqLocs<'a> {
             bincoded = bincode::encode_to_vec(&locs, bincode_config)
                 .expect("Unable to bincode locs into compressor");
 
-            log::debug!("Bincoded size of SeqLoc Block: {}", bincoded.len());
+            log::debug!("Bincoded size of Loc Block: {}", bincoded.len());
 
             compressor.write_all(&bincoded).unwrap();
             let compressed = compressor.finish().unwrap();
@@ -429,7 +429,7 @@ impl<'a> SeqLocs<'a> {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        log::debug!("Decompressing SeqLoc Chunk Offsets");
+        log::info!("Decompressing SeqLoc Chunk Offsets");
         in_buf
             .seek(SeekFrom::Start(seqlocs_chunks_offsets_position))
             .unwrap();
@@ -456,7 +456,7 @@ impl<'a> SeqLocs<'a> {
                 .unwrap()
                 .0;
 
-        log::debug!("Decompressing Compressed Block Locations");
+        log::info!("Decompressing Compressed Block Locations");
         in_buf.seek(SeekFrom::Start(block_index_pos)).unwrap();
 
         let compressed_block_locations: Vec<u8> =
@@ -595,7 +595,7 @@ impl<'a> SeqLocs<'a> {
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor.include_magicbytes(false).unwrap();
 
-            log::debug!("Prefetching SeqLocs");
+            log::info!("Prefetching SeqLocs");
 
             let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 

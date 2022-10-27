@@ -374,7 +374,7 @@ impl<'sfa> SfastaParser<'sfa> {
             Err(x) => return Result::Err(format!("Invalid file. {}", x)),
         };
 
-        log::debug!("Sfasta marker: {:?}", sfasta_marker);
+        log::info!("Sfasta marker: {:?}", sfasta_marker);
 
         #[cfg(not(fuzzing))]
         assert!(
@@ -396,7 +396,7 @@ impl<'sfa> SfastaParser<'sfa> {
         // TODO: In the future, with different versions, we will need to do different things
         // when we inevitabily introduce incompatabilities...
 
-        log::debug!("Parsing DirectoryOnDisk");
+        log::info!("Parsing DirectoryOnDisk");
 
         let dir: DirectoryOnDisk = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
         {
@@ -406,14 +406,14 @@ impl<'sfa> SfastaParser<'sfa> {
 
         sfasta.directory = dir.into();
 
-        log::debug!("Parsing Parameters");
+        log::info!("Parsing Parameters");
 
         sfasta.parameters = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA parameters: {}", y)),
         };
 
-        log::debug!("Parsing Metadata");
+        log::info!("Parsing Metadata");
         sfasta.metadata = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA metadata: {}", y)),
@@ -426,7 +426,7 @@ impl<'sfa> SfastaParser<'sfa> {
             .with_fixed_int_encoding()
             .with_limit::<{ 128 * 1024 * 1024 }>();
 
-        log::debug!("Index");
+        log::info!("Index");
         // TODO: Handle no index
         if sfasta.directory.index_loc.is_some() {
             sfasta.index =
@@ -441,7 +441,7 @@ impl<'sfa> SfastaParser<'sfa> {
             );
         }
 
-        log::debug!("SeqLocs");
+        log::info!("SeqLocs");
 
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
@@ -456,7 +456,7 @@ impl<'sfa> SfastaParser<'sfa> {
             sfasta.seqlocs = Some(seqlocs);
         }
 
-        log::debug!("Parsing Blocks");
+        log::info!("Parsing Blocks");
 
         if sfasta.directory.block_index_loc.is_none() {
             return Result::Err("No block index found in SFASTA file - Support for no block index is not yet implemented.".to_string());
@@ -485,9 +485,9 @@ impl<'sfa> SfastaParser<'sfa> {
         let compressed_size = x.0;
         let blocks_count = x.1;
 
-        log::debug!("Num Bits: {}", num_bits);
-        log::debug!("Compressed Size: {}", compressed_size);
-        log::debug!("Blocks Counts: {}", blocks_count);
+        log::info!("Num Bits: {}", num_bits);
+        log::info!("Compressed Size: {}", compressed_size);
+        log::info!("Blocks Counts: {}", blocks_count);
 
         if num_bits > 32 {
             return Result::Err(format!("Invalid num bits: {}", num_bits));
@@ -514,13 +514,13 @@ impl<'sfa> SfastaParser<'sfa> {
 
                 let x = x.unwrap().into_iter().flatten();
 
-                log::debug!("Doing something unsafe...");
+                log::info!("Doing something unsafe...");
 
                 // let block_locs_staggered = x.into_iter().map(|x| x.unpack(num_bits));
                 // let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
                 let block_locs_u32: Vec<u32> = x.collect();
 
-                log::debug!("Number of block_locs_u32: {}", block_locs_u32.len());
+                log::info!("Number of block_locs_u32: {}", block_locs_u32.len());
 
                 let block_locs: Vec<u64> = unsafe {
                     let mut block_locs_u32 = std::mem::ManuallyDrop::new(block_locs_u32);
@@ -536,7 +536,7 @@ impl<'sfa> SfastaParser<'sfa> {
                     )
                 }.to_vec(); */
 
-                log::debug!("Finished something unsafe");
+                log::info!("Finished something unsafe");
 
                 // std::mem::forget(block_locs_u32);
                 Some(block_locs)
@@ -544,7 +544,7 @@ impl<'sfa> SfastaParser<'sfa> {
                 None
             };
 
-        log::debug!("Creating Sequence Blocks");
+        log::info!("Creating Sequence Blocks");
 
         sfasta.sequenceblocks = Some(SequenceBlocks::new(
             block_locs,
@@ -557,7 +557,7 @@ impl<'sfa> SfastaParser<'sfa> {
             num_bits,
         ));
 
-        log::debug!("Opening Headers");
+        log::info!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {
             let mut headers = match StringBlockStore::from_buffer(
                 &mut in_buf,
@@ -574,7 +574,7 @@ impl<'sfa> SfastaParser<'sfa> {
             sfasta.headers = Some(headers);
         }
 
-        log::debug!("Opening IDs");
+        log::info!("Opening IDs");
         if sfasta.directory.ids_loc.is_some() {
             let mut ids = match StringBlockStore::from_buffer(
                 &mut in_buf,
@@ -589,7 +589,7 @@ impl<'sfa> SfastaParser<'sfa> {
             sfasta.ids = Some(ids);
         }
 
-        log::debug!("Opening Masking");
+        log::info!("Opening Masking");
         if sfasta.directory.masking_loc.is_some() {
             sfasta.masking = match Masking::from_buffer(
                 &mut in_buf,
@@ -600,10 +600,10 @@ impl<'sfa> SfastaParser<'sfa> {
             };
         }
 
-        log::debug!("Storing buf");
+        log::info!("Storing buf");
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 
-        log::debug!("Done!");
+        log::info!("Done!");
         Ok(sfasta)
     }
 }

@@ -228,7 +228,7 @@ impl BytesBlockStore {
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             data.extend(self.get_block_uncached(in_buf, i as u32));
         }
-        log::debug!("Generic Block Store Prefetching done: {}", data.len());
+        log::info!("Generic Block Store Prefetching done: {}", data.len());
         self.data = Some(data);
     }
 

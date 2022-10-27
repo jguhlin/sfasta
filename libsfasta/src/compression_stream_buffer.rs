@@ -209,7 +209,7 @@ impl CompressionStreamBuffer {
 
         let backoff = Backoff::new();
 
-        log::debug!("Waiting for compression workers to finish...");
+        log::info!("Waiting for compression workers to finish...");
 
         while self.sorted_entries.load(Ordering::Relaxed)
             < self.total_entries.load(Ordering::Relaxed)
@@ -220,7 +220,7 @@ impl CompressionStreamBuffer {
 
         self.shutdown.store(true, Ordering::Relaxed);
 
-        log::debug!("Joining workers");
+        log::info!("Joining workers");
 
         self.wakeup();
 
@@ -231,8 +231,8 @@ impl CompressionStreamBuffer {
         let writer_handle = std::mem::replace(&mut self.sort_worker, None);
 
         writer_handle.unwrap().join().unwrap();
-        log::debug!("CompressionStreamBuffer finalized");
-        log::debug!("Emit block spins: {}", self.emit_block_spins);
+        log::info!("CompressionStreamBuffer finalized");
+        log::info!("Emit block spins: {}", self.emit_block_spins);
         Ok(())
     }
 
@@ -390,11 +390,11 @@ fn _compression_worker_thread(
         match result {
             None => {
                 if shutdown.load(Ordering::Relaxed) {
-                    log::debug!(
+                    log::info!(
                         "Compression worker thread spins: {}",
                         compression_worker_spins
                     );
-                    log::debug!("Compression worker thread work units: {}", work_units);
+                    log::info!("Compression worker thread work units: {}", work_units);
                     return;
                 } else {
                     backoff.spin();
@@ -456,7 +456,7 @@ fn _sorter_worker_thread(
 
         while sort_queue.is_empty() {
             if shutdown.load(Ordering::Relaxed) {
-                log::debug!(
+                log::info!(
                     "Sorter worker empty spins: {}, have blocks spins: {}, output spins: {}",
                     sorter_worker_empty_spins,
                     sorter_worker_have_blocks_spins,
@@ -483,7 +483,7 @@ fn _sorter_worker_thread(
         match result {
             None => {
                 if shutdown.load(Ordering::Relaxed) {
-                    log::debug!(
+                    log::info!(
                         "Sorter worker empty spins: {}, have blocks spins: {}, output spins: {}",
                         sorter_worker_empty_spins,
                         sorter_worker_have_blocks_spins,
