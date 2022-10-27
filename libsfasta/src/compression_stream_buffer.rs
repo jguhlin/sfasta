@@ -497,7 +497,6 @@ fn _sorter_worker_thread(
                 if block_id == expected_block {
                     let mut entry = (expected_block, sbc);
                     while let Err(x) = output_queue.push(entry) {
-                        log::debug!("Sorter Worker Output Queue Full");
                         sorter_worker_output_spins = sorter_worker_output_spins.saturating_add(1);
                         backoff.snooze();
                         entry = x;
