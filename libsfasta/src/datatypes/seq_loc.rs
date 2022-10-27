@@ -654,8 +654,6 @@ impl<'a> SeqLocs<'a> {
             let byte_offset = self.seqlocs_chunks_offsets.as_ref().unwrap()[chunk];
             in_buf.seek(SeekFrom::Current(byte_offset as i64)).unwrap();
             length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
-            println!("Length: {}", length);
-            println!("Offset: {}", byte_offset);
             let seqlocs_chunk_raw: Vec<u8> = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
             let seqlocs_chunk_compressed: Vec<u8> =
                 decompressor.decompress(&seqlocs_chunk_raw, length as usize).unwrap();
