@@ -1,4 +1,3 @@
-// This is not even a good copy of headers... could it be generic?
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::datatypes::{zstd_encoder, CompressionType, Loc};

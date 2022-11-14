@@ -16,7 +16,7 @@ pub struct Sfasta<'sfa> {
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
-    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + 'sfa>>>, // TODO: Needs to be behind RwLock to support better multi-threading...
+    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlocks<'sfa>>,
     pub seqlocs: Option<SeqLocs<'sfa>>,
     pub headers: Option<StringBlockStore>,
@@ -81,7 +81,7 @@ impl<'sfa> Sfasta<'sfa> {
     // TODO: Support multiple matches
     pub fn get_sequence_by_id(&mut self, id: &str) -> Result<Option<Sequence>, &str> {
         let matches = self.find(id).expect("Unable to find entry");
-        if matches == None {
+        if matches.is_none() {
             return Ok(None);
         }
 
@@ -473,9 +473,6 @@ impl<'sfa> SfastaParser<'sfa> {
             ))
             .expect("Unable to work with seek API");
 
-        //let block_locs_compressed: Vec<u8> =
-        //bincode::decode_from_std_read(&mut in_buf, bincode_config)
-        //.expect("Unable to parse block locs index");
         let num_bits: u8 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
@@ -499,60 +496,11 @@ impl<'sfa> SfastaParser<'sfa> {
         }
 
         let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
-
-        let block_locs =
-            // TODO: Should be prefetch, but not yet working...
-            if true {
-                let x = (0..blocks_count).map(|_| {
-                        match bincode::decode_from_std_read::<Packed, _, _>(&mut in_buf, bincode_config) {
-                            Ok(x) => Ok(x),
-                            Err(y) => {
-                                Result::Err(format!("Error reading SFASTA block index: {}", y))
-                            }
-                        }
-                }).collect::<Result<Vec<Packed>, String>>()?;
-
-                let x = x.into_iter().map(|x| x.unpack(num_bits)).collect::<Result<Vec<Vec<u32>>, String>>();
-                if x.is_err() {
-                    return Result::Err(x.err().unwrap());
-                }
-
-                let x = x.unwrap().into_iter().flatten();
-
-                log::info!("Doing something unsafe...");
-
-                // let block_locs_staggered = x.into_iter().map(|x| x.unpack(num_bits));
-                // let block_locs_u32: Vec<u32> = block_locs_staggered.into_iter().flatten().collect();
-                let block_locs_u32: Vec<u32> = x.collect();
-
-                log::info!("Number of block_locs_u32: {}", block_locs_u32.len());
-
-                let block_locs: Vec<u64> = unsafe {
-                    let mut block_locs_u32 = std::mem::ManuallyDrop::new(block_locs_u32);
-                    Vec::from_raw_parts(block_locs_u32.as_mut_ptr() as *mut u64,
-                    block_locs_u32.len(),
-                    block_locs_u32.capacity())
-                };
-
-/*                let block_locs: Vec<u64> = unsafe {
-                    std::slice::from_raw_parts(
-                        block_locs_u32.as_ptr() as *const u64,
-                        block_locs_u32.len(),
-                    )
-                }.to_vec(); */
-
-                log::info!("Finished something unsafe");
-
-                // std::mem::forget(block_locs_u32);
-                Some(block_locs)
-            } else {
-                None
-            };
+        println!("Block index loc: {}", block_index_loc);
 
         log::info!("Creating Sequence Blocks");
 
         sfasta.sequenceblocks = Some(SequenceBlocks::new(
-            block_locs,
             sfasta.parameters.compression_type,
             sfasta.parameters.compression_dict.clone(),
             sfasta.parameters.block_size as usize,
@@ -562,11 +510,23 @@ impl<'sfa> SfastaParser<'sfa> {
             num_bits,
         ));
 
+        println!("Prefetch: {}", prefetch);
+
+        if prefetch {
+            println!("Prefetching block locs");
+            sfasta
+                .sequenceblocks
+                .as_mut()
+                .unwrap()
+                .prefetch_block_locs(&mut in_buf)
+                .expect("Unable to prefetch block locs");
+        }
+
         log::info!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {
             let mut headers = match StringBlockStore::from_buffer(
                 &mut in_buf,
-                sfasta.directory.headers_loc.unwrap().get() as u64,
+                sfasta.directory.headers_loc.unwrap().get(),
             ) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA headers: {}", y)),
@@ -583,7 +543,7 @@ impl<'sfa> SfastaParser<'sfa> {
         if sfasta.directory.ids_loc.is_some() {
             let mut ids = match StringBlockStore::from_buffer(
                 &mut in_buf,
-                sfasta.directory.ids_loc.unwrap().get() as u64,
+                sfasta.directory.ids_loc.unwrap().get(),
             ) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA ids: {}", y)),
@@ -598,7 +558,7 @@ impl<'sfa> SfastaParser<'sfa> {
         if sfasta.directory.masking_loc.is_some() {
             sfasta.masking = match Masking::from_buffer(
                 &mut in_buf,
-                sfasta.directory.masking_loc.unwrap().get() as u64,
+                sfasta.directory.masking_loc.unwrap().get(),
             ) {
                 Ok(x) => Some(x),
                 Err(y) => return Result::Err(format!("Error reading SFASTA masking: {}", y)),
@@ -868,6 +828,7 @@ mod tests {
             panic!("Unable to seek to start of file, {:#?}", x)
         };
 
+        // TODO: Test this with prefecth both true and false...
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
         assert!(sfasta.index_len() == 10);
 
@@ -891,6 +852,7 @@ mod tests {
         // println!("{:#?}", &sequence[last_ten..].as_bytes());
         println!("{:#?}", &sequence[last_ten..]);
 
+        println!("{:#?}", &sequence[0..100]);
         assert!(&sequence[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
         assert!(&sequence[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
         // Last 10

@@ -1,4 +1,5 @@
 use crate::datatypes::structs::{default_compression_level, CompressionType};
+use crate::*;
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
@@ -23,12 +24,12 @@ pub struct SequenceBlocks<'a> {
     caching: bool,
     block_size: usize,
     zstd_decompressor: Option<zstd::bulk::Decompressor<'a>>,
+    cache_block: Option<(u32, Vec<u64>)>,
 }
 
 // TODO: Redundant code, clean it up
 impl<'a> SequenceBlocks<'a> {
     pub fn new(
-        block_locs: Option<Vec<u64>>,
         compression_type: CompressionType,
         compression_dict: Option<Vec<u8>>,
         block_size: usize,
@@ -53,7 +54,6 @@ impl<'a> SequenceBlocks<'a> {
         };
 
         Self {
-            block_locs,
             cache: None,
             compression_type,
             compression_level: default_compression_level(compression_type),
@@ -68,6 +68,8 @@ impl<'a> SequenceBlocks<'a> {
             total_blocks,
             block_index_location,
             num_bits,
+            block_locs: None,
+            cache_block: None,
         }
     }
 
@@ -76,26 +78,24 @@ impl<'a> SequenceBlocks<'a> {
         self
     }
 
-    // TODO: Likely edge case where < 256 entries, thus no bitpacked blocks
     pub fn block_locs<R>(&mut self, mut in_buf: &mut R, block: u32) -> u64
     where
         R: Read + Seek,
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
         if let Some(block_locs) = &self.block_locs {
             block_locs[block as usize]
+        } else if self.cache_block.is_some() && self.cache_block.as_ref().unwrap().0 == block {
+            let idx = block as usize % BitPacker8x::BLOCK_LEN;
+            self.cache_block.as_ref().unwrap().1[idx]
         } else {
-            // TODO: Not working yet...
-
-            println!("Block Index Location: {}", self.block_index_location);
-            println!("Block: {}", block);
-
+            let in_block = (block / BitPacker8x::BLOCK_LEN as u32) * 2;
             in_buf
                 .seek(SeekFrom::Start(
-                    self.block_index_location + (block as u64 / 2 * self.compressed_size as u64),
+                    self.block_index_location + (in_block as u64 * self.compressed_size),
                 ))
                 .unwrap();
+
             let p: crate::utils::Packed =
                 bincode::decode_from_std_read(&mut in_buf, bincode_config)
                     .expect("Unable to decode block index");
@@ -105,13 +105,64 @@ impl<'a> SequenceBlocks<'a> {
             let mut p: Vec<u32> = p.unpack(self.num_bits).unwrap();
             let p2 = p2.unpack(self.num_bits).unwrap();
             p.extend(p2);
-            let block_locs: Vec<u64> =
-                unsafe { std::slice::from_raw_parts(p.as_ptr() as *const u64, p.len()).to_vec() };
 
-            let idx = block as usize;
-            let idx = idx % BitPacker8x::BLOCK_LEN;
-            block_locs[idx]
+            let block_locs: Vec<u64> = unsafe {
+                let mut p = std::mem::ManuallyDrop::new(p);
+                Vec::from_raw_parts(
+                    p.as_mut_ptr() as *mut u64,
+                    BitPacker8x::BLOCK_LEN, // p.len(),
+                    p.capacity(),
+                )
+            };
+
+            self.cache_block = Some((block, block_locs));
+
+            let idx = block as usize % BitPacker8x::BLOCK_LEN;
+            self.cache_block.as_ref().unwrap().1[idx]
         }
+    }
+
+    pub fn prefetch_block_locs<R>(&mut self, mut in_buf: &mut R) -> Result<(), String>
+    where
+        R: Read + Seek,
+    {
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        let x = (0..self.total_blocks)
+            .map(|_| {
+                match bincode::decode_from_std_read::<Packed, _, _>(&mut in_buf, bincode_config) {
+                    Ok(x) => Ok(x),
+                    Err(y) => Result::Err(format!("Error reading SFASTA block index: {}", y)),
+                }
+            })
+            .collect::<Result<Vec<Packed>, String>>()
+            .expect("Unable to decode block index");
+
+        let x = x
+            .into_iter()
+            .map(|x| x.unpack(self.num_bits))
+            .collect::<Result<Vec<Vec<u32>>, String>>();
+        if x.is_err() {
+            return Result::Err(x.err().unwrap());
+        }
+
+        let x = x.unwrap().into_iter().flatten();
+
+        let block_locs_u32: Vec<u32> = x.collect();
+
+        log::info!("Number of block_locs_u32: {}", block_locs_u32.len());
+
+        let block_locs: Vec<u64> = unsafe {
+            let mut block_locs_u32 = std::mem::ManuallyDrop::new(block_locs_u32);
+            Vec::from_raw_parts(
+                block_locs_u32.as_mut_ptr() as *mut u64,
+                block_locs_u32.len() / 2,
+                block_locs_u32.capacity(),
+            )
+        };
+
+        self.block_locs = Some(block_locs);
+        Ok(())
     }
 
     pub fn _get_block<R>(&mut self, mut in_buf: &mut R, block: u32)

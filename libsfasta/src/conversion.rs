@@ -585,7 +585,7 @@ where
         });
 
         // Store the location of the Sequence Blocks...
-        // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
+        // Stored as Vec<(u32, u64)> because multithreading means it does not have to be in order
         let mut block_locs = Vec::with_capacity(1024);
         let mut pos = out_buf
             .seek(SeekFrom::Current(0))
@@ -658,7 +658,7 @@ where
         log::info!("DEBUG: Wrote {} total blocks", block_locs.len());
 
         let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
-        bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(num_bits, &mut out_buf, bincode_config)
             .expect("Unable to write to bincode output");
 
         let size_loc = out_buf
@@ -672,6 +672,7 @@ where
             .expect("Unable to write to bincode output");
 
         for i in bitpacked {
+            println!("Writing block at {}", out_buf.seek(SeekFrom::Current(0)).unwrap());
             if let Ok(x) = bincode::encode_into_std_write(&i, &mut out_buf, bincode_config) {
                 if i.is_packed() && size == 0 {
                     size = x as u64;
