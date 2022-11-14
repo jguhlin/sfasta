@@ -334,7 +334,12 @@ impl<'sfa> Sfasta<'sfa> {
         self.seqlocs.as_mut().unwrap().prefetch(&mut buf);
 
         // TODO: Fail is index is not initialized yet (prefetch does it here, but still)
-        Ok(self.seqlocs.as_mut().unwrap().get_all_seqlocs(&mut buf).unwrap())
+        Ok(self
+            .seqlocs
+            .as_mut()
+            .unwrap()
+            .get_all_seqlocs(&mut buf)
+            .unwrap())
     }
 
     pub fn index_len(&mut self) -> usize {

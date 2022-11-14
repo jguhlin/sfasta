@@ -362,8 +362,7 @@ fn view(input: &str) {
 
     let seqlocs = sfasta.get_seqlocs().unwrap().unwrap().to_vec();
 
-    for seqloc in seqlocs
-    {
+    for seqloc in seqlocs {
         let id = sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
 
         stdout.write_all(&common[..1]).unwrap();
