@@ -103,7 +103,7 @@ impl<'a> SeqLocs<'a> {
             let start_block = start / self.chunk_size as usize;
             let end_block = (start + length) / self.chunk_size as usize;
 
-            let mut locs = Vec::new();
+            let mut locs = Vec::with_capacity(length);
             if start_block == end_block {
                 let block = self.get_block(&mut in_buf, start_block as u32);
                 locs.extend_from_slice(&block[start % chunk_size..start % chunk_size + length]);
@@ -556,7 +556,7 @@ impl<'a> SeqLocs<'a> {
 
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 128 * 1024 * 1024 }>();
+            .with_limit::<{ 32 * 1024 * 1024 }>();
 
         if self.compressed_seq_buffer.is_none() {
             self.compressed_seq_buffer = Some(Vec::with_capacity(256 * 1024));
@@ -578,7 +578,7 @@ impl<'a> SeqLocs<'a> {
         }
 
         if self.decompression_buffer.is_none() {
-            self.decompression_buffer = Some(Vec::with_capacity(8 * 1024 * 1024));
+            self.decompression_buffer = Some(Vec::with_capacity(2 * 1024 * 1024));
         }
 
         let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
