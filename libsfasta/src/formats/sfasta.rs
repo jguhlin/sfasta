@@ -75,6 +75,17 @@ impl<'sfa> Sfasta<'sfa> {
         self
     }
 
+    pub fn seq_slice(&mut self, seqloc: &SeqLoc, range: std::ops::Range<u32>) -> Vec<Loc> {
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        let block_size = self.get_block_size();
+
+        seqloc.seq_slice(self.seqlocs.as_mut().unwrap(), 
+            &mut buf, 
+            block_size, 
+            range)
+
+    }
+
     /// Get a Sequence object by ID.
     /// Convenience function. Not optimized for speed. If you don't need the header, scores, or masking,
     /// it's better to call more performant functions.
