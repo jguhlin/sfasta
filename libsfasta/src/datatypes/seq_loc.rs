@@ -67,8 +67,8 @@ impl<'a> Default for SeqLocs<'a> {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 256 * 1024,
-            seqlocs_chunk_size: 1024,
+            chunk_size: 8 * 1024,
+            seqlocs_chunk_size: 8 * 1024,
             seqlocs_chunks_offsets: None,
             index: None,
             total_locs: 0,
@@ -578,7 +578,7 @@ impl<'a> SeqLocs<'a> {
         }
 
         if self.decompression_buffer.is_none() {
-            self.decompression_buffer = Some(Vec::with_capacity(2 * 1024 * 1024));
+            self.decompression_buffer = Some(Vec::with_capacity(8 * 1024 * 1024));
         }
 
         let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
