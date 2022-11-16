@@ -1,3 +1,6 @@
+//! SeqLocs handle the location pointers for sequences, masks, IDs, etc...
+//! Each SeqLoc will point to a start and a length of Loc objects for a given sequence
+
 // TODO! Need tests...
 // TODO: Bitpack seqlocs instead of zstd compress...
 // TODO: When data gets too large, pre-emptively compress it into memory (such as nt db, >200Gb).
@@ -83,10 +86,12 @@ impl<'a> Default for SeqLocs<'a> {
 }
 
 impl<'a> SeqLocs<'a> {
+    /// Create a new SeqLocs object
     pub fn new() -> Self {
         SeqLocs::default()
     }
 
+    /// Get locs for a given seqloc (as defined by start and length)
     pub fn get_locs<R>(&mut self, mut in_buf: &mut R, start: usize, length: usize) -> Vec<Loc>
     where
         R: Read + Seek,
@@ -118,10 +123,12 @@ impl<'a> SeqLocs<'a> {
         }
     }
 
+    /// Get total number of SeqLocs
     pub fn index_len(&self) -> usize {
         self.total_seqlocs
     }
 
+    /// Only for SFASTA creation. Add a SeqLoc to the SeqLocs object
     pub fn add_to_index(&mut self, seqloc: SeqLoc) {
         if self.index.is_none() {
             self.index = Some(Vec::new());
@@ -130,6 +137,7 @@ impl<'a> SeqLocs<'a> {
         self.total_seqlocs += 1;
     }
 
+    /// Only for SFASTA creation. Add a Loc to the index
     pub fn add_locs(&mut self, locs: &[Loc]) -> (u64, u32) {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(1024));
@@ -149,6 +157,7 @@ impl<'a> SeqLocs<'a> {
         (start as u64, locs.len() as u32)
     }
 
+    /// Prefetch the SeqLocs index into memory. Speeds up successive access, but can be a hefty one-time cost for very large files.
     pub fn prefetch<R>(&mut self, mut in_buf: &mut R)
     where
         R: Read + Seek,
@@ -195,6 +204,7 @@ impl<'a> SeqLocs<'a> {
         }
     } */
 
+    /// Set the location u64 of the SeqLocs object
     pub fn with_location(mut self, location: u64) -> Self {
         self.location = location;
         self
@@ -210,6 +220,7 @@ impl<'a> SeqLocs<'a> {
         self
     }
 
+    /// Write a SeqLocs object to a file (buffer)
     pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> u64
     where
         W: Write + Seek,
@@ -331,7 +342,7 @@ impl<'a> SeqLocs<'a> {
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
 
-            bincoded = bincode::encode_to_vec(&locs, bincode_config)
+            bincoded = bincode::encode_to_vec(locs, bincode_config)
                 .expect("Unable to bincode locs into compressor");
 
             log::debug!("Bincoded size of Loc Block: {}", bincoded.len());
@@ -393,6 +404,7 @@ impl<'a> SeqLocs<'a> {
         seqlocs_location
     }
 
+    /// Open SeqLocs object from a file (buffer)
     pub fn from_buffer<R>(mut in_buf: &mut R, pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
@@ -512,6 +524,7 @@ impl<'a> SeqLocs<'a> {
         self.block_locations.is_some()
     }
 
+    /// Get a particular block of Locs from the store
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[Loc]
     where
         R: Read + Seek,
@@ -532,6 +545,7 @@ impl<'a> SeqLocs<'a> {
         }
     }
 
+    /// Get a particular block of Locs from the store, without using a cache
     fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<Loc>
     where
         R: Read + Seek,
@@ -583,6 +597,7 @@ impl<'a> SeqLocs<'a> {
         locs
     }
 
+    /// Load up all SeqLocs from a file
     pub fn get_all_seqlocs<R>(
         &mut self,
         in_buf: &mut R,
@@ -635,6 +650,7 @@ impl<'a> SeqLocs<'a> {
         return Ok(self.index.as_ref());
     }
 
+    /// Get a particular SeqLoc from the store
     pub fn get_seqloc<R>(
         &mut self,
         in_buf: &mut R,
