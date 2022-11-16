@@ -65,7 +65,7 @@ impl<'sfa> Sfasta<'sfa> {
         self
     }
 
-    pub fn get_block_size(&self) -> u32 {
+    pub const fn get_block_size(&self) -> u32 {
         self.parameters.block_size
     }
 
@@ -202,6 +202,26 @@ impl<'sfa> Sfasta<'sfa> {
         }))
     }
 
+    pub fn get_sequence_only_by_locs(
+        &mut self,
+        locs: &[Loc],
+        cache: bool,
+    ) -> Result<Option<Sequence>, &'static str> {
+        let sequence = if cache {
+                Some(self.get_sequence_by_locs(locs).unwrap())
+            } else {
+                Some(self.get_sequence_by_locs_nocache(locs).unwrap())
+            };
+
+        Ok(Some(Sequence {
+            sequence,
+            id: None,
+            header: None,
+            scores: None,
+            offset: 0,
+        }))
+    }
+
     // TODO: Should return Result<Option<Sequence>, &str>
     // TODO: Should actually be what get_sequence_by_seqloc is!
     pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
@@ -268,6 +288,49 @@ impl<'sfa> Sfasta<'sfa> {
             let locs = seqloc.masking.as_ref().unwrap();
             let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
             masking.mask_sequence(&mut *buf, &locs, &mut seq);
+        }
+
+        Ok(seq)
+    }
+
+    // No masking is possible here...
+    pub fn get_sequence_by_locs(&mut self, locs: &[Loc]) -> Result<Vec<u8>, &'static str> {
+        let mut seq: Vec<u8> = Vec::with_capacity(1024);
+
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+
+        // Once stabilized, use write_all_vectored
+        for (block, (start, end)) in locs
+            .iter()
+            .map(|x| x.original_format(self.parameters.block_size))
+        {
+            let seqblock = self
+                .sequenceblocks
+                .as_mut()
+                .unwrap()
+                .get_block(&mut *buf, block);
+            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
+        }
+
+        Ok(seq)
+    }
+
+    // No masking is possible here...
+    pub fn get_sequence_by_locs_nocache(&mut self, locs: &[Loc]) -> Result<Vec<u8>, &'static str> {
+        let mut seq: Vec<u8> = Vec::with_capacity(1024);
+
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+
+        for (block, (start, end)) in locs
+            .iter()
+            .map(|x| x.original_format(self.parameters.block_size))
+        {
+            let seqblock = self
+                .sequenceblocks
+                .as_mut()
+                .unwrap()
+                .get_block_uncached(&mut *buf, block);
+            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
         }
 
         Ok(seq)
