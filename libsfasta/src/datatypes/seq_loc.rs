@@ -106,11 +106,9 @@ impl<'a> SeqLocs<'a> {
                 for block in start_block..=end_block {
                     let block_locs = self.get_block(&mut in_buf, block as u32);
                     if start_block == block {
-                        locs.extend_from_slice(&block_locs[start % chunk_size as usize..]);
+                        locs.extend_from_slice(&block_locs[start % chunk_size..]);
                     } else if end_block == block {
-                        locs.extend_from_slice(
-                            &block_locs[..(start + length) % chunk_size as usize],
-                        );
+                        locs.extend_from_slice(&block_locs[..(start + length) % chunk_size]);
                     } else {
                         locs.extend_from_slice(block_locs);
                     }
@@ -155,7 +153,8 @@ impl<'a> SeqLocs<'a> {
     where
         R: Read + Seek,
     {
-        self.get_all_seqlocs(&mut in_buf);
+        self.get_all_seqlocs(&mut in_buf)
+            .expect("Unable to Prefetch All SeqLocs");
 
         let mut data = Vec::with_capacity(self.total_locs);
         log::info!(
@@ -250,7 +249,7 @@ impl<'a> SeqLocs<'a> {
         );
 
         // Write out header
-        bincode::encode_into_std_write(&header, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(header, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
 
         seqlocs_chunks_position = out_buf
@@ -265,7 +264,7 @@ impl<'a> SeqLocs<'a> {
         let mut current_offset = 0;
         for chunk in seq_locs.chunks(self.seqlocs_chunk_size as usize) {
             seqlocs_chunk_offset.push(current_offset);
-            let as_bytes = bincode::encode_to_vec(&chunk, bincode_config).unwrap();
+            let as_bytes = bincode::encode_to_vec(chunk, bincode_config).unwrap();
             let compressed = compressor.compress(&as_bytes).unwrap();
             match bincode::encode_into_std_write(
                 as_bytes.len() as u32,
@@ -385,7 +384,7 @@ impl<'a> SeqLocs<'a> {
         );
 
         // Write out updated header...
-        bincode::encode_into_std_write(&header, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(header, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
 
         // Go back to the end of the file...
@@ -527,7 +526,7 @@ impl<'a> SeqLocs<'a> {
         } else {
             let seqlocs = self.get_block_uncached(in_buf, block);
 
-            self.cache = Some((block as u32, seqlocs));
+            self.cache = Some((block, seqlocs));
 
             &self.cache.as_ref().unwrap().1
         }
@@ -604,13 +603,13 @@ impl<'a> SeqLocs<'a> {
                 .seek(SeekFrom::Start(self.seqlocs_chunks_position))
                 .unwrap();
             let mut seqlocs = Vec::new();
-            let mut length: u32 = 0;
+            let mut length: u32;
 
             // TODO: Zero copy deserialization possible here?
             for offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
                 in_buf
                     .seek(SeekFrom::Start(
-                        self.seqlocs_chunks_position as u64 + *offset as u64,
+                        self.seqlocs_chunks_position + *offset as u64,
                     ))
                     .unwrap();
                 length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
@@ -618,15 +617,15 @@ impl<'a> SeqLocs<'a> {
                     bump.alloc(bincode::decode_from_std_read(in_buf, bincode_config).unwrap());
                 let seqlocs_chunk_compressed: &mut Vec<u8> = bump.alloc(
                     decompressor
-                        .decompress(&seqlocs_chunk_raw, length as usize)
+                        .decompress(seqlocs_chunk_raw, length as usize)
                         .unwrap(),
                 );
                 let seqlocs_chunk: &mut Vec<SeqLoc> = bump.alloc(
-                    bincode::decode_from_slice(&seqlocs_chunk_compressed, bincode_config)
+                    bincode::decode_from_slice(seqlocs_chunk_compressed, bincode_config)
                         .unwrap()
                         .0,
                 );
-                seqlocs.extend_from_slice(&seqlocs_chunk);
+                seqlocs.extend_from_slice(seqlocs_chunk);
 
                 bump.reset();
             }
@@ -663,13 +662,12 @@ impl<'a> SeqLocs<'a> {
             in_buf
                 .seek(SeekFrom::Start(self.seqlocs_chunks_position))
                 .unwrap();
-            let mut length: u32 = 0;
 
             let chunk = index as usize / self.seqlocs_chunk_size as usize;
             let offset = index as usize % self.seqlocs_chunk_size as usize;
             let byte_offset = self.seqlocs_chunks_offsets.as_ref().unwrap()[chunk];
             in_buf.seek(SeekFrom::Current(byte_offset as i64)).unwrap();
-            length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+            let length: u32 = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
             let seqlocs_chunk_raw: Vec<u8> =
                 bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
             let seqlocs_chunk_compressed: Vec<u8> = decompressor
@@ -706,7 +704,7 @@ impl SeqLoc {
     }
 
     #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self, block_size: u32) -> usize {
+    pub fn len(&self, _block_size: u32) -> usize {
         if self.sequence.is_some() {
             self.sequence.as_ref().unwrap().1 as usize
         } else if self.masking.is_some() {

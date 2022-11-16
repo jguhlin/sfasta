@@ -79,11 +79,7 @@ impl<'sfa> Sfasta<'sfa> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let block_size = self.get_block_size();
 
-        seqloc.seq_slice(self.seqlocs.as_mut().unwrap(), 
-            &mut buf, 
-            block_size, 
-            range)
-
+        seqloc.seq_slice(self.seqlocs.as_mut().unwrap(), &mut buf, block_size, range)
     }
 
     /// Get a Sequence object by ID.
@@ -219,10 +215,10 @@ impl<'sfa> Sfasta<'sfa> {
         cache: bool,
     ) -> Result<Option<Sequence>, &'static str> {
         let sequence = if cache {
-                Some(self.get_sequence_by_locs(locs).unwrap())
-            } else {
-                Some(self.get_sequence_by_locs_nocache(locs).unwrap())
-            };
+            Some(self.get_sequence_by_locs(locs).unwrap())
+        } else {
+            Some(self.get_sequence_by_locs_nocache(locs).unwrap())
+        };
 
         Ok(Some(Sequence {
             sequence,
