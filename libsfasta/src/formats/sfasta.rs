@@ -232,7 +232,7 @@ impl<'sfa> Sfasta<'sfa> {
     // TODO: Should return Result<Option<Sequence>, &str>
     // TODO: Should actually be what get_sequence_by_seqloc is!
     pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
-        let mut seq: Vec<u8> = Vec::with_capacity(seqloc.len(self.parameters.block_size));
+        let mut seq: Vec<u8> = Vec::with_capacity(1024);
 
         assert!(seqloc.sequence.is_some());
 
@@ -267,7 +267,7 @@ impl<'sfa> Sfasta<'sfa> {
     }
 
     pub fn get_sequence_nocache(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
-        let mut seq: Vec<u8> = Vec::with_capacity(seqloc.len(self.parameters.block_size));
+        let mut seq: Vec<u8> = Vec::with_capacity(1024);
 
         assert!(seqloc.sequence.is_some());
 
@@ -381,6 +381,13 @@ impl<'sfa> Sfasta<'sfa> {
 
     pub fn len(&self) -> usize {
         self.seqlocs.as_ref().unwrap().total_seqlocs
+    }
+
+    // Get length from SeqLoc (only for sequence)
+    pub fn seqloc_len(&mut self, seqloc: &SeqLoc) -> usize {
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        let seqlocs = self.seqlocs.as_mut().unwrap();
+        seqloc.len(seqlocs, &mut buf, self.parameters.block_size)
     }
 
     pub fn is_empty(&self) -> bool {

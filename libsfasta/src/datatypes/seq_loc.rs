@@ -720,16 +720,11 @@ impl SeqLoc {
     }
 
     #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self, _block_size: u32) -> usize {
-        if self.sequence.is_some() {
-            self.sequence.as_ref().unwrap().1 as usize
-        } else if self.masking.is_some() {
-            self.masking.as_ref().unwrap().1 as usize
-        } else if self.scores.is_some() {
-            self.scores.as_ref().unwrap().1 as usize
-        } else {
-            0
-        }
+    pub fn len<R>(&self, seqlocs: &mut SeqLocs, mut in_buf: &mut R, block_size: u32) -> usize 
+    where R: Read + Seek
+    {
+        let locs = seqlocs.get_locs(&mut in_buf, self.sequence.unwrap().0 as usize, self.sequence.unwrap().1 as usize);
+        locs.into_iter().map(|loc| loc.len(block_size)).sum()    
     }
 
     // Convert Vec of Locs to the ranges of the sequence...
