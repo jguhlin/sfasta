@@ -289,7 +289,10 @@ impl<'a> SeqLocs<'a> {
             }
 
             match bincode::encode_into_std_write(&compressed, &mut out_buf, bincode_config) {
-                Ok(x) => current_offset += x as u32,
+                Ok(x) => {
+                    current_offset += x as u32;
+                    log::debug!("SeqLoc Chunk Size: {}", x);
+                },
                 Err(e) => {
                     panic!("Unable to write out seqlocs chunk: {}", e);
                 }
@@ -350,8 +353,9 @@ impl<'a> SeqLocs<'a> {
             compressor.write_all(&bincoded).unwrap();
             let compressed = compressor.finish().unwrap();
 
-            bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
+            let x = bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
                 .expect("Unable to write Sequence Blocks to file");
+            log::debug!("Compressed size of Loc Block: {}", x);
 
             bincoded.clear();
         }
