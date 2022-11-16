@@ -672,10 +672,6 @@ where
             .expect("Unable to write to bincode output");
 
         for i in bitpacked {
-            println!(
-                "Writing block at {}",
-                out_buf.seek(SeekFrom::Current(0)).unwrap()
-            );
             if let Ok(x) = bincode::encode_into_std_write(&i, &mut out_buf, bincode_config) {
                 if i.is_packed() && size == 0 {
                     size = x as u64;
