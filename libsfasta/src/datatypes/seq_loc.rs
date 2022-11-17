@@ -624,13 +624,13 @@ impl<'a> SeqLocs<'a> {
             let mut seqlocs = Vec::with_capacity(self.total_seqlocs);
             let mut length: u32;
 
-            // TODO: Zero copy deserialization possible here?
-            for offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
-                in_buf
-                    .seek(SeekFrom::Start(
-                        self.seqlocs_chunks_position + *offset as u64,
+            in_buf.seek(SeekFrom::Start(
+                        self.seqlocs_chunks_position + self.seqlocs_chunks_offsets.as_ref().unwrap()[0] as u64,
                     ))
-                    .unwrap();
+                .unwrap();
+
+            // TODO: Zero copy deserialization possible here?
+            for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
                 length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
                 let seqlocs_chunk_raw: &mut Vec<u8> =
                     bump.alloc(bincode::decode_from_std_read(in_buf, bincode_config).unwrap());
