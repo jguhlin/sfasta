@@ -326,7 +326,7 @@ impl<'sfa> Sfasta<'sfa> {
     pub fn get_sequence_by_locs_nocache(&mut self, locs: &[Loc]) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(1024);
 
-        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
 
         for (block, (start, end)) in locs
             .iter()

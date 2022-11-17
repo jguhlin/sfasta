@@ -169,8 +169,6 @@ impl<'a> SeqLocs<'a> {
             self.block_locations.as_ref().unwrap().len()
         );
 
-        let mut in_buf = std::io::BufReader::with_capacity(512 * 1024, in_buf);
-
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             let locs = self.get_block_uncached(&mut in_buf, i as u32);
             data.extend(locs);
@@ -610,9 +608,6 @@ impl<'a> SeqLocs<'a> {
         R: Read + Seek,
     {
         if self.index.is_none() {
-
-            // Because this is sequential reading, we use a BufReader
-            let mut in_buf = std::io::BufReader::with_capacity(512 * 1024, in_buf);
 
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor.set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true)).unwrap();
