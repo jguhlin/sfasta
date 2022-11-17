@@ -67,8 +67,8 @@ impl<'a> Default for SeqLocs<'a> {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            chunk_size: 8 * 1024,
-            seqlocs_chunk_size: 8 * 1024,
+            chunk_size: 4 * 1024,
+            seqlocs_chunk_size: 4 * 1024,
             seqlocs_chunks_offsets: None,
             index: None,
             total_locs: 0,
@@ -307,7 +307,7 @@ impl<'a> SeqLocs<'a> {
         let data = bincode::encode_to_vec(&seqlocs_chunk_offset, bincode_config)
             .expect("Unable to write out seqlocs chunk offsets");
 
-        let length = data.len();
+        // let length = data.len();
         match bincode::encode_into_std_write(data.len() as u32, &mut out_buf, bincode_config) {
             Ok(_) => (),
             Err(e) => {
@@ -324,7 +324,7 @@ impl<'a> SeqLocs<'a> {
         }
 
         // FORMAT: Write sequence location blocks
-        let mut bincoded: Vec<u8> = Vec::with_capacity(2 * 1024 * 1024);
+        let mut bincoded: Vec<u8>;
 
         for s in locs
             .iter()
