@@ -632,6 +632,7 @@ impl<'a> SeqLocs<'a> {
                 ))
                 .unwrap();
 
+            log::debug!("Reading {} chunks of SeqLocs", self.seqlocs_chunks_offsets.as_ref().unwrap().len());
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
                 length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
