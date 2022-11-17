@@ -655,6 +655,7 @@ impl<'a> SeqLocs<'a> {
                 decompressor
                         .decompress_to_buffer(seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
                         .unwrap();
+
                 let mut seqlocs_chunk: Vec<SeqLoc> =
                     bincode::decode_from_slice(&seqlocs_chunk_raw, bincode_config)
                         .unwrap()
