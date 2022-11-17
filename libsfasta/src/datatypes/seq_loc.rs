@@ -292,7 +292,7 @@ impl<'a> SeqLocs<'a> {
                 Ok(x) => {
                     current_offset += x as u32;
                     log::debug!("SeqLoc Chunk Size: {}", x);
-                },
+                }
                 Err(e) => {
                     panic!("Unable to write out seqlocs chunk: {}", e);
                 }
@@ -624,9 +624,11 @@ impl<'a> SeqLocs<'a> {
             let mut seqlocs = Vec::with_capacity(self.total_seqlocs);
             let mut length: u32;
 
-            in_buf.seek(SeekFrom::Start(
-                        self.seqlocs_chunks_position + self.seqlocs_chunks_offsets.as_ref().unwrap()[0] as u64,
-                    ))
+            in_buf
+                .seek(SeekFrom::Start(
+                    self.seqlocs_chunks_position
+                        + self.seqlocs_chunks_offsets.as_ref().unwrap()[0] as u64,
+                ))
                 .unwrap();
 
             // TODO: Zero copy deserialization possible here?
@@ -639,7 +641,7 @@ impl<'a> SeqLocs<'a> {
                         .decompress(seqlocs_chunk_compressed, length as usize)
                         .unwrap(),
                 );
-                let mut seqlocs_chunk: Vec<SeqLoc> = 
+                let mut seqlocs_chunk: Vec<SeqLoc> =
                     bincode::decode_from_slice(seqlocs_chunk_raw, bincode_config)
                         .unwrap()
                         .0;
@@ -725,11 +727,16 @@ impl SeqLoc {
     }
 
     #[allow(clippy::len_without_is_empty)]
-    pub fn len<R>(&self, seqlocs: &mut SeqLocs, mut in_buf: &mut R, block_size: u32) -> usize 
-    where R: Read + Seek
+    pub fn len<R>(&self, seqlocs: &mut SeqLocs, mut in_buf: &mut R, block_size: u32) -> usize
+    where
+        R: Read + Seek,
     {
-        let locs = seqlocs.get_locs(&mut in_buf, self.sequence.unwrap().0 as usize, self.sequence.unwrap().1 as usize);
-        locs.into_iter().map(|loc| loc.len(block_size)).sum()    
+        let locs = seqlocs.get_locs(
+            &mut in_buf,
+            self.sequence.unwrap().0 as usize,
+            self.sequence.unwrap().1 as usize,
+        );
+        locs.into_iter().map(|loc| loc.len(block_size)).sum()
     }
 
     // Convert Vec of Locs to the ranges of the sequence...
