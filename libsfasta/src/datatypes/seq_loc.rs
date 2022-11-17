@@ -632,19 +632,19 @@ impl<'a> SeqLocs<'a> {
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
                 length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
-                let seqlocs_chunk_raw: &mut Vec<u8> =
+                let seqlocs_chunk_compressed: &mut Vec<u8> =
                     bump.alloc(bincode::decode_from_std_read(in_buf, bincode_config).unwrap());
-                let seqlocs_chunk_compressed: &mut Vec<u8> = bump.alloc(
+                let seqlocs_chunk_raw: &mut Vec<u8> = bump.alloc(
                     decompressor
-                        .decompress(seqlocs_chunk_raw, length as usize)
+                        .decompress(seqlocs_chunk_compressed, length as usize)
                         .unwrap(),
                 );
                 let seqlocs_chunk: &mut Vec<SeqLoc> = bump.alloc(
-                    bincode::decode_from_slice(seqlocs_chunk_compressed, bincode_config)
+                    bincode::decode_from_slice(seqlocs_chunk_raw, bincode_config)
                         .unwrap()
                         .0,
                 );
-                seqlocs.extend_from_slice(seqlocs_chunk);
+                seqlocs.append(seqlocs_chunk);
 
                 bump.reset();
             }
