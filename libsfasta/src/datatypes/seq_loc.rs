@@ -611,7 +611,8 @@ impl<'a> SeqLocs<'a> {
     {
         if self.index.is_none() {
 
-            let now = std::time::Instant::now();
+            // Because this is sequential reading, we use a BufReader
+            let mut in_buf = std::io::BufReader::with_capacity(512 * 1024, in_buf);
 
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor.set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true)).unwrap();
@@ -635,14 +636,14 @@ impl<'a> SeqLocs<'a> {
                 ))
                 .unwrap();
 
-            log::debug!("Startup time: {:#?}", now.elapsed());
-
             log::debug!("Reading {} chunks of SeqLocs", self.seqlocs_chunks_offsets.as_ref().unwrap().len());
             let mut seqlocs_chunk_raw = Vec::with_capacity(64 * 1024);
             let mut seqlocs_chunk_compressed: Vec<u8> = Vec::with_capacity(64 * 1024);
             let mut seqlocs_chunk: Vec<SeqLoc> = Vec::with_capacity(256 * 1024);
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
+                let now = std::time::Instant::now();
+
                 length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
 
                 seqlocs_chunk_raw.clear();
@@ -659,6 +660,8 @@ impl<'a> SeqLocs<'a> {
                         .unwrap()
                         .0;
                 seqlocs.append(&mut seqlocs_chunk);
+
+                log::debug!("Chunk read in {:#?}", now.elapsed());
             }
             self.index = Some(seqlocs);
         }
