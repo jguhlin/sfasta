@@ -269,7 +269,7 @@ impl<'a> SeqLocs<'a> {
 
         let mut seqlocs_chunk_offset: Vec<u32> = Vec::new();
 
-        let mut compressor = zstd_encoder(-3, None);
+        let mut compressor = zstd_encoder(-7, None);
 
         // FORMAT: Write SeqLocs (Specified where to find the [Locs] for each datatype)
         let mut current_offset = 0;
