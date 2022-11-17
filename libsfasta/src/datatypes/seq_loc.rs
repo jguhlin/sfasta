@@ -14,8 +14,6 @@ use bumpalo::Bump;
 use crate::datatypes::zstd_encoder;
 
 /*
-Inefficient storage of seqlocs.
-
 Should flatten and have it stored as:
 SeqLoc Index:
 (Option<(u64, u32)>, Option<(u32, u32)>, Option(<u64, u32>), Option<(u64, u8)>, Option<(u64, u8)>
