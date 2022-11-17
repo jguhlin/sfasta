@@ -624,6 +624,7 @@ impl<'a> SeqLocs<'a> {
             let mut seqlocs = Vec::with_capacity(self.total_seqlocs);
             let mut length: u32;
 
+            // Go to the start, then just read sequentially..
             in_buf
                 .seek(SeekFrom::Start(
                     self.seqlocs_chunks_position
