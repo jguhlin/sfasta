@@ -582,7 +582,7 @@ impl<'a> SeqLocs<'a> {
         }
 
         if self.decompression_buffer.is_none() {
-            self.decompression_buffer = Some(Vec::with_capacity(8 * 1024 * 1024));
+            self.decompression_buffer = Some(Vec::with_capacity(512 * 1024));
         }
 
         let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
