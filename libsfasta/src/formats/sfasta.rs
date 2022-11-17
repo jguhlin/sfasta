@@ -588,8 +588,6 @@ impl<'sfa> SfastaParser<'sfa> {
             num_bits,
         ));
 
-        println!("Prefetch: {}", prefetch);
-
         if prefetch {
             println!("Prefetching block locs");
             sfasta
