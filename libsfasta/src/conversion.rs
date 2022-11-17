@@ -860,7 +860,7 @@ where
             in_buf_reader.into_inner()
         });
 
-        let mut out_buf = BufWriter::new(&mut out_fh);
+        // let mut out_buf = BufWriter::new(&mut out_fh);
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
 
@@ -926,7 +926,7 @@ where
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
         let mut block_locs = Vec::with_capacity(8192);
-        let mut pos = out_buf
+        let mut pos = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
@@ -936,7 +936,7 @@ where
         // FORMAT: Write each sequence block to file
 
         // This writes out the sequence blocks (seqblockcompressed)
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         loop {
             result = oq.pop();
@@ -948,13 +948,13 @@ where
                     }
                 }
                 Some((block_id, sb)) => {
-                    bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
+                    bincode::encode_into_std_write(&sb, &mut out_fh, bincode_config)
                         .expect("Unable to write to bincode output");
                     // log::info!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 
-                    pos = out_buf
+                    pos = out_fh
                         .seek(SeekFrom::Current(0))
                         .expect("Unable to work with seek API");
                 }
@@ -964,10 +964,10 @@ where
         let in_buf = fastq_thread.join().unwrap();
         let j = reader_handle.join().unwrap();
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         log::info!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
 
-        let _start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let _start = out_fh.seek(SeekFrom::Current(0)).unwrap();
         // Write FASTQ scores here...
         let fastq_thread = s.spawn(|_| {
             // Convert reader into buffered reader then into the Fastq struct (and iterator)
@@ -1046,7 +1046,7 @@ where
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because the multithreading means it does not have to be in order
         let mut block_locs = Vec::with_capacity(8192);
-        let mut pos = out_buf
+        let mut pos = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
@@ -1056,7 +1056,7 @@ where
         // FORMAT: Write each sequence block to file
 
         // This writes out the sequence blocks (seqblockcompressed)
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         loop {
             result = oq.pop();
@@ -1068,13 +1068,13 @@ where
                     }
                 }
                 Some((block_id, sb)) => {
-                    bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
+                    bincode::encode_into_std_write(&sb, &mut out_fh, bincode_config)
                         .expect("Unable to write to bincode output");
                     // log::info!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 
-                    pos = out_buf
+                    pos = out_fh
                         .seek(SeekFrom::Current(0))
                         .expect("Unable to work with seek API");
                 }
@@ -1083,14 +1083,14 @@ where
 
         fastq_thread.join().unwrap();
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         log::info!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
 
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         // Block Index
         block_index_pos = Some(
-            out_buf
+            out_fh
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API"),
         );
@@ -1107,11 +1107,11 @@ where
         };
 
         let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
-        bincode::encode_into_std_write(&num_bits, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(&num_bits, &mut out_fh, bincode_config)
             .expect("Unable to write to bincode output");
-        bincode::encode_into_std_write(&bitpacked, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(&bitpacked, &mut out_fh, bincode_config).unwrap();
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         log::info!("DEBUG: Wrote {} bytes of block index", end - start);
 
         // let j = reader_handle.join().expect("Unable to join thread");
@@ -1122,12 +1122,12 @@ where
         masking = Some(j.4);
 
         let start_time = Instant::now();
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_buf) {
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
         log::info!(
             "DEBUG: Wrote {} bytes of headers in {:#?}",
@@ -1136,12 +1136,12 @@ where
         );
 
         let start_time = Instant::now();
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_buf) {
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
         log::info!(
             "DEBUG: Wrote {} bytes of ids in {:#?}",
@@ -1150,12 +1150,12 @@ where
         );
 
         let start_time = Instant::now();
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_buf) {
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         let end_time = Instant::now();
         log::info!(
             "DEBUG: Wrote {} bytes of masking in {:#?}",
