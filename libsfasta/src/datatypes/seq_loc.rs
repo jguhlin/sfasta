@@ -639,12 +639,11 @@ impl<'a> SeqLocs<'a> {
                         .decompress(seqlocs_chunk_compressed, length as usize)
                         .unwrap(),
                 );
-                let seqlocs_chunk: &mut Vec<SeqLoc> = bump.alloc(
+                let mut seqlocs_chunk: Vec<SeqLoc> = 
                     bincode::decode_from_slice(seqlocs_chunk_raw, bincode_config)
                         .unwrap()
-                        .0,
-                );
-                seqlocs.append(seqlocs_chunk);
+                        .0;
+                seqlocs.append(&mut seqlocs_chunk);
 
                 bump.reset();
             }
