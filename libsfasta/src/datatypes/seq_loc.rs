@@ -653,17 +653,21 @@ impl<'a> SeqLocs<'a> {
                 seqlocs_chunk_compressed.clear();
                 seqlocs_chunk_compressed = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
 
+                log::debug!("Read from file: {:#?}", now.elapsed());
+                let now = std::time::Instant::now();
+
                 decompressor
                         .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
                         .unwrap();
 
+                log::debug!("Decompress: {:#?}", now.elapsed());
+                let now = std::time::Instant::now();
                 
                 seqlocs_chunk = bincode::decode_from_slice(&seqlocs_chunk_raw, bincode_config)
                         .unwrap()
                         .0;
                 seqlocs.append(&mut seqlocs_chunk);
-
-                log::debug!("Chunk read time: {:#?}", now.elapsed());
+                log::debug!("Decode time: {:#?}", now.elapsed());
             }
             self.index = Some(seqlocs);
         }
