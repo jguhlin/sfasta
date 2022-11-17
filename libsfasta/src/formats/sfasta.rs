@@ -324,7 +324,7 @@ impl<'sfa> Sfasta<'sfa> {
 
     // No masking is possible here...
     pub fn get_sequence_by_locs_nocache(&mut self, locs: &[Loc]) -> Result<Vec<u8>, &'static str> {
-        let mut seq: Vec<u8> = Vec::with_capacity(1024);
+        let mut seq: Vec<u8> = Vec::with_capacity(256);
 
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
 

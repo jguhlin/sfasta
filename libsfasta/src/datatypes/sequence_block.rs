@@ -217,7 +217,7 @@ impl<'a> SequenceBlocks<'a> {
             .expect("Unable to work with seek API");
 
         let sbc: SequenceBlockCompressed =
-            bincode::decode_from_std_read(&mut *in_buf, bincode_config)
+            bincode::decode_from_std_read(in_buf, bincode_config)
                 .expect("Unable to parse SequenceBlockCompressed");
 
         let mut buffer = Vec::with_capacity(self.block_size);
