@@ -644,13 +644,13 @@ impl<'a> SeqLocs<'a> {
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
                 let now = std::time::Instant::now();
 
-                length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+                length = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
                 seqlocs_chunk_raw.clear();
                 seqlocs_chunk_raw.reserve(length as usize);
 
                 seqlocs_chunk_compressed.clear();
-                seqlocs_chunk_compressed = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+                seqlocs_chunk_compressed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
                 decompressor
                         .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
