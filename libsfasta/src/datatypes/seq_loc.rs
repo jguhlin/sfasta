@@ -169,6 +169,8 @@ impl<'a> SeqLocs<'a> {
             self.block_locations.as_ref().unwrap().len()
         );
 
+        let mut in_buf = std::io::BufReader::with_capacity(512 * 1024, in_buf);
+
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             let locs = self.get_block_uncached(&mut in_buf, i as u32);
             data.extend(locs);
@@ -609,6 +611,9 @@ impl<'a> SeqLocs<'a> {
     {
         if self.index.is_none() {
 
+            // Because this is sequential reading, we use a BufReader
+            let mut in_buf = std::io::BufReader::with_capacity(512 * 1024, in_buf);
+
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor.set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true)).unwrap();
             decompressor.include_magicbytes(false).unwrap();
@@ -637,13 +642,13 @@ impl<'a> SeqLocs<'a> {
             let mut seqlocs_chunk: Vec<SeqLoc> = Vec::with_capacity(256 * 1024);
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
-                length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+                length = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
                 seqlocs_chunk_raw.clear();
                 seqlocs_chunk_raw.reserve(length as usize);
 
                 seqlocs_chunk_compressed.clear();
-                seqlocs_chunk_compressed = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+                seqlocs_chunk_compressed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
                 decompressor
                         .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
