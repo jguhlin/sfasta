@@ -171,6 +171,8 @@ impl<'a> SeqLocs<'a> {
             self.block_locations.as_ref().unwrap().len()
         );
 
+        let mut in_buf = std::io::BufReader::with_capacity(512 * 1024, in_buf);
+
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             let locs = self.get_block_uncached(&mut in_buf, i as u32);
             data.extend(locs);
@@ -642,8 +644,6 @@ impl<'a> SeqLocs<'a> {
             let mut seqlocs_chunk: Vec<SeqLoc> = Vec::with_capacity(256 * 1024);
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
-                let now = std::time::Instant::now();
-
                 length = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
                 seqlocs_chunk_raw.clear();
@@ -661,7 +661,6 @@ impl<'a> SeqLocs<'a> {
                         .0;
                 seqlocs.append(&mut seqlocs_chunk);
 
-                log::debug!("Chunk read in {:#?}", now.elapsed());
             }
             self.index = Some(seqlocs);
         }
