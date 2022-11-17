@@ -610,6 +610,9 @@ impl<'a> SeqLocs<'a> {
         R: Read + Seek,
     {
         if self.index.is_none() {
+
+            let now = std::time::Instant::now();
+
             let mut bump = Bump::new();
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor.include_magicbytes(false).unwrap();
@@ -632,9 +635,14 @@ impl<'a> SeqLocs<'a> {
                 ))
                 .unwrap();
 
+            log::debug!("Startup time: {:#?}", now.elapsed());
+
+
             log::debug!("Reading {} chunks of SeqLocs", self.seqlocs_chunks_offsets.as_ref().unwrap().len());
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
+                let now = std::time::Instant::now();
+
                 length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
                 let seqlocs_chunk_compressed: &mut Vec<u8> =
                     bump.alloc(bincode::decode_from_std_read(in_buf, bincode_config).unwrap());
@@ -649,7 +657,11 @@ impl<'a> SeqLocs<'a> {
                         .0;
                 seqlocs.append(&mut seqlocs_chunk);
 
+                log::debug!("Chunk read time: {:#?}", now.elapsed());
+                let now = std::time::Instant::now();
+
                 bump.reset();
+                log::debug!("Chunk bump reset time: {:#?}", now.elapsed());
             }
             self.index = Some(seqlocs);
         }
