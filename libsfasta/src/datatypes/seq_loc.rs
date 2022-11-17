@@ -651,8 +651,6 @@ impl<'a> SeqLocs<'a> {
                 seqlocs_chunk_compressed.clear();
                 seqlocs_chunk_compressed = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
 
-                let now = std::time::Instant::now();
-
                 decompressor
                         .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
                         .unwrap();
