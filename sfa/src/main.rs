@@ -555,7 +555,7 @@ fn convert(
     }
 
     let mut buf = libsfasta::utils::CrossbeamReader::from_channel(r);
-    let mut out_fh = Box::new(output);
+    let mut out_fh = Box::new(std::io::BufWriter::new(output));
 
     converter.convert_fasta(&mut buf, &mut out_fh);
     log::info!("Joining IO thread");
