@@ -151,7 +151,7 @@ impl Converter {
 
     /// Main conversion function
     // TODO: Switch R and W into borrows
-    pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, out_fh: &mut Box<W>)
+    pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, mut out_fh: &mut Box<W>)
     where
         W: WriteAndSeek + 'static,
         R: Read + Send + 'convert,
@@ -243,7 +243,7 @@ impl Converter {
         let mut indexer =
             crate::dual_level_index::DualIndexBuilder::with_capacity(seqlocs.index_len());
 
-        let mut out_buf = BufWriter::with_capacity(256 * 1024, out_fh);
+        // let mut out_buf = BufWriter::with_capacity(256 * 1024, out_fh);
 
         let start_time = std::time::Instant::now();
 
@@ -277,49 +277,49 @@ impl Converter {
             // Use the main thread to write the sequence locations...
             log::info!(
                 "Writing SeqLocs to file. {}",
-                out_buf.seek(SeekFrom::Current(0)).unwrap()
+                out_fh.seek(SeekFrom::Current(0)).unwrap()
             );
 
-            let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+            let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
             let start_time = std::time::Instant::now();
 
-            seqlocs_location = seqlocs.write_to_buffer(&mut out_buf);
+            seqlocs_location = seqlocs.write_to_buffer(&mut out_fh);
             log::info!(
                 "Writing SeqLocs to file: COMPLETE. {}",
-                out_buf.seek(SeekFrom::Current(0)).unwrap()
+                out_fh.seek(SeekFrom::Current(0)).unwrap()
             );
 
             let end_time = std::time::Instant::now();
             log::info!("SeqLocs write time: {:?}", end_time - start_time);
 
-            let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+            let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
-                dual_index_pos = out_buf
+                dual_index_pos = out_fh
                     .seek(SeekFrom::Current(0))
                     .expect("Unable to work with seek API");
 
                 let mut index = index_handle.unwrap().join().unwrap();
                 log::info!(
                     "Writing index to file. {}",
-                    out_buf.seek(SeekFrom::Current(0)).unwrap()
+                    out_fh.seek(SeekFrom::Current(0)).unwrap()
                 );
 
-                let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+                let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
                 let start_time = std::time::Instant::now();
-                index.write_to_buffer(&mut out_buf);
+                index.write_to_buffer(&mut out_fh);
                 let end_time = std::time::Instant::now();
                 log::info!("Index write time: {:?}", end_time - start_time);
 
-                let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+                let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
                 debug_size.push(("index".to_string(), (end - start) as usize));
 
                 log::info!(
                     "Writing index to file: COMPLETE. {}",
-                    out_buf.seek(SeekFrom::Current(0)).unwrap()
+                    out_fh.seek(SeekFrom::Current(0)).unwrap()
                 );
             }
         })
@@ -337,22 +337,22 @@ impl Converter {
 
         sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
 
-        out_buf
+        out_fh
             .seek(SeekFrom::Start(directory_location))
             .expect("Unable to rewind to start of the file");
 
         // Here we re-write the directory information at the start of the file, allowing for
         // easy jumps to important areas while keeping everything in a single file
 
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         let start_time = std::time::Instant::now();
 
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
-        bincode::encode_into_std_write(dir, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
             .expect("Unable to write directory to file");
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
 
         let end_time = std::time::Instant::now();
@@ -361,7 +361,7 @@ impl Converter {
 
         log::info!("DEBUG: {:?}", debug_size);
 
-        out_buf.flush().expect("Unable to flush output file");
+        out_fh.flush().expect("Unable to flush output file");
 
         let fn_end_time = std::time::Instant::now();
         log::info!("Conversion time: {:?}", fn_end_time - fn_start_time);
