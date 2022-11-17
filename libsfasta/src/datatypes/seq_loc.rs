@@ -615,6 +615,7 @@ impl<'a> SeqLocs<'a> {
 
             let mut bump = Bump::new();
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
+            decompressor.set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true)).unwrap();
             decompressor.include_magicbytes(false).unwrap();
 
             log::info!("Prefetching SeqLocs");
@@ -637,7 +638,6 @@ impl<'a> SeqLocs<'a> {
 
             log::debug!("Startup time: {:#?}", now.elapsed());
 
-
             log::debug!("Reading {} chunks of SeqLocs", self.seqlocs_chunks_offsets.as_ref().unwrap().len());
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
@@ -657,11 +657,8 @@ impl<'a> SeqLocs<'a> {
                         .0;
                 seqlocs.append(&mut seqlocs_chunk);
 
-                log::debug!("Chunk read time: {:#?}", now.elapsed());
-                let now = std::time::Instant::now();
-
                 bump.reset();
-                log::debug!("Chunk bump reset time: {:#?}", now.elapsed());
+                log::debug!("Chunk read time: {:#?}", now.elapsed());
             }
             self.index = Some(seqlocs);
         }
