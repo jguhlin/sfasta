@@ -621,7 +621,7 @@ impl<'a> SeqLocs<'a> {
             in_buf
                 .seek(SeekFrom::Start(self.seqlocs_chunks_position))
                 .unwrap();
-            let mut seqlocs = Vec::new();
+            let mut seqlocs = Vec::with_capacity(self.total_seqlocs);
             let mut length: u32;
 
             // TODO: Zero copy deserialization possible here?
@@ -650,6 +650,8 @@ impl<'a> SeqLocs<'a> {
             }
             self.index = Some(seqlocs);
         }
+
+        log::debug!("Finished");
 
         return Ok(self.index.as_ref());
     }
