@@ -560,7 +560,7 @@ impl<'a> SeqLocs<'a> {
 
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 32 * 1024 * 1024 }>();
+            .with_limit::<{ 2 * 1024 * 1024 }>();
 
         if self.compressed_seq_buffer.is_none() {
             self.compressed_seq_buffer = Some(Vec::with_capacity(256 * 1024));
