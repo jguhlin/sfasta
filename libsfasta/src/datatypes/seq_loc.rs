@@ -639,20 +639,24 @@ impl<'a> SeqLocs<'a> {
             log::debug!("Startup time: {:#?}", now.elapsed());
 
             log::debug!("Reading {} chunks of SeqLocs", self.seqlocs_chunks_offsets.as_ref().unwrap().len());
+            let mut seqlocs_chunk_raw = Vec::with_capacity(64 * 1024);
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
                 let now = std::time::Instant::now();
 
                 length = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+
+                seqlocs_chunk_raw.clear();
+                seqlocs_chunk_raw.reserve(length as usize);
+
                 let seqlocs_chunk_compressed: &mut Vec<u8> =
                     bump.alloc(bincode::decode_from_std_read(in_buf, bincode_config).unwrap());
-                let seqlocs_chunk_raw: &mut Vec<u8> = bump.alloc(
-                    decompressor
-                        .decompress(seqlocs_chunk_compressed, length as usize)
-                        .unwrap(),
-                );
+
+                decompressor
+                        .decompress_to_buffer(seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
+                        .unwrap();
                 let mut seqlocs_chunk: Vec<SeqLoc> =
-                    bincode::decode_from_slice(seqlocs_chunk_raw, bincode_config)
+                    bincode::decode_from_slice(&seqlocs_chunk_raw, bincode_config)
                         .unwrap()
                         .0;
                 seqlocs.append(&mut seqlocs_chunk);
