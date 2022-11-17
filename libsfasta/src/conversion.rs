@@ -498,7 +498,7 @@ where
         });
 
         let fasta_thread_clone = fasta_thread.thread().clone();
-        let mut out_buf = BufWriter::with_capacity(256 * 1024, &mut out_fh);
+        // let mut out_buf = BufWriter::with_capacity(256 * 1024, &mut out_fh);
 
         // let mut seq_locs = Arc::new(Mutex::new(Vec::with_capacity(1024)));
 
@@ -587,7 +587,7 @@ where
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because multithreading means it does not have to be in order
         let mut block_locs = Vec::with_capacity(1024);
-        let mut pos = out_buf
+        let mut pos = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
@@ -597,7 +597,7 @@ where
         // FORMAT: Write each sequence block to file
 
         // This writes out the sequence blocks (seqblockcompressed)
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
         let backoff = Backoff::new();
 
         let mut output_spins: usize = 0;
@@ -616,13 +616,13 @@ where
                     }
                 }
                 Some((block_id, sb)) => {
-                    bincode::encode_into_std_write(&sb, &mut out_buf, bincode_config)
+                    bincode::encode_into_std_write(&sb, &mut out_fh, bincode_config)
                         .expect("Unable to write to bincode output");
                     // log::info!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 
-                    pos = out_buf
+                    pos = out_fh
                         .seek(SeekFrom::Current(0))
                         .expect("Unable to work with seek API");
                 }
@@ -631,15 +631,15 @@ where
 
         fasta_thread.join().unwrap();
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         log::info!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
         debug_size.push(("Sequence Blocks".to_string(), (end - start) as usize));
 
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         // Block Index
         block_index_pos = Some(
-            out_buf
+            out_fh
                 .seek(SeekFrom::Current(0))
                 .expect("Unable to work with seek API"),
         );
@@ -658,21 +658,21 @@ where
         log::info!("DEBUG: Wrote {} total blocks", block_locs.len());
 
         let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
-        bincode::encode_into_std_write(num_bits, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(num_bits, &mut out_fh, bincode_config)
             .expect("Unable to write to bincode output");
 
-        let size_loc = out_buf
+        let size_loc = out_fh
             .seek(SeekFrom::Current(0))
             .expect("Unable to work with seek API");
 
         // (size of bitpacked data, total number of block locs)
         let mut size: u64 = 0;
         let bitpacked_len = bitpacked.len() as u64;
-        bincode::encode_into_std_write((size, bitpacked_len), &mut out_buf, bincode_config)
+        bincode::encode_into_std_write((size, bitpacked_len), &mut out_fh, bincode_config)
             .expect("Unable to write to bincode output");
 
         for i in bitpacked {
-            if let Ok(x) = bincode::encode_into_std_write(&i, &mut out_buf, bincode_config) {
+            if let Ok(x) = bincode::encode_into_std_write(&i, &mut out_fh, bincode_config) {
                 if i.is_packed() && size == 0 {
                     size = x as u64;
                 } else if size != 0 && i.is_packed() {
@@ -683,13 +683,13 @@ where
             }
         }
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
-        out_buf.seek(SeekFrom::Start(size_loc)).unwrap();
-        bincode::encode_into_std_write((size, bitpacked_len), &mut out_buf, bincode_config)
+        out_fh.seek(SeekFrom::Start(size_loc)).unwrap();
+        bincode::encode_into_std_write((size, bitpacked_len), &mut out_fh, bincode_config)
             .expect("Unable to write to bincode output");
 
-        out_buf.seek(SeekFrom::Start(end)).unwrap();
+            out_fh.seek(SeekFrom::Start(end)).unwrap();
 
         log::info!("DEBUG: Wrote {} bytes of block index", end - start);
         debug_size.push(("Block Index".to_string(), (end - start) as usize));
@@ -704,14 +704,14 @@ where
 
         let start_time = Instant::now();
 
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
-        headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_buf) {
+        headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         let end_time = Instant::now();
 
@@ -724,13 +724,13 @@ where
         );
 
         let start_time = Instant::now();
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_buf) {
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         let end_time = Instant::now();
 
@@ -742,13 +742,13 @@ where
         );
 
         let start_time = Instant::now();
-        let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_buf) {
+        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
         debug_size.push(("Masking".to_string(), (end - start) as usize));
         let end_time = Instant::now();
         log::info!(
@@ -757,7 +757,7 @@ where
             end_time - start_time
         );
 
-        out_buf.flush().expect("Unable to flush output buffer");
+        out_fh.flush().expect("Unable to flush output buffer");
 
         // TODO: Comes out about 20% smaller but about 2x as long in time...
         /*
