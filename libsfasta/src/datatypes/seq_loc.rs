@@ -613,7 +613,6 @@ impl<'a> SeqLocs<'a> {
 
             let now = std::time::Instant::now();
 
-            let mut bump = Bump::new();
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor.set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true)).unwrap();
             decompressor.include_magicbytes(false).unwrap();
@@ -640,6 +639,8 @@ impl<'a> SeqLocs<'a> {
 
             log::debug!("Reading {} chunks of SeqLocs", self.seqlocs_chunks_offsets.as_ref().unwrap().len());
             let mut seqlocs_chunk_raw = Vec::with_capacity(64 * 1024);
+            let mut seqlocs_chunk_compressed: Vec<u8> = Vec::with_capacity(64 * 1024);
+            let mut seqlocs_chunk: Vec<SeqLoc> = Vec::with_capacity(256 * 1024);
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
                 let now = std::time::Instant::now();
@@ -649,20 +650,19 @@ impl<'a> SeqLocs<'a> {
                 seqlocs_chunk_raw.clear();
                 seqlocs_chunk_raw.reserve(length as usize);
 
-                let seqlocs_chunk_compressed: &mut Vec<u8> =
-                    bump.alloc(bincode::decode_from_std_read(in_buf, bincode_config).unwrap());
+                seqlocs_chunk_compressed.clear();
+                seqlocs_chunk_compressed = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
 
                 decompressor
-                        .decompress_to_buffer(seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
+                        .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
                         .unwrap();
 
-                let mut seqlocs_chunk: Vec<SeqLoc> =
-                    bincode::decode_from_slice(&seqlocs_chunk_raw, bincode_config)
+                
+                seqlocs_chunk = bincode::decode_from_slice(&seqlocs_chunk_raw, bincode_config)
                         .unwrap()
                         .0;
                 seqlocs.append(&mut seqlocs_chunk);
 
-                bump.reset();
                 log::debug!("Chunk read time: {:#?}", now.elapsed());
             }
             self.index = Some(seqlocs);
