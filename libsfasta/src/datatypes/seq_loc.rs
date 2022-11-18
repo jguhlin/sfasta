@@ -610,12 +610,13 @@ impl<'a> SeqLocs<'a> {
         R: Read + Seek,
     {
         if self.index.is_none() {
-
             // Because this is sequential reading, we use a BufReader
             let mut in_buf = std::io::BufReader::with_capacity(512 * 1024, in_buf);
 
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
-            decompressor.set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true)).unwrap();
+            decompressor
+                .set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true))
+                .unwrap();
             decompressor.include_magicbytes(false).unwrap();
 
             log::info!("Prefetching SeqLocs");
@@ -636,7 +637,10 @@ impl<'a> SeqLocs<'a> {
                 ))
                 .unwrap();
 
-            log::debug!("Reading {} chunks of SeqLocs", self.seqlocs_chunks_offsets.as_ref().unwrap().len());
+            log::debug!(
+                "Reading {} chunks of SeqLocs",
+                self.seqlocs_chunks_offsets.as_ref().unwrap().len()
+            );
             let mut seqlocs_chunk_raw = Vec::with_capacity(64 * 1024);
             let mut seqlocs_chunk_compressed: Vec<u8> = Vec::with_capacity(64 * 1024);
             let mut seqlocs_chunk: Vec<SeqLoc> = Vec::with_capacity(256 * 1024);
@@ -648,17 +652,17 @@ impl<'a> SeqLocs<'a> {
                 seqlocs_chunk_raw.reserve(length as usize);
 
                 seqlocs_chunk_compressed.clear();
-                seqlocs_chunk_compressed = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+                seqlocs_chunk_compressed =
+                    bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
                 decompressor
-                        .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
-                        .unwrap();
+                    .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
+                    .unwrap();
 
                 seqlocs_chunk = bincode::decode_from_slice(&seqlocs_chunk_raw, bincode_config)
-                        .unwrap()
-                        .0;
+                    .unwrap()
+                    .0;
                 seqlocs.append(&mut seqlocs_chunk);
-
             }
             self.index = Some(seqlocs);
         }

@@ -1,11 +1,10 @@
 // NOTE: I've spent lots of time converting this to bitvec so that bool would be 1bit instead of 8bits (1 bytes)
 // Compressed, this saves < 1Mbp on a 2.3Gbp uncompressed FASTA file... and triple the length for masking.
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{Read, Seek, Write};
 
 use crate::datatypes::{BytesBlockStore, Loc};
 use crate::*;
 
-use bumpalo::Bump;
 use pulp::Arch;
 
 pub struct Masking {

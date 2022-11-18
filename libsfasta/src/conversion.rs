@@ -4,10 +4,10 @@ use crossbeam::thread;
 use crossbeam::utils::Backoff;
 
 use std::fs::{metadata, File};
-use std::io::{BufReader, BufWriter, Read, Seek, SeekFrom, Write};
+use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 use std::time::Instant;
 
 use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
@@ -125,7 +125,7 @@ impl Converter {
         // Write the directory, parameters, and metadata structs out...
 
         // Write the version
-        bincode::encode_into_std_write(&sfasta.version, &mut out_fh, bincode_config)
+        bincode::encode_into_std_write(sfasta.version, &mut out_fh, bincode_config)
             .expect("Unable to write directory to file");
 
         // Write the directory
@@ -498,9 +498,6 @@ where
         });
 
         let fasta_thread_clone = fasta_thread.thread().clone();
-        // let mut out_buf = BufWriter::with_capacity(256 * 1024, &mut out_fh);
-
-        // let mut seq_locs = Arc::new(Mutex::new(Vec::with_capacity(1024)));
 
         // TODO: Multithread this part
         let reader_handle = s.spawn(move |_| {
@@ -616,7 +613,7 @@ where
                     }
                 }
                 Some((block_id, sb)) => {
-                    bincode::encode_into_std_write(&sb, &mut out_fh, bincode_config)
+                    bincode::encode_into_std_write(sb, &mut out_fh, bincode_config)
                         .expect("Unable to write to bincode output");
                     // log::info!("Writer wrote block {}", block_id);
 
@@ -689,7 +686,7 @@ where
         bincode::encode_into_std_write((size, bitpacked_len), &mut out_fh, bincode_config)
             .expect("Unable to write to bincode output");
 
-            out_fh.seek(SeekFrom::Start(end)).unwrap();
+        out_fh.seek(SeekFrom::Start(end)).unwrap();
 
         log::info!("DEBUG: Wrote {} bytes of block index", end - start);
         debug_size.push(("Block Index".to_string(), (end - start) as usize));
