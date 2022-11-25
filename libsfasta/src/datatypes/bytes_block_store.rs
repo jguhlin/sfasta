@@ -20,7 +20,7 @@ impl Default for BytesBlockStore {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            block_size: 2 * 1024 * 1024,
+            block_size: 512 * 1024,
             data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
@@ -37,7 +37,7 @@ impl BytesBlockStore {
     }
 
     fn compress_blocks(&mut self) {
-        let mut compressor = zstd_encoder(1, None);
+        let mut compressor = zstd_encoder(3, None);
         if self.compressed_blocks.is_none() {
             self.compressed_block_lens = Some(Vec::new());
             self.compressed_blocks = Some(Vec::new());
@@ -50,12 +50,9 @@ impl BytesBlockStore {
             #[cfg(not(test))]
             let mut compressed = Vec::with_capacity(self.block_size);
 
-            let block = self
-                .data
-                .as_mut()
-                .unwrap()
-                .drain(..self.block_size)
-                .collect::<Vec<u8>>();
+            let mut block = self.data.as_mut().unwrap().split_off(self.block_size);
+            block.reserve(self.block_size);
+            std::mem::swap(&mut block, self.data.as_mut().unwrap());
 
             let compressed_size = compressor
                 .compress_to_buffer(&block, &mut compressed)
@@ -135,10 +132,10 @@ impl BytesBlockStore {
 
         let starting_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
         // TODO: This is a lie, only zstd is supported as of right now...
-        bincode::encode_into_std_write(&self.compression_type, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
             .unwrap();
-        bincode::encode_into_std_write(&block_locations_pos, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&self.block_size, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
 
         let mut block_locations = Vec::new();
 
@@ -160,7 +157,7 @@ impl BytesBlockStore {
 
         for block in blocks {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-            let compressed_block = compressor.compress(&block).unwrap();
+            let compressed_block = compressor.compress(block).unwrap();
             bincode::encode_into_std_write(&compressed_block, &mut out_buf, bincode_config)
                 .unwrap();
             block_locations.push(block_start);
@@ -172,10 +169,10 @@ impl BytesBlockStore {
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        bincode::encode_into_std_write(&self.compression_type, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
             .unwrap();
-        bincode::encode_into_std_write(&block_locations_pos, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&self.block_size, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
 
         // Back to the end so we don't interfere with anything...
         out_buf.seek(SeekFrom::Start(end)).unwrap();
@@ -279,10 +276,10 @@ impl BytesBlockStore {
 
             let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
-            result.extend(&self.data.as_ref().unwrap()[start as usize..=end as usize]);
+            result.extend(&self.data.as_ref().unwrap()[start..=end]);
         } else {
             for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
-                let block = self.get_block(in_buf, block as u32);
+                let block = self.get_block(in_buf, block);
                 result.extend(&block[start as usize..=end as usize]);
             }
         }

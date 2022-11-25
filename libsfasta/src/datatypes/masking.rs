@@ -3,7 +3,6 @@
 use std::io::{Read, Seek, Write};
 
 use crate::datatypes::{BytesBlockStore, Loc};
-use crate::*;
 
 use pulp::Arch;
 
@@ -31,13 +30,7 @@ impl Masking {
             return None;
         }
 
-        // let arch = Arch::new();
-
         let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
-
-        // let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-        // let bytes = bincode::encode_to_vec(&masked, bincode_config).unwrap();
-
         Some(self.inner.add(&masked))
     }
 
@@ -70,17 +63,11 @@ impl Masking {
     {
         let arch = Arch::new();
 
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-        let mut mask_raw = self.inner.get(in_buf, &loc);
-
-        // let mut mask: Vec<bool>;
-        // let size: usize;
-
-        // (mask, size) = bincode::decode_from_slice(&mut mask_raw[..], bincode_config).unwrap();
+        let mask_raw = self.inner.get(in_buf, loc);
 
         arch.dispatch(|| {
-            for (i, m) in mask_raw.drain(..).enumerate() {
-                seq[i] = if m == 1 {
+            for (i, m) in mask_raw.iter().enumerate() {
+                seq[i] = if *m == 1 {
                     seq[i].to_ascii_lowercase()
                 } else {
                     seq[i]
