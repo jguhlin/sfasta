@@ -13,3 +13,4 @@ Cargo.lock
 massif*
 Erow_1.0.fasta.gz
 libsfasta/test_data/uniprot_sprot.fasta.gz
+*.gz
