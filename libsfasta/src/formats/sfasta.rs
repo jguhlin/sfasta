@@ -574,7 +574,7 @@ impl<'sfa> SfastaParser<'sfa> {
         }
 
         let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
-        println!("Block index loc: {}", block_index_loc);
+        // println!("Block index loc: {}", block_index_loc);
 
         log::info!("Creating Sequence Blocks");
 

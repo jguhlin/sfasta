@@ -82,7 +82,7 @@ impl<'a> SequenceBlocks<'a> {
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding().with_limit::<2097152>();
         if let Some(block_locs) = &self.block_locs {
             block_locs[block as usize]
         } else if self.cache_block.is_some() && self.cache_block.as_ref().unwrap().0 == block {
