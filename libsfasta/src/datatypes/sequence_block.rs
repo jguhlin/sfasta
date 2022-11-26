@@ -90,6 +90,8 @@ impl<'a> SequenceBlocks<'a> {
             self.cache_block.as_ref().unwrap().1[idx]
         } else {
             let in_block = (block / BitPacker8x::BLOCK_LEN as u32) * 2;
+            log::debug!("Reading block index block {}", in_block);
+            log::debug!("Seeking to {}, BI: {} Block: {} Compressed Size: {}", self.block_index_location + (in_block as u64 * self.compressed_size), self.block_index_location, in_block, self.compressed_size);
             in_buf
                 .seek(SeekFrom::Start(
                     self.block_index_location + (in_block as u64 * self.compressed_size),

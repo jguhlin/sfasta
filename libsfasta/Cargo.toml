@@ -14,6 +14,7 @@ exclude = [
 	"*.profdata",
 	
 ]
+
 [lib]
 crate-type = ["rlib", "cdylib"]
 name = "libsfasta"
@@ -39,6 +40,7 @@ bitvec = "1.0.1"
 env_logger = "0.9.0"
 getrandom = { version = "0.2.7", features = ["js"] }
 bumpalo = "3.11.0"
+stream-vbyte64 = "0.1.2"
 
 # Hashers
 twox-hash = "1.6.3"
