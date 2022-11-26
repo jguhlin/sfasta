@@ -680,6 +680,8 @@ where
             }
         }
 
+        log::debug!("Block sizes: {}", size);
+
         let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
 
         out_fh.seek(SeekFrom::Start(size_loc)).unwrap();
