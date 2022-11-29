@@ -4,19 +4,22 @@ use simdutf8::basic::from_utf8;
 
 use crate::datatypes::{BytesBlockStore, Loc};
 
-pub struct StringBlockStore {
+// TODO: WIP:
+// Only changed the name so far!!
+
+pub struct U64BlockStore {
     inner: BytesBlockStore,
 }
 
-impl Default for StringBlockStore {
+impl Default for U64BlockStore {
     fn default() -> Self {
-        StringBlockStore {
-            inner: BytesBlockStore::default().with_block_size(2 * 1024 * 1024),
+        U64BlockStore {
+            inner: BytesBlockStore::default().with_block_size(512 * 1024),
         }
     }
 }
 
-impl StringBlockStore {
+impl U64BlockStore {
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.inner = self.inner.with_block_size(block_size);
         self
@@ -42,7 +45,7 @@ impl StringBlockStore {
             Err(e) => return Err(e),
         };
 
-        let store = StringBlockStore { inner };
+        let store = U64BlockStore { inner };
         Ok(store)
     }
 
@@ -88,7 +91,7 @@ mod tests {
 
     #[test]
     fn test_add_id() {
-        let mut store = StringBlockStore {
+        let mut store = U64BlockStore {
             ..Default::default()
         };
 
@@ -107,7 +110,7 @@ mod tests {
 
         let mut buffer = Cursor::new(Vec::new());
         store.write_to_buffer(&mut buffer);
-        let mut store = StringBlockStore::from_buffer(&mut buffer, 0).unwrap();
+        let mut store = U64BlockStore::from_buffer(&mut buffer, 0).unwrap();
 
         for i in 0..test_ids.len() {
             let id = store.get(&mut buffer, &locs[i]);

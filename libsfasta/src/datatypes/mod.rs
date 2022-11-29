@@ -7,6 +7,7 @@ pub mod parameters;
 pub mod seq_loc;
 pub mod sequence_block;
 pub mod string_block_store;
+pub mod u64_block_store;
 pub mod structs;
 
 pub use bytes_block_store::*;
@@ -19,3 +20,4 @@ pub use seq_loc::*;
 pub use sequence_block::*;
 pub use string_block_store::*;
 pub use structs::*;
+pub use u64_block_store::*;

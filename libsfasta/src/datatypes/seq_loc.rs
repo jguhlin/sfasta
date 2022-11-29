@@ -2,14 +2,11 @@
 //! Each SeqLoc will point to a start and a length of Loc objects for a given sequence
 
 // TODO! Need tests...
-// TODO: Bitpack seqlocs instead of zstd compress...
 // TODO: When data gets too large, pre-emptively compress it into memory (such as nt db, >200Gb).
 // TODO: Flatten seqlocs into a single vec, then use ordinals to find appropritate ones
 // TODO: Can convert this to use ByteBlockStore?
 
 use std::io::{Read, Seek, SeekFrom, Write};
-
-use bumpalo::Bump;
 
 use crate::datatypes::zstd_encoder;
 
@@ -135,7 +132,7 @@ impl<'a> SeqLocs<'a> {
         self.total_seqlocs += 1;
     }
 
-    /// Only for SFASTA creation. Add a Loc to the index
+    /// Only during SFASTA creation. Add a Loc to the index
     pub fn add_locs(&mut self, locs: &[Loc]) -> (u64, u32) {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(1024));
@@ -231,7 +228,7 @@ impl<'a> SeqLocs<'a> {
             panic!("Unable to write SeqLocs as there are none");
         }
 
-        let starting_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let starting_pos = out_buf.stream_position().unwrap();
 
         let locs = self.data.take().unwrap();
         let total_locs = locs.len() as u64;
@@ -239,8 +236,7 @@ impl<'a> SeqLocs<'a> {
         let seq_locs = self.index.take().unwrap();
         let total_seq_locs = seq_locs.len() as u64;
 
-        let seqlocs_location = out_buf
-            .seek(SeekFrom::Current(0))
+        let seqlocs_location = out_buf.stream_position()
             .expect("Unable to work with seek API");
 
         let mut block_locations: Vec<u64> =
@@ -263,8 +259,7 @@ impl<'a> SeqLocs<'a> {
         bincode::encode_into_std_write(header, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
 
-        seqlocs_chunks_position = out_buf
-            .seek(SeekFrom::Current(0))
+        seqlocs_chunks_position = out_buf.stream_position()
             .expect("Unable to work with seek API");
 
         let mut seqlocs_chunk_offset: Vec<u32> = Vec::new();
@@ -299,8 +294,7 @@ impl<'a> SeqLocs<'a> {
             }
         }
 
-        seqlocs_chunks_offsets_position = out_buf
-            .seek(SeekFrom::Current(0))
+        seqlocs_chunks_offsets_position = out_buf.stream_position()
             .expect("Unable to work with seek API");
 
         // Write out SeqLocs Chunk Offsets
@@ -332,8 +326,7 @@ impl<'a> SeqLocs<'a> {
             .chunks(self.chunk_size as usize)
         {
             block_locations.push(
-                out_buf
-                    .seek(SeekFrom::Current(0))
+                out_buf.stream_position()
                     .expect("Unable to work with seek API"),
             );
 
@@ -360,8 +353,7 @@ impl<'a> SeqLocs<'a> {
             bincoded.clear();
         }
 
-        self.block_index_pos = out_buf
-            .seek(SeekFrom::Current(0))
+        self.block_index_pos = out_buf.stream_position()
             .expect("Unable to work with seek API");
 
         // This needs to be in small chunks and then with offsets for values (instead of absolute locations)
@@ -381,8 +373,7 @@ impl<'a> SeqLocs<'a> {
 
         self.block_locations = Some(block_locations);
 
-        let end = out_buf
-            .seek(SeekFrom::Current(0))
+        let end = out_buf.stream_position()
             .expect("Unable to work with seek API");
 
         out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
@@ -643,7 +634,7 @@ impl<'a> SeqLocs<'a> {
             );
             let mut seqlocs_chunk_raw = Vec::with_capacity(64 * 1024);
             let mut seqlocs_chunk_compressed: Vec<u8> = Vec::with_capacity(64 * 1024);
-            let mut seqlocs_chunk: Vec<SeqLoc> = Vec::with_capacity(256 * 1024);
+            let mut seqlocs_chunk: Vec<SeqLoc>;
             // TODO: Zero copy deserialization possible here?
             for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
                 length = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();

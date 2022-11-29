@@ -82,7 +82,9 @@ impl<'a> SequenceBlocks<'a> {
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding().with_limit::<1048576>();
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<1048576>();
         if let Some(block_locs) = &self.block_locs {
             block_locs[block as usize]
         } else if self.cache_block.is_some() && self.cache_block.as_ref().unwrap().0 == block {
@@ -91,7 +93,13 @@ impl<'a> SequenceBlocks<'a> {
         } else {
             let in_block = (block / BitPacker8x::BLOCK_LEN as u32) * 2;
             log::debug!("Reading block index block {}", in_block);
-            log::debug!("Seeking to {}, BI: {} Block: {} Compressed Size: {}", self.block_index_location + (in_block as u64 * self.compressed_size), self.block_index_location, block, self.compressed_size);
+            log::debug!(
+                "Seeking to {}, BI: {} Block: {} Compressed Size: {}",
+                self.block_index_location + (in_block as u64 * self.compressed_size),
+                self.block_index_location,
+                block,
+                self.compressed_size
+            );
             in_buf
                 .seek(SeekFrom::Start(
                     self.block_index_location + (in_block as u64 * self.compressed_size),

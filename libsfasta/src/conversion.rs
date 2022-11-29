@@ -112,6 +112,7 @@ impl Converter {
         self
     }
 
+    /// Write the headers for the SFASTA tool, return the location of th headers (so they can be updated at the end)
     pub fn write_headers<W>(&self, mut out_fh: &mut Box<W>, sfasta: &Sfasta) -> u64
     where
         W: Write + Seek,
@@ -130,7 +131,7 @@ impl Converter {
 
         // Write the directory
         let directory_location = out_fh
-            .seek(SeekFrom::Current(0))
+            .stream_position()
             .expect("Unable to work with seek API");
 
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
@@ -160,6 +161,7 @@ impl Converter {
 
         let mut debug_size: Vec<(String, usize)> = Vec::new();
 
+        // Nearly all of this needs to be fixed int encoding
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         assert!(self.block_size < u32::MAX as usize);
@@ -189,12 +191,13 @@ impl Converter {
 
         log::info!(
             "Writing sequences start... {}",
-            out_fh.seek(SeekFrom::Current(0)).unwrap()
+            out_fh.stream_position().unwrap()
         );
 
-        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.stream_position().unwrap();
 
         // Write sequences
+        // Creates the sequence block compressor configuration
         let mut sb_config = CompressionStreamBufferConfig::default()
             .with_block_size(self.block_size as u32)
             .with_compression_type(self.compression_type)
@@ -204,12 +207,14 @@ impl Converter {
             sb_config = sb_config.with_compression_level(self.compression_level.unwrap());
         }
 
+        // TODO: Untested, been awhile... Only useful for very small blocks so hasn't been used lately...
         if let Some(dict) = self.dict {
             sb_config = sb_config.with_compression_dict(dict);
         }
 
         let start_time = std::time::Instant::now();
 
+        // Calls the big function write_fasta_sequence to process both sequences and masking, and write them into a file....
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
@@ -223,33 +228,20 @@ impl Converter {
             end_time - start_time
         );
 
-        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.stream_position().unwrap();
 
         debug_size.push(("sequences".to_string(), (end - start) as usize));
 
         log::info!(
             "Writing sequences finished... {}",
-            out_fh.seek(SeekFrom::Current(0)).unwrap()
+            out_fh.stream_position().unwrap()
         );
-
-        // TODO: Here is where we would write out the scores...
-        // ... but this fn is only for FASTA right now...
-
-        // TODO: Here is where we would write out the masking...
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
         let mut indexer =
             crate::dual_level_index::DualIndexBuilder::with_capacity(seqlocs.index_len());
-
-        // let mut out_buf = BufWriter::with_capacity(256 * 1024, out_fh);
-
-        let start_time = std::time::Instant::now();
-
-        let end_time = std::time::Instant::now();
-
-        log::info!("Create SeqLocs Struct time: {:?}", end_time - start_time);
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
@@ -258,11 +250,11 @@ impl Converter {
         // This will then point to the different location blocks where the sequence is...
         //
         // TODO: Optional index can probably be handled better...
-
         let mut dual_index_pos = 0;
 
         let mut seqlocs_location = 0;
 
+        // Build index in another thread...
         thread::scope(|s| {
             // Start a thread to build the index...
             let index_handle = Some(s.spawn(|_| {
@@ -277,49 +269,49 @@ impl Converter {
             // Use the main thread to write the sequence locations...
             log::info!(
                 "Writing SeqLocs to file. {}",
-                out_fh.seek(SeekFrom::Current(0)).unwrap()
+                out_fh.stream_position().unwrap()
             );
 
-            let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+            let start = out_fh.stream_position().unwrap();
 
             let start_time = std::time::Instant::now();
 
             seqlocs_location = seqlocs.write_to_buffer(&mut out_fh);
             log::info!(
                 "Writing SeqLocs to file: COMPLETE. {}",
-                out_fh.seek(SeekFrom::Current(0)).unwrap()
+                out_fh.stream_position().unwrap()
             );
 
             let end_time = std::time::Instant::now();
             log::info!("SeqLocs write time: {:?}", end_time - start_time);
 
-            let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+            let end = out_fh.stream_position().unwrap();
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
                 dual_index_pos = out_fh
-                    .seek(SeekFrom::Current(0))
+                    .stream_position()
                     .expect("Unable to work with seek API");
 
                 let mut index = index_handle.unwrap().join().unwrap();
                 log::info!(
                     "Writing index to file. {}",
-                    out_fh.seek(SeekFrom::Current(0)).unwrap()
+                    out_fh.stream_position().unwrap()
                 );
 
-                let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+                let start = out_fh.stream_position().unwrap();
 
                 let start_time = std::time::Instant::now();
                 index.write_to_buffer(&mut out_fh);
                 let end_time = std::time::Instant::now();
                 log::info!("Index write time: {:?}", end_time - start_time);
 
-                let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+                let end = out_fh.stream_position().unwrap();
                 debug_size.push(("index".to_string(), (end - start) as usize));
 
                 log::info!(
                     "Writing index to file: COMPLETE. {}",
-                    out_fh.seek(SeekFrom::Current(0)).unwrap()
+                    out_fh.stream_position().unwrap()
                 );
             }
         })
@@ -330,8 +322,6 @@ impl Converter {
         sfasta.directory.headers_loc = headers_location;
         sfasta.directory.ids_loc = ids_location;
         sfasta.directory.masking_loc = masking_location;
-
-        // TODO: Scores Block Index
 
         // Go to the beginning, and write the location of the index
 
@@ -344,7 +334,7 @@ impl Converter {
         // Here we re-write the directory information at the start of the file, allowing for
         // easy jumps to important areas while keeping everything in a single file
 
-        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.stream_position().unwrap();
 
         let start_time = std::time::Instant::now();
 
@@ -352,7 +342,7 @@ impl Converter {
         bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
             .expect("Unable to write directory to file");
 
-        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.stream_position().unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
 
         let end_time = std::time::Instant::now();
@@ -417,7 +407,7 @@ pub fn write_fasta_sequence<'convert, W, R>(
     sb_config: CompressionStreamBufferConfig,
     in_buf: &mut R,
     mut out_fh: &mut Box<W>,
-    mut debug_size: &mut Vec<(String, usize)>,
+    debug_size: &mut Vec<(String, usize)>,
 ) -> (
     Vec<std::sync::Arc<String>>,
     SeqLocs<'convert>,
@@ -466,6 +456,7 @@ where
             let backoff = Backoff::new();
 
             for x in fasta {
+                backoff.reset();
                 if x.is_err() {
                     while fasta_queue_in.push(Work::Shutdown).is_err() {
                         backoff.snooze();
@@ -489,7 +480,6 @@ where
             }
 
             log::info!("FASTA reading complete...");
-
             while fasta_queue_in.push(Work::Shutdown).is_err() {
                 backoff.snooze();
             }
@@ -500,6 +490,7 @@ where
         let fasta_thread_clone = fasta_thread.thread().clone();
 
         // TODO: Multithread this part
+        // Thread that handles the heavy lifting of the incoming Seq structs
         let reader_handle = s.spawn(move |_| {
             sb.initialize();
 
@@ -510,7 +501,7 @@ where
             let mut masking = Masking::default();
 
             // For each Sequence in the fasta file, make it upper case (masking is stored separately)
-            // Add the sequence, get the SeqLocs and store them in Location struct
+            // Add the sequence to the SequenceBlocks, get the SeqLocs and store them in Location struct
             // And store that in seq_locs Vec...
 
             let backoff = Backoff::new();
@@ -584,8 +575,7 @@ where
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because multithreading means it does not have to be in order
         let mut block_locs = Vec::with_capacity(1024);
-        let mut pos = out_fh
-            .seek(SeekFrom::Current(0))
+        let mut pos = out_fh.stream_position()
             .expect("Unable to work with seek API");
 
         let mut result;
@@ -593,8 +583,8 @@ where
         // For each entry processed by the sequence buffer, pop it out, write the block, and write the block id
         // FORMAT: Write each sequence block to file
 
-        // This writes out the sequence blocks (seqblockcompressed)
-        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        // This writes out the sequence blocks (SeqBlockCompressed / SBC)
+        let start = out_fh.stream_position().unwrap();
         let backoff = Backoff::new();
 
         let mut output_spins: usize = 0;
@@ -619,29 +609,30 @@ where
 
                     block_locs.push((block_id, pos));
 
-                    pos = out_fh
-                        .seek(SeekFrom::Current(0))
+                    pos = out_fh.stream_position()
                         .expect("Unable to work with seek API");
                 }
             }
         }
 
+        // Join the FASTA thread (ot block until it can be joined)
         fasta_thread.join().unwrap();
 
-        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.stream_position().unwrap();
         log::info!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
         debug_size.push(("Sequence Blocks".to_string(), (end - start) as usize));
 
-        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.stream_position().unwrap();
 
         // Block Index
         block_index_pos = Some(
-            out_fh
-                .seek(SeekFrom::Current(0))
+            out_fh.stream_position()
                 .expect("Unable to work with seek API"),
         );
 
-        // Write the block index to file
+        // TODO: This is the part messing up. Needs to be an independent datatype, and maybe try using Stream VByte or zstd instead...
+
+        // Write the block index to file (We sort u32 to u64, so it is ordinal)
         block_locs.sort_by(|a, b| a.0.cmp(&b.0));
         let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
 
@@ -658,8 +649,7 @@ where
         bincode::encode_into_std_write(num_bits, &mut out_fh, bincode_config)
             .expect("Unable to write to bincode output");
 
-        let size_loc = out_fh
-            .seek(SeekFrom::Current(0))
+        let size_loc = out_fh.stream_position()
             .expect("Unable to work with seek API");
 
         // (size of bitpacked data, total number of block locs)
@@ -682,7 +672,7 @@ where
 
         log::debug!("Block sizes: {}", size);
 
-        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.stream_position().unwrap();
 
         out_fh.seek(SeekFrom::Start(size_loc)).unwrap();
         bincode::encode_into_std_write((size, bitpacked_len), &mut out_fh, bincode_config)
@@ -703,14 +693,14 @@ where
 
         let start_time = Instant::now();
 
-        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.stream_position().unwrap();
 
         headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
 
-        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.stream_position().unwrap();
 
         let end_time = Instant::now();
 
@@ -723,13 +713,13 @@ where
         );
 
         let start_time = Instant::now();
-        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.stream_position().unwrap();
         ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
 
-        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.stream_position().unwrap();
 
         let end_time = Instant::now();
 
@@ -741,13 +731,13 @@ where
         );
 
         let start_time = Instant::now();
-        let start = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let start = out_fh.stream_position().unwrap();
         masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_fh) {
             Some(x) => NonZeroU64::new(x),
             None => None,
         };
 
-        let end = out_fh.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_fh.stream_position().unwrap();
         debug_size.push(("Masking".to_string(), (end - start) as usize));
         let end_time = Instant::now();
         log::info!(
