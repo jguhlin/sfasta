@@ -551,41 +551,16 @@ impl<'sfa> SfastaParser<'sfa> {
             ))
             .expect("Unable to work with seek API");
 
-        let num_bits: u8 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(x) => x,
-            Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
-        };
-
-        let x: (u64, u64) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(x) => x,
-            Err(y) => return Result::Err(format!("Error reading SFASTA block index: {}", y)),
-        };
-
-        // TODO: Not yet used, but eliminates the need to read all the block locs into memory (thus speeding up large files such as nt)
-        let compressed_size = x.0;
-        let blocks_count = x.1;
-
-        log::info!("Num Bits: {}", num_bits);
-        log::info!("Compressed Size: {}", compressed_size);
-        log::info!("Blocks Counts: {}", blocks_count);
-
-        if num_bits > 32 {
-            return Result::Err(format!("Invalid num bits: {}", num_bits));
-        }
-
         let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
-        // println!("Block index loc: {}", block_index_loc);
 
         log::info!("Creating Sequence Blocks");
 
         sfasta.sequenceblocks = Some(SequenceBlocks::new(
+            &mut in_buf,
             sfasta.parameters.compression_type,
             sfasta.parameters.compression_dict.clone(),
             sfasta.parameters.block_size as usize,
-            compressed_size,
-            blocks_count,
             block_index_loc,
-            num_bits,
         ));
 
         if prefetch {

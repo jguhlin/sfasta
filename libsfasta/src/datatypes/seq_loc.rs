@@ -331,7 +331,8 @@ impl<'a> SeqLocs<'a> {
             block_locations.push(
                 out_buf
                     .stream_position()
-                    .expect("Unable to work with seek API"),
+                    .expect("Unable to work with seek API")
+                - starting_pos
             );
 
             let locs = s.to_vec();
@@ -365,7 +366,7 @@ impl<'a> SeqLocs<'a> {
         let bincoded = bincode::encode_to_vec(&block_locations, bincode_config)
             .expect("Unable to bincode locs into compressor");
 
-        let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
+        let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 3)
             .expect("Unable to create zstd encoder");
         compressor.include_magicbytes(false).unwrap();
         compressor.long_distance_matching(true).unwrap();
@@ -553,7 +554,7 @@ impl<'a> SeqLocs<'a> {
     {
         let block_locations = self.block_locations.as_ref().unwrap();
         let block_location = block_locations[block as usize];
-        in_buf.seek(SeekFrom::Start(block_location)).unwrap();
+        in_buf.seek(SeekFrom::Start(self.location + block_location)).unwrap();
 
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()

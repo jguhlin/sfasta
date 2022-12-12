@@ -633,56 +633,21 @@ where
                 .expect("Unable to work with seek API"),
         );
 
-        // TODO: This is the part messing up. Needs to be an independent datatype, and maybe try using Stream VByte or zstd instead...
+        let mut block_locs_store = U64BlockStore::default();
 
-        // Write the block index to file (We sort u32 to u64, so it is ordinal)
+        // Write the block index to file (We sort so it is ordinal)
         block_locs.sort_by(|a, b| a.0.cmp(&b.0));
         let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
 
-        let block_locs_u32 = unsafe {
-            std::slice::from_raw_parts(
-                block_locs.as_ptr() as *const u32,
-                block_locs.len() * std::mem::size_of::<u64>() / std::mem::size_of::<u32>(),
-            )
-        };
+        log::info!("DEBUG: Writing {} total blocks", block_locs.len());
+   
+        block_locs.into_iter().for_each(|x| {
+            block_locs_store.add(x);
+        });
 
-        log::info!("DEBUG: Wrote {} total blocks", block_locs.len());
-
-        let (num_bits, bitpacked) = bitpack_u32(block_locs_u32);
-        bincode::encode_into_std_write(num_bits, &mut out_fh, bincode_config)
-            .expect("Unable to write to bincode output");
-
-        let size_loc = out_fh
-            .stream_position()
-            .expect("Unable to work with seek API");
-
-        // (size of bitpacked data, total number of block locs)
-        let mut size: u64 = 0;
-        let bitpacked_len = bitpacked.len() as u64;
-        bincode::encode_into_std_write((size, bitpacked_len), &mut out_fh, bincode_config)
-            .expect("Unable to write to bincode output");
-
-        for i in bitpacked {
-            if let Ok(x) = bincode::encode_into_std_write(&i, &mut out_fh, bincode_config) {
-                if i.is_packed() && size == 0 {
-                    size = x as u64;
-                } else if size != 0 && i.is_packed() {
-                    assert!(x as u64 == size);
-                }
-            } else {
-                panic!("Unable to write to bincode output");
-            }
-        }
-
-        log::debug!("Block sizes: {}", size);
+        block_locs_store.write_to_buffer(&mut out_fh);
 
         let end = out_fh.stream_position().unwrap();
-
-        out_fh.seek(SeekFrom::Start(size_loc)).unwrap();
-        bincode::encode_into_std_write((size, bitpacked_len), &mut out_fh, bincode_config)
-            .expect("Unable to write to bincode output");
-
-        out_fh.seek(SeekFrom::Start(end)).unwrap();
 
         log::info!("DEBUG: Wrote {} bytes of block index", end - start);
         debug_size.push(("Block Index".to_string(), (end - start) as usize));

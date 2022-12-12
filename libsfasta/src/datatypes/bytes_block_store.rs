@@ -145,8 +145,6 @@ impl BytesBlockStore {
 
         let mut block_locations = Vec::new();
 
-        let mut compressor = zstd_encoder(1, None);
-
         // Emits compressed blocks
         let blocks = self.emit_blocks();
 

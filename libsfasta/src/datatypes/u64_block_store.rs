@@ -18,7 +18,7 @@ use crate::datatypes::{zstd_encoder, CompressionType};
 pub struct U64BlockStore {
     location: u64,
     block_index_pos: u64,
-    block_locations: Option<Vec<u64>>,
+    block_locations: Option<Vec<u32>>,
     block_size: u64,
     pub data: Option<Vec<u64>>,
     pub compression_type: CompressionType,
@@ -46,6 +46,12 @@ impl Default for U64BlockStore {
 }
 
 impl U64BlockStore {
+    pub fn with_location(loc: u64) -> Self {
+        let mut store = U64BlockStore::default();
+        store.location = loc;
+        store
+    }
+
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.block_size = block_size as u64;
         self
@@ -65,7 +71,7 @@ impl U64BlockStore {
         let mut compressed = Vec::with_capacity(8192);
 
         #[cfg(not(test))]
-        let mut compressed = Vec::with_capacity(self.block_size as usize);
+        let mut compressed = Vec::with_capacity(self.block_size as usize * 8);
 
         let at = std::cmp::min(self.block_size as usize, self.data.as_mut().unwrap().len());
 
@@ -145,7 +151,7 @@ impl U64BlockStore {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
             bincode::encode_into_std_write(&compressed_block, &mut out_buf, bincode_config)
                 .unwrap();
-            block_locations.push(block_start);
+            block_locations.push((block_start - starting_pos) as u32);
         }
 
         block_locations_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -239,7 +245,7 @@ impl U64BlockStore {
         decompressor.include_magicbytes(false).unwrap();
 
         let block_location = block_locations[block as usize];
-        in_buf.seek(SeekFrom::Start(block_location)).unwrap();
+        in_buf.seek(SeekFrom::Start(self.location + block_location as u64)).unwrap();
         let compressed_block: Vec<u8> =
             bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
@@ -252,14 +258,16 @@ impl U64BlockStore {
             .0
     }
 
-    pub fn get<R>(&mut self, in_buf: &mut R, x: usize) -> Vec<u64>
+    pub fn get<R>(&mut self, in_buf: &mut R, x: usize) -> u64
     where
         R: Read + Seek,
     {
         if self.data.is_some() {
-            self.data.as_ref().unwrap()[x..x + self.block_size as usize].to_vec()
+            self.data.as_ref().unwrap()[x]
         } else {
-            self.get_block(in_buf, (x % self.block_size as usize) as u32)
+            // Get the remainder
+            let (block, position_in_block) = (x / self.block_size as usize, x % self.block_size as usize);
+            self.get_block(in_buf, block as u32)[position_in_block]
         }
     }
 }
