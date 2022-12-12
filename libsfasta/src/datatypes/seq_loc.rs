@@ -236,7 +236,8 @@ impl<'a> SeqLocs<'a> {
         let seq_locs = self.index.take().unwrap();
         let total_seq_locs = seq_locs.len() as u64;
 
-        let seqlocs_location = out_buf.stream_position()
+        let seqlocs_location = out_buf
+            .stream_position()
             .expect("Unable to work with seek API");
 
         let mut block_locations: Vec<u64> =
@@ -259,7 +260,8 @@ impl<'a> SeqLocs<'a> {
         bincode::encode_into_std_write(header, &mut out_buf, bincode_config)
             .expect("Unable to write out chunk size");
 
-        seqlocs_chunks_position = out_buf.stream_position()
+        seqlocs_chunks_position = out_buf
+            .stream_position()
             .expect("Unable to work with seek API");
 
         let mut seqlocs_chunk_offset: Vec<u32> = Vec::new();
@@ -294,7 +296,8 @@ impl<'a> SeqLocs<'a> {
             }
         }
 
-        seqlocs_chunks_offsets_position = out_buf.stream_position()
+        seqlocs_chunks_offsets_position = out_buf
+            .stream_position()
             .expect("Unable to work with seek API");
 
         // Write out SeqLocs Chunk Offsets
@@ -326,7 +329,8 @@ impl<'a> SeqLocs<'a> {
             .chunks(self.chunk_size as usize)
         {
             block_locations.push(
-                out_buf.stream_position()
+                out_buf
+                    .stream_position()
                     .expect("Unable to work with seek API"),
             );
 
@@ -353,7 +357,8 @@ impl<'a> SeqLocs<'a> {
             bincoded.clear();
         }
 
-        self.block_index_pos = out_buf.stream_position()
+        self.block_index_pos = out_buf
+            .stream_position()
             .expect("Unable to work with seek API");
 
         // This needs to be in small chunks and then with offsets for values (instead of absolute locations)
@@ -373,7 +378,8 @@ impl<'a> SeqLocs<'a> {
 
         self.block_locations = Some(block_locations);
 
-        let end = out_buf.stream_position()
+        let end = out_buf
+            .stream_position()
             .expect("Unable to work with seek API");
 
         out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();

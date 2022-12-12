@@ -575,7 +575,8 @@ where
         // Store the location of the Sequence Blocks...
         // Stored as Vec<(u32, u64)> because multithreading means it does not have to be in order
         let mut block_locs = Vec::with_capacity(1024);
-        let mut pos = out_fh.stream_position()
+        let mut pos = out_fh
+            .stream_position()
             .expect("Unable to work with seek API");
 
         let mut result;
@@ -609,7 +610,8 @@ where
 
                     block_locs.push((block_id, pos));
 
-                    pos = out_fh.stream_position()
+                    pos = out_fh
+                        .stream_position()
                         .expect("Unable to work with seek API");
                 }
             }
@@ -626,7 +628,8 @@ where
 
         // Block Index
         block_index_pos = Some(
-            out_fh.stream_position()
+            out_fh
+                .stream_position()
                 .expect("Unable to work with seek API"),
         );
 
@@ -649,7 +652,8 @@ where
         bincode::encode_into_std_write(num_bits, &mut out_fh, bincode_config)
             .expect("Unable to write to bincode output");
 
-        let size_loc = out_fh.stream_position()
+        let size_loc = out_fh
+            .stream_position()
             .expect("Unable to work with seek API");
 
         // (size of bitpacked data, total number of block locs)

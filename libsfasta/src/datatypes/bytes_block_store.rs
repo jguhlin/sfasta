@@ -36,35 +36,36 @@ impl BytesBlockStore {
         self
     }
 
-    fn compress_blocks(&mut self) {
+    fn compress_block(&mut self) {
         let mut compressor = zstd_encoder(3, None);
+
         if self.compressed_blocks.is_none() {
             self.compressed_block_lens = Some(Vec::new());
             self.compressed_blocks = Some(Vec::new());
         }
 
-        while self.data.as_ref().unwrap().len() > self.block_size {
-            #[cfg(test)]
-            let mut compressed = Vec::with_capacity(1024);
+        #[cfg(test)]
+        let mut compressed = Vec::with_capacity(8192);
 
-            #[cfg(not(test))]
-            let mut compressed = Vec::with_capacity(self.block_size);
+        #[cfg(not(test))]
+        let mut compressed = Vec::with_capacity(self.block_size);
 
-            let mut block = self.data.as_mut().unwrap().split_off(self.block_size);
-            block.reserve(self.block_size);
-            std::mem::swap(&mut block, self.data.as_mut().unwrap());
+        let at = std::cmp::min(self.block_size, self.data.as_mut().unwrap().len());
 
-            let compressed_size = compressor
-                .compress_to_buffer(&block, &mut compressed)
-                .unwrap();
+        let mut block = self.data.as_mut().unwrap().split_off(at);
+        block.reserve(self.block_size);
+        std::mem::swap(&mut block, self.data.as_mut().unwrap());
 
-            self.compressed_block_lens
-                .as_mut()
-                .unwrap()
-                .push(compressed_size);
+        let compressed_size = compressor
+            .compress_to_buffer(&block, &mut compressed)
+            .unwrap();
 
-            self.compressed_blocks.as_mut().unwrap().extend(compressed);
-        }
+        self.compressed_block_lens
+            .as_mut()
+            .unwrap()
+            .push(compressed_size);
+
+        self.compressed_blocks.as_mut().unwrap().extend(compressed);
     }
 
     // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
@@ -73,8 +74,8 @@ impl BytesBlockStore {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
 
-        if self.data.as_ref().unwrap().len() > self.block_size {
-            self.compress_blocks();
+        while self.data.as_ref().unwrap().len() > self.block_size {
+            self.compress_block();
         }
 
         let data = self.data.as_mut().unwrap();
@@ -108,13 +109,18 @@ impl BytesBlockStore {
     }
 
     pub fn emit_blocks(&mut self) -> Vec<&[u8]> {
-        let data = self.data.as_ref().unwrap();
+        while self.data.as_ref().unwrap().len() > 0 {
+            self.compress_block();
+        }
+
+        let data = self.compressed_blocks.as_ref().unwrap();
         let mut blocks = Vec::new();
         let len = data.len();
 
-        for i in (0..len).step_by(self.block_size) {
-            let end = std::cmp::min(i + self.block_size, data.len());
-            blocks.push(&data[i..end]);
+        let mut start = 0;
+        for len in self.compressed_block_lens.as_ref().unwrap() {
+            blocks.push(&data[start..start + len]);
+            start += len;
         }
 
         blocks
@@ -141,23 +147,11 @@ impl BytesBlockStore {
 
         let mut compressor = zstd_encoder(1, None);
 
-        if self.compressed_blocks.is_some() {
-            let mut current_pos = 0;
-            let compressed_blocks = self.compressed_blocks.as_ref().unwrap();
-            for len in self.compressed_block_lens.as_ref().unwrap().iter() {
-                let block = &compressed_blocks[current_pos..current_pos + len];
-                let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-                bincode::encode_into_std_write(block, &mut out_buf, bincode_config).unwrap();
-                block_locations.push(block_start);
-                current_pos += len;
-            }
-        }
-
+        // Emits compressed blocks
         let blocks = self.emit_blocks();
 
-        for block in blocks {
+        for compressed_block in blocks {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-            let compressed_block = compressor.compress(block).unwrap();
             bincode::encode_into_std_write(&compressed_block, &mut out_buf, bincode_config)
                 .unwrap();
             block_locations.push(block_start);
