@@ -265,7 +265,7 @@ impl U64BlockStore {
             bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
         let decompressed_block = decompressor
-            .decompress(&compressed_block, 8 * self.block_size as usize)
+            .decompress(&compressed_block, 16 * self.block_size as usize)
             .unwrap();
 
         bincode::decode_from_slice(&decompressed_block, bincode_config)
