@@ -640,7 +640,7 @@ where
         let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
 
         log::info!("DEBUG: Writing {} total blocks", block_locs.len());
-   
+
         block_locs.into_iter().for_each(|x| {
             block_locs_store.add(x);
         });

@@ -156,7 +156,15 @@ impl BytesBlockStore {
         }
 
         block_locations_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        bincode::encode_into_std_write(&block_locations, &mut out_buf, bincode_config).unwrap();
+
+        let bincoded_block_locations_size =
+            bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
+
+        let compressed_block_locations =
+            zstd::bulk::compress(&bincoded_block_locations_size, -3).unwrap();
+
+        bincode::encode_into_std_write(&compressed_block_locations, &mut out_buf, bincode_config)
+            .unwrap();
         self.block_locations = Some(block_locations);
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -195,13 +203,18 @@ impl BytesBlockStore {
         store.location = starting_pos;
 
         in_buf.seek(SeekFrom::Start(store.block_index_pos)).unwrap();
+        let compressed: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+        };
 
-        store.block_locations = Some(
-            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-                Ok(x) => x,
-                Err(e) => return Err(format!("Error decoding block locations: {}", e)),
-            },
-        );
+        let block_locations: Vec<u8> = zstd::stream::decode_all(&compressed[..]).unwrap();
+        let block_locations: Vec<u64> =
+            bincode::decode_from_slice(&block_locations, bincode_config)
+                .unwrap()
+                .0;
+
+        store.block_locations = Some(block_locations);
 
         Ok(store)
     }

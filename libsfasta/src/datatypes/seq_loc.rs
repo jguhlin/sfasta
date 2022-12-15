@@ -240,9 +240,6 @@ impl<'a> SeqLocs<'a> {
             .stream_position()
             .expect("Unable to work with seek API");
 
-        let mut block_locations: Vec<u64> =
-            Vec::with_capacity((seq_locs.len() / self.chunk_size as usize) + 1);
-
         let mut seqlocs_chunks_position = 0u64;
         let mut seqlocs_chunks_offsets_position = 0u64;
 
@@ -266,7 +263,9 @@ impl<'a> SeqLocs<'a> {
 
         let mut seqlocs_chunk_offset: Vec<u32> = Vec::new();
 
-        let mut compressor = zstd_encoder(3, None);
+        let mut compressor = zstd_encoder(9, None);
+
+        let start = out_buf.stream_position().unwrap();
 
         // FORMAT: Write SeqLocs (Specified where to find the [Locs] for each datatype)
         let mut current_offset = 0;
@@ -288,13 +287,19 @@ impl<'a> SeqLocs<'a> {
             match bincode::encode_into_std_write(&compressed, &mut out_buf, bincode_config) {
                 Ok(x) => {
                     current_offset += x as u32;
-                    log::debug!("SeqLoc Chunk Size: {}", x);
                 }
                 Err(e) => {
                     panic!("Unable to write out seqlocs chunk: {}", e);
                 }
             }
         }
+
+        let end = out_buf.stream_position().unwrap();
+        log::debug!(
+            "Wrote {} seqlocs chunks in {} bytes",
+            seqlocs_chunk_offset.len(),
+            end - start
+        );
 
         seqlocs_chunks_offsets_position = out_buf
             .stream_position()
@@ -304,7 +309,6 @@ impl<'a> SeqLocs<'a> {
         let data = bincode::encode_to_vec(&seqlocs_chunk_offset, bincode_config)
             .expect("Unable to write out seqlocs chunk offsets");
 
-        // let length = data.len();
         match bincode::encode_into_std_write(data.len() as u32, &mut out_buf, bincode_config) {
             Ok(_) => (),
             Err(e) => {
@@ -321,42 +325,47 @@ impl<'a> SeqLocs<'a> {
         }
 
         // FORMAT: Write sequence location blocks
+
+        let mut block_locations: Vec<u64> =
+            Vec::with_capacity((seq_locs.len() / self.chunk_size as usize) + 1);
+
         let mut bincoded: Vec<u8>;
 
-        for s in locs
-            .iter()
-            .collect::<Vec<&Loc>>()
-            .chunks(self.chunk_size as usize)
-        {
+        let start = out_buf.stream_position().unwrap();
+        let mut compressed_buf: Vec<u8> = Vec::with_capacity(128 * 1024);
+
+        for chunk in locs.chunks(self.chunk_size as usize) {
             block_locations.push(
                 out_buf
                     .stream_position()
                     .expect("Unable to work with seek API")
-                - starting_pos
+                    - starting_pos,
             );
 
-            let locs = s.to_vec();
-
-            let mut compressor =
-                zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
-                    .expect("Unable to create zstd encoder");
+            let mut compressor = zstd::stream::Encoder::new(&mut compressed_buf, 7)
+                .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
 
-            bincoded = bincode::encode_to_vec(locs, bincode_config)
+            bincoded = bincode::encode_to_vec(chunk, bincode_config)
                 .expect("Unable to bincode locs into compressor");
 
-            log::debug!("Bincoded size of Loc Block: {}", bincoded.len());
-
             compressor.write_all(&bincoded).unwrap();
-            let compressed = compressor.finish().unwrap();
+            compressor.finish().unwrap();
 
-            let x = bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
+            bincode::encode_into_std_write(&compressed_buf[..], &mut out_buf, bincode_config)
                 .expect("Unable to write Sequence Blocks to file");
-            log::debug!("Compressed size of Loc Block: {}", x);
 
             bincoded.clear();
+            compressed_buf.clear();
         }
+
+        let end = out_buf.stream_position().unwrap();
+        log::debug!(
+            "Wrote {} Loc blocks in {} bytes",
+            block_locations.len(),
+            end - start
+        );
 
         self.block_index_pos = out_buf
             .stream_position()
@@ -554,7 +563,9 @@ impl<'a> SeqLocs<'a> {
     {
         let block_locations = self.block_locations.as_ref().unwrap();
         let block_location = block_locations[block as usize];
-        in_buf.seek(SeekFrom::Start(self.location + block_location)).unwrap();
+        in_buf
+            .seek(SeekFrom::Start(self.location + block_location))
+            .unwrap();
 
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
@@ -839,9 +850,6 @@ pub enum Loc {
     FromStart(u32, u32), // Block, length...
     ToEnd(u32, u32),     // Block, start,
     EntireBlock(u32),    // Entire block belongs to this seq...
-                         // pub block: u32,
-                         // pub start: u32,
-                         // pub end: u32,
 }
 
 impl Loc {

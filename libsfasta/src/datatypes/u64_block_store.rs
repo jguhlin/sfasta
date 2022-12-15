@@ -14,7 +14,6 @@ use crate::datatypes::{zstd_encoder, CompressionType};
 
 // This is a specialized variant of Bytes Block Store, but we don't need the entire Loc system, just the # of the block and the location in the block (ordinal)
 
-
 pub struct U64BlockStore {
     location: u64,
     block_index_pos: u64,
@@ -155,7 +154,15 @@ impl U64BlockStore {
         }
 
         block_locations_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        bincode::encode_into_std_write(&block_locations, &mut out_buf, bincode_config).unwrap();
+
+        let bincoded_block_locations_size =
+            bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
+
+        let compressed_block_locations =
+            zstd::bulk::compress(&bincoded_block_locations_size, -3).unwrap();
+        bincode::encode_into_std_write(&compressed_block_locations, &mut out_buf, bincode_config)
+            .unwrap();
+
         self.block_locations = Some(block_locations);
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -195,12 +202,18 @@ impl U64BlockStore {
 
         in_buf.seek(SeekFrom::Start(store.block_index_pos)).unwrap();
 
-        store.block_locations = Some(
-            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-                Ok(x) => x,
-                Err(e) => return Err(format!("Error decoding block locations: {}", e)),
-            },
-        );
+        let compressed: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+        };
+
+        let block_locations: Vec<u8> = zstd::stream::decode_all(&compressed[..]).unwrap();
+        let block_locations: Vec<u32> =
+            bincode::decode_from_slice(&block_locations, bincode_config)
+                .unwrap()
+                .0;
+
+        store.block_locations = Some(block_locations);
 
         Ok(store)
     }
@@ -245,7 +258,9 @@ impl U64BlockStore {
         decompressor.include_magicbytes(false).unwrap();
 
         let block_location = block_locations[block as usize];
-        in_buf.seek(SeekFrom::Start(self.location + block_location as u64)).unwrap();
+        in_buf
+            .seek(SeekFrom::Start(self.location + block_location as u64))
+            .unwrap();
         let compressed_block: Vec<u8> =
             bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
@@ -266,7 +281,8 @@ impl U64BlockStore {
             self.data.as_ref().unwrap()[x]
         } else {
             // Get the remainder
-            let (block, position_in_block) = (x / self.block_size as usize, x % self.block_size as usize);
+            let (block, position_in_block) =
+                (x / self.block_size as usize, x % self.block_size as usize);
             self.get_block(in_buf, block as u32)[position_in_block]
         }
     }

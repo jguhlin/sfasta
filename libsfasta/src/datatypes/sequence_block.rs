@@ -29,7 +29,10 @@ impl<'a> SequenceBlocks<'a> {
         compression_dict: Option<Vec<u8>>,
         block_size: usize,
         block_index_location: u64,
-    ) -> Self where R: Read + Seek,  {
+    ) -> Self
+    where
+        R: Read + Seek,
+    {
         let zstd_decompressor = if compression_type == CompressionType::ZSTD {
             let mut zstd_decompressor = if let Some(dict) = &compression_dict {
                 zstd::bulk::Decompressor::with_dictionary(dict)
@@ -55,7 +58,8 @@ impl<'a> SequenceBlocks<'a> {
             cache_sbc: SequenceBlockCompressed {
                 compressed_seq: Vec::with_capacity(block_size),
             },
-            block_loc_store: U64BlockStore::from_buffer(in_buf, block_index_location).expect("Unable to open Block Index Store")
+            block_loc_store: U64BlockStore::from_buffer(in_buf, block_index_location)
+                .expect("Unable to open Block Index Store"),
         }
     }
 
@@ -165,6 +169,7 @@ pub fn zstd_encoder(
     encoder
         .include_contentsize(false)
         .expect("Unable to set ZSTD Content Size Flag");
+    encoder.long_distance_matching(true);
     encoder
 }
 
