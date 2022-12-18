@@ -11,8 +11,8 @@ jobs:
     steps:
       - checkout
       - run: cargo --version
-      - run: cargo build --release
       - run: cargo test
+      - run: cargo build
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/2.0/configuration-reference/#workflows
