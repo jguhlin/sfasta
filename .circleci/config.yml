@@ -13,8 +13,6 @@ jobs:
       - restore_cache:
           key: project-cache
       - run: cargo --version
-      #- run: cargo test
-      #- run: cargo build
       - run: bash .scripts/grcov.bash
       - run: curl -Os https://uploader.codecov.io/latest/linux/codecov
       - run: chmod +x codecov
