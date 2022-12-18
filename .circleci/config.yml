@@ -17,11 +17,11 @@ jobs:
       - run: curl -Os https://uploader.codecov.io/latest/linux/codecov
       - run: chmod +x codecov
       - run: ./codecov
-    - save_cache:
-        key: project-cache
-        paths:
-          - "~/.cargo"
-          - "./target"
+      - save_cache:
+          key: project-cache
+          paths:
+            - "~/.cargo"
+            - "./target"
 
 # Invoke jobs via workflows
 # See: https://circleci.com/docs/2.0/configuration-reference/#workflows
