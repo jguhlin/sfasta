@@ -6,6 +6,8 @@ export RUSTFLAGS="-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Co
 export RUSTDOCFLAGS="-Cpanic=abort"
 export LLVM_PROFILE_FILE="sfasta-%p-%m.profraw"
 
+mkdir -p target/coverage
+
 cargo test
 
 #grcov . -s . --binary-path ./target/debug/ -t lcov --branch --ignore-not-existing -o ./target/debug/coverage/
