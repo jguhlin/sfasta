@@ -5,7 +5,7 @@ version: 2.1
 # Define a job to be invoked later in a workflow.
 # See: https://circleci.com/docs/2.0/configuration-reference/#jobs
 jobs:
-  build:
+  test:
     docker:
       - image: cimg/rust:1.65.0
     steps:
@@ -29,4 +29,4 @@ jobs:
 workflows:
   sfasta-test:
     jobs:
-      - build
+      - test
