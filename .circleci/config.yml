@@ -12,6 +12,7 @@ jobs:
       - checkout
       - restore_cache:
           key: project-cache
+      - run: cargo install grcov
       - run: cargo --version
       - run: bash .scripts/grcov.bash
       - run: curl -Os https://uploader.codecov.io/latest/linux/codecov
