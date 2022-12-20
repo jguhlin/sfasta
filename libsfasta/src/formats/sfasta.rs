@@ -1,3 +1,8 @@
+//! Structs to open and work with SFASTA file format
+//! 
+//! This module contains the main methods of reading SFASTA files, including iterators
+//! to iterate over sequences.
+
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::RwLock;
 
@@ -8,7 +13,7 @@ use crate::datatypes::*;
 use crate::dual_level_index::*;
 use crate::*;
 
-/// Main Sfasta crate
+/// Main Sfasta struct
 pub struct Sfasta<'sfa> {
     pub version: u64, // I'm going to regret this, but 18,446,744,073,709,551,615 versions should be enough for anybody.
     pub directory: Directory,
@@ -435,9 +440,13 @@ pub struct SfastaParser<'sfa> {
 
 impl<'sfa> SfastaParser<'sfa> {
     /// Convenience function to open a file and parse it.
-    /// Prefetch defaults to false
-    pub fn open(path: String) -> Result<Sfasta<'sfa>, String> {
-        let in_buf = std::fs::File::open(path).expect("Unable to open file");
+    /// Does not prefetch indices automatically
+    /// 
+    /// ```
+    /// let sfasta = SfastaParser::open("myfile.sfasta").unwrap();
+    /// ```
+    pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Sfasta<'sfa>, String> {
+        let in_buf = std::fs::File::open(&path).expect(format!("Unable to open file: {}", path.as_ref().display()).as_str());
         SfastaParser::open_from_buffer(in_buf, false)
     }
 
@@ -772,13 +781,6 @@ impl<'sfa> Iterator for Sequences<'sfa> {
         } else {
             None
         };
-
-        /*
-        let scores = if self.with_scores && seqloc.scores.is_some() {
-            todo!();
-        } else {
-            None
-        }; */
 
         let sequence = if self.with_sequences && seqloc.sequence.is_some() {
             Some(

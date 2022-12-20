@@ -1,4 +1,4 @@
-# 0.3.4 UNRELEASED BREAKING FILE FORMAT
+# 0.3.4 
 ## Major Changes
 Breaks file format, please convert to FASTA then back to SFA
 Far better CPU handling
