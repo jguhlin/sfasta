@@ -620,7 +620,7 @@ impl<'a> SeqLocs<'a> {
     {
         if self.index.is_none() {
             // Because this is sequential reading, we use a BufReader
-            let mut in_buf = std::io::BufReader::with_capacity(512 * 1024, in_buf);
+            let mut in_buf = std::io::BufReader::new(in_buf);
 
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor
