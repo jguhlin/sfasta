@@ -467,7 +467,8 @@ impl<'sfa> SfastaParser<'sfa> {
     /// Convenience function to open a file and parse it.
     /// Does not prefetch indices automatically
     ///
-    /// ```
+    /// ```no_run
+    /// # use libsfasta::prelude::*;
     /// let sfasta = SfastaParser::open("myfile.sfasta").unwrap();
     /// ```
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Sfasta<'sfa>, String> {
@@ -838,6 +839,7 @@ impl<'sfa> Iterator for Sequences<'sfa> {
 mod tests {
     use super::*;
     use crate::conversion::Converter;
+    use crate::prelude::*;
     use std::fs::File;
     use std::io::BufReader;
     use std::io::Cursor;
