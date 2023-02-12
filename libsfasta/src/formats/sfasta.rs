@@ -21,7 +21,7 @@ pub struct Sfasta<'sfa> {
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
-    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + 'sfa>>>,
+    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlocks<'sfa>>,
     pub seqlocs: Option<SeqLocs<'sfa>>,
     pub headers: Option<StringBlockStore>,
@@ -384,6 +384,15 @@ impl<'sfa> Sfasta<'sfa> {
         Ok(ids.get(&mut buf, &locs))
     }
 
+    pub fn get_id_loaded(&self, locs: &(u64, u8)) -> Result<String, &'static str> {
+        let seqlocs = self.seqlocs.as_ref().unwrap();
+        let locs = seqlocs.get_locs_loaded(locs.0 as usize, locs.1 as usize);
+
+        let ids = self.ids.as_ref().unwrap();
+
+        Ok(ids.get_loaded(&locs))
+    }
+
     pub fn len(&self) -> usize {
         self.seqlocs.as_ref().unwrap().total_seqlocs
     }
@@ -393,6 +402,13 @@ impl<'sfa> Sfasta<'sfa> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let seqlocs = self.seqlocs.as_mut().unwrap();
         seqloc.len(seqlocs, &mut buf, self.parameters.block_size)
+    }
+
+    // Get length from SeqLoc (only for sequence)
+    // Immutable for preloaded datasets
+    pub fn seqloc_len_loaded(&self, seqloc: &SeqLoc) -> usize {
+        let seqlocs = self.seqlocs.as_ref().unwrap();
+        seqloc.len_loaded(seqlocs, self.parameters.block_size)
     }
 
     pub fn is_empty(&self) -> bool {
@@ -454,7 +470,7 @@ impl<'sfa> SfastaParser<'sfa> {
     // Prefetch should probably be another name...
     pub fn open_from_buffer<R>(mut in_buf: R, prefetch: bool) -> Result<Sfasta<'sfa>, String>
     where
-        R: 'sfa + Read + Seek + Send,
+        R: 'sfa + Read + Seek + Send + Sync,
     {
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()

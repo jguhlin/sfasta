@@ -3,6 +3,7 @@ use crate::datatypes::U64BlockStore;
 use crate::*;
 
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::sync::Arc;
 
 use flate2::write::{GzDecoder, GzEncoder};
 use log::error;

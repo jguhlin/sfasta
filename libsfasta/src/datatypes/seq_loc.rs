@@ -37,7 +37,7 @@ pub struct SeqLocs<'a> {
     block_locations: Option<Vec<u64>>,
     chunk_size: u32,
     seqlocs_chunk_size: u64,
-    index: Option<Vec<SeqLoc>>,
+    pub index: Option<Vec<SeqLoc>>,
     pub data: Option<Vec<Loc>>,
     total_locs: usize,
     pub total_seqlocs: usize,
@@ -115,6 +115,16 @@ impl<'a> SeqLocs<'a> {
                 }
             }
             locs
+        }
+    }
+
+    /// Get locs for a given seqloc (as defined by start and length)
+    pub fn get_locs_loaded(&self, start: usize, length: usize) -> Vec<Loc>
+    {
+        if self.data.is_some() {
+            self.data.as_ref().unwrap()[start..start + length].to_vec()
+        } else {
+            panic!("Cannot get locs from SeqLocs that is not loaded");
         }
     }
 
@@ -757,6 +767,15 @@ impl SeqLoc {
     {
         let locs = seqlocs.get_locs(
             &mut in_buf,
+            self.sequence.unwrap().0 as usize,
+            self.sequence.unwrap().1 as usize,
+        );
+        locs.into_iter().map(|loc| loc.len(block_size)).sum()
+    }
+
+    pub fn len_loaded(&self, seqlocs: &SeqLocs, block_size: u32) -> usize
+    {
+        let locs = seqlocs.get_locs_loaded(
             self.sequence.unwrap().0 as usize,
             self.sequence.unwrap().1 as usize,
         );

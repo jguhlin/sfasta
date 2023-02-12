@@ -291,6 +291,26 @@ impl BytesBlockStore {
 
         result
     }
+
+    pub fn get_loaded(&self, loc: &[Loc]) -> Vec<u8>
+    {
+        let mut result = Vec::with_capacity(64);
+
+        let block_size = self.block_size as u32;
+
+        if self.data.is_some() {
+            let loc0 = loc[0].original_format(block_size);
+            let loc1 = loc[loc.len() - 1].original_format(block_size);
+
+            let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
+            let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
+            result.extend(&self.data.as_ref().unwrap()[start..=end]);
+        } else {
+            panic!("Data not loaded");        
+        }
+
+        result
+    }
 }
 
 #[cfg(test)]

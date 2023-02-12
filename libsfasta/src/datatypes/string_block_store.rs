@@ -79,6 +79,13 @@ impl StringBlockStore {
 
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
+
+    pub fn get_loaded(&self, loc: &[Loc]) -> String
+    {
+        let string_as_bytes = self.inner.get_loaded(loc);
+
+        from_utf8(&string_as_bytes).unwrap().to_string()
+    }
 }
 
 #[cfg(test)]
