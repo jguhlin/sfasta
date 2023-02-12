@@ -22,11 +22,30 @@ pub struct Sfasta<'sfa> {
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + 'sfa>>>,
-    pub sequenceblocks: Option<SequenceBlocks<'sfa>>,
-    pub seqlocs: Option<SeqLocs<'sfa>>,
+    pub sequenceblocks: Option<SequenceBlocks>,
+    pub seqlocs: Option<SeqLocs>,
     pub headers: Option<StringBlockStore>,
     pub ids: Option<StringBlockStore>,
     pub masking: Option<Masking>,
+}
+
+impl<'sfa> Clone for Sfasta<'sfa> {
+    fn clone(&self) -> Self {
+        Sfasta {
+            version: self.version,
+            directory: self.directory.clone(),
+            parameters: self.parameters.clone(),
+            metadata: self.metadata.clone(),
+            index_directory: self.index_directory.clone(),
+            index: self.index.clone(),
+            buf: None,
+            sequenceblocks: self.sequenceblocks.clone(),
+            seqlocs: self.seqlocs.clone(),
+            headers: self.headers.clone(),
+            ids: self.ids.clone(),
+            masking: self.masking.clone(),
+        }
+    }
 }
 
 impl<'sfa> Default for Sfasta<'sfa> {
@@ -49,6 +68,14 @@ impl<'sfa> Default for Sfasta<'sfa> {
 }
 
 impl<'sfa> Sfasta<'sfa> {
+
+    /// Use for after cloning(primarily for multiple threads), give the object a new read buffer
+    pub fn with_buffer(mut self, buf: Box<dyn ReadAndSeek + Send + 'sfa>) -> Self {
+        self.buf = Some(RwLock::new(buf));
+        self
+    }
+
+
     pub fn with_sequences(self) -> Self {
         // TODO: Should we really have SFASTA without sequences?!
         // self.directory = self.directory.with_sequences();

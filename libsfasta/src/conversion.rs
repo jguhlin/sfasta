@@ -410,7 +410,7 @@ pub fn write_fasta_sequence<'convert, W, R>(
     debug_size: &mut Vec<(String, usize)>,
 ) -> (
     Vec<std::sync::Arc<String>>,
-    SeqLocs<'convert>,
+    SeqLocs,
     u64,
     Option<NonZeroU64>,
     Option<NonZeroU64>,
@@ -755,7 +755,7 @@ pub fn write_fastq_sequence<'write, W, R>(
     mut out_fh: &mut W,
 ) -> (
     Vec<std::sync::Arc<String>>,
-    SeqLocs<'write>,
+    SeqLocs,
     u64,
     Option<NonZeroU64>,
     Option<NonZeroU64>,

@@ -366,7 +366,7 @@ impl DualIndexWriter {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct DualIndex {
     pub idx_start: u64,
     pub chunk_size: u64,

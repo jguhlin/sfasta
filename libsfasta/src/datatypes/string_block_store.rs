@@ -4,6 +4,7 @@ use simdutf8::basic::from_utf8;
 
 use crate::datatypes::{BytesBlockStore, Loc};
 
+#[derive(Clone)]
 pub struct StringBlockStore {
     inner: BytesBlockStore,
 }

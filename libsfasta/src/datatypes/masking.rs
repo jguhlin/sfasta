@@ -6,6 +6,7 @@ use crate::datatypes::{BytesBlockStore, Loc};
 
 use pulp::Arch;
 
+#[derive(Clone)]
 pub struct Masking {
     inner: BytesBlockStore,
 }

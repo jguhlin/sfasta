@@ -2,6 +2,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::datatypes::{zstd_encoder, CompressionType, Loc};
 
+#[derive(Clone)]
 pub struct BytesBlockStore {
     location: u64,
     block_index_pos: u64,
