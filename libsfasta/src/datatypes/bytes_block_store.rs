@@ -2,6 +2,7 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::datatypes::{zstd_encoder, CompressionType, Loc};
 
+#[derive(Clone)]
 pub struct BytesBlockStore {
     location: u64,
     block_index_pos: u64,
@@ -109,13 +110,13 @@ impl BytesBlockStore {
     }
 
     pub fn emit_blocks(&mut self) -> Vec<&[u8]> {
-        while self.data.as_ref().unwrap().len() > 0 {
+        while !self.data.as_ref().unwrap().is_empty() {
             self.compress_block();
         }
 
         let data = self.compressed_blocks.as_ref().unwrap();
         let mut blocks = Vec::new();
-        let len = data.len();
+        let _len = data.len();
 
         let mut start = 0;
         for len in self.compressed_block_lens.as_ref().unwrap() {
@@ -136,7 +137,7 @@ impl BytesBlockStore {
 
         let mut block_locations_pos: u64 = 0;
 
-        let starting_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let starting_pos = out_buf.stream_position().unwrap();
         // TODO: This is a lie, only zstd is supported as of right now...
         bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
             .unwrap();
@@ -149,13 +150,13 @@ impl BytesBlockStore {
         let blocks = self.emit_blocks();
 
         for compressed_block in blocks {
-            let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-            bincode::encode_into_std_write(&compressed_block, &mut out_buf, bincode_config)
+            let block_start = out_buf.stream_position().unwrap();
+            bincode::encode_into_std_write(compressed_block, &mut out_buf, bincode_config)
                 .unwrap();
             block_locations.push(block_start);
         }
 
-        block_locations_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        block_locations_pos = out_buf.stream_position().unwrap();
 
         let bincoded_block_locations_size =
             bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
@@ -167,7 +168,7 @@ impl BytesBlockStore {
             .unwrap();
         self.block_locations = Some(block_locations);
 
-        let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        let end = out_buf.stream_position().unwrap();
         out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
         bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
             .unwrap();
@@ -197,7 +198,7 @@ impl BytesBlockStore {
             store.block_size,
         ) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
-            Err(e) => return Err(format!("Error decoding block store: {}", e)),
+            Err(e) => return Err(format!("Error decoding block store: {e}")),
         };
 
         store.location = starting_pos;
@@ -205,7 +206,7 @@ impl BytesBlockStore {
         in_buf.seek(SeekFrom::Start(store.block_index_pos)).unwrap();
         let compressed: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
-            Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+            Err(e) => return Err(format!("Error decoding block locations: {e}")),
         };
 
         let block_locations: Vec<u8> = zstd::stream::decode_all(&compressed[..]).unwrap();
@@ -325,7 +326,7 @@ mod tests {
     fn test_bv_stuff() {
         let a: u8 = 5;
         let bv: BitVec<u8, Lsb0> = BitVec::from_element(a);
-        let b = bv[0..8].load::<u8>();
+        let _b = bv[0..8].load::<u8>();
     }
 
     #[test]

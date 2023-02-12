@@ -1,5 +1,5 @@
 //! Structs to open and work with SFASTA file format
-//! 
+//!
 //! This module contains the main methods of reading SFASTA files, including iterators
 //! to iterate over sequences.
 
@@ -21,12 +21,31 @@ pub struct Sfasta<'sfa> {
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
-    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
-    pub sequenceblocks: Option<SequenceBlocks<'sfa>>,
-    pub seqlocs: Option<SeqLocs<'sfa>>,
+    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + 'sfa>>>,
+    pub sequenceblocks: Option<SequenceBlocks>,
+    pub seqlocs: Option<SeqLocs>,
     pub headers: Option<StringBlockStore>,
     pub ids: Option<StringBlockStore>,
     pub masking: Option<Masking>,
+}
+
+impl<'sfa> Clone for Sfasta<'sfa> {
+    fn clone(&self) -> Self {
+        Sfasta {
+            version: self.version,
+            directory: self.directory.clone(),
+            parameters: self.parameters.clone(),
+            metadata: self.metadata.clone(),
+            index_directory: self.index_directory.clone(),
+            index: self.index.clone(),
+            buf: None,
+            sequenceblocks: self.sequenceblocks.clone(),
+            seqlocs: self.seqlocs.clone(),
+            headers: self.headers.clone(),
+            ids: self.ids.clone(),
+            masking: self.masking.clone(),
+        }
+    }
 }
 
 impl<'sfa> Default for Sfasta<'sfa> {
@@ -49,6 +68,12 @@ impl<'sfa> Default for Sfasta<'sfa> {
 }
 
 impl<'sfa> Sfasta<'sfa> {
+    /// Use for after cloning(primarily for multiple threads), give the object a new read buffer
+    pub fn with_buffer(mut self, buf: Box<dyn ReadAndSeek + Send + 'sfa>) -> Self {
+        self.buf = Some(RwLock::new(buf));
+        self
+    }
+
     pub fn with_sequences(self) -> Self {
         // TODO: Should we really have SFASTA without sequences?!
         // self.directory = self.directory.with_sequences();
@@ -309,7 +334,7 @@ impl<'sfa> Sfasta<'sfa> {
     pub fn get_sequence_by_locs(&mut self, locs: &[Loc]) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(1024);
 
-        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
 
         // Once stabilized, use write_all_vectored
         for (block, (start, end)) in locs
@@ -457,12 +482,14 @@ pub struct SfastaParser<'sfa> {
 impl<'sfa> SfastaParser<'sfa> {
     /// Convenience function to open a file and parse it.
     /// Does not prefetch indices automatically
-    /// 
-    /// ```
+    ///
+    /// ```no_run
+    /// # use libsfasta::prelude::*;
     /// let sfasta = SfastaParser::open("myfile.sfasta").unwrap();
     /// ```
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Sfasta<'sfa>, String> {
-        let in_buf = std::fs::File::open(&path).expect(format!("Unable to open file: {}", path.as_ref().display()).as_str());
+        let in_buf = std::fs::File::open(&path)
+            .unwrap_or_else(|_| panic!("Unable to open file: {}", path.as_ref().display()));
         SfastaParser::open_from_buffer(in_buf, false)
     }
 
@@ -479,7 +506,7 @@ impl<'sfa> SfastaParser<'sfa> {
         let mut sfasta_marker: [u8; 6] = [0; 6];
         match in_buf.read_exact(&mut sfasta_marker) {
             Ok(_) => (),
-            Err(x) => return Result::Err(format!("Invalid file. {}", x)),
+            Err(x) => return Result::Err(format!("Invalid file. {x}")),
         };
 
         log::info!("Sfasta marker: {:?}", sfasta_marker);
@@ -493,7 +520,7 @@ impl<'sfa> SfastaParser<'sfa> {
         let mut sfasta = Sfasta {
             version: match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
-                Err(y) => return Result::Err(format!("Error reading SFASTA directory: {}", y)),
+                Err(y) => return Result::Err(format!("Error reading SFASTA directory: {y}")),
             },
             ..Default::default()
         };
@@ -509,7 +536,7 @@ impl<'sfa> SfastaParser<'sfa> {
         let dir: DirectoryOnDisk = match bincode::decode_from_std_read(&mut in_buf, bincode_config)
         {
             Ok(x) => x,
-            Err(y) => return Result::Err(format!("Error reading SFASTA directory: {}", y)),
+            Err(y) => return Result::Err(format!("Error reading SFASTA directory: {y}")),
         };
 
         sfasta.directory = dir.into();
@@ -518,21 +545,17 @@ impl<'sfa> SfastaParser<'sfa> {
 
         sfasta.parameters = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
-            Err(y) => return Result::Err(format!("Error reading SFASTA parameters: {}", y)),
+            Err(y) => return Result::Err(format!("Error reading SFASTA parameters: {y}")),
         };
 
         log::info!("Parsing Metadata");
         sfasta.metadata = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
-            Err(y) => return Result::Err(format!("Error reading SFASTA metadata: {}", y)),
+            Err(y) => return Result::Err(format!("Error reading SFASTA metadata: {y}")),
         };
 
         // Next are the sequence blocks, which aren't important right now...
         // The index is much more important to us...
-
-        let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
-            .with_limit::<{ 128 * 1024 * 1024 }>();
 
         log::info!("Index");
         // TODO: Handle no index
@@ -540,7 +563,7 @@ impl<'sfa> SfastaParser<'sfa> {
             sfasta.index =
                 match DualIndex::new(&mut in_buf, sfasta.directory.index_loc.unwrap().get()) {
                     Ok(x) => Some(x),
-                    Err(y) => return Result::Err(format!("Error reading SFASTA index: {}", y)),
+                    Err(y) => return Result::Err(format!("Error reading SFASTA index: {y}")),
                 };
         } else {
             return Result::Err(
@@ -555,7 +578,7 @@ impl<'sfa> SfastaParser<'sfa> {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
             let mut seqlocs = match SeqLocs::from_buffer(&mut in_buf, seqlocs_loc) {
                 Ok(x) => x,
-                Err(y) => return Result::Err(format!("Error reading SFASTA seqlocs: {}", y)),
+                Err(y) => return Result::Err(format!("Error reading SFASTA seqlocs: {y}")),
             };
 
             if prefetch {
@@ -576,7 +599,7 @@ impl<'sfa> SfastaParser<'sfa> {
             ))
             .expect("Unable to work with seek API");
 
-        let block_index_loc = in_buf.seek(SeekFrom::Current(0)).unwrap();
+        let block_index_loc = in_buf.stream_position().unwrap();
 
         log::info!("Creating Sequence Blocks");
 
@@ -605,7 +628,7 @@ impl<'sfa> SfastaParser<'sfa> {
                 sfasta.directory.headers_loc.unwrap().get(),
             ) {
                 Ok(x) => x,
-                Err(y) => return Result::Err(format!("Error reading SFASTA headers: {}", y)),
+                Err(y) => return Result::Err(format!("Error reading SFASTA headers: {y}")),
             };
 
             if prefetch {
@@ -622,7 +645,7 @@ impl<'sfa> SfastaParser<'sfa> {
                 sfasta.directory.ids_loc.unwrap().get(),
             ) {
                 Ok(x) => x,
-                Err(y) => return Result::Err(format!("Error reading SFASTA ids: {}", y)),
+                Err(y) => return Result::Err(format!("Error reading SFASTA ids: {y}")),
             };
             if prefetch {
                 ids.prefetch(&mut in_buf);
@@ -637,7 +660,7 @@ impl<'sfa> SfastaParser<'sfa> {
                 sfasta.directory.masking_loc.unwrap().get(),
             ) {
                 Ok(x) => Some(x),
-                Err(y) => return Result::Err(format!("Error reading SFASTA masking: {}", y)),
+                Err(y) => return Result::Err(format!("Error reading SFASTA masking: {y}")),
             };
         }
 
@@ -852,7 +875,7 @@ mod tests {
         converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
-            panic!("Unable to seek to start of file, {:#?}", x)
+            panic!("Unable to seek to start of file, {x:#?}")
         };
 
         println!("Opening file...");
@@ -894,7 +917,7 @@ mod tests {
         converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
-            panic!("Unable to seek to start of file, {:#?}", x)
+            panic!("Unable to seek to start of file, {x:#?}")
         };
 
         // TODO: Test this with prefecth both true and false...
@@ -902,12 +925,12 @@ mod tests {
         assert!(sfasta.index_len() == 10);
 
         let output = &sfasta.find("test").unwrap().unwrap();
-        println!("'test' seqloc: {:#?}", output);
+        println!("'test' seqloc: {output:#?}");
         let sequence = sfasta.get_sequence(output).unwrap();
         println!("'test' Sequence length: {}", sequence.len());
 
         let output = &sfasta.find("test3").unwrap().unwrap();
-        println!("'test3' seqloc: {:#?}", output);
+        println!("'test3' seqloc: {output:#?}");
 
         let sequence = sfasta.get_sequence(output).unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
@@ -947,7 +970,7 @@ mod tests {
         converter.convert_fasta(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
-            panic!("Unable to seek to start of file, {:#?}", x)
+            panic!("Unable to seek to start of file, {x:#?}")
         };
 
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();

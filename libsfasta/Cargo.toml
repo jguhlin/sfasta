@@ -49,7 +49,7 @@ twox-hash = "1.6.3"
 bitpacking = { version = "0.8.4", features = ["bitpacker8x"] }
 snap = "1.0.5"
 brotli = "3.3.4"
-lz4_flex = "0.9.4"
+lz4_flex = "0.10.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
@@ -59,7 +59,7 @@ flate2 = { version = "1.0.24", features = ["rust_backend"], default-features = t
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Comment flate2 out for testing wasm build
 flate2 = {version = "1.0.24", features = ["zlib-ng"], default-features = false}
-zstd = { version="0.12.1", default-features = false, features=["arrays", "zdict_builder", "experimental"] } # { git = "https://github.com/gyscos/zstd-rs", features = [ "experimental" ] }
+zstd = { version="0.12.3", default-features = false, features=["arrays", "zdict_builder", "experimental"] } # { git = "https://github.com/gyscos/zstd-rs", features = [ "experimental" ] }
 xz = "0.1.0"
 pulp = "0.10.4"
 syncmers = "0.1.0"

@@ -6,6 +6,7 @@ use crate::datatypes::{BytesBlockStore, Loc};
 
 use pulp::Arch;
 
+#[derive(Clone)]
 pub struct Masking {
     inner: BytesBlockStore,
 }
@@ -104,27 +105,27 @@ mod tests {
         let seq = test_seqs[0].as_bytes();
         println!("{:#?}", test_seqs.len());
         let loc = masking.add_masking(seq).unwrap();
-        println!("{:#?}", loc);
+        println!("{loc:#?}");
 
         for _ in 0..1000 {
-            for i in 0..test_seqs.len() {
+            (0..test_seqs.len()).for_each(|i| {
                 let seq = test_seqs[i].as_bytes();
                 masking.add_masking(seq);
-            }
+            });
         }
 
         let seq = test_seqs[0].as_bytes();
         let loc2 = masking.add_masking(seq).unwrap();
-        println!("{:#?}", loc2);
+        println!("{loc2:#?}");
 
         let seq = test_seqs[3].as_bytes();
         let loc3 = masking.add_masking(seq).unwrap();
 
         for _ in 0..1000 {
-            for i in 0..test_seqs.len() {
+            (0..test_seqs.len()).for_each(|i| {
                 let seq = test_seqs[i].as_bytes();
                 masking.add_masking(seq);
-            }
+            });
         }
 
         let mut buffer = Cursor::new(Vec::new());

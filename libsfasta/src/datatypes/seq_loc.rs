@@ -9,6 +9,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::datatypes::zstd_encoder;
+use crate::utils::zstd_decompressor;
 
 /*
 Should flatten and have it stored as:
@@ -28,7 +29,8 @@ pub struct SeqLoc {
 } */
 
 /// Handles access to SeqLocs
-pub struct SeqLocs<'a> {
+#[derive(Clone)]
+pub struct SeqLocs {
     location: u64,
     block_index_pos: u64,
     seqlocs_chunks_position: u64,
@@ -44,11 +46,10 @@ pub struct SeqLocs<'a> {
     cache: Option<(u32, Vec<Loc>)>,
     decompression_buffer: Option<Vec<u8>>,
     compressed_seq_buffer: Option<Vec<u8>>,
-    zstd_decompressor: Option<zstd::bulk::Decompressor<'a>>,
     preloaded: bool,
 }
 
-impl<'a> std::ops::Index<usize> for SeqLocs<'a> {
+impl std::ops::Index<usize> for SeqLocs {
     type Output = Loc;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -56,7 +57,7 @@ impl<'a> std::ops::Index<usize> for SeqLocs<'a> {
     }
 }
 
-impl<'a> Default for SeqLocs<'a> {
+impl Default for SeqLocs {
     fn default() -> Self {
         SeqLocs {
             location: 0,
@@ -72,7 +73,6 @@ impl<'a> Default for SeqLocs<'a> {
             cache: None,
             decompression_buffer: None,
             compressed_seq_buffer: None,
-            zstd_decompressor: None,
             preloaded: false,
             seqlocs_chunks_position: 0,
             seqlocs_chunks_offsets_position: 0,
@@ -80,7 +80,7 @@ impl<'a> Default for SeqLocs<'a> {
     }
 }
 
-impl<'a> SeqLocs<'a> {
+impl SeqLocs {
     /// Create a new SeqLocs object
     pub fn new() -> Self {
         SeqLocs::default()
@@ -290,7 +290,7 @@ impl<'a> SeqLocs<'a> {
             ) {
                 Ok(x) => current_offset += x as u32,
                 Err(e) => {
-                    panic!("Unable to write out seqlocs chunk size: {}", e);
+                    panic!("Unable to write out seqlocs chunk size: {e}");
                 }
             }
 
@@ -299,7 +299,7 @@ impl<'a> SeqLocs<'a> {
                     current_offset += x as u32;
                 }
                 Err(e) => {
-                    panic!("Unable to write out seqlocs chunk: {}", e);
+                    panic!("Unable to write out seqlocs chunk: {e}");
                 }
             }
         }
@@ -322,7 +322,7 @@ impl<'a> SeqLocs<'a> {
         match bincode::encode_into_std_write(data.len() as u32, &mut out_buf, bincode_config) {
             Ok(_) => (),
             Err(e) => {
-                panic!("Unable to write out seqlocs chunk offsets size: {}", e);
+                panic!("Unable to write out seqlocs chunk offsets size: {e}");
             }
         }
 
@@ -330,7 +330,7 @@ impl<'a> SeqLocs<'a> {
         match bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config) {
             Ok(_) => (),
             Err(e) => {
-                panic!("Unable to write out seqlocs chunk offsets size: {}", e);
+                panic!("Unable to write out seqlocs chunk offsets size: {e}");
             }
         }
 
@@ -445,7 +445,7 @@ impl<'a> SeqLocs<'a> {
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(h) => h,
                 Err(e) => {
-                    return Err(format!("Unable to read header: {}", e));
+                    return Err(format!("Unable to read header: {e}"));
                 }
             };
 
@@ -468,7 +468,7 @@ impl<'a> SeqLocs<'a> {
         let data_len: u32 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(l) => l,
             Err(e) => {
-                return Err(format!("Unable to read seqlocs chunk offsets size: {}", e));
+                return Err(format!("Unable to read seqlocs chunk offsets size: {e}"));
             }
         };
 
@@ -476,7 +476,7 @@ impl<'a> SeqLocs<'a> {
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
                 Err(e) => {
-                    return Err(format!("Unable to read seqlocs chunk offsets: {}", e));
+                    return Err(format!("Unable to read seqlocs chunk offsets: {e}"));
                 }
             };
 
@@ -496,7 +496,7 @@ impl<'a> SeqLocs<'a> {
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(c) => c,
                 Err(e) => {
-                    return Err(format!("Unable to read block index pos: {}", e));
+                    return Err(format!("Unable to read block index pos: {e}"));
                 }
             };
 
@@ -508,7 +508,7 @@ impl<'a> SeqLocs<'a> {
         match decompressor.read_to_end(&mut decompressed) {
             Ok(_) => (),
             Err(e) => {
-                return Err(format!("Unable to decompress block locations: {}", e));
+                return Err(format!("Unable to decompress block locations: {e}"));
             }
         }
 
@@ -516,7 +516,7 @@ impl<'a> SeqLocs<'a> {
             match bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config) {
                 Ok(c) => c,
                 Err(e) => {
-                    return Err(format!("Unable to read block index pos: {}", e));
+                    return Err(format!("Unable to read block index pos: {e}"));
                 }
             };
 
@@ -533,7 +533,6 @@ impl<'a> SeqLocs<'a> {
             total_seqlocs: total_seq_locs as usize,
             decompression_buffer: None,
             compressed_seq_buffer: None,
-            zstd_decompressor: None,
             preloaded: false,
             seqlocs_chunks_position,
             seqlocs_chunks_offsets_position,
@@ -592,19 +591,11 @@ impl<'a> SeqLocs<'a> {
         *compressed_block = bincode::decode_from_std_read(&mut in_buf, bincode_config)
             .expect("Unable to read block");
 
-        if self.zstd_decompressor.is_none() {
-            let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
-            zstd_decompressor
-                .include_magicbytes(false)
-                .expect("Unable to disable magicbytes in decoder");
-            self.zstd_decompressor = Some(zstd_decompressor);
-        }
+        let mut zstd_decompressor = zstd_decompressor(None);
 
         if self.decompression_buffer.is_none() {
             self.decompression_buffer = Some(Vec::with_capacity(512 * 1024));
         }
-
-        let zstd_decompressor = self.zstd_decompressor.as_mut().unwrap();
 
         let decompressed = self.decompression_buffer.as_mut().unwrap();
 

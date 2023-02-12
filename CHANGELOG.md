@@ -1,3 +1,7 @@
+# 0.3.5 (Unreleased)
+## Major Changes
+* Added cloning support for sharing across threads (read buffer must be set with with_buffer method for each new thread)
+
 # 0.3.4 
 ## Major Changes
 Breaks file format, please convert to FASTA then back to SFA
@@ -7,7 +11,6 @@ Prefetching data for speeding up viewing entire files sequentially
 Slice SeqLoc's to get sub-sequences (no more decompressing entire genomes for a small fraction)
 Fuzzing for parse_fasta and parse_fastq
 More efficient store of SeqLoc's for large files
-
 
 ## Minor Changes
 Print out the correct version from cargo.toml

@@ -14,6 +14,7 @@ use crate::datatypes::{zstd_encoder, CompressionType};
 
 // This is a specialized variant of Bytes Block Store, but we don't need the entire Loc system, just the # of the block and the location in the block (ordinal)
 
+#[derive(Clone)]
 pub struct U64BlockStore {
     location: u64,
     block_index_pos: u64,

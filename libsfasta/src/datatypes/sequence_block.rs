@@ -1,5 +1,6 @@
 use crate::datatypes::structs::{default_compression_level, CompressionType};
 use crate::datatypes::U64BlockStore;
+use crate::utils::zstd_decompressor;
 use crate::*;
 
 use std::io::{Read, Seek, SeekFrom, Write};
@@ -11,19 +12,20 @@ use log::error;
 #[cfg(not(target_arch = "wasm32"))]
 use xz::read::{XzDecoder, XzEncoder};
 
-pub struct SequenceBlocks<'a> {
+#[derive(Clone)]
+pub struct SequenceBlocks {
     pub block_loc_store: U64BlockStore,
     cache: Option<(u32, Vec<u8>)>,
     cache_sbc: SequenceBlockCompressed,
     pub compression_type: CompressionType,
     pub compression_level: i8,
+    pub compression_dict: Option<Vec<u8>>,
     caching: bool,
     block_size: usize,
-    zstd_decompressor: Option<zstd::bulk::Decompressor<'a>>,
 }
 
 // TODO: Redundant code, clean it up
-impl<'a> SequenceBlocks<'a> {
+impl SequenceBlocks {
     pub fn new<R>(
         in_buf: &mut R,
         compression_type: CompressionType,
@@ -34,28 +36,13 @@ impl<'a> SequenceBlocks<'a> {
     where
         R: Read + Seek,
     {
-        let zstd_decompressor = if compression_type == CompressionType::ZSTD {
-            let mut zstd_decompressor = if let Some(dict) = &compression_dict {
-                zstd::bulk::Decompressor::with_dictionary(dict)
-            } else {
-                zstd::bulk::Decompressor::new()
-            }
-            .unwrap();
-            zstd_decompressor
-                .include_magicbytes(false)
-                .expect("Unable to disable magicbytes in decoder");
-            Some(zstd_decompressor)
-        } else {
-            None
-        };
-
         Self {
             cache: None,
             compression_type,
             compression_level: default_compression_level(compression_type),
             caching: false,
             block_size,
-            zstd_decompressor,
+            compression_dict,
             cache_sbc: SequenceBlockCompressed {
                 compressed_seq: Vec::with_capacity(block_size),
             },
@@ -69,7 +56,7 @@ impl<'a> SequenceBlocks<'a> {
         self
     }
 
-    pub fn block_locs<R>(&mut self, mut in_buf: &mut R, block: u32) -> u64
+    pub fn block_locs<R>(&mut self, in_buf: &mut R, block: u32) -> u64
     where
         R: Read + Seek,
     {
@@ -104,11 +91,21 @@ impl<'a> SequenceBlocks<'a> {
         self.cache_sbc.compressed_seq = bincode::decode_from_std_read(&mut *in_buf, bincode_config)
             .expect("Unable to parse SequenceBlockCompressed");
 
+        let mut zstd_decompressor = if self.compression_type == CompressionType::ZSTD {
+            if let Some(compression_dict) = self.compression_dict.as_ref() {
+                Some(zstd_decompressor(Some(&compression_dict)))
+            } else {
+                Some(zstd_decompressor(None))
+            }
+        } else {
+            None
+        };
+
         self.cache.as_mut().unwrap().1.clear();
         self.cache_sbc.decompress_to_buffer(
             self.compression_type,
             &mut self.cache.as_mut().unwrap().1,
-            self.zstd_decompressor.as_mut(),
+            zstd_decompressor.as_mut(),
         );
     }
 
@@ -138,11 +135,17 @@ impl<'a> SequenceBlocks<'a> {
         let sbc: SequenceBlockCompressed = bincode::decode_from_std_read(in_buf, bincode_config)
             .expect("Unable to parse SequenceBlockCompressed");
 
+        let mut zstd_decompressor = if self.compression_type == CompressionType::ZSTD {
+            Some(zstd_decompressor(None))
+        } else {
+            None
+        };
+
         let mut buffer = Vec::with_capacity(self.block_size);
         sbc.decompress_to_buffer(
             self.compression_type,
             &mut buffer,
-            self.zstd_decompressor.as_mut(),
+            zstd_decompressor.as_mut(),
         );
 
         buffer
@@ -170,7 +173,7 @@ pub fn zstd_encoder(
     encoder
         .include_contentsize(false)
         .expect("Unable to set ZSTD Content Size Flag");
-    encoder.long_distance_matching(true);
+    encoder.long_distance_matching(true).expect("Unable to set long_distance_matching");
     encoder
 }
 
@@ -258,8 +261,8 @@ impl SequenceBlock {
                 compressor.read_to_end(&mut cseq).unwrap();
             }
             _ => {
-                error!("Unsupported compression type: {:?}", compression_type);
-                panic!("Unsupported compression type: {:?}", compression_type);
+                error!("Unsupported compression type: {compression_type:?}");
+                panic!("Unsupported compression type: {compression_type:?}");
             }
         }
 
@@ -279,7 +282,7 @@ impl SequenceBlock {
     }
 }
 
-#[derive(bincode::Encode, bincode::Decode)]
+#[derive(bincode::Encode, bincode::Decode, Clone)]
 pub struct SequenceBlockCompressed {
     pub compressed_seq: Vec<u8>,
 }
@@ -311,7 +314,7 @@ impl SequenceBlockCompressed {
                 let zstd = zstd_decompressor.as_mut().unwrap();
                 match zstd.decompress_to_buffer(&self.compressed_seq, &mut seq) {
                     Ok(_x) => _x,
-                    Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                    Err(y) => panic!("Unable to decompress block: {y:#?}"),
                 };
             }
 
@@ -381,7 +384,7 @@ impl SequenceBlockCompressed {
                 let zstd = zstd_decompressor.as_mut().unwrap();
                 match zstd.decompress_to_buffer(&self.compressed_seq, buffer) {
                     Ok(_x) => _x,
-                    Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                    Err(y) => panic!("Unable to decompress block: {y:#?}"),
                 };
             }
             CompressionType::XZ => {

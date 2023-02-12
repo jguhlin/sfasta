@@ -247,7 +247,7 @@ mod tests {
         let mut buf = BufReader::new(fakefasta_);
         let j = summarize_fasta(&mut buf);
         assert!(j.0 == 2);
-        println!("{:#?}", j);
+        println!("{j:#?}");
         assert!(j.1[0] == "Hello");
         assert!(j.1[1] == "Second");
         assert!(j.2[0] == 17);

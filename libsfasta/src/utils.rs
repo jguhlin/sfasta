@@ -7,6 +7,20 @@ use std::path::Path;
 use bitpacking::{BitPacker, BitPacker8x};
 use crossbeam::channel;
 
+pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd::bulk::Decompressor<'a> {
+    let mut zstd_decompressor = if let Some(dict) = dict {
+        zstd::bulk::Decompressor::with_dictionary(dict)
+    } else {
+        zstd::bulk::Decompressor::new()
+    }
+    .unwrap();
+
+    zstd_decompressor
+        .include_magicbytes(false)
+        .expect("Failed to set magicbytes");
+    zstd_decompressor
+}
+
 pub fn create_dict(input: &[u8], block_size: usize) -> Vec<u8> {
     let block_counts = input.len() / block_size;
     let input = &input[..block_counts * block_size];
