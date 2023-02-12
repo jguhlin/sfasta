@@ -49,8 +49,8 @@ pub fn detect_compression_format(buffer: &[u8]) -> Result<CompressionType, &'sta
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Read;
     use std::fs::*;
+    use std::io::Read;
 
     #[test]
     fn test_detect_file_format() {

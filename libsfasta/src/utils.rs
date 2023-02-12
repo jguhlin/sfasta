@@ -13,10 +13,11 @@ pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd::bulk::Decompressor<'a
     } else {
         zstd::bulk::Decompressor::new()
     }
-
     .unwrap();
 
-    zstd_decompressor.include_magicbytes(false).expect("Failed to set magicbytes");
+    zstd_decompressor
+        .include_magicbytes(false)
+        .expect("Failed to set magicbytes");
     zstd_decompressor
 }
 

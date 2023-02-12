@@ -1,5 +1,5 @@
 //! Structs to open and work with SFASTA file format
-//! 
+//!
 //! This module contains the main methods of reading SFASTA files, including iterators
 //! to iterate over sequences.
 
@@ -68,13 +68,11 @@ impl<'sfa> Default for Sfasta<'sfa> {
 }
 
 impl<'sfa> Sfasta<'sfa> {
-
     /// Use for after cloning(primarily for multiple threads), give the object a new read buffer
     pub fn with_buffer(mut self, buf: Box<dyn ReadAndSeek + Send + 'sfa>) -> Self {
         self.buf = Some(RwLock::new(buf));
         self
     }
-
 
     pub fn with_sequences(self) -> Self {
         // TODO: Should we really have SFASTA without sequences?!
@@ -468,12 +466,13 @@ pub struct SfastaParser<'sfa> {
 impl<'sfa> SfastaParser<'sfa> {
     /// Convenience function to open a file and parse it.
     /// Does not prefetch indices automatically
-    /// 
+    ///
     /// ```
     /// let sfasta = SfastaParser::open("myfile.sfasta").unwrap();
     /// ```
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Sfasta<'sfa>, String> {
-        let in_buf = std::fs::File::open(&path).expect(format!("Unable to open file: {}", path.as_ref().display()).as_str());
+        let in_buf = std::fs::File::open(&path)
+            .expect(format!("Unable to open file: {}", path.as_ref().display()).as_str());
         SfastaParser::open_from_buffer(in_buf, false)
     }
 
