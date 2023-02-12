@@ -49,7 +49,7 @@ pub struct SeqLocs {
     preloaded: bool,
 }
 
-impl<'a> std::ops::Index<usize> for SeqLocs {
+impl std::ops::Index<usize> for SeqLocs {
     type Output = Loc;
 
     fn index(&self, index: usize) -> &Self::Output {
@@ -57,7 +57,7 @@ impl<'a> std::ops::Index<usize> for SeqLocs {
     }
 }
 
-impl<'a> Default for SeqLocs {
+impl Default for SeqLocs {
     fn default() -> Self {
         SeqLocs {
             location: 0,
@@ -280,7 +280,7 @@ impl SeqLocs {
             ) {
                 Ok(x) => current_offset += x as u32,
                 Err(e) => {
-                    panic!("Unable to write out seqlocs chunk size: {}", e);
+                    panic!("Unable to write out seqlocs chunk size: {e}");
                 }
             }
 
@@ -289,7 +289,7 @@ impl SeqLocs {
                     current_offset += x as u32;
                 }
                 Err(e) => {
-                    panic!("Unable to write out seqlocs chunk: {}", e);
+                    panic!("Unable to write out seqlocs chunk: {e}");
                 }
             }
         }
@@ -312,7 +312,7 @@ impl SeqLocs {
         match bincode::encode_into_std_write(data.len() as u32, &mut out_buf, bincode_config) {
             Ok(_) => (),
             Err(e) => {
-                panic!("Unable to write out seqlocs chunk offsets size: {}", e);
+                panic!("Unable to write out seqlocs chunk offsets size: {e}");
             }
         }
 
@@ -320,7 +320,7 @@ impl SeqLocs {
         match bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config) {
             Ok(_) => (),
             Err(e) => {
-                panic!("Unable to write out seqlocs chunk offsets size: {}", e);
+                panic!("Unable to write out seqlocs chunk offsets size: {e}");
             }
         }
 
@@ -435,7 +435,7 @@ impl SeqLocs {
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(h) => h,
                 Err(e) => {
-                    return Err(format!("Unable to read header: {}", e));
+                    return Err(format!("Unable to read header: {e}"));
                 }
             };
 
@@ -458,7 +458,7 @@ impl SeqLocs {
         let data_len: u32 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(l) => l,
             Err(e) => {
-                return Err(format!("Unable to read seqlocs chunk offsets size: {}", e));
+                return Err(format!("Unable to read seqlocs chunk offsets size: {e}"));
             }
         };
 
@@ -466,7 +466,7 @@ impl SeqLocs {
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
                 Err(e) => {
-                    return Err(format!("Unable to read seqlocs chunk offsets: {}", e));
+                    return Err(format!("Unable to read seqlocs chunk offsets: {e}"));
                 }
             };
 
@@ -486,7 +486,7 @@ impl SeqLocs {
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(c) => c,
                 Err(e) => {
-                    return Err(format!("Unable to read block index pos: {}", e));
+                    return Err(format!("Unable to read block index pos: {e}"));
                 }
             };
 
@@ -498,7 +498,7 @@ impl SeqLocs {
         match decompressor.read_to_end(&mut decompressed) {
             Ok(_) => (),
             Err(e) => {
-                return Err(format!("Unable to decompress block locations: {}", e));
+                return Err(format!("Unable to decompress block locations: {e}"));
             }
         }
 
@@ -506,7 +506,7 @@ impl SeqLocs {
             match bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config) {
                 Ok(c) => c,
                 Err(e) => {
-                    return Err(format!("Unable to read block index pos: {}", e));
+                    return Err(format!("Unable to read block index pos: {e}"));
                 }
             };
 

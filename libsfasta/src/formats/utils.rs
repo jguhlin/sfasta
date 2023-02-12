@@ -6,22 +6,22 @@ use crate::datatypes::structs::*;
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
 pub enum FileFormat {
-    FASTA,
-    FASTQ,
-    SFASTA,
-    GFA,
+    Fasta,
+    Fastq,
+    Sfasta,
+    Gfa,
 }
 
 /// Detect the file format of a file. Prefer the file extension when available.
 #[allow(dead_code)]
 pub fn detect_file_format(buffer: &[u8]) -> Result<FileFormat, &'static str> {
-    let buffer = from_utf8(&buffer).expect("Unable to parse file as UTF-8");
-    if buffer.starts_with(">") {
-        Ok(FileFormat::FASTA)
-    } else if buffer.starts_with("@") {
-        Ok(FileFormat::FASTQ)
+    let buffer = from_utf8(buffer).expect("Unable to parse file as UTF-8");
+    if buffer.starts_with('>') {
+        Ok(FileFormat::Fasta)
+    } else if buffer.starts_with('@') {
+        Ok(FileFormat::Fastq)
     } else if buffer.starts_with("sfasta") {
-        Ok(FileFormat::SFASTA)
+        Ok(FileFormat::Sfasta)
     // Need a better test for GFA...
     } else {
         Err("Unknown file format")
@@ -49,19 +49,18 @@ pub fn detect_compression_format(buffer: &[u8]) -> Result<CompressionType, &'sta
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs::*;
-    use std::io::Read;
 
     #[test]
     fn test_detect_file_format() {
         let mut buf: &[u8; 10] = b">Test1\nATC";
-        println!("{:#?}", buf);
-        assert_eq!(detect_file_format(buf).unwrap(), FileFormat::FASTA);
+        println!("{buf:#?}");
+
+        assert_eq!(detect_file_format(buf).unwrap(), FileFormat::Fasta);
 
         buf = b"@Test1\nATC";
-        assert_eq!(detect_file_format(buf).unwrap(), FileFormat::FASTQ);
+        assert_eq!(detect_file_format(buf).unwrap(), FileFormat::Fastq);
 
         buf = b"sfasta\n\n\n\n";
-        assert_eq!(detect_file_format(buf).unwrap(), FileFormat::SFASTA);
+        assert_eq!(detect_file_format(buf).unwrap(), FileFormat::Sfasta);
     }
 }

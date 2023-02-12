@@ -55,7 +55,7 @@ impl SequenceBlocks {
         self
     }
 
-    pub fn block_locs<R>(&mut self, mut in_buf: &mut R, block: u32) -> u64
+    pub fn block_locs<R>(&mut self, in_buf: &mut R, block: u32) -> u64
     where
         R: Read + Seek,
     {
@@ -172,7 +172,7 @@ pub fn zstd_encoder(
     encoder
         .include_contentsize(false)
         .expect("Unable to set ZSTD Content Size Flag");
-    encoder.long_distance_matching(true);
+    encoder.long_distance_matching(true).expect("Unable to set long_distance_matching");
     encoder
 }
 
@@ -260,8 +260,8 @@ impl SequenceBlock {
                 compressor.read_to_end(&mut cseq).unwrap();
             }
             _ => {
-                error!("Unsupported compression type: {:?}", compression_type);
-                panic!("Unsupported compression type: {:?}", compression_type);
+                error!("Unsupported compression type: {compression_type:?}");
+                panic!("Unsupported compression type: {compression_type:?}");
             }
         }
 
@@ -313,7 +313,7 @@ impl SequenceBlockCompressed {
                 let zstd = zstd_decompressor.as_mut().unwrap();
                 match zstd.decompress_to_buffer(&self.compressed_seq, &mut seq) {
                     Ok(_x) => _x,
-                    Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                    Err(y) => panic!("Unable to decompress block: {y:#?}"),
                 };
             }
 
@@ -383,7 +383,7 @@ impl SequenceBlockCompressed {
                 let zstd = zstd_decompressor.as_mut().unwrap();
                 match zstd.decompress_to_buffer(&self.compressed_seq, buffer) {
                     Ok(_x) => _x,
-                    Err(y) => panic!("Unable to decompress block: {:#?}", y),
+                    Err(y) => panic!("Unable to decompress block: {y:#?}"),
                 };
             }
             CompressionType::XZ => {

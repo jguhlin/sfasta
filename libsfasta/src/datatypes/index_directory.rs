@@ -42,9 +42,9 @@ mod tests {
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let encoded_x: Vec<u8> = bincode::encode_to_vec(&x, bincode_config).unwrap();
-        let encoded_y: Vec<u8> = bincode::encode_to_vec(&y, bincode_config).unwrap();
-        let encoded_z: Vec<u8> = bincode::encode_to_vec(&z, bincode_config).unwrap();
+        let encoded_x: Vec<u8> = bincode::encode_to_vec(x, bincode_config).unwrap();
+        let encoded_y: Vec<u8> = bincode::encode_to_vec(y, bincode_config).unwrap();
+        let encoded_z: Vec<u8> = bincode::encode_to_vec(z, bincode_config).unwrap();
 
         assert!(encoded_x.len() == encoded_y.len());
         assert!(encoded_x.len() == encoded_z.len());
