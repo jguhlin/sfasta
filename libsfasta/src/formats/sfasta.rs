@@ -21,7 +21,7 @@ pub struct Sfasta<'sfa> {
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
-    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + 'sfa>>>,
+    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlocks>,
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<StringBlockStore>,
@@ -69,8 +69,10 @@ impl<'sfa> Default for Sfasta<'sfa> {
 
 impl<'sfa> Sfasta<'sfa> {
     /// Use for after cloning(primarily for multiple threads), give the object a new read buffer
-    pub fn with_buffer(mut self, buf: Box<dyn ReadAndSeek + Send + 'sfa>) -> Self {
-        self.buf = Some(RwLock::new(buf));
+    pub fn with_buffer<R>(mut self, buf: R) -> Self 
+    where
+            R: 'sfa + Read + Seek + Send + Sync {
+        self.buf = Some(RwLock::new(Box::new(buf)));
         self
     }
 
