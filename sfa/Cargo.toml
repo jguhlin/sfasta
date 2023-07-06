@@ -34,7 +34,7 @@ mimalloc = { version = "0.1.29", default-features = false, optional = true}
 env_logger = "0.10.0"
 
 # Compression algorithms
-lz4_flex = "0.9.4"
+lz4_flex = "0.11.1"
 zstd = { version="0.12.1", default-features = false, features=["arrays", "experimental"] } # { git = "https://github.com/gyscos/zstd-rs", features = [ "experimental" ] }
 xz = "0.1.0"
 flate2 = { version = "1.0.24", features = ["zlib-ng"], default-features = false }
