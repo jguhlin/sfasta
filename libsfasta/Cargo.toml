@@ -28,7 +28,7 @@ log = "0.4.19"
 crossbeam = "0.8.1"
 static_assertions = "1.1.0"
 bincode = { version = "2.0.0-rc.3" } #, features = ["serde"] }
-bytelines = "2.4.0"
+bytelines = "=2.2.2"
 simdutf8 = {version = "0.1.4", features = ["aarch64_neon"] }
 rayon = "1.7.0"
 itertools = "0.11.0"
