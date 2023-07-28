@@ -18,7 +18,7 @@ impl Default for Parameters {
             block_size: 4 * 1024 * 1024, // 4 Mb
             compression_type: CompressionType::ZSTD,
             compression_dict: None,
-            index_compression_type: CompressionType::LZ4,
+            index_compression_type: CompressionType::ZSTD,
             index_chunk_size: 64 * 1024,   // 64k
             seqlocs_chunk_size: 64 * 1024, // 64k
         }

@@ -9,6 +9,7 @@ use std::sync::Arc;
 use flate2::write::{GzDecoder, GzEncoder};
 use log::error;
 
+use lz4_flex::block;
 #[cfg(not(target_arch = "wasm32"))]
 use xz::read::{XzDecoder, XzEncoder};
 
@@ -32,11 +33,17 @@ impl SequenceBlocks {
         compression_dict: Option<Vec<u8>>,
         block_size: usize,
         block_index_location: u64,
-    ) -> Self
+    ) -> Result<Self, String>
     where
         R: Read + Seek,
     {
-        Self {
+        let block_loc_store = U64BlockStore::from_buffer(in_buf, block_index_location);
+        // Return error if block_loc_store is not created
+        if block_loc_store.is_err() {
+            return Err("Unable to open Block Index Store".to_string());
+        }
+
+        Ok(Self {
             cache: None,
             compression_type,
             compression_level: default_compression_level(compression_type),
@@ -46,9 +53,8 @@ impl SequenceBlocks {
             cache_sbc: SequenceBlockCompressed {
                 compressed_seq: Vec::with_capacity(block_size),
             },
-            block_loc_store: U64BlockStore::from_buffer(in_buf, block_index_location)
-                .expect("Unable to open Block Index Store"),
-        }
+            block_loc_store: block_loc_store.unwrap(),
+        })
     }
 
     pub fn without_caching(mut self) -> Self {

@@ -208,11 +208,15 @@ impl U64BlockStore {
             Err(e) => return Err(format!("Error decoding block locations: {}", e)),
         };
 
-        let block_locations: Vec<u8> = zstd::stream::decode_all(&compressed[..]).unwrap();
-        let block_locations: Vec<u32> =
-            bincode::decode_from_slice(&block_locations, bincode_config)
-                .unwrap()
-                .0;
+        let block_locations: Vec<u8> = match zstd::stream::decode_all(&compressed[..]) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+        };
+        
+        let block_locations: Vec<u32> = match bincode::decode_from_slice(&block_locations, bincode_config) {
+            Ok(x) => x.0,
+            Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+        };
 
         store.block_locations = Some(block_locations);
 

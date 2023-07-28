@@ -1,7 +1,7 @@
 //! Structs to open and work with SFASTA file format
 //!
 //! This module contains the main methods of reading SFASTA files, including iterators
-//! to iterate over sequences.
+//! to iterate over contained sequences.
 
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::RwLock;
@@ -491,6 +491,13 @@ impl<'sfa> SfastaParser<'sfa> {
     /// let sfasta = SfastaParser::open("myfile.sfasta").unwrap();
     /// ```
     pub fn open<P: AsRef<std::path::Path>>(path: P) -> Result<Sfasta<'sfa>, String> {
+        // Check file size is reasonable:
+        let metadata = std::fs::metadata(&path).unwrap();
+        if metadata.len() < 128 {
+            // 128 is a guess, but should figure out the header size....
+            return Err("File size is too small to be a valid SFASTA".to_string());
+        }
+
         let in_buf = std::fs::File::open(&path)
             .unwrap_or_else(|_| panic!("Unable to open file: {}", path.as_ref().display()));
         SfastaParser::open_from_buffer(in_buf, false)
@@ -506,6 +513,14 @@ impl<'sfa> SfastaParser<'sfa> {
             .with_fixed_int_encoding()
             .with_limit::<{ 2 * 1024 * 1024 }>();
 
+        // Confirm buffer is a reasonable size. 64 is random but maybe acceptable size...
+        let buffer_length = in_buf.seek(SeekFrom::End(0)).unwrap();
+        if buffer_length < 128 {
+            return Result::Err(format!("File is too small to be a valid SFASTA"));
+        }
+
+        in_buf.seek(SeekFrom::Start(0)).unwrap();
+
         let mut sfasta_marker: [u8; 6] = [0; 6];
         match in_buf.read_exact(&mut sfasta_marker) {
             Ok(_) => (),
@@ -514,11 +529,11 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::info!("Sfasta marker: {:?}", sfasta_marker);
 
-        #[cfg(not(fuzzing))]
-        assert!(
-            sfasta_marker == "sfasta".as_bytes(),
-            "File is missing sfasta magic bytes"
-        );
+        if sfasta_marker != "sfasta".as_bytes() {
+            return Result::Err(format!(
+                "Invalid SFASTA Format. File is missing sfasta magic bytes."
+            ));
+        }
 
         let mut sfasta = Sfasta {
             version: match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
@@ -528,8 +543,12 @@ impl<'sfa> SfastaParser<'sfa> {
             ..Default::default()
         };
 
-        #[cfg(not(fuzzing))]
-        assert!(sfasta.version <= 1); // 1 is the maximum version supported at this stage...
+        if sfasta.version != 1 {
+            return Result::Err(format!(
+                "Invalid SFASTA Format. File is version {} but this library only supports version 1",
+                sfasta.version
+            ));
+        }
 
         // TODO: In the future, with different versions, we will need to do different things
         // when we inevitabily introduce incompatabilities...
@@ -541,6 +560,11 @@ impl<'sfa> SfastaParser<'sfa> {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA directory: {y}")),
         };
+
+        match dir.sanity_check(buffer_length) {
+            Ok(_) => (),
+            Err(x) => return Result::Err(format!("Invalid SFASTA directory: {x}")),
+        }
 
         sfasta.directory = dir.into();
 
@@ -606,13 +630,22 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::info!("Creating Sequence Blocks");
 
-        sfasta.sequenceblocks = Some(SequenceBlocks::new(
+        let sequenceblocks = SequenceBlocks::new(
             &mut in_buf,
             sfasta.parameters.compression_type,
             sfasta.parameters.compression_dict.clone(),
             sfasta.parameters.block_size as usize,
             block_index_loc,
-        ));
+        );
+
+        if sequenceblocks.is_err() {
+            return Result::Err(format!(
+                "Error reading SFASTA sequence blocks: {:?}",
+                sequenceblocks.err()
+            ));
+        }
+
+        sfasta.sequenceblocks = Some(sequenceblocks.unwrap());
 
         if prefetch {
             println!("Prefetching block locs");
@@ -623,6 +656,8 @@ impl<'sfa> SfastaParser<'sfa> {
                 .prefetch_block_locs(&mut in_buf)
                 .expect("Unable to prefetch block locs");
         }
+
+
 
         log::info!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {

@@ -429,12 +429,27 @@ impl SeqLocs {
     where
         R: Read + Seek,
     {
+
+        let current_pos = in_buf
+            .stream_position()
+            .expect("Unable to work with seek API");
+
+        // Really the remaining length
+        let buffer_len = in_buf
+            .seek(SeekFrom::End(0))
+            .expect("Unable to work with seek API");
+
+        // Reset position
+        in_buf
+            .seek(SeekFrom::Start(current_pos))
+            .expect("Unable to work with seek API");
+
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
 
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 2 * 1024 }>();
+            .with_limit::<{ 4 * 1024 }>();
 
         in_buf
             .seek(SeekFrom::Start(pos))
@@ -458,18 +473,36 @@ impl SeqLocs {
             seqlocs_chunks_offsets_position,
         ) = header;
 
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 8 * 1024 * 1024 }>();
 
         log::info!("Decompressing SeqLoc Chunk Offsets");
         in_buf
             .seek(SeekFrom::Start(seqlocs_chunks_offsets_position))
             .unwrap();
+        
         let data_len: u32 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(l) => l,
             Err(e) => {
                 return Err(format!("Unable to read seqlocs chunk offsets size: {e}"));
             }
         };
+
+        if data_len == 0 {
+            return Err(format!("SeqLocs Data Len is erroneously 0"));
+        }
+
+        if data_len == std::u32::MAX {
+            return Err(format!("SeqLocs Data Len is erroneously std::u32::MAX"));
+        }
+
+        if data_len > buffer_len as u32 {
+            return Err(format!(
+                "SeqLocs Data Len is greater than buffer len: {} > {}",
+                data_len, buffer_len
+            ));
+        }
 
         let offsets_compressed: Vec<u8> =
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
@@ -479,14 +512,21 @@ impl SeqLocs {
                 }
             };
 
-        let seqlocs_chunks_offsets_raw: Vec<u8> = decompressor
-            .decompress(&offsets_compressed, data_len as usize)
-            .unwrap();
+        let seqlocs_chunks_offsets_raw: Vec<u8> =
+            match decompressor.decompress(&offsets_compressed, data_len as usize) {
+                Ok(x) => x,
+                Err(e) => {
+                    return Err(format!("Unable to decompress seqlocs chunk offsets: {e}"));
+                }
+            };
 
         let seqlocs_chunks_offsets: Vec<u32> =
-            bincode::decode_from_slice(&seqlocs_chunks_offsets_raw, bincode_config)
-                .unwrap()
-                .0;
+            match bincode::decode_from_slice(&seqlocs_chunks_offsets_raw, bincode_config) {
+                Ok(x) => x.0,
+                Err(e) => {
+                    return Err(format!("Unable to read seqlocs chunk offsets: {e}"));
+                }
+            };
 
         log::info!("Decompressing Compressed Block Locations");
         in_buf.seek(SeekFrom::Start(block_index_pos)).unwrap();

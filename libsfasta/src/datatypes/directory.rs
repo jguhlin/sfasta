@@ -48,6 +48,64 @@ impl From<Directory> for DirectoryOnDisk {
     }
 }
 
+impl DirectoryOnDisk {
+    pub fn sanity_check(&self, buffer_length: u64) -> Result<(), String> {
+        if self.index_loc > buffer_length {
+            return Err(format!(
+                "Index location is outside of buffer: {} > {}",
+                self.index_loc, buffer_length
+            ));
+        }
+
+        if self.ids_loc > buffer_length {
+            return Err(format!(
+                "Ids location is outside of buffer: {} > {}",
+                self.ids_loc, buffer_length
+            ));
+        }
+
+        if self.block_index_loc > buffer_length {
+            return Err(format!(
+                "Block index location is outside of buffer: {} > {}",
+                self.block_index_loc, buffer_length
+            ));
+        }
+
+        if self.seqlocs_loc > buffer_length {
+            return Err(format!(
+                "Seqlocs location is outside of buffer: {} > {}",
+                self.seqlocs_loc, buffer_length
+            ));
+        }
+
+        if self.scores_loc > buffer_length {
+            return Err(format!(
+                "Scores location is outside of buffer: {} > {}",
+                self.scores_loc, buffer_length
+            ));
+        }
+
+        if self.masking_loc > buffer_length {
+            return Err(format!(
+                "Masking location is outside of buffer: {} > {}",
+                self.masking_loc, buffer_length
+            ));
+        }
+
+        if self.headers_loc > buffer_length {
+            return Err(format!(
+                "Headers location is outside of buffer: {} > {}",
+                self.headers_loc, buffer_length
+            ));
+        }
+
+        Ok(())
+    }
+
+
+    
+}
+
 // , bincode::Encode, bincode::Decode
 // Directory should not be encoded, DirectoryOnDisk should be (can use .into or .from to get there and back)
 #[derive(Debug, Clone, Default)]
