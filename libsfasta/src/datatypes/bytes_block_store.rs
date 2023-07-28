@@ -210,9 +210,12 @@ impl BytesBlockStore {
 
         let block_locations: Vec<u8> = zstd::stream::decode_all(&compressed[..]).unwrap();
         let block_locations: Vec<u64> =
-            bincode::decode_from_slice(&block_locations, bincode_config)
-                .unwrap()
-                .0;
+            match bincode::decode_from_slice(&block_locations, bincode_config)
+            {
+                Ok(x) => x.0,
+                Err(e) => return Err(format!("Error decoding block locations: {e}")),
+            };
+                
 
         store.block_locations = Some(block_locations);
 
