@@ -173,7 +173,9 @@ pub fn zstd_encoder(
     encoder
         .include_contentsize(false)
         .expect("Unable to set ZSTD Content Size Flag");
-    encoder.long_distance_matching(true).expect("Unable to set long_distance_matching");
+    encoder
+        .long_distance_matching(true)
+        .expect("Unable to set long_distance_matching");
     encoder
 }
 

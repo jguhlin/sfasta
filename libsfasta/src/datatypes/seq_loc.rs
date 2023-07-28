@@ -119,8 +119,7 @@ impl SeqLocs {
     }
 
     /// Get locs for a given seqloc (as defined by start and length)
-    pub fn get_locs_loaded(&self, start: usize, length: usize) -> Vec<Loc>
-    {
+    pub fn get_locs_loaded(&self, start: usize, length: usize) -> Vec<Loc> {
         if self.data.is_some() {
             self.data.as_ref().unwrap()[start..start + length].to_vec()
         } else {
@@ -764,8 +763,7 @@ impl SeqLoc {
         locs.into_iter().map(|loc| loc.len(block_size)).sum()
     }
 
-    pub fn len_loaded(&self, seqlocs: &SeqLocs, block_size: u32) -> usize
-    {
+    pub fn len_loaded(&self, seqlocs: &SeqLocs, block_size: u32) -> usize {
         let locs = seqlocs.get_locs_loaded(
             self.sequence.unwrap().0 as usize,
             self.sequence.unwrap().1 as usize,

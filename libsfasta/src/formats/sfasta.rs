@@ -69,9 +69,10 @@ impl<'sfa> Default for Sfasta<'sfa> {
 
 impl<'sfa> Sfasta<'sfa> {
     /// Use for after cloning(primarily for multiple threads), give the object a new read buffer
-    pub fn with_buffer<R>(mut self, buf: R) -> Self 
+    pub fn with_buffer<R>(mut self, buf: R) -> Self
     where
-            R: 'sfa + Read + Seek + Send + Sync {
+        R: 'sfa + Read + Seek + Send + Sync,
+    {
         self.buf = Some(RwLock::new(Box::new(buf)));
         self
     }

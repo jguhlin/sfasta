@@ -151,8 +151,7 @@ impl BytesBlockStore {
 
         for compressed_block in blocks {
             let block_start = out_buf.stream_position().unwrap();
-            bincode::encode_into_std_write(compressed_block, &mut out_buf, bincode_config)
-                .unwrap();
+            bincode::encode_into_std_write(compressed_block, &mut out_buf, bincode_config).unwrap();
             block_locations.push(block_start);
         }
 
@@ -293,8 +292,7 @@ impl BytesBlockStore {
         result
     }
 
-    pub fn get_loaded(&self, loc: &[Loc]) -> Vec<u8>
-    {
+    pub fn get_loaded(&self, loc: &[Loc]) -> Vec<u8> {
         let mut result = Vec::with_capacity(64);
 
         let block_size = self.block_size as u32;
@@ -307,7 +305,7 @@ impl BytesBlockStore {
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
             result.extend(&self.data.as_ref().unwrap()[start..=end]);
         } else {
-            panic!("Data not loaded");        
+            panic!("Data not loaded");
         }
 
         result
