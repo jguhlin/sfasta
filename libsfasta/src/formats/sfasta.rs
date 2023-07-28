@@ -657,8 +657,6 @@ impl<'sfa> SfastaParser<'sfa> {
                 .expect("Unable to prefetch block locs");
         }
 
-
-
         log::info!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {
             let mut headers = match StringBlockStore::from_buffer(

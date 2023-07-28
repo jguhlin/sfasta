@@ -101,9 +101,6 @@ impl DirectoryOnDisk {
 
         Ok(())
     }
-
-
-    
 }
 
 // , bincode::Encode, bincode::Decode

@@ -212,11 +212,12 @@ impl U64BlockStore {
             Ok(x) => x,
             Err(e) => return Err(format!("Error decoding block locations: {}", e)),
         };
-        
-        let block_locations: Vec<u32> = match bincode::decode_from_slice(&block_locations, bincode_config) {
-            Ok(x) => x.0,
-            Err(e) => return Err(format!("Error decoding block locations: {}", e)),
-        };
+
+        let block_locations: Vec<u32> =
+            match bincode::decode_from_slice(&block_locations, bincode_config) {
+                Ok(x) => x.0,
+                Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+            };
 
         store.block_locations = Some(block_locations);
 

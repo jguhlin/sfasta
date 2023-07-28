@@ -429,7 +429,6 @@ impl SeqLocs {
     where
         R: Read + Seek,
     {
-
         let current_pos = in_buf
             .stream_position()
             .expect("Unable to work with seek API");
@@ -481,7 +480,7 @@ impl SeqLocs {
         in_buf
             .seek(SeekFrom::Start(seqlocs_chunks_offsets_position))
             .unwrap();
-        
+
         let data_len: u32 = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(l) => l,
             Err(e) => {
