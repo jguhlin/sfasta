@@ -281,7 +281,7 @@ impl BytesBlockStore {
         // Calculate length from Loc
         // TODO: This underestimates, so we need to test it.
         let len = loc.iter().fold(0, |acc, x| acc + x.len(block_size));
-        log::info!("BytesBlockStore Get: Calculated Length: {}", len);
+        log::debug!("BytesBlockStore Get: Calculated Length: {}", len);
 
         let mut result = Vec::with_capacity(len + 8192);
 
@@ -299,7 +299,7 @@ impl BytesBlockStore {
             }
         }
 
-        log::info!("BytesBlockStore Get: Result Length: {}", result.len());
+        log::debug!("BytesBlockStore Get: Result Length: {}", result.len());
 
         result
     }
