@@ -109,16 +109,12 @@ impl SequenceBlocks {
             None
         };
 
-        let arch = Arch::new();
-
         self.cache.as_mut().unwrap().1.clear();
-        arch.dispatch(|| {
-            self.cache_sbc.decompress_to_buffer(
-                self.compression_type,
-                &mut self.cache.as_mut().unwrap().1,
-                zstd_decompressor.as_mut(),
-            );
-        });
+        self.cache_sbc.decompress_to_buffer(
+            self.compression_type,
+            &mut self.cache.as_mut().unwrap().1,
+            zstd_decompressor.as_mut(),
+        );
     }
 
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[u8]
