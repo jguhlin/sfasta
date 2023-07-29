@@ -47,7 +47,7 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
     let mut seqlocs = SeqLocs::default();
     let locs = vec![loc; 1024];
 
-    c.bench_with_input(BenchmarkId::new("add_locs", 1024*1024*8), &locs, |b, s| {
+    c.bench_with_input(BenchmarkId::new("add_locs_large", 1024*1024*8), &locs, |b, s| {
         b.iter(|| 
             for _ in 0..1024*8 {
                 seqlocs.add_locs(&s);
