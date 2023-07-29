@@ -148,14 +148,6 @@ impl SeqLocs {
             self.data = Some(Vec::with_capacity(8192 * 64));
         }
 
-        // If capacity >= 90% increase it by 10%
-        if self.data.as_ref().unwrap().capacity()
-            >= (self.data.as_ref().unwrap().len() as f32 * 0.9) as usize
-        {
-            let new_capacity = (self.data.as_ref().unwrap().capacity() as f64 * 0.1) as usize;
-            self.data.as_mut().unwrap().reserve(new_capacity);
-        }
-
         let start = self.total_locs;
         let len = locs.len();
         self.total_locs += len;
