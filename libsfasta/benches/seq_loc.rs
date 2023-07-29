@@ -8,29 +8,31 @@ use std::io::Cursor;
 use std::sync::Arc;
 
 pub fn benchmark_add_locs(c: &mut Criterion) {
-    let mut seqlocs = SeqLocs::default();
-
-    let mut rng = rand::thread_rng();
-
+    
     let loc = Loc::Loc(0, 0, 128);
+
+    let mut seqlocs = SeqLocs::default();
     let locs = vec![loc.clone(); 128];
 
     c.bench_with_input(BenchmarkId::new("add_locs", 128), &locs, |b, s| {
         b.iter(|| seqlocs.add_locs(black_box(&s)))
     });
 
+    let mut seqlocs = SeqLocs::default();
     let locs = vec![loc.clone(); 256];
 
     c.bench_with_input(BenchmarkId::new("add_locs", 256), &locs, |b, s| {
         b.iter(|| seqlocs.add_locs(black_box(&s)))
     });
 
+    let mut seqlocs = SeqLocs::default();
     let locs = vec![loc.clone(); 512];
 
     c.bench_with_input(BenchmarkId::new("add_locs", 512), &locs, |b, s| {
         b.iter(|| seqlocs.add_locs(black_box(&s)))
     });
 
+    let mut seqlocs = SeqLocs::default();
     let locs = vec![loc; 1024];
 
     c.bench_with_input(BenchmarkId::new("add_locs", 1024), &locs, |b, s| {
