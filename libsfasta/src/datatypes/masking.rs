@@ -31,7 +31,10 @@ impl Masking {
             return None;
         }
 
-        let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
+        let arch = Arch::new();
+
+        let masked: Vec<u8> =
+            arch.dispatch(|| seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect());
         Some(self.inner.add(&masked))
     }
 

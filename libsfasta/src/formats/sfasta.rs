@@ -270,13 +270,15 @@ impl<'sfa> Sfasta<'sfa> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let locs = seqloc.sequence.as_ref().unwrap();
 
-        let len = seqloc.len(self.seqlocs.as_mut().unwrap(), &mut buf, self.parameters.block_size);
+        let len = seqloc.len(
+            self.seqlocs.as_mut().unwrap(),
+            &mut buf,
+            self.parameters.block_size,
+        );
         let mut seq: Vec<u8> = Vec::with_capacity(len);
 
         let seqlocs = self.seqlocs.as_mut().unwrap();
         let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
-
-        
 
         // Once stabilized, use write_all_vectored
         for (block, (start, end)) in locs

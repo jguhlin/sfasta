@@ -456,7 +456,7 @@ impl Converter {
         thread::scope(|s| {
             let fasta_thread = s.spawn(|_| {
                 let mut fasta_thread_spins: usize = 0; // Debugging
-                // Convert reader into buffered reader then into the Fasta struct (and iterator)
+                                                       // Convert reader into buffered reader then into the Fasta struct (and iterator)
                 let mut in_buf_reader = BufReader::new(in_buf);
 
                 // TODO: Should be auto-detect and handle...
@@ -980,7 +980,6 @@ where
                 Some((block_id, sb)) => {
                     bincode::encode_into_std_write(sb, &mut out_fh, bincode_config)
                         .expect("Unable to write to bincode output");
-                    // log::info!("Writer wrote block {}", block_id);
 
                     block_locs.push((block_id, pos));
 
@@ -1521,8 +1520,6 @@ where
         masking_location,
     )
 }
-
-
 
 #[cfg(test)]
 mod tests {
