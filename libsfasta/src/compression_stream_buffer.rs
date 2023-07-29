@@ -244,11 +244,15 @@ impl CompressionStreamBuffer {
 
         let block_size = self.block_size as usize;
 
+        let arch = Arch::new();
+
         let mut locs = Vec::with_capacity((x.len() / self.block_size as usize) + 8);
 
         // Remove whitespace
         let mut seq = x;
-        seq.make_ascii_uppercase();
+        arch.dispatch(|| {
+            seq.make_ascii_uppercase()
+        });
 
         while !seq.is_empty() {
             let len = self.len();
