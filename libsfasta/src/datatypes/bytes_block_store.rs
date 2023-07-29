@@ -38,7 +38,7 @@ impl BytesBlockStore {
     }
 
     fn compress_block(&mut self) {
-        let mut compressor = zstd_encoder(3, None);
+        let mut compressor = zstd_encoder(-3, None);
 
         if self.compressed_blocks.is_none() {
             self.compressed_block_lens = Some(Vec::new());
@@ -93,7 +93,7 @@ impl BytesBlockStore {
         let starting_block = (start / self.block_size) + compressed_blocks_count;
         let ending_block = (end / self.block_size) + compressed_blocks_count;
 
-        let mut locs = Vec::new();
+        let mut locs = Vec::with_capacity(16);
 
         for block in starting_block..=ending_block {
             let block_start = start % self.block_size;
