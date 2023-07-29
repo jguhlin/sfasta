@@ -505,7 +505,7 @@ impl Converter {
 
                 let mut headers = StringBlockStore::default().with_block_size(2 * 1024 * 1024);
                 let mut seqlocs = SeqLocs::default();
-                let mut ids = StringBlockStore::default().with_block_size(2 * 1024 * 1024);
+                let mut ids = StringBlockStore::default().with_block_size(1024 * 1024);
                 let mut ids_string = Vec::new();
                 let mut masking = Masking::default();
 

@@ -233,7 +233,7 @@ impl SeqLocs {
     where
         W: Write + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
         if self.data.is_none() {
             panic!("Unable to write SeqLocs as there are none");
@@ -454,7 +454,7 @@ impl SeqLocs {
         decompressor.include_magicbytes(false).unwrap();
 
         let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
+            .with_variable_int_encoding()
             .with_limit::<{ 4 * 1024 }>();
 
         in_buf
@@ -480,7 +480,7 @@ impl SeqLocs {
         ) = header;
 
         let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
+            .with_variable_int_encoding()
             .with_limit::<{ 8 * 1024 * 1024 }>();
 
         log::info!("Decompressing SeqLoc Chunk Offsets");
