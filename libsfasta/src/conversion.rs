@@ -527,6 +527,7 @@ impl Converter {
                         Some(Work::FastaPayload(seq)) => {
                             let (seqid, seqheader, seq, _) = seq.into_parts();
                             let mut location = SeqLoc::new();
+
                             let now = std::time::Instant::now();
                             let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
                             if let Some(x) = masked {
@@ -534,9 +535,11 @@ impl Converter {
                                 location.masking = Some(x);
                             }
                             masking_time += now.elapsed();
+
                             let now = std::time::Instant::now();
                             let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
                             adding_time += now.elapsed();
+                            
                             let now = std::time::Instant::now();
                             let myid = std::sync::Arc::new(seqid.unwrap());
                             ids_string.push(std::sync::Arc::clone(&myid));

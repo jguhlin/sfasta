@@ -29,6 +29,7 @@ impl Masking {
         // If none are lowercase, nope out here... Written in a way that allows for easy vectorization for SIMD
         let arch = Arch::new();
 
+        // Significant speedup (70% reduction in total masking time)
         if arch.dispatch(|| {
             for x in seq.iter() {
                 if x < &b'a' {
@@ -40,22 +41,9 @@ impl Masking {
             return None;
         }
 
-        // if !seq.iter().any(|x| x < &b'a') {
-            // return None;
-        // }
-
-        // let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
-
-        // Get lower-case sequence as a series of 1s and 0s as u8s, written in a way that is easy to vectorize
-        let masked = arch.dispatch(|| {
-            let mut masked = vec![0u8; seq.len()];
-            for (i, x) in seq.iter().enumerate() {
-                masked[i] = if x < &b'a' { 1 } else { 0 };
-            }
-            masked
-        });
-
-
+        // No benefit to using pulp here... (even with for loop)
+        let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
+        
         Some(self.inner.add(&masked))
     }
 

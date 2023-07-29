@@ -10,6 +10,7 @@ use crossbeam::queue::ArrayQueue;
 use crossbeam::sync::{Parker, Unparker};
 use crossbeam::utils::Backoff;
 use rand::prelude::*;
+use pulp::Arch;
 
 use crate::datatypes::*;
 use crate::CompressionType;
@@ -243,7 +244,7 @@ impl CompressionStreamBuffer {
 
         let block_size = self.block_size as usize;
 
-        let mut locs = Vec::with_capacity(x.len() / self.block_size as usize);
+        let mut locs = Vec::with_capacity((x.len() / self.block_size as usize) + 8);
 
         // Remove whitespace
         let mut seq = x;
