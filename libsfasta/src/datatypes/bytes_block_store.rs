@@ -21,7 +21,7 @@ impl Default for BytesBlockStore {
             location: 0,
             block_index_pos: 0,
             block_locations: None,
-            block_size: 512 * 1024,
+            block_size: 1024 * 1024,
             data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
@@ -41,8 +41,8 @@ impl BytesBlockStore {
         let mut compressor = zstd_encoder(-3, None);
 
         if self.compressed_blocks.is_none() {
-            self.compressed_block_lens = Some(Vec::new());
-            self.compressed_blocks = Some(Vec::new());
+            self.compressed_block_lens = Some(Vec::with_capacity(16));
+            self.compressed_blocks = Some(Vec::with_capacity(16));
         }
 
         #[cfg(test)]
@@ -51,10 +51,11 @@ impl BytesBlockStore {
         #[cfg(not(test))]
         let mut compressed = Vec::with_capacity(self.block_size);
 
-        let at = std::cmp::min(self.block_size, self.data.as_mut().unwrap().len());
+        // let at = std::cmp::min(self.block_size, self.data.as_mut().unwrap().len());
 
-        let mut block = self.data.as_mut().unwrap().split_off(at);
-        block.reserve(self.block_size);
+        //let mut block = self.data.as_mut().unwrap().split_off(at);
+        let mut block = Vec::with_capacity(self.block_size);
+        // block.reserve(self.block_size);
         std::mem::swap(&mut block, self.data.as_mut().unwrap());
 
         let compressed_size = compressor
