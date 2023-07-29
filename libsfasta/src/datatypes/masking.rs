@@ -48,9 +48,9 @@ impl Masking {
 
         // Get lower-case sequence as a series of 1s and 0s as u8s, written in a way that is easy to vectorize
         let masked = arch.dispatch(|| {
-            let mut masked = Vec::with_capacity(seq.len());
-            for x in seq.iter() {
-                masked.push((x > &b'Z') as u8);
+            let mut masked = vec![0u8; seq.len()];
+            for (i, x) in seq.iter().enumerate() {
+                masked[i] = if x < &b'a' { 1 } else { 0 };
             }
             masked
         });
