@@ -54,6 +54,26 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
             }
         )
     });
+
+    let mut seqlocs = SeqLocs::default();
+
+    c.bench_with_input(BenchmarkId::new("add_locs_large", 1024*1024*16), &locs, |b, s| {
+        b.iter(|| 
+            for _ in 0..1024*16 {
+                seqlocs.add_locs(&s);
+            }
+        )
+    });
+
+    let mut seqlocs = SeqLocs::default();
+
+    c.bench_with_input(BenchmarkId::new("add_locs_large", 1024*1024*32), &locs, |b, s| {
+        b.iter(|| 
+            for _ in 0..1024*32 {
+                seqlocs.add_locs(&s);
+            }
+        )
+    });
 }
 
 criterion_group!(name = add_locs;
