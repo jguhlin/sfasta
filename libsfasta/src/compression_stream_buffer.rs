@@ -255,7 +255,7 @@ impl CompressionStreamBuffer {
         });
 
         while !seq.is_empty() {
-            let len = self.len();
+            let len = self.len(); // Length of current block
 
             let mut end = seq.len();
 

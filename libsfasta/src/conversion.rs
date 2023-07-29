@@ -539,10 +539,11 @@ impl Converter {
                             let now = std::time::Instant::now();
                             let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
                             adding_time += now.elapsed();
-                            
+
                             let now = std::time::Instant::now();
-                            let myid = std::sync::Arc::new(seqid.unwrap());
-                            ids_string.push(std::sync::Arc::clone(&myid));
+                            // let myid = std::sync::Arc::new(seqid.unwrap());
+                            let myid: std::borrow::Cow<str> = std::borrow::Cow::from(seqid.unwrap());
+                            // ids_string.push(std::sync::Arc::clone(&myid));
                             let idloc = ids.add(&(*myid));
                             if let Some(x) = seqheader {
                                 let x = seqlocs.add_locs(&headers.add(x));
@@ -551,8 +552,8 @@ impl Converter {
                             let x = seqlocs.add_locs(&idloc);
                             location.ids = Some((x.0, x.1 as u8));
                             location.sequence = Some(seqlocs.add_locs(&loc));
-                            seq_loc_time += now.elapsed();
                             seqlocs.add_to_index(location);
+                            seq_loc_time += now.elapsed();
                         }
                         Some(Work::FastqPayload(_)) => {
                             panic!("Received FASTQ payload in FASTA thread")
