@@ -38,6 +38,11 @@ pub fn benchmark_add_locs(c: &mut Criterion) {
     c.bench_with_input(BenchmarkId::new("add_locs", 1024), &locs, |b, s| {
         b.iter(|| seqlocs.add_locs(&s))
     });
+   
+}
+
+fn benchmark_add_locs_large(c: &mut Criterion) {
+    let loc = Loc::Loc(0, 0, 128);
 
     let mut seqlocs = SeqLocs::default();
     let locs = vec![loc; 1024];
@@ -49,10 +54,14 @@ pub fn benchmark_add_locs(c: &mut Criterion) {
             }
         )
     });
-    
 }
 
 criterion_group!(name = add_locs;
     config = Criterion::default(); //.measurement_time(std::time::Duration::from_secs(90));
     targets = benchmark_add_locs);
-criterion_main!(add_locs);
+
+criterion_group!(name = add_locs_large;
+    config = Criterion::default();
+    targets = benchmark_add_locs_large);
+
+criterion_main!(add_locs, add_locs_large);
