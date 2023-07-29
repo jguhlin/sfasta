@@ -518,6 +518,8 @@ impl Converter {
                 let mut masking_time = std::time::Duration::new(0, 0);
                 let mut adding_time = std::time::Duration::new(0, 0);
                 let mut seq_loc_time = std::time::Duration::new(0, 0);
+                let mut ids_add_time = std::time::Duration::new(0, 0);
+                let mut seqlocs_add_time = std::time::Duration::new(0, 0);
 
                 let mut fasta_queue_spins: usize = 0;
                 loop {
@@ -541,15 +543,19 @@ impl Converter {
                             adding_time += now.elapsed();
 
                             let now = std::time::Instant::now();
-                            // let myid = std::sync::Arc::new(seqid.unwrap());
                             let myid: std::borrow::Cow<str> = std::borrow::Cow::from(seqid.unwrap());
-                            // ids_string.push(std::sync::Arc::clone(&myid));
                             let idloc = ids.add(&(*myid));
+                            ids_add_time += now.elapsed();
+
+                            let now = std::time::Instant::now();
                             if let Some(x) = seqheader {
                                 let x = seqlocs.add_locs(&headers.add(x));
                                 location.headers = Some((x.0, x.1 as u8));
                             }
                             let x = seqlocs.add_locs(&idloc);
+                            seqlocs_add_time += now.elapsed();
+
+                            let now = std::time::Instant::now();
                             location.ids = Some((x.0, x.1 as u8));
                             location.sequence = Some(seqlocs.add_locs(&loc));
                             seqlocs.add_to_index(location);
@@ -574,6 +580,8 @@ impl Converter {
                 log::info!("Masking time: {}ms", masking_time.as_millis());
                 log::info!("Adding time: {}ms", adding_time.as_millis());
                 log::info!("SeqLoc time: {}ms", seq_loc_time.as_millis());
+                log::info!("IDs add time: {}ms", ids_add_time.as_millis());
+                log::info!("SeqLocs add time: {}ms", seqlocs_add_time.as_millis());
                 log::info!("Finalizing SequenceBuffer");
                 // Finalize pushes the last block, which is likely smaller than the complete block size
                 match sb.finalize() {
