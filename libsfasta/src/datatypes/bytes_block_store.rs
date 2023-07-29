@@ -279,10 +279,11 @@ impl BytesBlockStore {
         let block_size = self.block_size as u32;
 
         // Calculate length from Loc
+        // TODO: This underestimates, so we need to test it.
         let len = loc.iter().fold(0, |acc, x| acc + x.len(block_size));
         log::info!("BytesBlockStore Get: Calculated Length: {}", len);
 
-        let mut result = Vec::with_capacity(len);
+        let mut result = Vec::with_capacity(len + 8192);
 
         if self.data.is_some() {
             let loc0 = loc[0].original_format(block_size);
