@@ -122,6 +122,19 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
         )
     });
 
+    let loc = StructSeqLoc { block: 0, start: 0, len: 128 };
+    let locs = vec![loc; 1024];
+
+    c.bench_with_input(BenchmarkId::new("add_locs_large_structformat", 1024*1024*32), &locs, |b, s| {
+        b.iter(|| {
+                let mut seqlocs = StructLocSeqLocs::default();
+                for _ in 0..1024*32 {
+                    seqlocs.add_locs(&s);
+                }
+            }
+        )
+    });
+
     let loc = (0, 0, 128);
     let locs = vec![loc; 1024];
 
@@ -135,18 +148,6 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
         )
     });
 
-    let loc = StructSeqLoc { block: 0, start: 0, len: 128 };
-    let locs = vec![loc; 1024];
-
-    c.bench_with_input(BenchmarkId::new("add_locs_large_structformat", 1024*1024*32), &locs, |b, s| {
-        b.iter(|| {
-                let mut seqlocs = StructLocSeqLocs::default();
-                for _ in 0..1024*32 {
-                    seqlocs.add_locs(&s);
-                }
-            }
-        )
-    });
 }
 
 // Disabled while we work on the rest...
