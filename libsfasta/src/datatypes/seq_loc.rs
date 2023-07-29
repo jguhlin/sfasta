@@ -356,7 +356,8 @@ impl SeqLocs {
                     - starting_pos,
             );
 
-            let mut compressor = zstd::stream::Encoder::new(&mut compressed_buf, 7)
+            // TODO: Also should be customizable compression level
+            let mut compressor = zstd::stream::Encoder::new(&mut compressed_buf, -3)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
@@ -389,7 +390,8 @@ impl SeqLocs {
         let bincoded = bincode::encode_to_vec(&block_locations, bincode_config)
             .expect("Unable to bincode locs into compressor");
 
-        let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 3)
+        // TODO: Also should be customizable compression level
+        let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
             .expect("Unable to create zstd encoder");
         compressor.include_magicbytes(false).unwrap();
         compressor.long_distance_matching(true).unwrap();

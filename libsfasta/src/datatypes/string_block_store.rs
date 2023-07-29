@@ -12,7 +12,7 @@ pub struct StringBlockStore {
 impl Default for StringBlockStore {
     fn default() -> Self {
         StringBlockStore {
-            inner: BytesBlockStore::default().with_block_size(1 * 1024 * 1024),
+            inner: BytesBlockStore::default().with_block_size(512 * 1024),
         }
     }
 }

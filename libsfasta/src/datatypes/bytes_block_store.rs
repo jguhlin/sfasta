@@ -51,11 +51,7 @@ impl BytesBlockStore {
         #[cfg(not(test))]
         let mut compressed = Vec::with_capacity(self.block_size);
 
-        // let at = std::cmp::min(self.block_size, self.data.as_mut().unwrap().len());
-
-        //let mut block = self.data.as_mut().unwrap().split_off(at);
         let mut block = Vec::with_capacity(self.block_size);
-        // block.reserve(self.block_size);
         std::mem::swap(&mut block, self.data.as_mut().unwrap());
 
         let compressed_size = compressor

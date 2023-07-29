@@ -544,7 +544,7 @@ impl Converter {
 
                             let now = std::time::Instant::now();
                             let myid: std::borrow::Cow<str> = std::borrow::Cow::from(seqid.unwrap());
-                            let idloc = ids.add(&(*myid));
+                            let idloc = ids.add(myid);
                             ids_add_time += now.elapsed();
 
                             let now = std::time::Instant::now();
@@ -911,9 +911,11 @@ where
                             location.masking = Some(x);
                         }
                         masking_time += now.elapsed();
+
                         let now = std::time::Instant::now();
                         let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
                         adding_time += now.elapsed();
+
                         let now = std::time::Instant::now();
                         let myid = std::sync::Arc::new(seqid.unwrap());
                         ids_string.push(std::sync::Arc::clone(&myid));
