@@ -81,7 +81,7 @@ criterion_group!(name = add_locs;
     targets = benchmark_add_locs);
 
 criterion_group!(name = add_locs_large;
-    config = Criterion::default();
+    config = Criterion::default().measurement_time(std::time::Duration::from_secs(30));
     targets = benchmark_add_locs_large);
 
 criterion_main!(add_locs, add_locs_large);
