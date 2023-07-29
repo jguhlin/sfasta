@@ -44,7 +44,17 @@ impl Masking {
             // return None;
         // }
 
-        let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
+        // let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
+
+        // Get lower-case sequence as a series of 1s and 0s as u8s, written in a way that is easy to vectorize
+        let masked = arch.dispatch(|| {
+            let mut masked = Vec::with_capacity(seq.len());
+            for x in seq.iter() {
+                masked.push((x > &b'Z') as u8);
+            }
+            masked
+        });
+
 
         Some(self.inner.add(&masked))
     }
