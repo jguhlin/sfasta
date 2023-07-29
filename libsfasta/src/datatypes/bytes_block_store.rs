@@ -8,7 +8,7 @@ pub struct BytesBlockStore {
     block_index_pos: u64,
     block_locations: Option<Vec<u64>>,
     block_size: usize,
-    pub data: Vec<u8>, // Only used for writing...
+    pub data: Option<Vec<u8>>, // Only used for writing...
     pub compression_type: CompressionType,
     cache: Option<(u32, Vec<u8>)>,
     compressed_blocks: Option<Vec<u8>>,
@@ -22,7 +22,7 @@ impl Default for BytesBlockStore {
             block_index_pos: 0,
             block_locations: None,
             block_size: 1024 * 1024,
-            data: Vec::with_capacity(1024 * 1024),
+            data: None,
             compression_type: CompressionType::ZSTD,
             cache: None,
             compressed_blocks: None,
@@ -34,7 +34,6 @@ impl Default for BytesBlockStore {
 impl BytesBlockStore {
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.block_size = block_size;
-        self.data.reserve(block_size);
         self
     }
 
@@ -57,7 +56,7 @@ impl BytesBlockStore {
         //let mut block = self.data.as_mut().unwrap().split_off(at);
         let mut block = Vec::with_capacity(self.block_size);
         // block.reserve(self.block_size);
-        std::mem::swap(&mut block, self.data.as_mut());
+        std::mem::swap(&mut block, self.data.as_mut().unwrap());
 
         let compressed_size = compressor
             .compress_to_buffer(&block, &mut compressed)
@@ -112,17 +111,19 @@ impl BytesBlockStore {
     } */
 
     pub fn add<'b>(&'b mut self, input: &[u8]) -> Vec<Loc> {
-        // if self.data.is_none() {
-            // self.data = Some(Vec::with_capacity(self.block_size));
-        // }
+        if self.data.is_none() {
+            self.data = Some(Vec::with_capacity(self.block_size));
+        }
 
-        while self.data.len() > self.block_size {
+        while self.data.as_ref().unwrap().len() > self.block_size {
             self.compress_block();
         }
 
-        let mut start = self.data.len();
-        self.data.extend(input);
-        let end = self.data.len() - 1;
+        let data = self.data.as_mut().unwrap();
+
+        let mut start = data.len();
+        data.extend(input);
+        let end = data.len() - 1;
 
         let compressed_blocks_count = match self.compressed_block_lens.as_ref() {
             Some(v) => v.len(),
@@ -149,7 +150,7 @@ impl BytesBlockStore {
     }
 
     pub fn emit_blocks(&mut self) -> Vec<&[u8]> {
-        while !self.data.is_empty() {
+        while !self.data.as_ref().unwrap().is_empty() {
             self.compress_block();
         }
 
@@ -170,6 +171,8 @@ impl BytesBlockStore {
     where
         W: Write + Seek,
     {
+        self.data.as_ref()?;
+
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let mut block_locations_pos: u64 = 0;
@@ -268,7 +271,7 @@ impl BytesBlockStore {
             data.extend(self.get_block_uncached(in_buf, i as u32));
         }
         log::info!("Generic Block Store Prefetching done: {}", data.len());
-        self.data = data;
+        self.data = Some(data);
     }
 
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
@@ -319,13 +322,13 @@ impl BytesBlockStore {
 
         let mut result = Vec::with_capacity(len + 8192);
 
-        if !self.data.is_empty() {
+        if self.data.is_some() {
             let loc0 = loc[0].original_format(block_size);
             let loc1 = loc[loc.len() - 1].original_format(block_size);
 
             let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
-            result.extend(&self.data[start..=end]);
+            result.extend(&self.data.as_ref().unwrap()[start..=end]);
         } else {
             for (block, (start, end)) in loc.iter().map(|x| x.original_format(block_size)) {
                 let block = self.get_block(in_buf, block);
@@ -343,13 +346,13 @@ impl BytesBlockStore {
 
         let block_size = self.block_size as u32;
 
-        if !self.data.is_empty() {
+        if self.data.is_some() {
             let loc0 = loc[0].original_format(block_size);
             let loc1 = loc[loc.len() - 1].original_format(block_size);
 
             let start = loc0.0 as usize * block_size as usize + loc0.1 .0 as usize;
             let end = loc1.0 as usize * block_size as usize + loc1.1 .1 as usize;
-            result.extend(&self.data[start..=end]);
+            result.extend(&self.data.as_ref().unwrap()[start..=end]);
         } else {
             panic!("Data not loaded");
         }

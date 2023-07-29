@@ -142,16 +142,17 @@ impl SeqLocs {
     }
 
     /// Only during SFASTA creation. Add a Loc to the index
+    /// Returns the start and length of the Locs
     pub fn add_locs(&mut self, locs: &[Loc]) -> (u64, u32) {
         if self.data.is_none() {
-            self.data = Some(Vec::with_capacity(8192));
+            self.data = Some(Vec::with_capacity(8192 * 64));
         }
 
-        // If capacity >= 90% increase it by 20%
+        // If capacity >= 90% increase it by 10%
         if self.data.as_ref().unwrap().capacity()
             >= (self.data.as_ref().unwrap().len() as f32 * 0.9) as usize
         {
-            let new_capacity = (self.data.as_ref().unwrap().capacity() as f64 * 0.2) as usize;
+            let new_capacity = (self.data.as_ref().unwrap().capacity() as f64 * 0.1) as usize;
             self.data.as_mut().unwrap().reserve(new_capacity);
         }
 
