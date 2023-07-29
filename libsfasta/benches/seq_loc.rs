@@ -77,12 +77,13 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
     });
 }
 
-criterion_group!(name = add_locs;
+// Disabled while we work on the rest...
+/*criterion_group!(name = add_locs;
     config = Criterion::default(); //.measurement_time(std::time::Duration::from_secs(90));
-    targets = benchmark_add_locs);
+    targets = benchmark_add_locs);*/
 
 criterion_group!(name = add_locs_large;
-    config = Criterion::default().measurement_time(std::time::Duration::from_secs(30));
+    config = Criterion::default().measurement_time(std::time::Duration::from_secs(60));
     targets = benchmark_add_locs_large);
 
 criterion_main!(add_locs, add_locs_large);
