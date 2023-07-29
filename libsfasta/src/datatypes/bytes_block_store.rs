@@ -71,7 +71,7 @@ impl BytesBlockStore {
     }
 
     // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
-    pub fn add<'b, I: IntoIterator<Item = &'b u8>>(&'b mut self, input: I) -> Vec<Loc> {
+    /* pub fn add<'b, I: IntoIterator<Item = &'b u8>>(&'b mut self, input: I) -> Vec<Loc> {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
@@ -94,7 +94,46 @@ impl BytesBlockStore {
         let starting_block = (start / self.block_size) + compressed_blocks_count;
         let ending_block = (end / self.block_size) + compressed_blocks_count;
 
-        let mut locs = Vec::with_capacity(16);
+        let mut locs = Vec::with_capacity(input.len() / self.block_size + 1);
+
+        for block in starting_block..=ending_block {
+            let block_start = start % self.block_size;
+            let block_end = if block == ending_block {
+                end % self.block_size
+            } else {
+                self.block_size - 1
+            };
+            start = block_end + 1;
+            locs.push(Loc::Loc(block as u32, block_start as u32, block_end as u32));
+        }
+
+        locs
+    } */
+
+    pub fn add<'b>(&'b mut self, input: &[u8]) -> Vec<Loc> {
+        if self.data.is_none() {
+            self.data = Some(Vec::with_capacity(self.block_size));
+        }
+
+        while self.data.as_ref().unwrap().len() > self.block_size {
+            self.compress_block();
+        }
+
+        let data = self.data.as_mut().unwrap();
+
+        let mut start = data.len();
+        data.extend(input);
+        let end = data.len() - 1;
+
+        let compressed_blocks_count = match self.compressed_block_lens.as_ref() {
+            Some(v) => v.len(),
+            None => 0,
+        };
+
+        let starting_block = (start / self.block_size) + compressed_blocks_count;
+        let ending_block = (end / self.block_size) + compressed_blocks_count;
+
+        let mut locs = Vec::with_capacity(input.len() / self.block_size + 1);
 
         for block in starting_block..=ending_block {
             let block_start = start % self.block_size;
