@@ -144,7 +144,7 @@ impl SeqLocs {
     /// Only during SFASTA creation. Add a Loc to the index
     pub fn add_locs(&mut self, locs: &[Loc]) -> (u64, u32) {
         if self.data.is_none() {
-            self.data = Some(Vec::with_capacity(1024));
+            self.data = Some(Vec::with_capacity(8192));
         }
 
         // If capacity >= 90% increase it by 20%

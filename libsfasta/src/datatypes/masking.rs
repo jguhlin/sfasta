@@ -26,15 +26,26 @@ impl Masking {
     }
 
     pub fn add_masking(&mut self, seq: &[u8]) -> Option<Vec<Loc>> {
-        // If none are lowercase, nope out here...
-        if !seq.iter().any(|x| x < &b'a') {
+        // If none are lowercase, nope out here... Written in a way that allows for easy vectorization for SIMD
+        let arch = Arch::new();
+
+        if arch.dispatch(|| {
+            for x in seq.iter() {
+                if x < &b'a' {
+                    return true
+                }
+            }
+            false
+        }) {
             return None;
         }
 
-        let arch = Arch::new();
+        // if !seq.iter().any(|x| x < &b'a') {
+            // return None;
+        // }
 
-        let masked: Vec<u8> =
-            arch.dispatch(|| seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect());
+        let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
+
         Some(self.inner.add(&masked))
     }
 
