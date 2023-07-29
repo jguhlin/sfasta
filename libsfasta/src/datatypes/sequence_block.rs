@@ -9,6 +9,8 @@ use std::sync::Arc;
 use flate2::write::{GzDecoder, GzEncoder};
 use log::error;
 
+use pulp::Arch;
+
 use lz4_flex::block;
 #[cfg(not(target_arch = "wasm32"))]
 use xz::read::{XzDecoder, XzEncoder};
@@ -107,12 +109,16 @@ impl SequenceBlocks {
             None
         };
 
+        let arch = Arch::new();
+
         self.cache.as_mut().unwrap().1.clear();
-        self.cache_sbc.decompress_to_buffer(
-            self.compression_type,
-            &mut self.cache.as_mut().unwrap().1,
-            zstd_decompressor.as_mut(),
-        );
+        arch.dispatch(|| {
+            self.cache_sbc.decompress_to_buffer(
+                self.compression_type,
+                &mut self.cache.as_mut().unwrap().1,
+                zstd_decompressor.as_mut(),
+            );
+        });
     }
 
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[u8]
