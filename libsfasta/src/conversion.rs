@@ -533,7 +533,7 @@ impl Converter {
                             let now = std::time::Instant::now();
                             let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
                             if let Some(x) = masked {
-                                let x = seqlocs.add_locs(&x);
+                                let x = seqlocs.add_locs(x);
                                 location.masking = Some(x);
                             }
                             masking_time += now.elapsed();
@@ -549,15 +549,15 @@ impl Converter {
 
                             let now = std::time::Instant::now();
                             if let Some(x) = seqheader {
-                                let x = seqlocs.add_locs(&headers.add(x));
+                                let x = seqlocs.add_locs(headers.add(x));
                                 location.headers = Some((x.0, x.1 as u8));
                             }
-                            let x = seqlocs.add_locs(&idloc);
+                            let x = seqlocs.add_locs(idloc);
                             seqlocs_add_time += now.elapsed();
 
                             let now = std::time::Instant::now();
                             location.ids = Some((x.0, x.1 as u8));
-                            location.sequence = Some(seqlocs.add_locs(&loc));
+                            location.sequence = Some(seqlocs.add_locs(loc));
                             seqlocs.add_to_index(location);
                             seq_loc_time += now.elapsed();
                         }
@@ -907,7 +907,7 @@ where
                         let now = std::time::Instant::now();
                         let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
                         if let Some(x) = masked {
-                            let x = seqlocs.add_locs(&x);
+                            let x = seqlocs.add_locs(x);
                             location.masking = Some(x);
                         }
                         masking_time += now.elapsed();
@@ -919,12 +919,12 @@ where
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add(&(*myid));
                         if let Some(x) = seqheader {
-                            let x = seqlocs.add_locs(&headers.add(x));
+                            let x = seqlocs.add_locs(headers.add(x));
                             location.headers = Some((x.0, x.1 as u8));
                         }
-                        let x = seqlocs.add_locs(&idloc);
+                        let x = seqlocs.add_locs(idloc);
                         location.ids = Some((x.0, x.1 as u8));
-                        location.sequence = Some(seqlocs.add_locs(&loc));
+                        location.sequence = Some(seqlocs.add_locs(loc));
                         seq_loc_time += now.elapsed();
                         seqlocs.add_to_index(location);
                     }
@@ -1227,7 +1227,7 @@ where
                         let mut location = SeqLoc::new();
                         let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
                         if let Some(x) = masked {
-                            let x = seqlocs.add_locs(&x);
+                            let x = seqlocs.add_locs(x);
                             location.masking = Some(x);
                         }
                         let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
@@ -1236,12 +1236,12 @@ where
                         let idloc = ids.add(&(*myid));
                         if let Some(header) = seqheader {
                             let x = headers.add(header);
-                            let x = seqlocs.add_locs(&x);
+                            let x = seqlocs.add_locs(x);
                             location.headers = Some((x.0, x.1 as u8));
                         }
-                        let x = seqlocs.add_locs(&loc);
+                        let x = seqlocs.add_locs(idloc);
                         location.ids = Some((x.0, x.1 as u8));
-                        location.sequence = Some(seqlocs.add_locs(&loc));
+                        location.sequence = Some(seqlocs.add_locs(loc));
                         seqlocs.add_to_index(location);
                     }
                     Some(Work::FastaPayload(_)) => {

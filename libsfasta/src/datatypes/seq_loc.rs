@@ -143,7 +143,7 @@ impl SeqLocs {
 
     /// Only during SFASTA creation. Add a Loc to the index
     /// Returns the start and length of the Locs
-    pub fn add_locs(&mut self, locs: &[Loc]) -> (u64, u32) {
+    pub fn add_locs(&mut self, locs: Vec<Loc>) -> (u64, u32) {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(8192 * 64));
         }
@@ -157,9 +157,10 @@ impl SeqLocs {
         }
 
         let start = self.total_locs;
-        self.total_locs += locs.len();
-        self.data.as_mut().unwrap().extend_from_slice(locs);
-        (start as u64, locs.len() as u32)
+        let len = locs.len();
+        self.total_locs += len;
+        self.data.as_mut().unwrap().extend(locs);
+        (start as u64, len as u32)
     }
 
     /// Prefetch the SeqLocs index into memory. Speeds up successive access, but can be a hefty one-time cost for very large files.
@@ -999,7 +1000,7 @@ mod tests {
 
         let mut dummy_buffer = std::io::Cursor::new(vec![0; 1024]);
 
-        seqloc.sequence = Some(seqlocs.add_locs(&[
+        seqloc.sequence = Some(seqlocs.add_locs(vec![
             Loc::Loc(0, 0, 10),
             Loc::Loc(1, 0, 10),
             Loc::Loc(2, 0, 10),
@@ -1025,7 +1026,7 @@ mod tests {
         assert_eq!(slice, vec![Loc::Loc(0, 5, 9)]);
         let block_size = 262144;
         seqloc.sequence =
-            Some(seqlocs.add_locs(&[Loc::ToEnd(3097440, 261735), Loc::FromStart(3097441, 1274)]));
+            Some(seqlocs.add_locs(vec![Loc::ToEnd(3097440, 261735), Loc::FromStart(3097441, 1274)]));
 
         //                                  x 261735 ----------> 262144  (262144 - 261735) = 409
         //     -------------------------------------------------
@@ -1039,7 +1040,7 @@ mod tests {
         assert_eq!(slice, vec![Loc::Loc(3097440, 261735, 261755)]);
 
         seqloc.sequence =
-            Some(seqlocs.add_locs(&[Loc::ToEnd(1652696, 260695), Loc::FromStart(1652697, 28424)]));
+            Some(seqlocs.add_locs(vec![Loc::ToEnd(1652696, 260695), Loc::FromStart(1652697, 28424)]));
 
         //                               x 260695 ----------> 262144  (262144 - 260695) = 1449
         //    -------------------------------------------------
