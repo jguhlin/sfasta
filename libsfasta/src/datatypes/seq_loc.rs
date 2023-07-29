@@ -274,7 +274,7 @@ impl SeqLocs {
 
         let mut seqlocs_chunk_offset: Vec<u32> = Vec::new();
 
-        let mut compressor = zstd_encoder(9, None);
+        let mut compressor = zstd_encoder(-3, None);
 
         let start = out_buf.stream_position().unwrap();
 
