@@ -272,8 +272,11 @@ impl SeqLocs {
             .stream_position()
             .expect("Unable to work with seek API");
 
-        let mut seqlocs_chunk_offset: Vec<u32> = Vec::new();
+        let mut seqlocs_chunk_offset: Vec<u32> = Vec::with_capacity(
+            (seq_locs.len() / self.seqlocs_chunk_size as usize) + 1,
+        );
 
+        // TODO: Compression level here should be customizable, but also should be a fast one...
         let mut compressor = zstd_encoder(-3, None);
 
         let start = out_buf.stream_position().unwrap();
