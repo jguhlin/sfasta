@@ -44,33 +44,34 @@ pub fn benchmark_add_locs(c: &mut Criterion) {
 fn benchmark_add_locs_large(c: &mut Criterion) {
     let loc = Loc::Loc(0, 0, 128);
 
-    let mut seqlocs = SeqLocs::default();
     let locs = vec![loc; 1024];
 
     c.bench_with_input(BenchmarkId::new("add_locs_large", 1024*1024*8), &locs, |b, s| {
-        b.iter(|| 
-            for _ in 0..1024*8 {
-                seqlocs.add_locs(&s);
+        b.iter(|| {
+                let mut seqlocs = SeqLocs::default();
+                for _ in 0..1024*8 {
+                    seqlocs.add_locs(&s);
+                }
             }
         )
     });
-
-    let mut seqlocs = SeqLocs::default();
 
     c.bench_with_input(BenchmarkId::new("add_locs_large", 1024*1024*16), &locs, |b, s| {
-        b.iter(|| 
-            for _ in 0..1024*16 {
-                seqlocs.add_locs(&s);
+        b.iter(|| {
+            let mut seqlocs = SeqLocs::default();
+                for _ in 0..1024*16 {
+                    seqlocs.add_locs(&s);
+                }
             }
         )
     });
 
-    let mut seqlocs = SeqLocs::default();
-
     c.bench_with_input(BenchmarkId::new("add_locs_large", 1024*1024*32), &locs, |b, s| {
-        b.iter(|| 
-            for _ in 0..1024*32 {
-                seqlocs.add_locs(&s);
+        b.iter(|| {
+                let mut seqlocs = SeqLocs::default();
+                for _ in 0..1024*32 {
+                    seqlocs.add_locs(&s);
+                }
             }
         )
     });
