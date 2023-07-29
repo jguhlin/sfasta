@@ -55,9 +55,9 @@ pub struct Converter {
 impl Default for Converter {
     fn default() -> Self {
         Converter {
-            threads: 4,
-            block_size: 4 * 1024 * 1024,    // 1Mb
-            seqlocs_chunk_size: 128 * 1024, // 128k
+            threads: 8,
+            block_size: 4 * 1024 * 1024,    // 4Mb
+            seqlocs_chunk_size: 256 * 1024, // 256k
             index: true,
             masking: false,
             quality_scores: false,
@@ -503,9 +503,9 @@ impl Converter {
             let reader_handle = s.spawn(move |_| {
                 sb.initialize();
 
-                let mut headers = StringBlockStore::default().with_block_size(1024 * 1024);
+                let mut headers = StringBlockStore::default().with_block_size(2 * 1024 * 1024);
                 let mut seqlocs = SeqLocs::default();
-                let mut ids = StringBlockStore::default().with_block_size(256 * 1024);
+                let mut ids = StringBlockStore::default().with_block_size(2 * 1024 * 1024);
                 let mut ids_string = Vec::new();
                 let mut masking = Masking::default();
 
