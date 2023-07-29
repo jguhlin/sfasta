@@ -11,11 +11,37 @@ use std::sync::Arc;
 struct OriginalFormatSeqLocs {
     data: Option<Vec<(u32, u32, u32)>>,
     total_locs: usize,
-
 }
 
 impl OriginalFormatSeqLocs {
     pub fn add_locs(&mut self, locs: &[(u32, u32, u32)]) -> (u64, u32) {
+        if self.data.is_none() {
+            self.data = Some(Vec::with_capacity(8192 * 64));
+        }
+
+        let start = self.total_locs;
+        let len = locs.len();
+        self.total_locs += len;
+        self.data.as_mut().unwrap().extend_from_slice(locs);
+        (start as u64, len as u32)
+    }
+}
+
+#[derive(Clone)]
+struct StructSeqLoc {
+    block: u32,
+    start: u32,
+    len: u32,
+}
+
+#[derive(Default)]
+struct StructLocSeqLocs {
+    data: Option<Vec<StructSeqLoc>>,
+    total_locs: usize,
+}
+
+impl StructLocSeqLocs {
+    pub fn add_locs(&mut self, locs: &[StructSeqLoc]) -> (u64, u32) {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(8192 * 64));
         }
@@ -102,6 +128,19 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
     c.bench_with_input(BenchmarkId::new("add_locs_large_originalformat", 1024*1024*32), &locs, |b, s| {
         b.iter(|| {
                 let mut seqlocs = OriginalFormatSeqLocs::default();
+                for _ in 0..1024*32 {
+                    seqlocs.add_locs(&s);
+                }
+            }
+        )
+    });
+
+    let loc = StructSeqLoc { block: 0, start: 0, len: 128 };
+    let locs = vec![loc; 1024];
+
+    c.bench_with_input(BenchmarkId::new("add_locs_large_originalformat", 1024*1024*32), &locs, |b, s| {
+        b.iter(|| {
+                let mut seqlocs = StructLocSeqLocs::default();
                 for _ in 0..1024*32 {
                     seqlocs.add_locs(&s);
                 }
