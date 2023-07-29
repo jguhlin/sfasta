@@ -274,9 +274,13 @@ impl BytesBlockStore {
     where
         R: Read + Seek,
     {
-        let mut result = Vec::with_capacity(64);
 
         let block_size = self.block_size as u32;
+
+        // Calculate length from Loc
+        let len = loc.iter().fold(0, |acc, x| acc + x.len(block_size));
+
+        let mut result = Vec::with_capacity(len);
 
         if self.data.is_some() {
             let loc0 = loc[0].original_format(block_size);
@@ -291,7 +295,7 @@ impl BytesBlockStore {
                 result.extend(&block[start as usize..=end as usize]);
             }
         }
-
+        
         result
     }
 
