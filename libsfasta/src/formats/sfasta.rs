@@ -265,15 +265,18 @@ impl<'sfa> Sfasta<'sfa> {
     // TODO: Should return Result<Option<Sequence>, &str>
     // TODO: Should actually be what get_sequence_by_seqloc is!
     pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str> {
-        let mut seq: Vec<u8> = Vec::with_capacity(1024);
-
         assert!(seqloc.sequence.is_some());
 
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let locs = seqloc.sequence.as_ref().unwrap();
 
+        let len = seqloc.len(self.seqlocs.as_mut().unwrap(), &mut buf, self.parameters.block_size);
+        let mut seq: Vec<u8> = Vec::with_capacity(len);
+
         let seqlocs = self.seqlocs.as_mut().unwrap();
         let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
+
+        
 
         // Once stabilized, use write_all_vectored
         for (block, (start, end)) in locs

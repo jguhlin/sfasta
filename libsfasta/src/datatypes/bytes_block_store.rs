@@ -254,7 +254,8 @@ impl BytesBlockStore {
     {
         let bincode_config = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 128 * 1024 * 1024 }>();
+            .with_limit::<{ 128 * 1024 * 1024 }>(); // 128 MB is max limit TODO: Enforce elsewhere too
+
         let block_locations = self.block_locations.as_ref().unwrap();
 
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
@@ -295,7 +296,7 @@ impl BytesBlockStore {
                 result.extend(&block[start as usize..=end as usize]);
             }
         }
-        
+
         result
     }
 
