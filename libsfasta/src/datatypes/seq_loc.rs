@@ -225,7 +225,7 @@ impl SeqLocs {
     where
         W: Write + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
         if self.data.is_none() {
             panic!("Unable to write SeqLocs as there are none");
@@ -268,7 +268,7 @@ impl SeqLocs {
             Vec::with_capacity((seq_locs.len() / self.seqlocs_chunk_size as usize) + 1);
 
         // TODO: Compression level here should be customizable, but also should be a fast one...
-        let mut compressor = zstd_encoder(-3, None);
+        let mut compressor = zstd_encoder(3, None);
 
         let start = out_buf.stream_position().unwrap();
 
@@ -348,7 +348,7 @@ impl SeqLocs {
             );
 
             // TODO: Also should be customizable compression level
-            let mut compressor = zstd::stream::Encoder::new(&mut compressed_buf, -3)
+            let mut compressor = zstd::stream::Encoder::new(&mut compressed_buf, 3)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
@@ -382,7 +382,7 @@ impl SeqLocs {
             .expect("Unable to bincode locs into compressor");
 
         // TODO: Also should be customizable compression level
-        let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), -3)
+        let mut compressor = zstd::stream::Encoder::new(Vec::with_capacity(2 * 1024 * 1024), 3)
             .expect("Unable to create zstd encoder");
         compressor.include_magicbytes(false).unwrap();
         compressor.long_distance_matching(true).unwrap();
@@ -392,6 +392,8 @@ impl SeqLocs {
 
         bincode::encode_into_std_write(compressed, &mut out_buf, bincode_config)
             .expect("Unable to write Sequence Blocks to file");
+
+        log::debug!("Wrote block index");
 
         self.block_locations = Some(block_locations);
 
@@ -419,6 +421,7 @@ impl SeqLocs {
         // Go back to the end of the file...
         out_buf.seek(SeekFrom::Start(end)).unwrap();
 
+        log::debug!("Wrote header - SeqLoc Write to buffer complete");
         seqlocs_location
     }
 
@@ -445,7 +448,7 @@ impl SeqLocs {
         decompressor.include_magicbytes(false).unwrap();
 
         let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
+            .with_variable_int_encoding()
             .with_limit::<{ 4 * 1024 }>();
 
         in_buf
@@ -471,7 +474,7 @@ impl SeqLocs {
         ) = header;
 
         let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
+            .with_variable_int_encoding()
             .with_limit::<{ 8 * 1024 * 1024 }>();
 
         log::info!("Decompressing SeqLoc Chunk Offsets");
@@ -771,7 +774,7 @@ impl SeqLocs {
 pub struct SeqLoc {
     pub sequence: Option<(u64, u32)>,
     pub masking: Option<(u64, u32)>,
-    pub scores: Option<(u64, u32)>,
+    pub scores: Option<(u16, u16)>,
     pub headers: Option<(u64, u8)>,
     pub ids: Option<(u64, u8)>,
 }
