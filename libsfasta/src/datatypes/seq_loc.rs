@@ -20,7 +20,7 @@ SeqLoc Index:
 Then SeqLoc blocks are flattened version
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, PartialEq, Eq, Hash)]
-pub struct SeqLoc {
+pub struct SeqLoc {very
     pub sequence: Option<Vec<Loc>>,
     pub masking: Option<(u32, u32)>,
     pub scores: Option<Vec<Loc>>,
@@ -132,7 +132,7 @@ impl SeqLocs {
         self.total_seqlocs
     }
 
-    /// Only for SFASTA creation. Add a SeqLoc to the SeqLocs object
+    /// Only for creation. Add a SeqLoc to the SeqLocs object
     pub fn add_to_index(&mut self, seqloc: SeqLoc) {
         if self.index.is_none() {
             self.index = Some(Vec::new());
@@ -141,11 +141,11 @@ impl SeqLocs {
         self.total_seqlocs += 1;
     }
 
-    /// Only during SFASTA creation. Add a Loc to the index
-    /// Returns the start and length of the Locs
+    /// Only used during creation. Add a Loc to the index
+    /// Returns the start index and length of the Locs
     pub fn add_locs(&mut self, locs: &[Loc]) -> (u64, u32) {
         if self.data.is_none() {
-            self.data = Some(Vec::with_capacity(8192 * 64));
+            self.data = Some(Vec::with_capacity(1024 * 256));
         }
 
         let start = self.total_locs;
@@ -155,7 +155,7 @@ impl SeqLocs {
         (start as u64, len as u32)
     }
 
-    /// Prefetch the SeqLocs index into memory. Speeds up successive access, but can be a hefty one-time cost for very large files.
+    /// Prefetch the SeqLocs index into memory. Speeds up successive access, but can be a hefty one-time cost for large files.
     pub fn prefetch<R>(&mut self, mut in_buf: &mut R)
     where
         R: Read + Seek,

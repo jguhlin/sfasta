@@ -3,8 +3,8 @@ use std::io::{Read, Seek, Write};
 use simdutf8::basic::from_utf8;
 
 use crate::datatypes::{BytesBlockStore, Loc};
+use crate::CompressionType;
 
-#[derive(Clone)]
 pub struct StringBlockStore {
     inner: BytesBlockStore,
 }
@@ -12,7 +12,7 @@ pub struct StringBlockStore {
 impl Default for StringBlockStore {
     fn default() -> Self {
         StringBlockStore {
-            inner: BytesBlockStore::default().with_block_size(512 * 1024),
+            inner: BytesBlockStore::default().with_block_size(512 * 1024).with_compression(CompressionType::LZ4),
         }
     }
 }
@@ -23,9 +23,9 @@ impl StringBlockStore {
         self
     }
 
-    pub fn add<S: AsRef<str>>(&mut self, input: S) -> Vec<Loc> {
+    pub fn add(&mut self, input: &str) -> Vec<Loc> {
         self.inner
-            .add(input.as_ref().as_bytes())
+            .add(input.as_bytes())
             .expect("Failed to add string to block store")
     }
 

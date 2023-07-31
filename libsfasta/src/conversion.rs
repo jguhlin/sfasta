@@ -499,13 +499,14 @@ impl Converter {
             let fasta_thread_clone = fasta_thread.thread().clone();
 
             // TODO: Multithread this part
+            // Idea: split into queue's for headers, IDs, sequence, etc....
             // Thread that handles the heavy lifting of the incoming Seq structs
             let reader_handle = s.spawn(move |_| {
                 sb.initialize();
 
-                let mut headers = StringBlockStore::default().with_block_size(2 * 1024 * 1024);
+                let mut headers = StringBlockStore::default().with_block_size(512 * 1024);
                 let mut seqlocs = SeqLocs::default();
-                let mut ids = StringBlockStore::default().with_block_size(1024 * 1024);
+                let mut ids = StringBlockStore::default().with_block_size(512 * 1024);
                 let mut ids_string = Vec::new();
                 let mut masking = Masking::default();
 
@@ -520,6 +521,7 @@ impl Converter {
                 let mut seq_loc_time = std::time::Duration::new(0, 0);
                 let mut ids_add_time = std::time::Duration::new(0, 0);
                 let mut seqlocs_add_time = std::time::Duration::new(0, 0);
+                let mut headers_add_time = std::time::Duration::new(0, 0);
 
                 let mut fasta_queue_spins: usize = 0;
                 loop {
@@ -550,14 +552,17 @@ impl Converter {
 
                             let now = std::time::Instant::now();
                             if let Some(x) = seqheader {
-                                let x = seqlocs.add_locs(&headers.add(x));
+                                let x = seqlocs.add_locs(&headers.add(&x));
                                 location.headers = Some((x.0, x.1 as u8));
                             }
+                            headers_add_time += now.elapsed();
+
+                            let now = std::time::Instant::now();
                             let x = seqlocs.add_locs(&idloc);
+                            location.ids = Some((x.0, x.1 as u8));
                             seqlocs_add_time += now.elapsed();
 
                             let now = std::time::Instant::now();
-                            location.ids = Some((x.0, x.1 as u8));
                             location.sequence = Some(seqlocs.add_locs(&loc));
                             seqlocs.add_to_index(location);
                             seq_loc_time += now.elapsed();
@@ -583,6 +588,7 @@ impl Converter {
                 log::info!("SeqLoc time: {}ms", seq_loc_time.as_millis());
                 log::info!("IDs add time: {}ms", ids_add_time.as_millis());
                 log::info!("SeqLocs add time: {}ms", seqlocs_add_time.as_millis());
+                log::info!("Headers add time: {}ms", headers_add_time.as_millis());
                 log::info!("Finalizing SequenceBuffer");
                 // Finalize pushes the last block, which is likely smaller than the complete block size
                 match sb.finalize() {
@@ -922,7 +928,7 @@ where
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add(&(*myid));
                         if let Some(x) = seqheader {
-                            let x = seqlocs.add_locs(&headers.add(x));
+                            let x = seqlocs.add_locs(&headers.add(&x));
                             location.headers = Some((x.0, x.1 as u8));
                         }
                         let x = seqlocs.add_locs(&idloc);
@@ -1238,7 +1244,7 @@ where
                         ids_string.push(std::sync::Arc::clone(&myid));
                         let idloc = ids.add(&(*myid));
                         if let Some(header) = seqheader {
-                            let x = headers.add(header);
+                            let x = headers.add(&header);
                             let x = seqlocs.add_locs(&x);
                             location.headers = Some((x.0, x.1 as u8));
                         }

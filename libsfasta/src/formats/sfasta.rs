@@ -28,7 +28,7 @@ pub struct Sfasta<'sfa> {
     pub ids: Option<StringBlockStore>,
     pub masking: Option<Masking>,
 }
-
+/*
 impl<'sfa> Clone for Sfasta<'sfa> {
     fn clone(&self) -> Self {
         Sfasta {
@@ -46,7 +46,7 @@ impl<'sfa> Clone for Sfasta<'sfa> {
             masking: self.masking.clone(),
         }
     }
-}
+} */
 
 impl<'sfa> Default for Sfasta<'sfa> {
     fn default() -> Self {

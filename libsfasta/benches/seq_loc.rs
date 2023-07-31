@@ -78,7 +78,7 @@ impl TrupleStructLocSeqLocs {
 }
 
 pub fn benchmark_add_locs(c: &mut Criterion) {
-    let loc = Loc::Loc(0, 0, 128);
+    let loc = Loc::new(0, 0, 128);
 
     let mut seqlocs = SeqLocs::default();
     let locs = vec![loc.clone(); 128];
@@ -110,7 +110,7 @@ pub fn benchmark_add_locs(c: &mut Criterion) {
 }
 
 fn benchmark_add_locs_large(c: &mut Criterion) {
-    let loc = Loc::Loc(0, 0, 128);
+    let loc = Loc::new(0, 0, 128);
     let locs = vec![loc; 1024];
 
     c.bench_with_input(
@@ -196,7 +196,7 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
         &locs,
         |b, s| {
             b.iter(|| {
-                let mut seqlocs = TrupleStructLocSeqLocscar::default();
+                let mut seqlocs = TrupleStructLocSeqLocs::default();
                 for _ in 0..1024 * 32 {
                     seqlocs.add_locs(&s);
                 }

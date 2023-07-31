@@ -6,7 +6,6 @@ use crate::datatypes::{BytesBlockStore, Loc};
 
 use pulp::Arch;
 
-#[derive(Clone)]
 pub struct Masking {
     inner: BytesBlockStore,
 }
@@ -29,7 +28,7 @@ impl Masking {
         // If none are lowercase, nope out here... Written in a way that allows for easy vectorization for SIMD
         let arch = Arch::new();
 
-        // Significant speedup (70% reduction in total masking time)
+        // Significant speedup with this...
         if arch.dispatch(|| {
             for x in seq.iter() {
                 if x > &b'`' {

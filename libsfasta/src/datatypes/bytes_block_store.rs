@@ -2,7 +2,6 @@ use std::io::{Read, Seek, SeekFrom, Write};
 
 use crate::datatypes::{zstd_encoder, CompressionType, Loc};
 
-#[derive(Clone)]
 pub struct BytesBlockStore {
     location: u64,
     block_index_pos: u64,
@@ -10,6 +9,7 @@ pub struct BytesBlockStore {
     block_size: usize,
     pub data: Option<Vec<u8>>, // Only used for writing...
     pub compression_type: CompressionType,
+    pub compression_level: i32,
     cache: Option<(u32, Vec<u8>)>,
     compressed_blocks: Option<Vec<u8>>,
     compressed_block_lens: Option<Vec<usize>>,
@@ -24,6 +24,7 @@ impl Default for BytesBlockStore {
             block_size: 1024 * 1024,
             data: None,
             compression_type: CompressionType::ZSTD,
+            compression_level: -3,
             cache: None,
             compressed_blocks: None,
             compressed_block_lens: None,
@@ -37,8 +38,26 @@ impl BytesBlockStore {
         self
     }
 
+    pub fn with_compression(mut self, compression_type: CompressionType) -> Self {
+        self.compression_type = compression_type;
+        self
+    }
+
+    pub fn with_compression_level(mut self, compression_level: i32) -> Self {
+        if compression_level < -3 || compression_level > 22 {
+            panic!("Invalid compression level");
+        }
+
+        if self.compression_type == CompressionType::NONE  || self.compression_type == CompressionType::LZ4 {
+            panic!("Cannot set compression level for NONE or LZ4 compression");
+        }
+
+        self.compression_level = compression_level;
+        self
+    }
+
     fn compress_block(&mut self) {
-        let mut compressor = zstd_encoder(3, None);
+        // TODO: Make compression level configurable
 
         if self.compressed_blocks.is_none() {
             self.compressed_block_lens = Some(Vec::new());
@@ -54,13 +73,37 @@ impl BytesBlockStore {
         let at = std::cmp::min(self.block_size, self.data.as_mut().unwrap().len());
 
         let mut block = self.data.as_mut().unwrap().split_off(at);
-        block.reserve(self.block_size);
         std::mem::swap(&mut block, self.data.as_mut().unwrap());
 
-        let compressed_size = compressor
-            .compress_to_buffer(&block, &mut compressed)
-            .unwrap();
+        let compressed_size;
 
+        match self.compression_type {
+            CompressionType::ZSTD => {
+                let mut compressor = zstd_encoder(-3, None);
+                compressed_size = compressor
+                    .compress_to_buffer(&block, &mut compressed)
+                    .unwrap();
+            }
+            CompressionType::LZ4 => {
+                let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
+                compressor
+                    .write_all(&block)
+                    .expect("Failed to compress block");
+                compressed = compressor.finish().unwrap();
+                compressed_size = compressed.len();
+            },
+            CompressionType::SNAPPY => todo!(),
+            CompressionType::GZIP => todo!(),
+            CompressionType::NAF => todo!(),
+            CompressionType::NONE => todo!(),
+            CompressionType::XZ => todo!(),
+            CompressionType::BROTLI => todo!(),
+            CompressionType::NAFLike => todo!(),
+            CompressionType::BZIP2 => todo!(),
+            CompressionType::LZMA => todo!(),
+            CompressionType::RAR => todo!(),
+        }
+        
         self.compressed_block_lens
             .as_mut()
             .unwrap()
@@ -114,7 +157,7 @@ impl BytesBlockStore {
             self.data = Some(Vec::with_capacity(self.block_size));
         }
 
-        while self.data.as_ref().unwrap().len() > self.block_size {
+        if self.data.as_ref().unwrap().len() > self.block_size {
             self.compress_block();
         }
 
