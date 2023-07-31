@@ -281,16 +281,13 @@ impl<'sfa> Sfasta<'sfa> {
         let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
 
         // Once stabilized, use write_all_vectored
-        for (block, (start, end)) in locs
-            .iter()
-            .map(|x| x.original_format(self.parameters.block_size))
-        {
+        for l in locs.iter().map(|x| x) {
             let seqblock = self
                 .sequenceblocks
                 .as_mut()
                 .unwrap()
-                .get_block(&mut *buf, block);
-            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
+                .get_block(&mut *buf, l.block);
+            seq.extend_from_slice(&seqblock[l.start as usize..(l.start + l.len) as usize]);
         }
 
         if seqloc.masking.is_some() && self.masking.is_some() {
@@ -315,16 +312,13 @@ impl<'sfa> Sfasta<'sfa> {
         let seqlocs = self.seqlocs.as_mut().unwrap();
         let locs = seqlocs.get_locs(&mut buf, locs.0 as usize, locs.1 as usize);
 
-        for (block, (start, end)) in locs
-            .iter()
-            .map(|x| x.original_format(self.parameters.block_size))
-        {
+        for l in locs.iter().map(|x| x) {
             let seqblock = self
                 .sequenceblocks
                 .as_mut()
                 .unwrap()
-                .get_block_uncached(&mut *buf, block);
-            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
+                .get_block_uncached(&mut *buf, l.block);
+            seq.extend_from_slice(&seqblock[l.start as usize..(l.start + l.len) as usize]);
         }
 
         if seqloc.masking.is_some() && self.masking.is_some() {
@@ -345,16 +339,13 @@ impl<'sfa> Sfasta<'sfa> {
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
 
         // Once stabilized, use write_all_vectored
-        for (block, (start, end)) in locs
-            .iter()
-            .map(|x| x.original_format(self.parameters.block_size))
-        {
+        for l in locs.iter().map(|x| x) {
             let seqblock = self
                 .sequenceblocks
                 .as_mut()
                 .unwrap()
-                .get_block(&mut *buf, block);
-            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
+                .get_block(&mut *buf, l.block);
+            seq.extend_from_slice(&seqblock[l.start as usize..(l.start + l.len) as usize]);
         }
 
         Ok(seq)
@@ -366,16 +357,13 @@ impl<'sfa> Sfasta<'sfa> {
 
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
 
-        for (block, (start, end)) in locs
-            .iter()
-            .map(|x| x.original_format(self.parameters.block_size))
-        {
+        for l in locs.iter().map(|x| x) {
             let seqblock = self
                 .sequenceblocks
                 .as_mut()
                 .unwrap()
-                .get_block_uncached(&mut *buf, block);
-            seq.extend_from_slice(&seqblock[start as usize..end as usize]);
+                .get_block_uncached(&mut *buf, l.block);
+            seq.extend_from_slice(&seqblock[l.start as usize..(l.start + l.len) as usize]);
         }
 
         Ok(seq)
@@ -476,6 +464,9 @@ impl<'sfa> Sfasta<'sfa> {
 
     pub fn index_len(&mut self) -> usize {
         if self.index.is_none() {
+            #[cfg(test)]
+            println!("Index is none");
+
             return 0;
         }
 
@@ -1015,6 +1006,7 @@ mod tests {
         };
 
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
+        println!("Index len: {:#?}", sfasta.index_len());
         assert!(sfasta.index_len() == 10);
 
         let _output = &sfasta.find("test3").unwrap().unwrap();

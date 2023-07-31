@@ -264,9 +264,8 @@ impl SeqLocs {
             .stream_position()
             .expect("Unable to work with seek API");
 
-        let mut seqlocs_chunk_offset: Vec<u32> = Vec::with_capacity(
-            (seq_locs.len() / self.seqlocs_chunk_size as usize) + 1,
-        );
+        let mut seqlocs_chunk_offset: Vec<u32> =
+            Vec::with_capacity((seq_locs.len() / self.seqlocs_chunk_size as usize) + 1);
 
         // TODO: Compression level here should be customizable, but also should be a fast one...
         let mut compressor = zstd_encoder(-3, None);
@@ -798,7 +797,7 @@ impl SeqLoc {
             self.sequence.unwrap().0 as usize,
             self.sequence.unwrap().1 as usize,
         );
-        locs.into_iter().map(|loc| loc.len(block_size)).sum()
+        locs.into_iter().map(|loc| loc.len as usize).sum()
     }
 
     pub fn len_loaded(&self, seqlocs: &SeqLocs, block_size: u32) -> usize {
@@ -806,7 +805,7 @@ impl SeqLoc {
             self.sequence.unwrap().0 as usize,
             self.sequence.unwrap().1 as usize,
         );
-        locs.into_iter().map(|loc| loc.len(block_size)).sum()
+        locs.into_iter().map(|loc| loc.len as usize).sum()
     }
 
     // Convert Vec of Locs to the ranges of the sequence...
@@ -821,7 +820,7 @@ impl SeqLoc {
 
         if let seq = sequence {
             for loc in seq {
-                let len = loc.len(block_size) as u32;
+                let len = loc.len;
                 locations.push(start..start + len);
                 start += len;
             }
@@ -861,20 +860,20 @@ impl SeqLoc {
                 // So for example, Loc is 1500..2000, and the range we want is 20..50 (translates to 1520..1550)
                 let start = range.start.saturating_sub(split.start);
                 let end = range.end.saturating_sub(split.start);
-                new_locs.push(locs[i].slice(block_size, start..end));
+                new_locs.push(locs[i].slice(start..end));
                 break; // We are done if it contains the entire range...
             } else if split.contains(&range.start) {
                 // Loc contains the start of the range...
                 // For example, Loc is 1500..2000 (length 500 in this Loc) and the range we want is 450..550 (so 1950..2000 from this loc, and another 100 from the next loc)
                 let start = range.start.saturating_sub(split.start);
-                let end = range.end.saturating_sub(split.start);
-                new_locs.push(locs[i].slice(block_size, start..end));
+                let end = block_size; // range.end.saturating_sub(split.start);
+                new_locs.push(locs[i].slice(start..end));
             } else if split.contains(&end) {
                 // Loc contains the end of the range...
                 // For example, Loc is 1500..2000 (length 500 in this Loc, starting at 1000) and the range we want is 900..1200 (so 1500..1700 from this loc)
                 let start = range.start.saturating_sub(split.start);
                 let end = range.end.saturating_sub(split.start);
-                new_locs.push(locs[i].slice(block_size, start..end));
+                new_locs.push(locs[i].slice(start..end));
                 break; // We are done if it contains the end of the range...
             } else if split.start > range.start && split.end < range.end {
                 // Loc contains the entire range...
@@ -891,104 +890,40 @@ impl SeqLoc {
 }
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Hash)]
-pub enum Loc {
-    Loc(u32, u32, u32),  // Block, start, end...
-    FromStart(u32, u32), // Block, length...
-    ToEnd(u32, u32),     // Block, start,
-    EntireBlock(u32),    // Entire block belongs to this seq...
+pub struct Loc {
+    pub block: u32,
+    pub start: u32,
+    pub len: u32,
 }
 
 impl Loc {
-    /// The ultimate in lazy programming. This was once a type (tuple) and is now a enum....
     #[inline]
-    pub fn original_format(&self, block_size: u32) -> (u32, (u32, u32)) {
-        match self {
-            Loc::Loc(block, start, end) => (*block, (*start, *end)),
-            Loc::FromStart(block, length) => (*block, (0, *length)),
-            Loc::ToEnd(block, start) => (*block, (*start, block_size)),
-            Loc::EntireBlock(block) => (*block, (0, block_size)),
-        }
-    }
-
-    // TODO: This needs tests
-    #[inline]
-    pub fn len(&self, block_size: u32) -> usize {
-        match self {
-            Loc::Loc(_, start, end) => (*end - *start) as usize,
-            Loc::FromStart(_, length) => *length as usize,
-            Loc::ToEnd(_, start) => block_size as usize - *start as usize,
-            Loc::EntireBlock(_) => block_size as usize,
-        }
+    pub fn new(block: u32, start: u32, len: u32) -> Self {
+        Self { block, start, len }
     }
 
     #[inline]
     pub fn is_empty(&self) -> bool {
-        match self {
-            Loc::Loc(_, start, end) => *start == *end,
-            Loc::FromStart(_, length) => *length == 0,
-            Loc::ToEnd(_, start) => *start == 0,
-            Loc::EntireBlock(_) => false,
-        }
+        self.len == 0
     }
 
-    #[inline(always)]
-    pub fn block(&self) -> u32 {
-        match self {
-            Loc::Loc(block, _, _) => *block,
-            Loc::FromStart(block, _) => *block,
-            Loc::ToEnd(block, _) => *block,
-            Loc::EntireBlock(block) => *block,
-        }
-    }
-
-    #[inline(always)]
-    pub fn start(&self) -> u32 {
-        match self {
-            Loc::Loc(_, start, _) => *start,
-            Loc::FromStart(_, _) => 0,
-            Loc::ToEnd(_, start) => *start,
-            Loc::EntireBlock(_) => 0,
-        }
-    }
-
-    #[inline(always)]
-    pub fn end(&self, block_size: u32) -> u32 {
-        match self {
-            Loc::Loc(_, _, end) => *end,
-            Loc::FromStart(_, _) => block_size,
-            Loc::ToEnd(_, _) => block_size,
-            Loc::EntireBlock(_) => block_size,
-        }
-    }
-
-    #[inline(always)]
     /// Slice a loc
     /// Offset from the total sequence should be calculated before this step
     /// But this handles calculating from inside the loc itself...
     // TODO: Implement for RangeInclusive
-    pub fn slice(&self, block_size: u32, range: std::ops::Range<u32>) -> Loc {
-        Loc::Loc(
-            self.block(),
-            std::cmp::max(self.start().saturating_add(range.start), self.start()),
-            std::cmp::min(self.start().saturating_add(range.end), self.end(block_size)),
-        )
+    #[inline]
+    pub fn slice(&self, range: std::ops::Range<u32>) -> Loc {
+        Loc {
+            block: self.block,
+            start: std::cmp::max(self.start.saturating_add(range.start), self.start),
+            len: range.end.saturating_sub(range.start),
+        }
     }
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn test_original_format() {
-        let loc = Loc::Loc(0, 1, 2);
-        assert_eq!(loc.original_format(10), (0, (1, 2)));
-        let loc = Loc::FromStart(0, 2);
-        assert_eq!(loc.original_format(10), (0, (0, 2)));
-        let loc = Loc::ToEnd(0, 2);
-        assert_eq!(loc.original_format(10), (0, (2, 10)));
-        let loc = Loc::EntireBlock(0);
-        assert_eq!(loc.original_format(10), (0, (0, 10)));
-    }
 
     #[test]
     fn test_seqloc_slice() {
@@ -998,32 +933,34 @@ mod tests {
         let mut dummy_buffer = std::io::Cursor::new(vec![0; 1024]);
 
         seqloc.sequence = Some(seqlocs.add_locs(&vec![
-            Loc::Loc(0, 0, 10),
-            Loc::Loc(1, 0, 10),
-            Loc::Loc(2, 0, 10),
-            Loc::Loc(3, 0, 10),
-            Loc::Loc(4, 0, 10),
+            Loc::new(0, 0, 10),
+            Loc::new(1, 0, 10),
+            Loc::new(2, 0, 10),
+            Loc::new(3, 0, 10),
+            Loc::new(4, 0, 10),
         ]));
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 0..10);
-        assert_eq!(slice, vec![Loc::Loc(0, 0, 10)]);
+        assert_eq!(slice, vec![Loc::new(0, 0, 10)]);
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 5..7);
-        assert_eq!(slice, vec![Loc::Loc(0, 5, 7)]);
+        assert_eq!(slice, vec![Loc::new(0, 5, 2)]);
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 15..17);
-        assert_eq!(slice, vec![Loc::Loc(1, 5, 7)]);
+        assert_eq!(slice, vec![Loc::new(1, 5, 2)]);
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 10..20);
-        assert_eq!(slice, vec![Loc::Loc(1, 0, 10)]);
+        assert_eq!(slice, vec![Loc::new(1, 0, 10)]);
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 20..30);
-        assert_eq!(slice, vec![Loc::Loc(2, 0, 10)]);
+        assert_eq!(slice, vec![Loc::new(2, 0, 10)]);
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 15..35);
         assert_eq!(
             slice,
-            vec![Loc::Loc(1, 5, 10), Loc::Loc(2, 0, 10), Loc::Loc(3, 0, 5)]
+            vec![Loc::new(1, 5, 5), Loc::new(2, 0, 10), Loc::new(3, 0, 5)]
         );
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, 10, 5..9);
-        assert_eq!(slice, vec![Loc::Loc(0, 5, 9)]);
+        assert_eq!(slice, vec![Loc::new(0, 5, 4)]);
         let block_size = 262144;
-        seqloc.sequence =
-            Some(seqlocs.add_locs(&vec![Loc::ToEnd(3097440, 261735), Loc::FromStart(3097441, 1274)]));
+        seqloc.sequence = Some(seqlocs.add_locs(&vec![
+            Loc::new(3097440, 261735, 262144 - 261735),
+            Loc::new(3097441, 0, 1274),
+        ]));
 
         //                                  x 261735 ----------> 262144  (262144 - 261735) = 409
         //     -------------------------------------------------
@@ -1034,10 +971,12 @@ mod tests {
         //     We want 104567 to 104840 -- how?
 
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, block_size, 0..20);
-        assert_eq!(slice, vec![Loc::Loc(3097440, 261735, 261755)]);
+        assert_eq!(slice, vec![Loc::new(3097440, 261735, 20)]);
 
-        seqloc.sequence =
-            Some(seqlocs.add_locs(&vec![Loc::ToEnd(1652696, 260695), Loc::FromStart(1652697, 28424)]));
+        seqloc.sequence = Some(seqlocs.add_locs(&vec![
+            Loc::new(1652696, 260695, 262144 - 260695),
+            Loc::new(1652697, 0, 28424),
+        ]));
 
         //                               x 260695 ----------> 262144  (262144 - 260695) = 1449
         //    -------------------------------------------------
@@ -1052,6 +991,6 @@ mod tests {
         // 2679 - 1449 = 1230
 
         let slice = seqloc.seq_slice(&mut seqlocs, &mut dummy_buffer, block_size, 2679..2952);
-        assert_eq!(slice, vec![Loc::Loc(1652697, 1230, 1503)]);
+        assert_eq!(slice, vec![Loc::new(1652697, 1230, 2952 - 2679)]);
     }
 }

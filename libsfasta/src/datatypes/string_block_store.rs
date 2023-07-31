@@ -24,7 +24,9 @@ impl StringBlockStore {
     }
 
     pub fn add<S: AsRef<str>>(&mut self, input: S) -> Vec<Loc> {
-        self.inner.add(input.as_ref().as_bytes())
+        self.inner
+            .add(input.as_ref().as_bytes())
+            .expect("Failed to add string to block store")
     }
 
     pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>

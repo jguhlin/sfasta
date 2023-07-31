@@ -543,8 +543,9 @@ impl Converter {
                             adding_time += now.elapsed();
 
                             let now = std::time::Instant::now();
-                            let myid: std::borrow::Cow<str> = std::borrow::Cow::from(seqid.unwrap());
-                            let idloc = ids.add(myid);
+                            let myid = std::sync::Arc::new(seqid.unwrap());
+                            ids_string.push(std::sync::Arc::clone(&myid));
+                            let idloc = ids.add(&(*myid));
                             ids_add_time += now.elapsed();
 
                             let now = std::time::Instant::now();

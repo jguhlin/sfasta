@@ -32,19 +32,23 @@ impl Masking {
         // Significant speedup (70% reduction in total masking time)
         if arch.dispatch(|| {
             for x in seq.iter() {
-                if x < &b'a' {
-                    return true
+                if x > &b'`' {
+                    return false;
                 }
             }
-            false
+            true
         }) {
             return None;
         }
 
         // No benefit to using pulp here... (even with for loop)
-        let masked: Vec<u8> = seq.iter().map(|x| x > &b'Z').map(|x| x as u8).collect();
-        
-        Some(self.inner.add(&masked))
+        let masked: Vec<u8> = seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
+
+        Some(
+            self.inner
+                .add(&masked)
+                .expect("Failed to add masking to block store"),
+        )
     }
 
     pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
@@ -115,7 +119,7 @@ mod tests {
         ];
 
         let seq = test_seqs[0].as_bytes();
-        println!("{:#?}", test_seqs.len());
+        println!("Len: {:#?}", seq.len());
         let loc = masking.add_masking(seq).unwrap();
         println!("{loc:#?}");
 
@@ -133,6 +137,8 @@ mod tests {
         let seq = test_seqs[3].as_bytes();
         let loc3 = masking.add_masking(seq).unwrap();
 
+        println!("{loc3:#?}");
+
         for _ in 0..1000 {
             (0..test_seqs.len()).for_each(|i| {
                 let seq = test_seqs[i].as_bytes();
@@ -140,18 +146,28 @@ mod tests {
             });
         }
 
+        println!("Testing write_to_buffer");
         let mut buffer = Cursor::new(Vec::new());
         masking.write_to_buffer(&mut buffer).unwrap();
         let mut masking = Masking::from_buffer(&mut buffer, 0).unwrap();
 
+        println!("Testing mask_sequence");
         let mut seq = test_seqs[0].as_bytes().to_ascii_uppercase();
+        println!("Mask seq...");
+        println!("Loc: {:#?}", loc);
+        println!("Seq: {:#?}", from_utf8(&seq));
+        println!("Seq Len: {:#?}", seq.len());
         masking.mask_sequence(&mut buffer, &loc, &mut seq);
+
+        println!("Assert...");
         assert_eq!(seq, test_seqs[0].as_bytes());
 
+        println!("Testing mask_sequence");
         let mut seq = test_seqs[0].as_bytes().to_ascii_uppercase();
         masking.mask_sequence(&mut buffer, &loc2, &mut seq);
         assert_eq!(seq, test_seqs[0].as_bytes());
 
+        println!("Testing mask_sequence");
         let mut seq = test_seqs[3].as_bytes().to_ascii_uppercase();
         masking.mask_sequence(&mut buffer, &loc3, &mut seq);
         assert_eq!(seq, test_seqs[3].as_bytes());

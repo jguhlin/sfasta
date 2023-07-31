@@ -9,8 +9,8 @@ use std::time::Duration;
 use crossbeam::queue::ArrayQueue;
 use crossbeam::sync::{Parker, Unparker};
 use crossbeam::utils::Backoff;
-use rand::prelude::*;
 use pulp::Arch;
+use rand::prelude::*;
 
 use crate::datatypes::*;
 use crate::CompressionType;
@@ -250,9 +250,7 @@ impl CompressionStreamBuffer {
 
         // Remove whitespace
         let mut seq = x;
-        arch.dispatch(|| {
-            seq.make_ascii_uppercase()
-        });
+        arch.dispatch(|| seq.make_ascii_uppercase());
 
         while !seq.is_empty() {
             let len = self.len(); // Length of current block
@@ -280,14 +278,10 @@ impl CompressionStreamBuffer {
             self.buffer
                 .extend_from_slice(&seq[effective_start..effective_end]);
 
-            let loc = if len as u32 == 0 && len as u32 + end as u32 == self.block_size {
-                Loc::EntireBlock(self.cur_block_id)
-            } else if len == 0 {
-                Loc::FromStart(self.cur_block_id, len as u32 + end as u32)
-            } else if len + end == self.block_size as usize {
-                Loc::ToEnd(self.cur_block_id, len as u32)
-            } else {
-                Loc::Loc(self.cur_block_id, len as u32, len as u32 + end as u32)
+            let loc = Loc {
+                block: self.cur_block_id,
+                start: len as u32,
+                len: end as u32,
             };
 
             locs.push(loc);

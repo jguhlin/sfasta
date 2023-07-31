@@ -9,7 +9,7 @@ extern crate itertools;
 pub mod compression;
 pub mod compression_stream_buffer;
 pub mod convenience;
-mod conversion;
+pub mod conversion;
 pub mod datatypes;
 pub mod dual_level_index;
 mod formats;
