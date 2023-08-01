@@ -48,7 +48,9 @@ impl BytesBlockStore {
             panic!("Invalid compression level");
         }
 
-        if self.compression_type == CompressionType::NONE  || self.compression_type == CompressionType::LZ4 {
+        if self.compression_type == CompressionType::NONE
+            || self.compression_type == CompressionType::LZ4
+        {
             panic!("Cannot set compression level for NONE or LZ4 compression");
         }
 
@@ -91,7 +93,7 @@ impl BytesBlockStore {
                     .expect("Failed to compress block");
                 compressed = compressor.finish().unwrap();
                 compressed_size = compressed.len();
-            },
+            }
             CompressionType::SNAPPY => todo!(),
             CompressionType::GZIP => todo!(),
             CompressionType::NAF => todo!(),
@@ -103,7 +105,7 @@ impl BytesBlockStore {
             CompressionType::LZMA => todo!(),
             CompressionType::RAR => todo!(),
         }
-        
+
         self.compressed_block_lens
             .as_mut()
             .unwrap()

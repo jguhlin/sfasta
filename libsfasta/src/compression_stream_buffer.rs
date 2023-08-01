@@ -20,7 +20,6 @@ pub struct CompressionStreamBufferConfig {
     pub block_size: u32,
     pub compression_type: CompressionType,
     pub compression_level: i8,
-    pub num_threads: u16,
     pub compression_dict: Option<Vec<u8>>, // Only impl for Zstd at this time
 }
 
@@ -30,7 +29,6 @@ impl Default for CompressionStreamBufferConfig {
             block_size: 1024 * 1024,
             compression_type: CompressionType::ZSTD,
             compression_level: 3,
-            num_threads: 1,
             compression_dict: None,
         }
     }
@@ -42,13 +40,11 @@ impl CompressionStreamBufferConfig {
         block_size: u32,
         compression_type: CompressionType,
         compression_level: i8,
-        num_threads: u16,
     ) -> Self {
         Self {
             block_size,
             compression_type,
             compression_level,
-            num_threads,
             compression_dict: None,
         }
     }
@@ -66,11 +62,6 @@ impl CompressionStreamBufferConfig {
 
     pub const fn with_compression_level(mut self, compression_level: i8) -> Self {
         self.compression_level = compression_level;
-        self
-    }
-
-    pub const fn with_threads(mut self, num_threads: u16) -> Self {
-        self.num_threads = num_threads;
         self
     }
 
@@ -139,12 +130,10 @@ impl Drop for CompressionStreamBuffer {
     }
 }
 
-#[allow(dead_code)]
 impl CompressionStreamBuffer {
     pub fn from_config(config: CompressionStreamBufferConfig) -> Self {
         let mut buffer = Self::default();
         buffer.block_size = config.block_size;
-        buffer.threads = config.num_threads;
         buffer.compression_type = config.compression_type;
         buffer.compression_level = config.compression_level;
         buffer.compression_dict = config.compression_dict;
@@ -182,7 +171,7 @@ impl CompressionStreamBuffer {
 
             let handle = thread::spawn(move || {
                 std::thread::sleep(sleep);
-                _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd, parker)
+                // _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd, parker)
             });
             self.workers.push(handle);
         }
@@ -358,67 +347,6 @@ impl CompressionStreamBuffer {
 
     pub fn get_shutdown_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.shutdown)
-    }
-}
-
-fn _compression_worker_thread(
-    compress_queue: Arc<ArrayQueue<(u32, SequenceBlock)>>,
-    sort_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
-    shutdown: Arc<AtomicBool>,
-    compression_type: CompressionType,
-    compression_level: i8,
-    compression_dict: Option<Vec<u8>>,
-    parker: Parker,
-) {
-    let mut result;
-    let backoff = Backoff::new();
-    let mut compression_worker_spins: usize = 0;
-    let mut work_units: usize = 0;
-
-    let mut zstd_compressor = if compression_type == CompressionType::ZSTD {
-        Some(zstd_encoder(compression_level as i32, compression_dict))
-    } else {
-        None
-    };
-
-    let mut rng = rand::thread_rng();
-
-    loop {
-        result = compress_queue.pop();
-
-        match result {
-            None => {
-                if shutdown.load(Ordering::Relaxed) {
-                    log::info!(
-                        "Compression worker thread spins: {}",
-                        compression_worker_spins
-                    );
-                    log::info!("Compression worker thread work units: {}", work_units);
-                    return;
-                } else {
-                    backoff.spin();
-                    compression_worker_spins = compression_worker_spins.saturating_add(1);
-                    if backoff.is_completed() {
-                        parker.park_timeout(Duration::from_millis(rng.gen_range(50..150)));
-                        backoff.reset();
-                    }
-                }
-            }
-
-            Some((block_id, sb)) => {
-                work_units += 1;
-                let sbc = sb.compress(
-                    compression_type,
-                    compression_level,
-                    zstd_compressor.as_mut(),
-                );
-
-                let mut entry = (block_id, sbc);
-                while let Err(x) = sort_queue.push(entry) {
-                    entry = x;
-                }
-            }
-        }
     }
 }
 

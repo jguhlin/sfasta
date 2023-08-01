@@ -12,7 +12,9 @@ pub struct StringBlockStore {
 impl Default for StringBlockStore {
     fn default() -> Self {
         StringBlockStore {
-            inner: BytesBlockStore::default().with_block_size(512 * 1024).with_compression(CompressionType::LZ4),
+            inner: BytesBlockStore::default()
+                .with_block_size(512 * 1024)
+                .with_compression(CompressionType::LZ4),
         }
     }
 }

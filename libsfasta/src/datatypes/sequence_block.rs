@@ -167,7 +167,7 @@ pub struct SequenceBlock {
 #[cfg(not(target_arch = "wasm32"))]
 pub fn zstd_encoder(
     compression_level: i32,
-    dict: Option<Vec<u8>>,
+    dict: Option<Arc<Vec<u8>>>,
 ) -> zstd::bulk::Compressor<'static> {
     let mut encoder = if let Some(dict) = dict {
         zstd::bulk::Compressor::with_dictionary(compression_level, &dict).unwrap()

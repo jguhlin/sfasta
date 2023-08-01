@@ -418,8 +418,7 @@ impl Converter {
         // Creates the sequence block compressor configuration
         let mut sb_config = CompressionStreamBufferConfig::default()
             .with_block_size(self.block_size as u32)
-            .with_compression_type(self.compression_type)
-            .with_threads(self.threads as u16); // Effectively # of compression threads
+            .with_compression_type(self.compression_type);
 
         if self.compression_level.is_some() {
             sb_config = sb_config.with_compression_level(self.compression_level.unwrap());
@@ -530,7 +529,7 @@ impl Converter {
                     match seq_queue_out.pop() {
                         Some(Work::FastaPayload(seq)) => {
                             let (seqid, seqheader, seq, _) = seq.into_parts();
-                            
+
                             let mut location = SeqLoc::new();
 
                             let now = std::time::Instant::now();
