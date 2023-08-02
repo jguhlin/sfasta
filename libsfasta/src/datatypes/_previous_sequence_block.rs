@@ -9,9 +9,7 @@ use std::sync::Arc;
 use flate2::write::{GzDecoder, GzEncoder};
 use log::error;
 
-use pulp::Arch;
 
-use lz4_flex::block;
 #[cfg(not(target_arch = "wasm32"))]
 use xz::read::{XzDecoder, XzEncoder};
 

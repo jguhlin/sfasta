@@ -1,17 +1,11 @@
-use std::collections::HashMap;
 use std::sync::atomic::Ordering;
 use std::sync::atomic::{AtomicBool, AtomicUsize};
 use std::sync::Arc;
-use std::thread;
-use std::thread::JoinHandle;
-use std::time::Duration;
 
 use crossbeam::queue::ArrayQueue;
-use crossbeam::sync::{Parker, Unparker};
 use crossbeam::utils::Backoff;
-use pulp::Arch;
-use rand::prelude::*;
 
+use crate::compression::{CompressionConfig, CompressionWork, CompressionWorkerOrder, Worker};
 use crate::datatypes::*;
 use crate::CompressionType;
 
@@ -20,13 +14,13 @@ pub struct CompressionStreamBufferConfig {
     pub block_size: u32,
     pub compression_type: CompressionType,
     pub compression_level: i8,
-    pub compression_dict: Option<Vec<u8>>, // Only impl for Zstd at this time
+    pub compression_dict: Option<Arc<Vec<u8>>>, // Only impl for Zstd at this time
 }
 
 impl Default for CompressionStreamBufferConfig {
     fn default() -> Self {
         Self {
-            block_size: 1024 * 1024,
+            block_size: 512 * 1024,
             compression_type: CompressionType::ZSTD,
             compression_level: 3,
             compression_dict: None,
@@ -66,7 +60,7 @@ impl CompressionStreamBufferConfig {
     }
 
     pub fn with_compression_dict(mut self, compression_dict: Vec<u8>) -> Self {
-        self.compression_dict = Some(compression_dict);
+        self.compression_dict = Some(Arc::new(compression_dict));
         self
     }
 }
@@ -77,20 +71,14 @@ pub struct CompressionStreamBuffer {
     buffer: Vec<u8>,
     threads: u16,
     initialized: bool,
-    workers: Vec<JoinHandle<()>>,
-    workers_unparkers: Vec<Unparker>,
-    sort_worker: Option<JoinHandle<()>>,
-    sort_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
     output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
-    compress_queue: Arc<ArrayQueue<(u32, SequenceBlock)>>,
     shutdown: Arc<AtomicBool>,
     total_entries: Arc<AtomicUsize>,
     sorted_entries: Arc<AtomicUsize>,
     finalized: bool,
-    compression_type: CompressionType,
-    compression_level: i8,
-    compression_dict: Option<Vec<u8>>,
     emit_block_spins: usize,
+    compression_worker: Option<Arc<Worker>>,
+    compression_config: Option<CompressionConfig>,
 }
 
 impl Default for CompressionStreamBuffer {
@@ -101,28 +89,20 @@ impl Default for CompressionStreamBuffer {
             buffer: Vec::with_capacity(2 * 1024 * 1024),
             threads: 1,
             initialized: false,
-            workers: Vec::<JoinHandle<()>>::new(),
-            workers_unparkers: Vec::<Unparker>::new(),
-            sort_worker: None,
-            sort_queue: Arc::new(ArrayQueue::new(16)),
-            compress_queue: Arc::new(ArrayQueue::new(16)),
             output_queue: Arc::new(ArrayQueue::new(16)),
             shutdown: Arc::new(AtomicBool::new(false)),
             finalized: false,
             total_entries: Arc::new(AtomicUsize::new(0)),
             sorted_entries: Arc::new(AtomicUsize::new(0)),
-            compression_type: CompressionType::ZSTD,
-            compression_level: default_compression_level(CompressionType::ZSTD),
             emit_block_spins: 0,
-            compression_dict: None,
+            compression_worker: None,
+            compression_config: None,
         }
     }
 }
 
 impl Drop for CompressionStreamBuffer {
     fn drop(&mut self) {
-        self.wakeup();
-
         assert!(
             self.buffer.is_empty(),
             "SequenceBuffer was not empty. Finalize the buffer to emit the final block."
@@ -133,61 +113,20 @@ impl Drop for CompressionStreamBuffer {
 impl CompressionStreamBuffer {
     pub fn from_config(config: CompressionStreamBufferConfig) -> Self {
         let mut buffer = Self::default();
+
+        let compression_config = Some(
+            CompressionConfig::new()
+                .with_compression_type(config.compression_type)
+                .with_compression_level(config.compression_level)
+                .with_compression_dict(config.compression_dict),
+        );
+
         buffer.block_size = config.block_size;
-        buffer.compression_type = config.compression_type;
-        buffer.compression_level = config.compression_level;
-        buffer.compression_dict = config.compression_dict;
+
         buffer
     }
 
-    #[inline(always)]
-    pub fn wakeup(&self) {
-        if let Some(sort_worker) = &self.sort_worker {
-            sort_worker.thread().unpark();
-        }
-
-        for i in self.workers_unparkers.iter() {
-            i.unpark()
-        }
-    }
-
     pub fn initialize(&mut self) {
-        let mut rng = rand::thread_rng();
-
-        for _ in 0..self.threads {
-            let shutdown_copy = Arc::clone(&self.shutdown);
-            let cq = Arc::clone(&self.compress_queue);
-            let wq = Arc::clone(&self.sort_queue);
-
-            let ct = self.compression_type;
-            let cl = self.compression_level;
-            let cd = self.compression_dict.clone();
-
-            let sleep = std::time::Duration::from_micros(rng.gen_range(1..100));
-
-            let parker = Parker::new();
-            let parker_thread = parker.unparker().clone();
-            self.workers_unparkers.push(parker_thread);
-
-            let handle = thread::spawn(move || {
-                std::thread::sleep(sleep);
-                // _compression_worker_thread(cq, wq, shutdown_copy, ct, cl, cd, parker)
-            });
-            self.workers.push(handle);
-        }
-
-        {
-            let shutdown_copy = Arc::clone(&self.shutdown);
-            let wq = Arc::clone(&self.sort_queue);
-            let we = Arc::clone(&self.sorted_entries);
-            let oq = Arc::clone(&self.output_queue);
-            let parker = Parker::new();
-            let parker_thread = parker.unparker().clone();
-            let handle = thread::spawn(move || _sorter_worker_thread(wq, oq, shutdown_copy, we));
-
-            self.sort_worker = Some(handle);
-        }
-
         self.initialized = true;
     }
 
@@ -195,7 +134,6 @@ impl CompressionStreamBuffer {
         // Emit the final block...
         self.emit_block();
         self.finalized = true;
-        self.wakeup();
 
         let backoff = Backoff::new();
 
@@ -204,24 +142,11 @@ impl CompressionStreamBuffer {
         while self.sorted_entries.load(Ordering::Relaxed)
             < self.total_entries.load(Ordering::Relaxed)
         {
-            self.wakeup();
             backoff.snooze();
         }
 
         self.shutdown.store(true, Ordering::Relaxed);
 
-        log::info!("Joining workers");
-
-        self.wakeup();
-
-        for i in self.workers.drain(..) {
-            i.join().unwrap();
-        }
-
-        let writer_handle = std::mem::replace(&mut self.sort_worker, None);
-
-        writer_handle.unwrap().join().unwrap();
-        log::info!("CompressionStreamBuffer finalized");
         log::info!("Emit block spins: {}", self.emit_block_spins);
         Ok(())
     }
@@ -233,13 +158,11 @@ impl CompressionStreamBuffer {
 
         let block_size = self.block_size as usize;
 
-        let arch = Arch::new();
-
         let mut locs = Vec::with_capacity((x.len() / self.block_size as usize) + 8);
 
         // Remove whitespace
         let mut seq = x;
-        arch.dispatch(|| seq.make_ascii_uppercase());
+        seq.make_ascii_uppercase();
 
         while !seq.is_empty() {
             let len = self.len(); // Length of current block
@@ -282,8 +205,6 @@ impl CompressionStreamBuffer {
             seq = &mut seq[end..];
         }
 
-        self.wakeup();
-
         Ok(locs)
     }
 
@@ -293,7 +214,6 @@ impl CompressionStreamBuffer {
         std::mem::swap(&mut self.buffer, &mut seq);
 
         let x = SequenceBlock { seq };
-        self.wakeup();
 
         if x.is_empty() {
             return;
@@ -301,15 +221,9 @@ impl CompressionStreamBuffer {
 
         self.total_entries.fetch_add(1, Ordering::SeqCst);
 
-        let mut entry = (self.cur_block_id, x);
-        while let Err(x) = self.compress_queue.push(entry) {
-            self.emit_block_spins = self.emit_block_spins.saturating_add(1);
-            backoff.snooze();
-            entry = x;
-        }
+        let mut entry = CompressionWorkerOrder::Compress(seq);
+        self.compression_worker.as_ref().unwrap().submit(entry);
         self.cur_block_id += 1;
-
-        self.wakeup();
     }
 
     // Convenience functions
@@ -337,7 +251,6 @@ impl CompressionStreamBuffer {
 
     pub fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
         self._check_initialized();
-        self.compression_type = compression_type;
         self
     }
 
@@ -347,93 +260,6 @@ impl CompressionStreamBuffer {
 
     pub fn get_shutdown_flag(&self) -> Arc<AtomicBool> {
         Arc::clone(&self.shutdown)
-    }
-}
-
-fn _sorter_worker_thread(
-    sort_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
-    output_queue: Arc<ArrayQueue<(u32, SequenceBlockCompressed)>>,
-    shutdown: Arc<AtomicBool>,
-    written_entries: Arc<AtomicUsize>,
-) {
-    let mut expected_block: u32 = 0;
-    let mut queue: HashMap<u32, SequenceBlockCompressed> = HashMap::with_capacity(256);
-    let mut result;
-    let backoff = Backoff::new();
-
-    let mut sorter_worker_empty_spins: usize = 0;
-    let mut sorter_worker_have_blocks_spins: usize = 0;
-    let mut sorter_worker_output_spins: usize = 0;
-
-    loop {
-        backoff.reset();
-        while !queue.is_empty() && queue.contains_key(&expected_block) {
-            let sbc = queue.remove(&expected_block).unwrap();
-
-            let mut entry = (expected_block, sbc);
-            while let Err(x) = output_queue.push(entry) {
-                sorter_worker_output_spins = sorter_worker_output_spins.saturating_add(1);
-                backoff.snooze();
-                entry = x;
-            }
-
-            expected_block += 1;
-            written_entries.fetch_add(1, Ordering::SeqCst);
-        }
-
-        while sort_queue.is_empty() {
-            if shutdown.load(Ordering::Relaxed) {
-                log::info!(
-                    "Sorter worker empty spins: {}, have blocks spins: {}, output spins: {}",
-                    sorter_worker_empty_spins,
-                    sorter_worker_have_blocks_spins,
-                    sorter_worker_output_spins
-                );
-                return;
-            }
-
-            backoff.snooze();
-
-            if queue.is_empty() {
-                sorter_worker_empty_spins = sorter_worker_empty_spins.saturating_add(1);
-            } else {
-                sorter_worker_have_blocks_spins = sorter_worker_have_blocks_spins.saturating_add(1);
-            }
-
-            if backoff.is_completed() {
-                backoff.reset();
-            }
-        }
-
-        result = sort_queue.pop();
-
-        match result {
-            None => {
-                if shutdown.load(Ordering::Relaxed) {
-                    log::info!(
-                        "Sorter worker empty spins: {}, have blocks spins: {}, output spins: {}",
-                        sorter_worker_empty_spins,
-                        sorter_worker_have_blocks_spins,
-                        sorter_worker_output_spins
-                    );
-                    return;
-                }
-            }
-            Some((block_id, sbc)) => {
-                if block_id == expected_block {
-                    let mut entry = (expected_block, sbc);
-                    while let Err(x) = output_queue.push(entry) {
-                        sorter_worker_output_spins = sorter_worker_output_spins.saturating_add(1);
-                        backoff.snooze();
-                        entry = x;
-                    }
-                    expected_block += 1;
-                    written_entries.fetch_add(1, Ordering::SeqCst);
-                } else {
-                    queue.insert(block_id, sbc);
-                }
-            }
-        }
     }
 }
 
@@ -471,11 +297,7 @@ mod tests {
         let loc = sb.add_sequence(&mut largeseq).unwrap();
         locs.extend(loc);
 
-        sb.wakeup();
-        // println!("Done adding seqs...");
         sb.finalize().expect("Unable to finalize SeqBuffer");
-
-        // println!("Finalized...");
 
         // This is actually a test, just making sure it does not panic here
         drop(sb);

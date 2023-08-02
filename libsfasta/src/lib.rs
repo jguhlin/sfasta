@@ -7,7 +7,6 @@ extern crate rayon;
 extern crate itertools;
 
 pub mod compression;
-pub mod compression_stream_buffer;
 pub mod convenience;
 pub mod conversion;
 pub mod datatypes;

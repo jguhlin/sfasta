@@ -1,18 +1,25 @@
 use std::io::{Read, Seek, SeekFrom, Write};
+use std::sync::{Arc, Mutex, Condvar};
+use std::collections::VecDeque;
 
-use crate::datatypes::{zstd_encoder, CompressionType, Loc};
+use crate::compression::{CompressionConfig, CompressionWork, CompressionWorkerOrder, Worker, CompressionPacket};
+use crate::datatypes::Loc;
+
+// Use ArrayQueue from crossbeam
+use crossbeam::queue::ArrayQueue;
 
 pub struct BytesBlockStore {
     location: u64,
     block_index_pos: u64,
-    block_locations: Option<Vec<u64>>,
+    block_locations: Option<Vec<Arc<Mutex<u64>>>>,
+    block_locations_pos: u64,
     block_size: usize,
     pub data: Option<Vec<u8>>, // Only used for writing...
-    pub compression_type: CompressionType,
-    pub compression_level: i32,
+    pub compression_config: CompressionConfig,
     cache: Option<(u32, Vec<u8>)>,
-    compressed_blocks: Option<Vec<u8>>,
-    compressed_block_lens: Option<Vec<usize>>,
+    compressed_blocks: Option<VecDeque<Arc<CompressionPacket>>>,
+    compression_worker: Option<Arc<Worker>>,
+    output_handle: Option<Arc<ArrayQueue<(Vec<u8>, Arc<Mutex<u64>>)>>>,
 }
 
 impl Default for BytesBlockStore {
@@ -20,14 +27,15 @@ impl Default for BytesBlockStore {
         BytesBlockStore {
             location: 0,
             block_index_pos: 0,
+            block_locations_pos: 0,
             block_locations: None,
-            block_size: 1024 * 1024,
+            block_size: 512 * 1024,
             data: None,
-            compression_type: CompressionType::ZSTD,
-            compression_level: -3,
             cache: None,
             compressed_blocks: None,
-            compressed_block_lens: None,
+            compression_config: CompressionConfig::default(),
+            compression_worker: None,
+            output_handle: None,
         }
     }
 }
@@ -38,121 +46,53 @@ impl BytesBlockStore {
         self
     }
 
-    pub fn with_compression(mut self, compression_type: CompressionType) -> Self {
-        self.compression_type = compression_type;
-        self
-    }
-
-    pub fn with_compression_level(mut self, compression_level: i32) -> Self {
-        if compression_level < -3 || compression_level > 22 {
-            panic!("Invalid compression level");
-        }
-
-        if self.compression_type == CompressionType::NONE
-            || self.compression_type == CompressionType::LZ4
-        {
-            panic!("Cannot set compression level for NONE or LZ4 compression");
-        }
-
-        self.compression_level = compression_level;
+    pub fn with_compression(mut self, compression: CompressionConfig) -> Self {
+        self.compression_config = compression;
         self
     }
 
     fn compress_block(&mut self) {
-        // TODO: Make compression level configurable
-
         if self.compressed_blocks.is_none() {
-            self.compressed_block_lens = Some(Vec::new());
-            self.compressed_blocks = Some(Vec::new());
+            self.compressed_blocks = Some(VecDeque::new());
         }
 
         #[cfg(test)]
-        let mut compressed = Vec::with_capacity(8192);
+        let packet = Arc::new(CompressionPacket::with_capacity(8192));
 
         #[cfg(not(test))]
-        let mut compressed = Vec::with_capacity(self.block_size);
+        let packet = Arc::new(CompressionPacket::with_capacity(self.block_size));
 
         let at = std::cmp::min(self.block_size, self.data.as_mut().unwrap().len());
 
         let mut block = self.data.as_mut().unwrap().split_off(at);
         std::mem::swap(&mut block, self.data.as_mut().unwrap());
 
-        let compressed_size;
+        let work = CompressionWorkerOrder::compress(
+            block,
+            Arc::clone(&packet),
+            &self.compression_config,
+        );
 
-        match self.compression_type {
-            CompressionType::ZSTD => {
-                let mut compressor = zstd_encoder(-3, None);
-                compressed_size = compressor
-                    .compress_to_buffer(&block, &mut compressed)
-                    .unwrap();
-            }
-            CompressionType::LZ4 => {
-                let mut compressor = lz4_flex::frame::FrameEncoder::new(compressed);
-                compressor
-                    .write_all(&block)
-                    .expect("Failed to compress block");
-                compressed = compressor.finish().unwrap();
-                compressed_size = compressed.len();
-            }
-            CompressionType::SNAPPY => todo!(),
-            CompressionType::GZIP => todo!(),
-            CompressionType::NAF => todo!(),
-            CompressionType::NONE => todo!(),
-            CompressionType::XZ => todo!(),
-            CompressionType::BROTLI => todo!(),
-            CompressionType::NAFLike => todo!(),
-            CompressionType::BZIP2 => todo!(),
-            CompressionType::LZMA => todo!(),
-            CompressionType::RAR => todo!(),
-        }
-
-        self.compressed_block_lens
+        self.compressed_blocks
             .as_mut()
             .unwrap()
-            .push(compressed_size);
-
-        self.compressed_blocks.as_mut().unwrap().extend(compressed);
+            .push_back(packet);
     }
 
-    // TODO: Brotli compress very large ID blocks in memory(or LZ4)? Such as NT...
-    /* pub fn add<'b, I: IntoIterator<Item = &'b u8>>(&'b mut self, input: I) -> Vec<Loc> {
-        if self.data.is_none() {
-            self.data = Some(Vec::with_capacity(self.block_size));
+    pub fn check_complete(&self) {
+        // If nowhere to go, then don't bother here...
+        if self.output_handle.is_none() {
+            return;
         }
 
-        while self.data.as_ref().unwrap().len() > self.block_size {
-            self.compress_block();
+        let compressed_blocks = self.compressed_blocks.as_mut().unwrap();
+        while !compressed_blocks.is_empty() && *compressed_blocks[0].complete.lock().unwrap() {
+            let block = VecDeque::pop_front(compressed_blocks).unwrap();
+            let block_pos = Arc::new(Mutex::new(0_u64));
+            self.block_locations.as_mut().unwrap().push(Arc::clone(&block_pos));
+            self.output_handle.as_ref().unwrap().push((block.output.into_inner().unwrap(), block_pos));
         }
-
-        let data = self.data.as_mut().unwrap();
-
-        let mut start = data.len();
-        data.extend(input);
-        let end = data.len() - 1;
-
-        let compressed_blocks_count = match self.compressed_block_lens.as_ref() {
-            Some(v) => v.len(),
-            None => 0,
-        };
-
-        let starting_block = (start / self.block_size) + compressed_blocks_count;
-        let ending_block = (end / self.block_size) + compressed_blocks_count;
-
-        let mut locs = Vec::with_capacity(input.len() / self.block_size + 1);
-
-        for block in starting_block..=ending_block {
-            let block_start = start % self.block_size;
-            let block_end = if block == ending_block {
-                end % self.block_size
-            } else {
-                self.block_size - 1
-            };
-            start = block_end + 1;
-            locs.push(Loc::Loc(block as u32, block_start as u32, block_end as u32));
-        }
-
-        locs
-    } */
+    }
 
     pub fn add<'b>(&'b mut self, input: &[u8]) -> Result<Vec<Loc>, &str> {
         if self.data.is_none() {
@@ -169,7 +109,7 @@ impl BytesBlockStore {
         data.extend(input);
         let end = data.len() - 1;
 
-        let compressed_blocks_count = match self.compressed_block_lens.as_ref() {
+        let compressed_blocks_count = match self.compressed_blocks.as_ref() {
             Some(v) => v.len(),
             None => 0,
         };
@@ -204,24 +144,7 @@ impl BytesBlockStore {
         Ok(locs)
     }
 
-    pub fn emit_blocks(&mut self) -> Vec<&[u8]> {
-        while !self.data.as_ref().unwrap().is_empty() {
-            self.compress_block();
-        }
-
-        let data = self.compressed_blocks.as_ref().unwrap();
-        let mut blocks = Vec::new();
-        let _len = data.len();
-
-        let mut start = 0;
-        for len in self.compressed_block_lens.as_ref().unwrap() {
-            blocks.push(&data[start..start + len]);
-            start += len;
-        }
-
-        blocks
-    }
-
+    /// DEPRECATED. This is going to be changed, blocks will be written as they become available now...
     pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
     where
         W: Write + Seek,
@@ -233,9 +156,12 @@ impl BytesBlockStore {
         let mut block_locations_pos: u64 = 0;
 
         let starting_pos = out_buf.stream_position().unwrap();
-        // TODO: This is a lie, only zstd is supported as of right now...
-        bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
-            .unwrap();
+        bincode::encode_into_std_write(
+            self.compression_config.compression_type,
+            &mut out_buf,
+            bincode_config,
+        )
+        .unwrap();
         bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
 
@@ -251,6 +177,60 @@ impl BytesBlockStore {
         }
 
         block_locations_pos = out_buf.stream_position().unwrap();
+
+        let bincoded_block_locations_size =
+            bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
+
+        let compressed_block_locations =
+            zstd::bulk::compress(&bincoded_block_locations_size, -3).unwrap();
+
+        bincode::encode_into_std_write(&compressed_block_locations, &mut out_buf, bincode_config)
+            .unwrap();
+        self.block_locations = Some(block_locations);
+
+        let end = out_buf.stream_position().unwrap();
+        out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
+        bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
+            .unwrap();
+        bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
+
+        // Back to the end so we don't interfere with anything...
+        out_buf.seek(SeekFrom::Start(end)).unwrap();
+
+        Some(starting_pos)
+    }
+
+    /// Write out the header for BytesBlockStore
+    pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
+    where
+        W: Write + Seek,
+    {
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        let orig_pos = out_buf.stream_position().unwrap();
+
+        out_buf.seek(SeekFrom::Start(pos)).unwrap();
+
+        let header_pos = out_buf.stream_position().unwrap();
+        bincode::encode_into_std_write(
+            self.compression_config.compression_type,
+            &mut out_buf,
+            bincode_config,
+        )
+        .unwrap();
+        bincode::encode_into_std_write(self.block_locations_pos, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
+    }
+
+    pub fn write_block_locations<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
+    where
+        W: Write + Seek,
+    {
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+
+        let mut block_locations = Vec::new();
+        self.block_locations_pos = out_buf.stream_position().unwrap();
 
         let bincoded_block_locations_size =
             bincode::encode_to_vec(&block_locations, bincode_config).unwrap();

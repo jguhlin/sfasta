@@ -5,7 +5,7 @@ pub mod masking;
 pub mod metadata;
 pub mod parameters;
 pub mod seq_loc;
-pub mod sequence_block;
+pub mod sequence_block_store;
 pub mod string_block_store;
 pub mod structs;
 pub mod u64_block_store;

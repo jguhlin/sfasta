@@ -8,9 +8,6 @@
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::datatypes::zstd_encoder;
-use crate::utils::zstd_decompressor;
-
 /*
 Should flatten and have it stored as:
 SeqLoc Index:

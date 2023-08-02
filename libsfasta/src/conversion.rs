@@ -7,18 +7,15 @@ use crossbeam::queue::ArrayQueue;
 use crossbeam::thread;
 use crossbeam::utils::Backoff;
 
-use std::fs::{metadata, File};
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
 
-use crate::compression_stream_buffer::{CompressionStreamBuffer, CompressionStreamBufferConfig};
 use crate::datatypes::*;
 use crate::dual_level_index::*;
 use crate::formats::*;
-use crate::utils::*;
 use crate::CompressionType;
 
 /// Main conversion struct
