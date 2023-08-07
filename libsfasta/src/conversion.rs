@@ -13,10 +13,10 @@ use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use std::time::Instant;
 
+use crate::compression::useful::CompressionType;
 use crate::datatypes::*;
 use crate::dual_level_index::*;
 use crate::formats::*;
-use crate::CompressionType;
 
 /// Main conversion struct
 ///
@@ -393,7 +393,7 @@ impl Converter {
 
     /// Unified function for writing FASTA and FASTQ files
     // TODO In development
-    pub fn write_sequence<'convert, W, R>(
+    pub fn process_file<'convert, W, R>(
         &self,
         in_buf: &mut R,
         mut out_fh: &mut Box<W>,
@@ -411,11 +411,6 @@ impl Converter {
         R: Read + Send + 'convert,
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-        // Creates the sequence block compressor configuration
-        let mut sb_config = CompressionStreamBufferConfig::default()
-            .with_block_size(self.block_size as u32)
-            .with_compression_type(self.compression_type);
 
         if self.compression_level.is_some() {
             sb_config = sb_config.with_compression_level(self.compression_level.unwrap());
@@ -797,6 +792,7 @@ mod tests {
     use super::*;
     use crate::datatypes::*;
     use std::io::Cursor;
+    use std::io::File;
 
     fn init() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -842,16 +838,7 @@ mod tests {
         let _metadata: Metadata =
             bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
-        let b: SequenceBlockCompressed =
-            bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
-        let mut zstd_decompressor = zstd::bulk::Decompressor::new().unwrap();
-        zstd_decompressor.include_magicbytes(false).unwrap();
-
-        let b = b.decompress(
-            CompressionType::ZSTD,
-            2 * 1024 * 1024,
-            Some(zstd_decompressor).as_mut(),
-        );
+        todo!();
 
         assert!(b.len() == 8192);
     }

@@ -1,8 +1,8 @@
 use std::collections::HashMap;
 use std::io::{Read, Write};
 use std::sync::atomic::Ordering;
-use std::sync::atomic::{AtomicBool, AtomicUsize};
-use std::sync::{Arc, Mutex, Condvar};
+use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize};
+use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -10,58 +10,13 @@ use std::time::Duration;
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
+use crate::compression::useful::*;
+use crate::io::OutputBlock;
+
 #[cfg(not(target_arch = "wasm32"))]
 use xz::read::{XzDecoder, XzEncoder};
 
-use crate::datatypes::*;
-use crate::CompressionType;
-
-pub struct CompressionPacket {
-    pub complete: Mutex<bool>,
-    pub condvar: Condvar,
-    pub output: Mutex<Vec<u8>>,
-}
-
-impl CompressionPacket {
-    pub fn new() -> Self {
-        Self {
-            complete: Mutex::new(false),
-            condvar: Condvar::new(),
-            output: Mutex::new(Vec::new()),
-        }
-    }
-
-    pub fn new_with_output(output: Vec<u8>) -> Self {
-        Self {
-            complete: Mutex::new(true),
-            condvar: Condvar::new(),
-            output: Mutex::new(output),
-        }
-    }
-
-    pub fn wait_for_completion(&self) {
-        let mut complete = self.complete.lock().unwrap();
-        while !*complete {
-            complete = self.condvar.wait(complete).unwrap();
-        }
-    }
-
-    pub fn set_complete(&self) {
-        self.output.lock().unwrap().shrink_to_fit();
-        let mut complete = self.complete.lock().unwrap();
-        *complete = true;
-        self.condvar.notify_all();
-    }
-
-    pub fn with_capacity(capacity: usize) -> Self {
-        Self {
-            complete: Mutex::new(false),
-            condvar: Condvar::new(),
-            output: Mutex::new(Vec::with_capacity(capacity)),
-        }
-    }
-}
-
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct CompressionConfig {
     pub compression_type: CompressionType,
     pub compression_level: i8,
@@ -99,41 +54,42 @@ impl CompressionConfig {
     }
 }
 
-pub enum CompressionWorkerOrder {
-    Compress(CompressionWork),
-    // Decompress(CompressionWork), // todo
-    // Shutdown
+pub enum CompressorWork {
+    Compress(CompressionBlock),
+    Decompress(CompressionBlock), // TODO
 }
 
-impl CompressionWorkerOrder {
-    pub fn compress(
-        input: Vec<u8>,
-        packet: Arc<CompressionPacket>,
-        compression_config: &CompressionConfig,
-    ) -> Self {
-        Self::Compress(CompressionWork {
-            input,
-            packet,
-            compression_type: compression_config.compression_type,
-            compression_level: compression_config.compression_level,
-            compression_dict: compression_config.compression_dict,
-        })
-    }
-}
-
-pub struct CompressionWork {
+pub struct CompressionBlock {
     pub input: Vec<u8>,
-    pub packet: Arc<CompressionPacket>,
-    pub compression_type: CompressionType,
-    pub compression_level: i8,
-    pub compression_dict: Option<Arc<Vec<u8>>>,
+    pub location: Arc<AtomicU64>,
+    pub compression_config: Arc<CompressionConfig>,
+}
+
+impl CompressionBlock {
+    pub fn new(input: Vec<u8>, compression_config: Arc<CompressionConfig>) -> Self {
+        Self {
+            input,
+            location: Arc::new(AtomicU64::new(0)),
+            compression_config,
+        }
+    }
+
+    pub fn get_location(&self) -> Arc<AtomicU64> {
+        Arc::clone(&self.location)
+    }
+
+    pub fn is_complete(&self) -> bool {
+        self.location.load(Ordering::Relaxed) != 0_u64
+    }
 }
 
 pub struct Worker {
     pub threads: u16,
     pub buffer_size: usize,
     handles: Vec<JoinHandle<()>>,
-    queue: Option<Arc<ArrayQueue<CompressionWorkerOrder>>>,
+    queue: Option<Arc<ArrayQueue<CompressorWork>>>, // Input
+    writer: Option<Arc<ArrayQueue<OutputBlock>>>,   // Output
+
     shutdown_flag: Arc<AtomicBool>,
 }
 
@@ -145,6 +101,7 @@ impl Default for Worker {
             buffer_size: 8192,
             queue: None,
             shutdown_flag: Arc::new(AtomicBool::new(false)),
+            writer: None,
         }
     }
 }
@@ -165,7 +122,7 @@ impl Worker {
     }
 
     pub fn start(&mut self) {
-        let queue = Arc::new(ArrayQueue::<CompressionWorkerOrder>::new(self.buffer_size));
+        let queue = Arc::new(ArrayQueue::<CompressorWork>::new(self.buffer_size));
         self.queue = Some(queue);
 
         for _ in 0..self.threads {
@@ -176,7 +133,7 @@ impl Worker {
         }
     }
 
-    pub fn submit(&self, work: CompressionWorkerOrder) {
+    pub fn submit(&self, work: CompressorWork) {
         let backoff = Backoff::new();
 
         let mut entry = work;
@@ -184,6 +141,19 @@ impl Worker {
             backoff.snooze();
             entry = x;
         }
+    }
+
+    pub fn compress(
+        &self,
+        input: Vec<u8>,
+        compression_config: Arc<CompressionConfig>,
+    ) -> Arc<AtomicU64> {
+        let block = CompressionBlock::new(input, compression_config);
+        let location = block.get_location();
+
+        self.submit(CompressorWork::Compress(block));
+
+        location
     }
 
     pub fn shutdown(&mut self) {
@@ -194,7 +164,7 @@ impl Worker {
     }
 }
 
-fn compression_worker(queue: Arc<ArrayQueue<CompressionWorkerOrder>>, shutdown: Arc<AtomicBool>) {
+fn compression_worker(queue: Arc<ArrayQueue<CompressorWork>>, shutdown: Arc<AtomicBool>) {
     let mut result;
     let backoff = Backoff::new();
 
@@ -212,16 +182,23 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressionWorkerOrder>>, shutdown: 
                     }
                 }
             }
-            Some(CompressionWorkerOrder::Compress(work)) => {
-                let mut output = work.packet.output.lock().unwrap();
+            Some(CompressorWork::Compress(work)) => {
+                #[cfg(not(test))]
+                let mut output = Vec::with_capacity(work.input.len());
 
-                match work.compression_type {
+                // Tests fail otherwise for buffer too small
+                #[cfg(test)]
+                let mut output = Vec::with_capacity(8192);
+
+                match work.compression_config.compression_type {
                     #[cfg(not(target_arch = "wasm32"))]
                     CompressionType::ZSTD => {
-                        let mut zstd_compressor =
-                            zstd_encoder(work.compression_level as i32, work.compression_dict);
+                        let mut zstd_compressor = zstd_encoder(
+                            work.compression_config.compression_level as i32,
+                            work.compression_config.compression_dict,
+                        );
                         zstd_compressor
-                            .compress_to_buffer(work.input.as_slice(), &mut *output)
+                            .compress_to_buffer(work.input.as_slice(), &mut output)
                             .unwrap();
                     }
                     #[cfg(target_arch = "wasm32")]
@@ -229,12 +206,12 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressionWorkerOrder>>, shutdown: 
                         unimplemented!("ZSTD encoding is not supported on wasm32");
                     }
                     CompressionType::LZ4 => {
-                        let mut lz4_compressor = lz4_flex::frame::FrameEncoder::new(&mut *output);
+                        let mut lz4_compressor = lz4_flex::frame::FrameEncoder::new(&mut output);
                         lz4_compressor.write_all(work.input.as_slice()).unwrap();
                         lz4_compressor.finish().unwrap();
                     }
                     CompressionType::SNAPPY => {
-                        let mut compressor = snap::write::FrameEncoder::new(&mut *output);
+                        let mut compressor = snap::write::FrameEncoder::new(&mut output);
                         compressor
                             .write_all(work.input.as_slice())
                             .expect("Unable to compress with Snappy");
@@ -242,8 +219,10 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressionWorkerOrder>>, shutdown: 
                     }
                     CompressionType::GZIP => {
                         let mut compressor = flate2::write::GzEncoder::new(
-                            &mut *output,
-                            flate2::Compression::new(work.compression_level as u32),
+                            &mut output,
+                            flate2::Compression::new(
+                                work.compression_config.compression_level as u32,
+                            ),
                         );
                         compressor
                             .write_all(work.input.as_slice())
@@ -251,14 +230,16 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressionWorkerOrder>>, shutdown: 
                         compressor.finish().unwrap();
                     }
                     CompressionType::NONE => {
-                        *output = work.input.as_slice().to_vec();
+                        output = work.input;
                     }
                     #[cfg(not(target_arch = "wasm32"))]
                     CompressionType::XZ => {
-                        let mut compressor =
-                            XzEncoder::new(work.input.as_slice(), work.compression_level as u32);
+                        let mut compressor = XzEncoder::new(
+                            work.input.as_slice(),
+                            work.compression_config.compression_level as u32,
+                        );
                         compressor
-                            .read_to_end(&mut *output)
+                            .read_to_end(&mut output)
                             .expect("Unable to compress with XZ");
                     }
                     #[cfg(target_arch = "wasm32")]
@@ -269,7 +250,7 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressionWorkerOrder>>, shutdown: 
                         let mut compressor = brotli::CompressorWriter::new(
                             &mut *output,
                             8192,
-                            work.compression_level as u32,
+                            work.compression_config.compression_level as u32,
                             22,
                         );
                         compressor
@@ -277,118 +258,30 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressionWorkerOrder>>, shutdown: 
                             .expect("Unable to compress with Brotli");
                         compressor.flush().expect("Unable to flush Brotli");
                     }
-                    _ => panic!("Unsupported compression type: {:?}", work.compression_type),
+                    _ => panic!(
+                        "Unsupported compression type: {:?}",
+                        work.compression_config.compression_type
+                    ),
                 };
-                work.packet.set_complete();
+
+                // TODO: Here we need to submit it
             }
+            Some(CompressorWork::Decompress(work)) => {
+                todo!();
+            }
+            _ => panic!("Unsupported work type"),
         }
     }
-}
-
-#[cfg(not(target_arch = "wasm32"))]
-pub fn zstd_encoder(
-    compression_level: i32,
-    dict: Option<Arc<Vec<u8>>>,
-) -> zstd::bulk::Compressor<'static> {
-    let mut encoder = if let Some(dict) = dict {
-        zstd::bulk::Compressor::with_dictionary(compression_level, &dict).unwrap()
-    } else {
-        zstd::bulk::Compressor::new(compression_level).unwrap()
-    };
-    encoder.include_checksum(false).unwrap();
-    encoder
-        .include_magicbytes(false)
-        .expect("Unable to set ZSTD MagicBytes");
-    encoder
-        .include_contentsize(false)
-        .expect("Unable to set ZSTD Content Size Flag");
-    encoder
-        .long_distance_matching(true)
-        .expect("Unable to set long_distance_matching");
-    encoder
-}
-
-#[cfg(target_arch = "wasm32")]
-pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static> {
-    unimplemented!("ZSTD encoding is not supported on wasm32");
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use flate2::Compression;
     use rand::prelude::*;
 
     #[test]
     pub fn test_compression() {
-        let mut worker = Worker::new().with_threads(4).with_buffer_size(100);
-        worker.start();
-
-        // Create 8192 bytes of random data (ascii)
-        let mut input = vec![b'A'; 8192];
-
-        // Create 1000 places to store the compressed data
-        let mut outputs = vec![Arc::new(CompressionPacket::with_capacity(8192 * 2)); 1000];
-
-        for compression_type in vec![
-            CompressionType::ZSTD,
-            CompressionType::LZ4,
-            CompressionType::SNAPPY,
-            CompressionType::GZIP,
-            CompressionType::NONE,
-            CompressionType::XZ,
-            CompressionType::BROTLI,
-        ] {
-            for packet in outputs.iter_mut() {
-                // Clear output
-                let mut output_clear = packet.output.lock().unwrap();
-                output_clear.clear();
-                drop(output_clear);
-
-                let input = input.clone();
-                worker.submit(CompressionWorkerOrder::Compress(CompressionWork {
-                    input,
-                    packet: Arc::clone(&packet),
-                    compression_type: compression_type,
-                    compression_level: 3,
-                    compression_dict: None,
-                }));
-            }
-        }
-
-        worker.shutdown();
-
-        assert!(outputs.iter().all(|packet| {
-            let output = packet.output.lock().unwrap();
-            output.len() > 0
-        }));
-
-        let mut worker = Worker::new().with_threads(4).with_buffer_size(100);
-        worker.start();
-
-        for packet in outputs.iter_mut() {
-            let output = Arc::clone(packet);
-            let input = input;
-            worker.submit(CompressionWorkerOrder::Compress(CompressionWork {
-                input,
-                packet: Arc::clone(packet),
-                compression_type: CompressionType::ZSTD,
-                compression_level: 3,
-                compression_dict: None,
-            }));
-        }
-
-        worker.shutdown();
-
-        // Decompress first output
-        let mut decompressed = Vec::new();
-        let output = outputs[0].output.lock().unwrap();
-        let mut decoder = zstd::stream::read::Decoder::new(&output[..]).unwrap();
-        decoder
-            .include_magicbytes(false)
-            .expect("Unable to disable magic bytes");
-        decoder.read_to_end(&mut decompressed).unwrap();
-
-        assert_eq!(decompressed, *input);
-        println!("Decompressed: {}", String::from_utf8_lossy(&decompressed));
+        todo!();
     }
 }

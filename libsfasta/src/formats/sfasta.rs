@@ -9,6 +9,7 @@ use std::sync::RwLock;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 
+use crate::compression::CompressionType;
 use crate::datatypes::*;
 use crate::dual_level_index::*;
 use crate::*;
@@ -22,7 +23,7 @@ pub struct Sfasta<'sfa> {
     pub index_directory: IndexDirectory,
     pub index: Option<DualIndex>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
-    pub sequenceblocks: Option<SequenceBlocks>,
+    pub sequenceblocks: Option<SequenceBlockStore>,
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<StringBlockStore>,
     pub ids: Option<StringBlockStore>,
@@ -626,12 +627,9 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::info!("Creating Sequence Blocks");
 
-        let sequenceblocks = SequenceBlocks::new(
+        let sequenceblocks = SequenceBlockStore::from_buffer(
             &mut in_buf,
-            sfasta.parameters.compression_type,
-            sfasta.parameters.compression_dict.clone(),
-            sfasta.parameters.block_size as usize,
-            block_index_loc,
+            sfasta.directory.masking_loc.unwrap().get(),
         );
 
         if sequenceblocks.is_err() {
@@ -644,13 +642,14 @@ impl<'sfa> SfastaParser<'sfa> {
         sfasta.sequenceblocks = Some(sequenceblocks.unwrap());
 
         if prefetch {
+            todo!("Prefetching block locs is not yet implemented");
             println!("Prefetching block locs");
-            sfasta
-                .sequenceblocks
-                .as_mut()
-                .unwrap()
-                .prefetch_block_locs(&mut in_buf)
-                .expect("Unable to prefetch block locs");
+            //            sfasta
+            //              .sequenceblocks
+            //            .as_mut()
+            //          .unwrap()
+            // .prefetch_block_locs(&mut in_buf) // TODO: Important to speed things back up
+            // .expect("Unable to prefetch block locs");
         }
 
         log::info!("Opening Headers");

@@ -1,6 +1,6 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-use libsfasta::compression_stream_buffer::CompressionStreamBuffer;
+use libsfasta::_compression_stream_buffer::CompressionStreamBuffer;
 
 use rand::Rng;
 

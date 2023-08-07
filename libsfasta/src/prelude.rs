@@ -1,6 +1,6 @@
+pub use crate::compression::useful::CompressionType;
 pub use crate::convenience::*;
 pub use crate::conversion::Converter; // generic_open_file,
-pub use crate::datatypes::structs::CompressionType;
 pub use crate::datatypes::Sequence;
 pub use crate::dual_level_index::*;
 pub use crate::formats::fasta::*;

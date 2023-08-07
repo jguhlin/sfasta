@@ -17,7 +17,7 @@ pub use masking::*;
 pub use metadata::*;
 pub use parameters::*;
 pub use seq_loc::*;
-pub use sequence_block::*;
+pub use sequence_block_store::*;
 pub use string_block_store::*;
 pub use structs::*;
 pub use u64_block_store::*;

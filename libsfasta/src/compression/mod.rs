@@ -6,6 +6,8 @@
 // pub use cute_nucleotides_2bit::*;
 // pub use cute_nucleotides_4bit::*;
 
+pub mod useful;
 pub mod worker;
 
+pub use useful::*;
 pub use worker::*;

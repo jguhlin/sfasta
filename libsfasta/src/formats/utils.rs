@@ -1,6 +1,6 @@
 use simdutf8::basic::from_utf8;
 
-use crate::datatypes::structs::*;
+use crate::compression::useful::CompressionType;
 
 /// Return type of the file format detection function
 #[allow(dead_code)]

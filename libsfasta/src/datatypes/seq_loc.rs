@@ -8,6 +8,8 @@
 
 use std::io::{Read, Seek, SeekFrom, Write};
 
+use crate::compression::*;
+
 /*
 Should flatten and have it stored as:
 SeqLoc Index:

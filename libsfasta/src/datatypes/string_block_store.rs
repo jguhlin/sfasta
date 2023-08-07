@@ -2,8 +2,8 @@ use std::io::{Read, Seek, Write};
 
 use simdutf8::basic::from_utf8;
 
+use crate::compression::*;
 use crate::datatypes::{BytesBlockStore, Loc};
-use crate::CompressionType;
 
 pub struct StringBlockStore {
     inner: BytesBlockStore,
@@ -14,7 +14,11 @@ impl Default for StringBlockStore {
         StringBlockStore {
             inner: BytesBlockStore::default()
                 .with_block_size(512 * 1024)
-                .with_compression(CompressionType::LZ4),
+                .with_compression(CompressionConfig {
+                    compression_type: CompressionType::LZ4,
+                    compression_level: 3,
+                    compression_dict: None,
+                }),
         }
     }
 }

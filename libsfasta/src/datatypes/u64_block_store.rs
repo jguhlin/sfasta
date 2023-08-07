@@ -1,6 +1,6 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 
-use crate::datatypes::{zstd_encoder, CompressionType};
+use crate::compression::{zstd_encoder, CompressionType};
 
 // TODO: WIP:
 // TODO: Read for testing, and then implementation

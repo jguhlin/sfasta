@@ -5,8 +5,8 @@ use std::io::{Read, Seek, Write};
 use simdutf8::basic::from_utf8;
 
 use crate::compression::CompressionConfig;
+use crate::compression::CompressionType;
 use crate::datatypes::{BytesBlockStore, Loc};
-use crate::CompressionType;
 
 pub struct SequenceBlockStore {
     inner: BytesBlockStore,
