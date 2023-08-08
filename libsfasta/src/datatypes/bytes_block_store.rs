@@ -39,6 +39,13 @@ impl Default for BytesBlockStore {
     }
 }
 
+impl Drop for BytesBlockStore {
+    fn drop(&mut self) {
+        self.finalize();
+        self.check_complete();
+    }
+}
+
 impl BytesBlockStore {
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.block_size = block_size;
@@ -138,64 +145,6 @@ impl BytesBlockStore {
         }
 
         Ok(locs)
-    }
-
-    /// DEPRECATED. This is going to be changed, blocks will be written as they become available now...
-    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
-    where
-        W: Write + Seek,
-    {
-        self.data.as_ref()?;
-
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-        let mut block_locations_pos: u64 = 0;
-
-        let starting_pos = out_buf.stream_position().unwrap();
-        bincode::encode_into_std_write(
-            self.compression_config.compression_type,
-            &mut out_buf,
-            bincode_config,
-        )
-        .unwrap();
-        bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
-
-        let mut block_locations = Vec::new();
-
-        // Emits compressed blocks
-        // let blocks = self.emit_blocks();
-
-        /*
-        for compressed_block in blocks {
-            let block_start = out_buf.stream_position().unwrap();
-            bincode::encode_into_std_write(compressed_block, &mut out_buf, bincode_config).unwrap();
-            block_locations.push(block_start);
-        } */
-
-        block_locations_pos = out_buf.stream_position().unwrap();
-
-        let bincoded_block_locations_size =
-            bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
-
-        let compressed_block_locations =
-            zstd::bulk::compress(&bincoded_block_locations_size, -3).unwrap();
-
-        bincode::encode_into_std_write(&compressed_block_locations, &mut out_buf, bincode_config)
-            .unwrap();
-        self.block_locations = Some(block_locations);
-
-        let end = out_buf.stream_position().unwrap();
-        out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        // bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
-        //.unwrap();
-        bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
-
-        // Back to the end so we don't interfere with anything...
-        out_buf.seek(SeekFrom::Start(end)).unwrap();
-
-        Some(starting_pos)
     }
 
     /// Write out the header for BytesBlockStore
@@ -422,13 +371,27 @@ impl BytesBlockStore {
 
         result
     }
+
+    // Push the last block into the compression queue
+    pub fn finalize(&mut self) {
+        assert!(self.compression_worker.is_some());
+        assert!(self.data.is_some());
+
+        let mut block: Option<Vec<u8>> = None;
+        std::mem::swap(&mut self.data, &mut block);
+
+        if block.is_some() && block.as_ref().unwrap().len() > 0 {
+            let worker = self.compression_worker.as_ref().unwrap();
+            let loc = worker.compress(block.unwrap(), Arc::clone(&self.compression_config));
+            self.block_locations.as_mut().unwrap().push(loc);
+        }
+    }
 }
 
+// TODO: More tests
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitvec::prelude::*;
-    use std::io::Cursor;
 
     #[test]
     fn test_block_boundaries() {
@@ -482,20 +445,6 @@ mod tests {
 
         for id in test_ids.iter() {
             locs.push(store.add(id.as_bytes()).unwrap());
-        }
-
-        let mut buffer = Cursor::new(Vec::new());
-        store.write_to_buffer(&mut buffer);
-
-        println!("Locs: {:#?}", locs);
-
-        let mut store = BytesBlockStore::from_buffer(&mut buffer, 0).unwrap();
-
-        for i in 0..test_ids.len() {
-            let id = store.get(&mut buffer, &locs[i]);
-            println!("Locs: {:#?}", locs[i]);
-            println!("{} {}", std::str::from_utf8(&id).unwrap(), test_ids[i]);
-            assert_eq!(id, test_ids[i].as_bytes());
         }
     }
 }

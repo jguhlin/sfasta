@@ -9,5 +9,5 @@ pub fn convert_fasta_file(input: &str, output: &str) {
 
     let converter = Converter::default().with_threads(2);
 
-    converter.convert_fasta(&mut input_file, &mut output_fh);
+    converter.convert(&mut input_file, output_fh);
 }

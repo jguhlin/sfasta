@@ -4,6 +4,7 @@ use crate::compression::{zstd_encoder, CompressionType};
 
 // TODO: WIP:
 // TODO: Read for testing, and then implementation
+// TODO: Switch to BytesBlockStore for backing
 
 // Originally was using bitpacking, by Converting [u64] to [u32] of double length, and decompressing that. But that was giving errors and was intractable without a specific datastructure to handle it.
 // So now we are using zstd (look into zigzag, stream vbyte 64, etc, in the future)

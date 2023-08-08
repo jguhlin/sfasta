@@ -23,7 +23,18 @@ impl Default for StringBlockStore {
     }
 }
 
+impl Drop for StringBlockStore {
+    fn drop(&mut self) {
+        self.inner.check_complete();
+        self.inner.finalize();
+    }
+}
+
 impl StringBlockStore {
+    pub fn finalize(&mut self) {
+        self.inner.finalize();
+    }
+
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.inner = self.inner.with_block_size(block_size);
         self
@@ -33,13 +44,6 @@ impl StringBlockStore {
         self.inner
             .add(input.as_bytes())
             .expect("Failed to add string to block store")
-    }
-
-    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
-    where
-        W: Write + Seek,
-    {
-        self.inner.write_to_buffer(&mut out_buf)
     }
 
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
@@ -117,15 +121,6 @@ mod tests {
 
         for id in test_ids.iter() {
             locs.push(store.add(id));
-        }
-
-        let mut buffer = Cursor::new(Vec::new());
-        store.write_to_buffer(&mut buffer);
-        let mut store = StringBlockStore::from_buffer(&mut buffer, 0).unwrap();
-
-        for i in 0..test_ids.len() {
-            let id = store.get(&mut buffer, &locs[i]);
-            assert_eq!(id, test_ids[i]);
         }
     }
 }

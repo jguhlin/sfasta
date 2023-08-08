@@ -121,6 +121,11 @@ impl Worker {
         self
     }
 
+    pub fn with_output_queue(mut self, writer: Arc<ArrayQueue<OutputBlock>>) -> Self {
+        self.writer = Some(writer);
+        self
+    }
+
     pub fn start(&mut self) {
         let queue = Arc::new(ArrayQueue::<CompressorWork>::new(self.buffer_size));
         self.queue = Some(queue);
@@ -162,6 +167,10 @@ impl Worker {
             handle.join().unwrap();
         }
     }
+
+    pub fn get_queue(&self) -> Arc<ArrayQueue<CompressorWork>> {
+        Arc::clone(self.queue.as_ref().unwrap())
+    }
 }
 
 fn compression_worker(queue: Arc<ArrayQueue<CompressorWork>>, shutdown: Arc<AtomicBool>) {
@@ -177,7 +186,7 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressorWork>>, shutdown: Arc<Atom
                 } else {
                     backoff.snooze();
                     if backoff.is_completed() {
-                        thread::park_timeout(Duration::from_millis(100));
+                        thread::park_timeout(Duration::from_millis(25));
                         backoff.reset();
                     }
                 }

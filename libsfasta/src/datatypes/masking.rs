@@ -18,6 +18,13 @@ impl Default for Masking {
     }
 }
 
+impl Drop for Masking {
+    fn drop(&mut self) {
+        self.inner.check_complete();
+        self.inner.finalize();
+    }
+}
+
 impl Masking {
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.inner = self.inner.with_block_size(block_size);
@@ -50,11 +57,8 @@ impl Masking {
         )
     }
 
-    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
-    where
-        W: Write + Seek,
-    {
-        self.inner.write_to_buffer(&mut out_buf)
+    pub fn finalize(&mut self) {
+        self.inner.finalize();
     }
 
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
@@ -144,32 +148,5 @@ mod tests {
                 masking.add_masking(seq);
             });
         }
-
-        println!("Testing write_to_buffer");
-        let mut buffer = Cursor::new(Vec::new());
-        masking.write_to_buffer(&mut buffer).unwrap();
-        let mut masking = Masking::from_buffer(&mut buffer, 0).unwrap();
-
-        println!("Testing mask_sequence");
-        let mut seq = test_seqs[0].as_bytes().to_ascii_uppercase();
-        println!("Mask seq...");
-        println!("Loc: {:#?}", loc);
-        println!("Seq: {:#?}", from_utf8(&seq));
-        println!("Seq Len: {:#?}", seq.len());
-        masking.mask_sequence(&mut buffer, &loc, &mut seq);
-
-        println!("Assert...");
-        assert_eq!(seq, test_seqs[0].as_bytes());
-
-        println!("Testing mask_sequence");
-        let mut seq = test_seqs[0].as_bytes().to_ascii_uppercase();
-        masking.mask_sequence(&mut buffer, &loc2, &mut seq);
-        assert_eq!(seq, test_seqs[0].as_bytes());
-
-        println!("Testing mask_sequence");
-        let mut seq = test_seqs[3].as_bytes().to_ascii_uppercase();
-        masking.mask_sequence(&mut buffer, &loc3, &mut seq);
-        assert_eq!(seq, test_seqs[3].as_bytes());
-        println!("{:#?}", from_utf8(&seq));
     }
 }

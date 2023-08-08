@@ -903,7 +903,7 @@ mod tests {
         let mut converter = converter.with_compression_type(CompressionType::NONE);
 
         println!("Converting file...");
-        converter.convert_fasta(&mut in_buf, &mut out_buf);
+        converter.convert(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {x:#?}")
@@ -945,7 +945,7 @@ mod tests {
             .with_block_size(512)
             .with_index();
 
-        converter.convert_fasta(&mut in_buf, &mut out_buf);
+        converter.convert(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {x:#?}")
@@ -998,7 +998,7 @@ mod tests {
             .with_block_size(512)
             .with_threads(8);
 
-        converter.convert_fasta(&mut in_buf, &mut out_buf);
+        converter.convert(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {x:#?}")

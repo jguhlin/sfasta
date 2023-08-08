@@ -198,25 +198,28 @@ impl Converter {
         directory_location
     }
 
-    /// Main conversion function for FASTA files.
-    // TODO: Switch R and W into borrows
-    pub fn convert_fasta<'convert, W, R>(self, mut in_buf: R, mut out_fh: &mut Box<W>)
+    /// Main conversion function for FASTA/Q files
+    pub fn convert<'convert, W, R>(self, mut in_buf: &mut R, mut out_fh: W)
     where
-        W: WriteAndSeek + 'static,
+        W: WriteAndSeek + 'static + Send + Sync,
         R: Read + Send + 'convert,
     {
-        let fn_start_time = std::time::Instant::now();
+        // Keep track of how long the conversion takes
+        let conversion_start_time = std::time::Instant::now();
 
+        // Track how much space each individual element takes up
         let mut debug_size: Vec<(String, usize)> = Vec::new();
 
-        // Nearly all of this needs to be fixed int encoding
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        // Trying out var int encoding
+        let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
         assert!(self.block_size < u32::MAX as usize);
 
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
 
         // Store masks as series of 0s and 1s... Vec<bool>
+        // Compression seems to take care of the size. bitvec! and vec! seem to have similar
+        // performance and on-disk storage requirements
         if self.masking {
             sfasta = sfasta.with_masking();
         }
@@ -253,7 +256,7 @@ impl Converter {
         // Vec<(String, Location)>
         // block_index_pos
         let (ids, mut seqlocs, block_index_pos, headers_location, ids_location, masking_location) =
-            self.write_sequence(&mut in_buf, out_fh, &mut debug_size);
+            self.process(&mut in_buf, out_fh, &mut debug_size);
 
         let end_time = std::time::Instant::now();
 
@@ -387,16 +390,18 @@ impl Converter {
 
         out_fh.flush().expect("Unable to flush output file");
 
-        let fn_end_time = std::time::Instant::now();
-        log::info!("Conversion time: {:?}", fn_end_time - fn_start_time);
+        let conversion_end_time = std::time::Instant::now();
+        log::info!(
+            "Conversion time: {:?}",
+            conversion_end_time - conversion_start_time
+        );
     }
 
-    /// Unified function for writing FASTA and FASTQ files
-    // TODO In development
-    pub fn process_file<'convert, W, R>(
+    /// Process buffer that outputs Seq objects
+    pub fn process<'convert, W, R>(
         &self,
         in_buf: &mut R,
-        mut out_fh: &mut Box<W>,
+        mut out_fh: W,
         debug_size: &mut Vec<(String, usize)>,
     ) -> (
         Vec<std::sync::Arc<String>>,
@@ -407,25 +412,31 @@ impl Converter {
         Option<NonZeroU64>,
     )
     where
-        W: WriteAndSeek + 'convert,
+        W: WriteAndSeek + 'convert + Send + Sync,
         R: Read + Send + 'convert,
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        if self.compression_level.is_some() {
-            sb_config = sb_config.with_compression_level(self.compression_level.unwrap());
-        }
-
         // TODO: Untested, been awhile... Only useful for very small blocks so hasn't been used lately...
         if let Some(dict) = &self.dict {
-            sb_config = sb_config.with_compression_dict(dict.clone());
+            todo!();
+            // sb_config = sb_config.with_compression_dict(dict.clone());
         }
 
-        let mut sb = CompressionStreamBuffer::from_config(sb_config);
+        let threads = self.threads;
 
-        // Multithreading support
-        let oq = sb.get_output_queue(); // Get a handle for the output queue from the sequence compressor
-        let shutdown = sb.get_shutdown_flag(); // Get a handle to the shutdown flag...
+        // Start the output I/O...
+        let output_worker = crate::io::worker::Worker::new(out_fh).with_buffer_size(1024);
+        let output_queue = output_worker.get_queue();
+
+        // Start the compression workers
+        let compression_workers = crate::compression::worker::Worker::new()
+            .with_buffer_size(8192)
+            .with_threads(threads as u16)
+            .with_output_queue(Arc::clone(&output_queue));
+
+        compression_workers.start();
+        let compression_queue = compression_workers.get_queue();
 
         // Some defaults
         let mut seq_locs: Option<SeqLocs> = None;
@@ -439,7 +450,7 @@ impl Converter {
         let mut masking_location = None;
 
         // Sequence queue for the generator
-        let seq_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192 * 2)); // TODO: Find best value here?
+        let seq_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192 * 2));
         let seq_queue_in = Arc::clone(&seq_queue);
         let seq_queue_out = Arc::clone(&seq_queue);
 
@@ -489,32 +500,23 @@ impl Converter {
 
             let fasta_thread_clone = fasta_thread.thread().clone();
 
-            // TODO: Multithread this part
+            // TODO: Multithread this part -- maybe, now with compression logic into a threadpool maybe not...
             // Idea: split into queue's for headers, IDs, sequence, etc....
             // Thread that handles the heavy lifting of the incoming Seq structs
+            // TODO: Set compression stuff here...
             let reader_handle = s.spawn(move |_| {
-                sb.initialize();
-
                 let mut headers = StringBlockStore::default().with_block_size(512 * 1024);
                 let mut seqlocs = SeqLocs::default();
                 let mut ids = StringBlockStore::default().with_block_size(512 * 1024);
                 let mut ids_string = Vec::new();
                 let mut masking = Masking::default();
+                let mut sequences = SequenceBlockStore::default().with_block_size(512 * 1024);
 
                 // For each Sequence in the fasta file, make it upper case (masking is stored separately)
                 // Add the sequence to the SequenceBlocks, get the SeqLocs and store them in Location struct
                 // And store that in seq_locs Vec...
 
                 let backoff = Backoff::new();
-
-                let mut masking_time = std::time::Duration::new(0, 0);
-                let mut adding_time = std::time::Duration::new(0, 0);
-                let mut seq_loc_time = std::time::Duration::new(0, 0);
-                let mut ids_add_time = std::time::Duration::new(0, 0);
-                let mut seqlocs_add_time = std::time::Duration::new(0, 0);
-                let mut headers_add_time = std::time::Duration::new(0, 0);
-
-                let mut fasta_queue_spins: usize = 0;
                 loop {
                     backoff.reset(); // Reset the backoff
                     fasta_thread_clone.unpark(); // Unpark the FASTA thread so it can continue to read
@@ -524,40 +526,32 @@ impl Converter {
 
                             let mut location = SeqLoc::new();
 
-                            let now = std::time::Instant::now();
                             let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
                             if let Some(x) = masked {
                                 let x = seqlocs.add_locs(&x);
                                 location.masking = Some(x);
                             }
-                            masking_time += now.elapsed();
 
-                            let now = std::time::Instant::now();
-                            let loc = sb.add_sequence(&mut seq.unwrap()[..]).unwrap(); // Destructive, capitalizes everything...
-                            adding_time += now.elapsed();
+                            // Capitalize sequence
+                            if let Some(x) = seq {
+                                x.make_ascii_uppercase();
+                                let loc = sequences.add(&mut seq.unwrap()[..]);
+                                location.sequence = Some(seqlocs.add_locs(&loc));
+                            }
 
-                            let now = std::time::Instant::now();
                             let myid = std::sync::Arc::new(seqid.unwrap());
                             ids_string.push(std::sync::Arc::clone(&myid));
                             let idloc = ids.add(&(*myid));
-                            ids_add_time += now.elapsed();
 
-                            let now = std::time::Instant::now();
                             if let Some(x) = seqheader {
                                 let x = seqlocs.add_locs(&headers.add(&x));
                                 location.headers = Some((x.0, x.1 as u8));
                             }
-                            headers_add_time += now.elapsed();
 
-                            let now = std::time::Instant::now();
                             let x = seqlocs.add_locs(&idloc);
                             location.ids = Some((x.0, x.1 as u8));
-                            seqlocs_add_time += now.elapsed();
 
-                            let now = std::time::Instant::now();
-                            location.sequence = Some(seqlocs.add_locs(&loc));
                             seqlocs.add_to_index(location);
-                            seq_loc_time += now.elapsed();
                         }
                         Some(Work::FastqPayload(_)) => {
                             panic!("Received FASTQ payload in FASTA thread")
@@ -565,7 +559,6 @@ impl Converter {
                         Some(Work::Shutdown) => break,
                         None => {
                             fasta_thread_clone.unpark();
-                            fasta_queue_spins = fasta_queue_spins.saturating_add(1);
                             backoff.snooze();
                             if backoff.is_completed() {
                                 backoff.reset();
@@ -575,22 +568,8 @@ impl Converter {
                     }
                 }
 
-                log::info!("Masking time: {}ms", masking_time.as_millis());
-                log::info!("Adding time: {}ms", adding_time.as_millis());
-                log::info!("SeqLoc time: {}ms", seq_loc_time.as_millis());
-                log::info!("IDs add time: {}ms", ids_add_time.as_millis());
-                log::info!("SeqLocs add time: {}ms", seqlocs_add_time.as_millis());
-                log::info!("Headers add time: {}ms", headers_add_time.as_millis());
                 log::info!("Finalizing SequenceBuffer");
-                // Finalize pushes the last block, which is likely smaller than the complete block size
-                match sb.finalize() {
-                    Ok(()) => (),
-                    Err(x) => panic!("Unable to finalize sequence buffer, {:#?}", x),
-                };
 
-                log::info!("fasta_queue_spins: {}", fasta_queue_spins);
-
-                // Return seq_locs to the main thread
                 (seqlocs, headers, ids, ids_string, masking)
             });
 

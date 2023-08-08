@@ -1,4 +1,7 @@
 //! A block store for storing sequences. This includes nucleotide, aminos, and scores.
+//!
+
+// TODO: Since this doesn't add any special functionality, should this just be replaced with BytesBlockStore? Maybe an alias?
 
 use std::io::{Read, Seek, Write};
 
@@ -26,23 +29,27 @@ impl Default for SequenceBlockStore {
     }
 }
 
+impl Drop for SequenceBlockStore {
+    fn drop(&mut self) {
+        self.inner.check_complete();
+        self.inner.finalize();
+    }
+}
+
 impl SequenceBlockStore {
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.inner = self.inner.with_block_size(block_size);
         self
     }
 
-    pub fn add(&mut self, input: &str) -> Vec<Loc> {
+    pub fn add(&mut self, input: &[u8]) -> Vec<Loc> {
         self.inner
-            .add(input.as_bytes())
+            .add(input)
             .expect("Failed to add string to block store")
     }
 
-    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
-    where
-        W: Write + Seek,
-    {
-        self.inner.write_to_buffer(&mut out_buf)
+    pub fn finalize(&mut self) {
+        self.inner.finalize();
     }
 
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
@@ -119,16 +126,7 @@ mod tests {
         let mut locs = Vec::new();
 
         for id in test_ids.iter() {
-            locs.push(store.add(id));
-        }
-
-        let mut buffer = Cursor::new(Vec::new());
-        store.write_to_buffer(&mut buffer);
-        let mut store = SequenceBlockStore::from_buffer(&mut buffer, 0).unwrap();
-
-        for i in 0..test_ids.len() {
-            let id = store.get(&mut buffer, &locs[i]);
-            assert_eq!(id, test_ids[i]);
+            locs.push(store.add(id.as_bytes()));
         }
     }
 }

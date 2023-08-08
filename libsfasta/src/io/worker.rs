@@ -1,8 +1,8 @@
 //! # I/O Worker
-//! 
+//!
 //! This holds the output buffer, must finish and destroy to have access to it again.
 
-use std::io::{Write, Seek};
+use std::io::{Seek, Write};
 use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
 use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
@@ -12,29 +12,35 @@ use std::time::Duration;
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
+#[derive(Debug, Clone)]
 pub struct OutputBlock {
     pub data: Vec<u8>,
     pub location: Arc<AtomicU64>,
 }
 
-pub struct Worker<W: Write + Seek> {
+pub struct Worker<W: Write + Seek + Send + Seek> {
     queue: Option<Arc<ArrayQueue<OutputBlock>>>,
+    shutdown_flag: Arc<AtomicBool>,
     buffer_size: usize,
 
     // Where to write
-    output_buffer: W
+    output_buffer: Arc<Mutex<W>>,
 }
 
-impl<W: Write + Seek> Worker<W> {
+impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
     pub fn into_inner(self) -> W {
-        self.output_buffer
+        match Arc::try_unwrap(self.output_buffer) {
+            Ok(output_buffer) => output_buffer.into_inner().unwrap(),
+            Err(_) => panic!("Could not unwrap output buffer"),
+        }
     }
 
     pub fn new(output_buffer: W) -> Self {
         Self {
             queue: None,
-            output_buffer,
+            output_buffer: Arc::new(Mutex::new(output_buffer)),
             buffer_size: 1024,
+            shutdown_flag: Arc::new(AtomicBool::new(false)),
         }
     }
 
@@ -43,18 +49,59 @@ impl<W: Write + Seek> Worker<W> {
         self
     }
 
-    pub fn start(&mut self) {
+    /// Starts the worker thread, and returns the JoinHandle.
+    pub fn start(&mut self) -> JoinHandle<()> {
         let queue = Arc::new(ArrayQueue::new(self.buffer_size));
-        self.queue = Some(queue.clone());
+        self.queue = Some(Arc::clone(&queue));
 
-        
+        let shutdown = Arc::clone(&self.shutdown_flag);
+
+        thread::spawn(|| self.worker(queue, shutdown))
     }
 
-    
+    /// Manually shutdown the worker
+    pub fn shutdown(&mut self) {
+        self.shutdown_flag.store(true, Ordering::Relaxed);
+    }
+
+    pub fn len(&self) -> usize {
+        self.queue.as_ref().unwrap().len()
+    }
+
+    pub fn get_queue(&self) -> Arc<ArrayQueue<OutputBlock>> {
+        Arc::clone(self.queue.as_ref().unwrap())
+    }
+
+    fn worker(&self, queue: Arc<ArrayQueue<OutputBlock>>, shutdown_flag: Arc<AtomicBool>) {
+        let backoff = Backoff::new();
+
+        // Hold the mutex for the entire duration
+        let output = Arc::clone(&self.output_buffer);
+        let mut output = output.lock().unwrap();
+
+        loop {
+            if shutdown_flag.load(Ordering::Relaxed) {
+                break;
+            }
+
+            if let Some(block) = queue.pop() {
+                let mut location = block.location;
+                let mut data = block.data;
+
+                // Get current location
+
+                let current_location = output.stream_position().unwrap();
+                output.write_all(&data).unwrap();
+            } else {
+                backoff.snooze();
+                if backoff.is_completed() {
+                    thread::sleep(Duration::from_millis(25));
+                    backoff.reset();
+                }
+            }
+        }
+    }
 }
-
-
-
 
 #[cfg(test)]
 mod tests {
@@ -64,28 +111,43 @@ mod tests {
     #[test]
     fn test_worker() {
         let mut worker = Worker::new(Cursor::new(Vec::new()));
-        worker.output_buffer.write_all(b"Hello World!").unwrap();
-        let output_buffer = worker.into_inner();
-        assert_eq!(output_buffer.into_inner(), b"Hello World!");
+        let handle = worker.start();
+
+        worker.shutdown();
+        handle.join().unwrap();
     }
 
-    // Test can use BufWriter
     #[test]
-    fn test_worker_bufwriter() {
-        let output_buffer = std::io::BufWriter::new(Cursor::new(Vec::new()));
-        let mut worker = Worker::new(output_buffer);
-        worker.output_buffer.write_all(b"Hello World!").unwrap();
-        let output_buffer = worker.into_inner().into_inner().unwrap().into_inner();
-        assert_eq!(output_buffer, b"Hello World!");
-    }
-
-    // Test uses u8
-    #[test]
-    fn test_worker_u8() {
+    fn test_worker_write() {
         let mut worker = Worker::new(Cursor::new(Vec::new()));
-        worker.output_buffer.write_all(&[0, 1, 2, 3, 4, 5]).unwrap();
-        let output_buffer = worker.into_inner();
-        assert_eq!(output_buffer.into_inner(), &[0, 1, 2, 3, 4, 5]);
+        let handle = worker.start();
+
+        let block = OutputBlock {
+            data: vec![1, 2, 3, 4, 5],
+            location: Arc::new(AtomicU64::new(0)),
+        };
+
+        worker.queue.as_ref().unwrap().push(block).unwrap();
+
+        worker.shutdown();
+        handle.join().unwrap();
+    }
+
+    #[test]
+    fn test_worker_write_multiple() {
+        let mut worker = Worker::new(Cursor::new(Vec::new()));
+        let handle = worker.start();
+
+        let block = OutputBlock {
+            data: vec![1, 2, 3, 4, 5],
+            location: Arc::new(AtomicU64::new(0)),
+        };
+
+        for _ in 0..100 {
+            worker.queue.as_ref().unwrap().push(block.clone()).unwrap();
+        }
+
+        worker.shutdown();
+        handle.join().unwrap();
     }
 }
-
