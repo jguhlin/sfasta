@@ -56,7 +56,8 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
 
         let shutdown = Arc::clone(&self.shutdown_flag);
 
-        thread::spawn(|| self.worker(queue, shutdown))
+        let output_buffer = Arc::clone(&self.output_buffer);
+        thread::spawn(|| worker(queue, shutdown, output_buffer))
     }
 
     /// Manually shutdown the worker
@@ -72,32 +73,37 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
         Arc::clone(self.queue.as_ref().unwrap())
     }
 
-    fn worker(&self, queue: Arc<ArrayQueue<OutputBlock>>, shutdown_flag: Arc<AtomicBool>) {
-        let backoff = Backoff::new();
+    
+}
 
-        // Hold the mutex for the entire duration
-        let output = Arc::clone(&self.output_buffer);
-        let mut output = output.lock().unwrap();
+fn worker<W>(queue: Arc<ArrayQueue<OutputBlock>>, shutdown_flag: Arc<AtomicBool>, output_buffer: Arc<Mutex<W>>) 
+where
+    W: Write + Seek + Send + Sync + Seek,
+{
+    let backoff = Backoff::new();
 
-        loop {
-            if shutdown_flag.load(Ordering::Relaxed) {
-                break;
-            }
+    // Hold the mutex for the entire duration
+    let output = Arc::clone(&output_buffer);
+    let mut output = output.lock().unwrap();
 
-            if let Some(block) = queue.pop() {
-                let mut location = block.location;
-                let mut data = block.data;
+    loop {
+        if shutdown_flag.load(Ordering::Relaxed) {
+            break;
+        }
 
-                // Get current location
+        if let Some(block) = queue.pop() {
+            let mut location = block.location;
+            let mut data = block.data;
 
-                let current_location = output.stream_position().unwrap();
-                output.write_all(&data).unwrap();
-            } else {
-                backoff.snooze();
-                if backoff.is_completed() {
-                    thread::sleep(Duration::from_millis(25));
-                    backoff.reset();
-                }
+            // Get current location
+
+            let current_location = output.stream_position().unwrap();
+            output.write_all(&data).unwrap();
+        } else {
+            backoff.snooze();
+            if backoff.is_completed() {
+                thread::sleep(Duration::from_millis(25));
+                backoff.reset();
             }
         }
     }

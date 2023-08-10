@@ -59,7 +59,7 @@ impl U64BlockStore {
     }
 
     fn compress_block(&mut self) {
-        let mut compressor = zstd_encoder(3, None);
+        let mut compressor = zstd_encoder(3, &None);
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 

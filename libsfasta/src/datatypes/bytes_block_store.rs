@@ -1,48 +1,40 @@
-use std::collections::VecDeque;
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
-use std::sync::{atomic::AtomicU64, Arc, Condvar, Mutex};
+use std::sync::{atomic::AtomicU64, Arc};
 
 use crossbeam::utils::Backoff;
+use binout::{VByte, Serializer};
 
-use crate::compression::{CompressionBlock, CompressionConfig, CompressorWork, Worker};
+use crate::compression::{CompressionConfig, Worker, CompressionType};
 use crate::datatypes::Loc;
-
-// Use ArrayQueue from crossbeam
-use crossbeam::queue::ArrayQueue;
 
 pub struct BytesBlockStore {
     location: u64,
-    block_index_pos: u64,
+    block_locations_index: Option<u64>,
     block_locations: Option<Vec<Arc<AtomicU64>>>,
-    block_locations_pos: u64,
+    block_locations_pos: Arc<AtomicU64>,
     block_size: usize,
     pub data: Option<Vec<u8>>, // Used for writing and reading...
     pub compression_config: Arc<CompressionConfig>,
     cache: Option<(u32, Vec<u8>)>,
     compression_worker: Option<Arc<Worker>>,
+    index_block_size: usize,
 }
 
 impl Default for BytesBlockStore {
     fn default() -> Self {
         BytesBlockStore {
             location: 0,
-            block_index_pos: 0,
-            block_locations_pos: 0,
+            block_locations_index: None, // TODO
+            block_locations_pos: Arc::new(AtomicU64::new(0)),
             block_locations: None,
             block_size: 512 * 1024,
             data: None,
             cache: None,
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
+            index_block_size: 1024,
         }
-    }
-}
-
-impl Drop for BytesBlockStore {
-    fn drop(&mut self) {
-        self.finalize();
-        self.check_complete();
     }
 }
 
@@ -79,7 +71,7 @@ impl BytesBlockStore {
 
         // Check that all block_locations are not 0, or backoff if any are
         let block_locations = self.block_locations.as_ref().unwrap();
-        let mut backoff = Backoff::new();
+        let backoff = Backoff::new();
         loop {
             let mut all_nonzero = true;
             for loc in block_locations.iter() {
@@ -154,56 +146,44 @@ impl BytesBlockStore {
     {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
-        let orig_pos = out_buf.stream_position().unwrap();
-
         out_buf.seek(SeekFrom::Start(pos)).unwrap();
 
-        let header_pos = out_buf.stream_position().unwrap();
         bincode::encode_into_std_write(
             self.compression_config.compression_type,
             &mut out_buf,
             bincode_config,
         )
         .unwrap();
-        bincode::encode_into_std_write(self.block_locations_pos, &mut out_buf, bincode_config)
+        bincode::encode_into_std_write(&self.block_locations_pos, &mut out_buf, bincode_config)
             .unwrap();
         bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
     }
 
-    pub fn write_block_locations<W>(&mut self, mut out_buf: &mut W) -> Option<u64>
-    where
-        W: Write + Seek,
+    /// Writes the locations of each block. This is used for finding the start of each block.
+    /// 
+    /// Splits the block locations into chunks of 1024 to create an index of block locations. TODO
+    pub fn write_block_locations(&mut self)
     {
-        let starting_pos = out_buf.stream_position().unwrap();
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        assert!(self.compression_worker.is_some());
+        self.check_complete();
 
-        let mut block_locations = Vec::new();
-        self.block_locations_pos = out_buf.stream_position().unwrap();
+        let mut output: Vec<u8> = Vec::with_capacity(self.index_block_size * 10 + 256);
 
-        let bincoded_block_locations_size =
-            bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
+        let block_locations = self.block_locations.as_ref().unwrap()
+            .iter()
+            .map(|x| x.load(Ordering::Relaxed));
+    
+        VByte::write_all_values(&mut output, block_locations).unwrap();
 
-        let block_locations_pos = out_buf.stream_position().unwrap();
+        let compression_config = Arc::new(CompressionConfig {
+            compression_type: CompressionType::NONE,
+            compression_level: 0,
+            compression_dict: None,
+        });
 
-        // TODO: Should be configurable or treated like a normal compression block
-        let compressed_block_locations =
-            zstd::bulk::compress(&bincoded_block_locations_size, -3).unwrap();
-
-        bincode::encode_into_std_write(&compressed_block_locations, &mut out_buf, bincode_config)
-            .unwrap();
-        self.block_locations = Some(block_locations);
-
-        let end = out_buf.stream_position().unwrap();
-        out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        bincode::encode_into_std_write(self.compression_config, &mut out_buf, bincode_config)
-            .unwrap();
-        bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
-
-        // Back to the end so we don't interfere with anything...
-        out_buf.seek(SeekFrom::Start(end)).unwrap();
-
-        Some(starting_pos)
+        let worker = self.compression_worker.as_ref().unwrap();
+        let loc = worker.compress(output, compression_config);
+        self.block_locations_pos = loc;
     }
 
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
@@ -219,7 +199,6 @@ impl BytesBlockStore {
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
         (
             store.compression_config,
-            store.block_index_pos,
             store.block_size,
         ) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
@@ -228,7 +207,6 @@ impl BytesBlockStore {
 
         store.location = starting_pos;
 
-        in_buf.seek(SeekFrom::Start(store.block_index_pos)).unwrap();
         let compressed: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(e) => return Err(format!("Error decoding block locations: {e}")),
@@ -292,7 +270,7 @@ impl BytesBlockStore {
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
 
-        let block_location = block_locations[block as usize];
+        let block_location = &block_locations[block as usize];
         let block_location = block_location.load(Ordering::Relaxed) as u64;
         in_buf.seek(SeekFrom::Start(block_location)).unwrap();
         let compressed_block: Vec<u8> =

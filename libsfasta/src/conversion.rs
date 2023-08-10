@@ -9,9 +9,7 @@ use crossbeam::utils::Backoff;
 
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
-use std::sync::atomic::Ordering;
 use std::sync::Arc;
-use std::time::Instant;
 
 use crate::compression::useful::CompressionType;
 use crate::datatypes::*;
@@ -161,7 +159,7 @@ impl Converter {
     }
 
     /// Write the headers for the SFASTA file, and return the location of th headers (so they can be updated at the end)
-    fn write_headers<W>(&self, mut out_fh: &mut Box<W>, sfasta: &Sfasta) -> u64
+    fn write_headers<W>(&self, mut out_fh: &mut W, sfasta: &Sfasta) -> u64
     where
         W: Write + Seek,
     {
@@ -199,7 +197,7 @@ impl Converter {
     }
 
     /// Main conversion function for FASTA/Q files
-    pub fn convert<'convert, W, R>(self, mut in_buf: &mut R, mut out_fh: W)
+    pub fn convert<'convert, W, R>(self, mut in_buf: &mut R, mut out_fh: &mut W)
     where
         W: WriteAndSeek + 'static + Send + Sync,
         R: Read + Send + 'convert,
@@ -234,7 +232,7 @@ impl Converter {
 
         // Store the location of the directory so we can update it later...
         // It's right after the SFASTA and version identifier...
-        let directory_location = self.write_headers(out_fh, &sfasta);
+        let directory_location = self.write_headers(&mut out_fh, &sfasta);
 
         // Put everything in Arcs and Mutexes to allow for multithreading
         // let in_buf = Arc::new(Mutex::new(in_buf));
@@ -255,8 +253,8 @@ impl Converter {
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
-        let (ids, mut seqlocs, block_index_pos, headers_location, ids_location, masking_location) =
-            self.process(&mut in_buf, out_fh, &mut debug_size);
+        let (ids, mut seqlocs, headers_location, ids_location, masking_location, sequences_location) =
+            self.process(&mut in_buf, &mut out_fh, &mut debug_size);
 
         let end_time = std::time::Instant::now();
 
@@ -362,7 +360,7 @@ impl Converter {
 
         // Go to the beginning, and write the location of the index
 
-        sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
+        // sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
 
         out_fh
             .seek(SeekFrom::Start(directory_location))
@@ -406,7 +404,7 @@ impl Converter {
     ) -> (
         Vec<std::sync::Arc<String>>,
         SeqLocs,
-        u64,
+        Option<NonZeroU64>,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
@@ -440,7 +438,6 @@ impl Converter {
 
         // Some defaults
         let mut seq_locs: Option<SeqLocs> = None;
-        let mut block_index_pos = None;
         let mut headers = None;
         let mut headers_location = None;
         let mut ids = None;
@@ -448,6 +445,8 @@ impl Converter {
         let mut ids_string = Vec::new();
         let mut masking = None;
         let mut masking_location = None;
+        let mut sequences = None;
+        let mut sequences_location = None;
 
         // Sequence queue for the generator
         let seq_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192 * 2));
@@ -568,90 +567,16 @@ impl Converter {
                     }
                 }
 
-                log::info!("Finalizing SequenceBuffer");
+                headers.write_block_locations();
+                ids.write_block_locations();
+                sequences.write_block_locations();
+                masking.write_block_locations();
 
-                (seqlocs, headers, ids, ids_string, masking)
+                (seqlocs, headers, ids, ids_string, masking, sequences)
             });
-
-            // Store the location of the Sequence Blocks...
-            // Stored as Vec<(u32, u64)> because multithreading means it does not have to be in order
-            let mut block_locs = Vec::with_capacity(1024);
-            let mut pos = out_fh
-                .stream_position()
-                .expect("Unable to work with seek API");
-
-            let mut result;
-
-            // For each entry processed by the sequence buffer, pop it out, write the block, and write the block id
-            // FORMAT: Write each sequence block to file
-
-            // This writes out the sequence blocks (SeqBlockCompressed / SBC)
-            let start = out_fh.stream_position().unwrap();
-            let backoff = Backoff::new();
-
-            let mut output_spins: usize = 0;
-            loop {
-                result = oq.pop();
-
-                match result {
-                    None => {
-                        if oq.is_empty() && shutdown.load(Ordering::Relaxed) {
-                            log::info!("output_spins: {}", output_spins);
-                            break;
-                        } else {
-                            reader_handle.thread().unpark();
-                            output_spins = output_spins.saturating_add(1);
-                            backoff.snooze();
-                        }
-                    }
-                    Some((block_id, sb)) => {
-                        bincode::encode_into_std_write(sb, &mut out_fh, bincode_config)
-                            .expect("Unable to write to bincode output");
-                        // log::info!("Writer wrote block {}", block_id);
-
-                        block_locs.push((block_id, pos));
-
-                        pos = out_fh
-                            .stream_position()
-                            .expect("Unable to work with seek API");
-                    }
-                }
-            }
 
             // Join the FASTA thread (ot block until it can be joined)
             fasta_thread.join().unwrap();
-
-            let end = out_fh.stream_position().unwrap();
-            log::info!("DEBUG: Wrote {} bytes of sequence blocks", end - start);
-            debug_size.push(("Sequence Blocks".to_string(), (end - start) as usize));
-
-            let start = out_fh.stream_position().unwrap();
-
-            // Block Index
-            block_index_pos = Some(
-                out_fh
-                    .stream_position()
-                    .expect("Unable to work with seek API"),
-            );
-
-            let mut block_locs_store = U64BlockStore::default();
-
-            // Write the block index to file (We sort so it is ordinal)
-            block_locs.sort_by(|a, b| a.0.cmp(&b.0));
-            let block_locs: Vec<u64> = block_locs.iter().map(|x| x.1).collect();
-
-            log::info!("DEBUG: Writing {} total blocks", block_locs.len());
-
-            block_locs.into_iter().for_each(|x| {
-                block_locs_store.add(x);
-            });
-
-            block_locs_store.write_to_buffer(&mut out_fh);
-
-            let end = out_fh.stream_position().unwrap();
-
-            log::info!("DEBUG: Wrote {} bytes of block index", end - start);
-            debug_size.push(("Block Index".to_string(), (end - start) as usize));
 
             reader_handle.thread().unpark();
             let j = reader_handle.join().expect("Unable to join thread");
@@ -660,90 +585,38 @@ impl Converter {
             ids = Some(j.2);
             ids_string = j.3;
             masking = Some(j.4);
+            sequences = Some(j.5);
 
-            let start_time = Instant::now();
+            headers_location = NonZeroU64::new(out_fh.stream_position().unwrap());
+            headers.as_mut().unwrap().write_header(headers_location.unwrap().get(), &mut out_fh);
 
-            let start = out_fh.stream_position().unwrap();
+            ids_location = NonZeroU64::new(out_fh.stream_position().unwrap());
+            ids.as_mut().unwrap().write_header(ids_location.unwrap().get(), &mut out_fh);
 
-            headers_location = match headers.as_mut().unwrap().write_to_buffer(&mut out_fh) {
-                Some(x) => NonZeroU64::new(x),
-                None => None,
-            };
+            masking_location = NonZeroU64::new(out_fh.stream_position().unwrap());
+            masking
+                .as_mut()
+                .unwrap()
+                .write_header(masking_location.unwrap().get(), &mut out_fh);
 
-            let end = out_fh.stream_position().unwrap();
-
-            let end_time = Instant::now();
-
-            debug_size.push(("Headers".to_string(), (end - start) as usize));
-
-            log::info!(
-                "DEBUG: Wrote {} bytes of headers in {:#?}",
-                end - start,
-                end_time - start_time
-            );
-
-            let start_time = Instant::now();
-            let start = out_fh.stream_position().unwrap();
-            ids_location = match ids.as_mut().expect("No ids!").write_to_buffer(&mut out_fh) {
-                Some(x) => NonZeroU64::new(x),
-                None => None,
-            };
-
-            let end = out_fh.stream_position().unwrap();
-
-            let end_time = Instant::now();
-
-            debug_size.push(("IDs".to_string(), (end - start) as usize));
-            log::info!(
-                "DEBUG: Wrote {} bytes of ids in {:#?}",
-                end - start,
-                end_time - start_time
-            );
-
-            let start_time = Instant::now();
-            let start = out_fh.stream_position().unwrap();
-            masking_location = match masking.as_mut().unwrap().write_to_buffer(&mut out_fh) {
-                Some(x) => NonZeroU64::new(x),
-                None => None,
-            };
-
-            let end = out_fh.stream_position().unwrap();
-            debug_size.push(("Masking".to_string(), (end - start) as usize));
-            let end_time = Instant::now();
-            log::info!(
-                "DEBUG: Wrote {} bytes of masking in {:#?}",
-                end - start,
-                end_time - start_time
-            );
+            sequences_location = NonZeroU64::new(out_fh.stream_position().unwrap());
+            sequences
+                .as_mut()
+                .unwrap()
+                .write_header(sequences_location.unwrap().get(), &mut out_fh);
 
             out_fh.flush().expect("Unable to flush output buffer");
 
-            // TODO: Comes out about 20% smaller but about 2x as long in time...
-            /*
-
-            let start_time = Instant::now();
-            let start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-            masking_location = match masking.as_mut().unwrap().write_to_buffer_zstd(&mut out_buf) {
-                Some(x) => NonZeroU64::new(x),
-                None => None,
-            };
-            let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
-            let end_time = Instant::now();
-            log::info!(
-                "DEBUG: Wrote {} bytes of masking ZSTD in {:#?}",
-                end - start,
-                end_time - start_time
-            ); */
         })
         .expect("Error");
 
         (
             ids_string,
             seq_locs.expect("Error"),
-            block_index_pos.expect("Error"),
             headers_location,
             ids_location,
             masking_location,
+            sequences_location,
         )
     }
 }
@@ -771,7 +644,7 @@ mod tests {
     use super::*;
     use crate::datatypes::*;
     use std::io::Cursor;
-    use std::io::File;
+    use std::fs::File;
 
     fn init() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -792,7 +665,7 @@ mod tests {
 
         let converter = Converter::default().with_threads(6).with_block_size(8192);
 
-        converter.convert_fasta(&mut in_buf, &mut out_buf);
+        converter.convert(&mut in_buf, &mut out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
@@ -819,6 +692,5 @@ mod tests {
 
         todo!();
 
-        assert!(b.len() == 8192);
     }
 }

@@ -23,14 +23,18 @@ impl Default for StringBlockStore {
     }
 }
 
-impl Drop for StringBlockStore {
-    fn drop(&mut self) {
-        self.inner.check_complete();
-        self.inner.finalize();
-    }
-}
-
 impl StringBlockStore {
+    pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
+    where
+        W: Write + Seek,
+     {
+        self.inner.write_header(pos, &mut out_buf);
+    }
+
+    pub fn write_block_locations(&mut self) {
+        self.inner.write_block_locations();
+    }
+
     pub fn finalize(&mut self) {
         self.inner.finalize();
     }

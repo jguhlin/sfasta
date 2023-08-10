@@ -267,7 +267,7 @@ impl SeqLocs {
             Vec::with_capacity((seq_locs.len() / self.seqlocs_chunk_size as usize) + 1);
 
         // TODO: Compression level here should be customizable, but also should be a fast one...
-        let mut compressor = zstd_encoder(3, None);
+        let mut compressor = zstd_encoder(3, &None);
 
         let start = out_buf.stream_position().unwrap();
 

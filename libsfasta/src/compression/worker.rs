@@ -25,17 +25,17 @@ pub struct CompressionConfig {
 
 impl Default for CompressionConfig {
     fn default() -> Self {
-        Self {
-            compression_type: CompressionType::ZSTD,
-            compression_level: 3,
-            compression_dict: None,
-        }
+        Self::new()
     }
 }
 
 impl CompressionConfig {
     pub const fn new() -> Self {
-        Self::default()
+        Self {
+            compression_type: CompressionType::ZSTD,
+            compression_level: 3,
+            compression_dict: None,
+        }
     }
 
     pub const fn with_compression_type(mut self, compression_type: CompressionType) -> Self {
@@ -48,7 +48,7 @@ impl CompressionConfig {
         self
     }
 
-    pub const fn with_compression_dict(mut self, compression_dict: Option<Arc<Vec<u8>>>) -> Self {
+    pub fn with_compression_dict(mut self, compression_dict: Option<Arc<Vec<u8>>>) -> Self {
         self.compression_dict = compression_dict;
         self
     }
@@ -142,7 +142,7 @@ impl Worker {
         let backoff = Backoff::new();
 
         let mut entry = work;
-        while let Err(x) = self.queue.as_ref().unwrap().push(work) {
+        while let Err(x) = self.queue.as_ref().unwrap().push(entry) {
             backoff.snooze();
             entry = x;
         }
@@ -204,7 +204,7 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressorWork>>, shutdown: Arc<Atom
                     CompressionType::ZSTD => {
                         let mut zstd_compressor = zstd_encoder(
                             work.compression_config.compression_level as i32,
-                            work.compression_config.compression_dict,
+                            &work.compression_config.compression_dict,
                         );
                         zstd_compressor
                             .compress_to_buffer(work.input.as_slice(), &mut output)

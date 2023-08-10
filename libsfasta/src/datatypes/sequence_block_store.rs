@@ -29,14 +29,18 @@ impl Default for SequenceBlockStore {
     }
 }
 
-impl Drop for SequenceBlockStore {
-    fn drop(&mut self) {
-        self.inner.check_complete();
-        self.inner.finalize();
-    }
-}
-
 impl SequenceBlockStore {
+    pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
+    where
+        W: Write + Seek,
+     {
+        self.inner.write_header(pos, &mut out_buf);
+    }
+
+    pub fn write_block_locations(&mut self) {
+        self.inner.write_block_locations();
+    }
+
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.inner = self.inner.with_block_size(block_size);
         self
