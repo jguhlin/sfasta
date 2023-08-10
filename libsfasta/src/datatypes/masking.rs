@@ -1,6 +1,7 @@
 // NOTE: I've spent lots of time converting this to bitvec so that bool would be 1bit instead of 8bits (1 bytes)
 // Compressed, this saves < 1Mbp on a 2.3Gbp uncompressed FASTA file... and triple the length for masking.
 use std::io::{Read, Seek, Write};
+use std::sync::Arc;
 
 use crate::datatypes::{BytesBlockStore, Loc};
 
@@ -22,7 +23,7 @@ impl Masking {
     pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
     where
         W: Write + Seek,
-     {
+    {
         self.inner.write_header(pos, &mut out_buf);
     }
 
@@ -32,6 +33,14 @@ impl Masking {
 
     pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.inner = self.inner.with_block_size(block_size);
+        self
+    }
+
+    pub fn with_compression_worker(
+        mut self,
+        compression_worker: Arc<crate::compression::Worker>,
+    ) -> Self {
+        self.inner = self.inner.with_compression_worker(compression_worker);
         self
     }
 
@@ -105,6 +114,7 @@ impl Masking {
 mod tests {
     use super::*;
     use std::io::Cursor;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     fn test_masking_basics() {

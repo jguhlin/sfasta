@@ -2,10 +2,10 @@ use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::atomic::Ordering;
 use std::sync::{atomic::AtomicU64, Arc};
 
+use binout::{Serializer, VByte};
 use crossbeam::utils::Backoff;
-use binout::{VByte, Serializer};
 
-use crate::compression::{CompressionConfig, Worker, CompressionType};
+use crate::compression::{CompressionConfig, CompressionType, Worker};
 use crate::datatypes::Loc;
 
 pub struct BytesBlockStore {
@@ -36,6 +36,40 @@ impl Default for BytesBlockStore {
             index_block_size: 1024,
         }
     }
+
+    /*
+    #[cfg(test)]
+    fn default() -> Self {
+
+        let output_buffer = Arc::new(std::sync::Mutex::new(Box::new(std::io::Cursor::new(
+            Vec::with_capacity(1024 * 1024),
+        ))));
+
+        let mut output_worker = crate::io::worker::Worker::new(output_buffer).with_buffer_size(16);
+        output_worker.start();
+        let output_queue = output_worker.get_queue();
+
+        let mut compression_workers = crate::compression::worker::Worker::new()
+            .with_buffer_size(16)
+            .with_threads(1_u16)
+            .with_output_queue(Arc::clone(&output_queue));
+
+        compression_workers.start();
+        let compression_workers = Arc::new(compression_workers);
+
+        BytesBlockStore {
+            location: 0,
+            block_locations_index: None, // TODO
+            block_locations_pos: Arc::new(AtomicU64::new(0)),
+            block_locations: None,
+            block_size: 512 * 1024,
+            data: None,
+            cache: None,
+            compression_config: Arc::new(CompressionConfig::default()),
+            compression_worker: Some(Arc::clone(&compression_workers)),
+            index_block_size: 1024,
+        }
+    } */
 }
 
 impl BytesBlockStore {
@@ -49,9 +83,18 @@ impl BytesBlockStore {
         self
     }
 
+    pub fn with_compression_worker(mut self, compression_worker: Arc<Worker>) -> Self {
+        self.compression_worker = Some(compression_worker);
+        self
+    }
+
     fn compress_block(&mut self) {
         assert!(self.compression_worker.is_some());
         assert!(self.data.is_some());
+
+        if self.block_locations.is_none() {
+            self.block_locations = Some(Vec::new());
+        }
 
         let at = std::cmp::min(self.block_size, self.data.as_mut().unwrap().len());
 
@@ -66,26 +109,34 @@ impl BytesBlockStore {
     pub fn check_complete(&self) {
         // If nowhere to go, then don't bother here...
         if self.compression_worker.is_none() {
+            println!("No compression worker");
             return;
         }
+
+        if self.block_locations.is_none() {
+            return;
+        }
+
+        println!("Checking complete...");
 
         // Check that all block_locations are not 0, or backoff if any are
         let block_locations = self.block_locations.as_ref().unwrap();
         let backoff = Backoff::new();
-        loop {
-            let mut all_nonzero = true;
+        let mut all_nonzero = false;
+
+        while !all_nonzero {
+            all_nonzero = true;
             for loc in block_locations.iter() {
                 if loc.load(Ordering::Relaxed) == 0 {
+                    // println!("Loc: {}", loc.load(Ordering::Relaxed));
                     all_nonzero = false;
                     break;
                 }
             }
 
-            if all_nonzero {
-                break;
+            if !all_nonzero {
+                backoff.snooze();
             }
-
-            backoff.snooze();
         }
     }
 
@@ -160,20 +211,41 @@ impl BytesBlockStore {
     }
 
     /// Writes the locations of each block. This is used for finding the start of each block.
-    /// 
+    ///
     /// Splits the block locations into chunks of 1024 to create an index of block locations. TODO
-    pub fn write_block_locations(&mut self)
-    {
+    pub fn write_block_locations(&mut self) {
         assert!(self.compression_worker.is_some());
         self.check_complete();
 
+        if self.block_locations.is_none() {
+            println!("No locations - returning");
+            return;
+        }
+
+        println!("Has locations...");
+
         let mut output: Vec<u8> = Vec::with_capacity(self.index_block_size * 10 + 256);
 
-        let block_locations = self.block_locations.as_ref().unwrap()
+        let block_locations = self
+            .block_locations
+            .as_ref()
+            .unwrap()
             .iter()
             .map(|x| x.load(Ordering::Relaxed));
-    
+
+        let total_bytes_of_block_locations = block_locations.clone().count() * 8;
+
         VByte::write_all_values(&mut output, block_locations).unwrap();
+
+        let total_bytes_of_vbytes_output = output.len();
+        println!(
+            "Total Bytes of Block Locations: {}",
+            total_bytes_of_block_locations
+        );
+        println!(
+            "Total Bytes of VBytes Output: {}",
+            total_bytes_of_vbytes_output
+        );
 
         let compression_config = Arc::new(CompressionConfig {
             compression_type: CompressionType::NONE,
@@ -197,13 +269,11 @@ impl BytesBlockStore {
         let mut store = BytesBlockStore::default();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        (
-            store.compression_config,
-            store.block_size,
-        ) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(x) => x,
-            Err(e) => return Err(format!("Error decoding block store: {e}")),
-        };
+        (store.compression_config, store.block_size) =
+            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                Ok(x) => x,
+                Err(e) => return Err(format!("Error decoding block store: {e}")),
+            };
 
         store.location = starting_pos;
 
@@ -386,10 +456,35 @@ mod tests {
 
     #[test]
     fn test_add_id() {
+        let output_buffer = Arc::new(std::sync::Mutex::new(Box::new(std::io::Cursor::new(
+            Vec::with_capacity(1024 * 1024),
+        ))));
+
+        let mut output_worker =
+            crate::io::worker::Worker::new(output_buffer).with_buffer_size(1024);
+        output_worker.start();
+
+        let output_queue = output_worker.get_queue();
+
+        let mut compression_workers = crate::compression::worker::Worker::new()
+            .with_buffer_size(16)
+            .with_threads(1_u16)
+            .with_output_queue(Arc::clone(&output_queue));
+
+        compression_workers.start();
+        let compression_workers = Arc::new(compression_workers);
+
         let mut store = BytesBlockStore {
             block_size: 10,
+            compression_config: Arc::new(CompressionConfig {
+                compression_type: CompressionType::NONE,
+                compression_level: 0,
+                compression_dict: None,
+            }),
+            compression_worker: Some(Arc::clone(&compression_workers)),
             ..Default::default()
         };
+
         let loc = store.add(b"Medtr5g026775.t1").unwrap();
         println!("{:?}", loc);
         assert!(

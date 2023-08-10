@@ -22,8 +22,8 @@ use std::path::Path;
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 
+use libsfasta::compression::CompressionType;
 use libsfasta::prelude::*;
-use libsfasta::CompressionType;
 
 // const GIT_VERSION: &str = git_version!();
 
@@ -557,7 +557,7 @@ fn convert(
     let mut buf = libsfasta::utils::CrossbeamReader::from_channel(r);
     let mut out_fh = Box::new(std::io::BufWriter::new(output));
 
-    converter.convert_fasta(&mut buf, &mut out_fh);
+    let mut out_fh = converter.convert(&mut buf, out_fh);
     log::info!("Joining IO thread");
     io_thread.join().expect("Unable to join IO thread");
     log::info!("IO thread joined");

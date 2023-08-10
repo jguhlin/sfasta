@@ -4,6 +4,7 @@
 // TODO: Since this doesn't add any special functionality, should this just be replaced with BytesBlockStore? Maybe an alias?
 
 use std::io::{Read, Seek, Write};
+use std::sync::Arc;
 
 use simdutf8::basic::from_utf8;
 
@@ -30,10 +31,18 @@ impl Default for SequenceBlockStore {
 }
 
 impl SequenceBlockStore {
+    pub fn with_compression_worker(
+        mut self,
+        compression_worker: Arc<crate::compression::Worker>,
+    ) -> Self {
+        self.inner = self.inner.with_compression_worker(compression_worker);
+        self
+    }
+
     pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
     where
         W: Write + Seek,
-     {
+    {
         self.inner.write_header(pos, &mut out_buf);
     }
 

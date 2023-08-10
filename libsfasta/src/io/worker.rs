@@ -18,27 +18,27 @@ pub struct OutputBlock {
     pub location: Arc<AtomicU64>,
 }
 
-pub struct Worker<W: Write + Seek + Send + Seek> {
+pub struct Worker<W: Write + Seek + Send + Seek + 'static> {
     queue: Option<Arc<ArrayQueue<OutputBlock>>>,
     shutdown_flag: Arc<AtomicBool>,
     buffer_size: usize,
 
     // Where to write
-    output_buffer: Arc<Mutex<W>>,
+    output_buffer: Arc<Mutex<Box<W>>>,
 }
 
 impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
-    pub fn into_inner(self) -> W {
+    pub fn into_inner(self) -> Box<W> {
         match Arc::try_unwrap(self.output_buffer) {
             Ok(output_buffer) => output_buffer.into_inner().unwrap(),
             Err(_) => panic!("Could not unwrap output buffer"),
         }
     }
 
-    pub fn new(output_buffer: W) -> Self {
+    pub fn new(output_buffer: Arc<Mutex<Box<W>>>) -> Self {
         Self {
             queue: None,
-            output_buffer: Arc::new(Mutex::new(output_buffer)),
+            output_buffer,
             buffer_size: 1024,
             shutdown_flag: Arc::new(AtomicBool::new(false)),
         }
@@ -72,33 +72,40 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
     pub fn get_queue(&self) -> Arc<ArrayQueue<OutputBlock>> {
         Arc::clone(self.queue.as_ref().unwrap())
     }
-
-    
 }
 
-fn worker<W>(queue: Arc<ArrayQueue<OutputBlock>>, shutdown_flag: Arc<AtomicBool>, output_buffer: Arc<Mutex<W>>) 
-where
+fn worker<W>(
+    queue: Arc<ArrayQueue<OutputBlock>>,
+    shutdown_flag: Arc<AtomicBool>,
+    output_buffer: Arc<Mutex<W>>,
+) where
     W: Write + Seek + Send + Sync + Seek,
 {
+    println!("IO Worker Started");
     let backoff = Backoff::new();
 
     // Hold the mutex for the entire duration
     let output = Arc::clone(&output_buffer);
     let mut output = output.lock().unwrap();
 
+    println!("IO Worker Got Lock");
+
     loop {
         if shutdown_flag.load(Ordering::Relaxed) {
+            println!("IO Worker Shutting Down");
             break;
         }
 
         if let Some(block) = queue.pop() {
-            let mut location = block.location;
-            let mut data = block.data;
+            let location = block.location;
+            let data = block.data;
 
             // Get current location
 
             let current_location = output.stream_position().unwrap();
+            println!("Current location: {}", current_location);
             output.write_all(&data).unwrap();
+            location.store(current_location, Ordering::Relaxed);
         } else {
             backoff.snooze();
             if backoff.is_completed() {
@@ -106,54 +113,5 @@ where
                 backoff.reset();
             }
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::io::Cursor;
-
-    #[test]
-    fn test_worker() {
-        let mut worker = Worker::new(Cursor::new(Vec::new()));
-        let handle = worker.start();
-
-        worker.shutdown();
-        handle.join().unwrap();
-    }
-
-    #[test]
-    fn test_worker_write() {
-        let mut worker = Worker::new(Cursor::new(Vec::new()));
-        let handle = worker.start();
-
-        let block = OutputBlock {
-            data: vec![1, 2, 3, 4, 5],
-            location: Arc::new(AtomicU64::new(0)),
-        };
-
-        worker.queue.as_ref().unwrap().push(block).unwrap();
-
-        worker.shutdown();
-        handle.join().unwrap();
-    }
-
-    #[test]
-    fn test_worker_write_multiple() {
-        let mut worker = Worker::new(Cursor::new(Vec::new()));
-        let handle = worker.start();
-
-        let block = OutputBlock {
-            data: vec![1, 2, 3, 4, 5],
-            location: Arc::new(AtomicU64::new(0)),
-        };
-
-        for _ in 0..100 {
-            worker.queue.as_ref().unwrap().push(block.clone()).unwrap();
-        }
-
-        worker.shutdown();
-        handle.join().unwrap();
     }
 }

@@ -9,7 +9,7 @@ use crossbeam::utils::Backoff;
 
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use crate::compression::useful::CompressionType;
 use crate::datatypes::*;
@@ -197,7 +197,7 @@ impl Converter {
     }
 
     /// Main conversion function for FASTA/Q files
-    pub fn convert<'convert, W, R>(self, mut in_buf: &mut R, mut out_fh: &mut W)
+    pub fn convert<'convert, W, R>(self, mut in_buf: &mut R, mut out_fh: Box<W>) -> Box<W>
     where
         W: WriteAndSeek + 'static + Send + Sync,
         R: Read + Send + 'convert,
@@ -243,34 +243,25 @@ impl Converter {
             out_fh.stream_position().unwrap()
         );
 
-        let start = out_fh.stream_position().unwrap();
-
-        // Write sequences
-
-        let start_time = std::time::Instant::now();
-
         // Calls the big function write_fasta_sequence to process both sequences and masking, and write them into a file....
         // Function returns:
         // Vec<(String, Location)>
         // block_index_pos
-        let (ids, mut seqlocs, headers_location, ids_location, masking_location, sequences_location) =
-            self.process(&mut in_buf, &mut out_fh, &mut debug_size);
 
-        let end_time = std::time::Instant::now();
+        let out_buffer = Arc::new(Mutex::new(out_fh));
 
-        log::info!(
-            "Write Fasta Sequence write time: {:?}",
-            end_time - start_time
-        );
+        println!("Big function");
 
-        let end = out_fh.stream_position().unwrap();
+        let (
+            ids,
+            mut seqlocs,
+            headers_location,
+            ids_location,
+            masking_location,
+            sequences_location,
+        ) = self.process(&mut in_buf, Arc::clone(&out_buffer));
 
-        debug_size.push(("sequences".to_string(), (end - start) as usize));
-
-        log::info!(
-            "Writing sequences finished... {}",
-            out_fh.stream_position().unwrap()
-        );
+        println!("Big function done");
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
@@ -289,6 +280,9 @@ impl Converter {
 
         let mut seqlocs_location = 0;
 
+        println!("Trying to get lock");
+        let mut out_buffer_thread = out_buffer.lock().unwrap();
+        println!("Got lock");
         // Build the index in another thread...
         thread::scope(|s| {
             // Start a thread to build the index...
@@ -304,53 +298,47 @@ impl Converter {
             // Use the main thread to write the sequence locations...
             log::info!(
                 "Writing SeqLocs to file. {}",
-                out_fh.stream_position().unwrap()
+                out_buffer_thread.stream_position().unwrap()
             );
 
-            let start = out_fh.stream_position().unwrap();
+            let start = out_buffer_thread.stream_position().unwrap();
 
-            let start_time = std::time::Instant::now();
-
-            seqlocs_location = seqlocs.write_to_buffer(&mut out_fh);
+            seqlocs_location = seqlocs.write_to_buffer(&mut *out_buffer_thread);
             log::info!(
                 "Writing SeqLocs to file: COMPLETE. {}",
-                out_fh.stream_position().unwrap()
+                out_buffer_thread.stream_position().unwrap()
             );
 
-            let end_time = std::time::Instant::now();
-            log::info!("SeqLocs write time: {:?}", end_time - start_time);
-
-            let end = out_fh.stream_position().unwrap();
+            let end = out_buffer_thread.stream_position().unwrap();
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
-                dual_index_pos = out_fh
+                dual_index_pos = out_buffer_thread
                     .stream_position()
                     .expect("Unable to work with seek API");
 
                 let mut index = index_handle.unwrap().join().unwrap();
                 log::info!(
                     "Writing index to file. {}",
-                    out_fh.stream_position().unwrap()
+                    out_buffer_thread.stream_position().unwrap()
                 );
 
-                let start = out_fh.stream_position().unwrap();
+                let start = out_buffer_thread.stream_position().unwrap();
 
                 let start_time = std::time::Instant::now();
-                index.write_to_buffer(&mut out_fh);
+                index.write_to_buffer(&mut *out_buffer_thread);
                 let end_time = std::time::Instant::now();
                 log::info!("Index write time: {:?}", end_time - start_time);
 
-                let end = out_fh.stream_position().unwrap();
+                let end = out_buffer_thread.stream_position().unwrap();
                 debug_size.push(("index".to_string(), (end - start) as usize));
-
-                log::info!(
-                    "Writing index to file: COMPLETE. {}",
-                    out_fh.stream_position().unwrap()
-                );
             }
         })
         .expect("Error");
+
+        drop(out_buffer_thread);
+
+        println!("Done with scope");
 
         sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
         sfasta.directory.index_loc = NonZeroU64::new(dual_index_pos);
@@ -362,22 +350,26 @@ impl Converter {
 
         // sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
 
-        out_fh
+        println!("Getting lock");
+
+        let mut out_buffer_lock = out_buffer.lock().unwrap();
+        println!("Got lock for directory_location");
+        out_buffer_lock
             .seek(SeekFrom::Start(directory_location))
             .expect("Unable to rewind to start of the file");
 
         // Here we re-write the directory information at the start of the file, allowing for
         // easy jumps to important areas while keeping everything in a single file
 
-        let start = out_fh.stream_position().unwrap();
+        let start = out_buffer_lock.stream_position().unwrap();
 
         let start_time = std::time::Instant::now();
 
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
-        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
+        bincode::encode_into_std_write(dir, &mut *out_buffer_lock, bincode_config)
             .expect("Unable to write directory to file");
 
-        let end = out_fh.stream_position().unwrap();
+        let end = out_buffer_lock.stream_position().unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
 
         let end_time = std::time::Instant::now();
@@ -386,21 +378,36 @@ impl Converter {
 
         log::info!("DEBUG: {:?}", debug_size);
 
-        out_fh.flush().expect("Unable to flush output file");
+        out_buffer_lock
+            .flush()
+            .expect("Unable to flush output file");
 
         let conversion_end_time = std::time::Instant::now();
         log::info!(
             "Conversion time: {:?}",
             conversion_end_time - conversion_start_time
         );
+
+        drop(out_buffer_lock);
+
+        println!(
+            "Out Buffer Arc Counts: {} {}",
+            Arc::strong_count(&out_buffer),
+            Arc::weak_count(&out_buffer)
+        );
+
+        // Pull out of Arc and Mutex
+        match Arc::try_unwrap(out_buffer) {
+            Ok(x) => x.into_inner().unwrap(),
+            Err(_) => panic!("Unable to unwrap out_buffer"),
+        }
     }
 
     /// Process buffer that outputs Seq objects
     pub fn process<'convert, W, R>(
         &self,
         in_buf: &mut R,
-        mut out_fh: W,
-        debug_size: &mut Vec<(String, usize)>,
+        out_fh: Arc<Mutex<Box<W>>>,
     ) -> (
         Vec<std::sync::Arc<String>>,
         SeqLocs,
@@ -410,11 +417,9 @@ impl Converter {
         Option<NonZeroU64>,
     )
     where
-        W: WriteAndSeek + 'convert + Send + Sync,
+        W: WriteAndSeek + 'convert + Send + Sync + 'static,
         R: Read + Send + 'convert,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
         // TODO: Untested, been awhile... Only useful for very small blocks so hasn't been used lately...
         if let Some(dict) = &self.dict {
             todo!();
@@ -423,18 +428,22 @@ impl Converter {
 
         let threads = self.threads;
 
+        let output_buffer = Arc::clone(&out_fh);
+
         // Start the output I/O...
-        let output_worker = crate::io::worker::Worker::new(out_fh).with_buffer_size(1024);
+        let mut output_worker =
+            crate::io::worker::Worker::new(output_buffer).with_buffer_size(1024);
+        output_worker.start();
         let output_queue = output_worker.get_queue();
 
         // Start the compression workers
-        let compression_workers = crate::compression::worker::Worker::new()
+        let mut compression_workers = crate::compression::worker::Worker::new()
             .with_buffer_size(8192)
             .with_threads(threads as u16)
             .with_output_queue(Arc::clone(&output_queue));
 
         compression_workers.start();
-        let compression_queue = compression_workers.get_queue();
+        let compression_workers = Arc::new(compression_workers);
 
         // Some defaults
         let mut seq_locs: Option<SeqLocs> = None;
@@ -453,11 +462,11 @@ impl Converter {
         let seq_queue_in = Arc::clone(&seq_queue);
         let seq_queue_out = Arc::clone(&seq_queue);
 
+        println!("New thread");
+
         // Pop to a new thread that pushes sequence into the sequence buffer...
         thread::scope(|s| {
             let fasta_thread = s.spawn(|_| {
-                let mut fasta_thread_spins: usize = 0; // Debugging
-                                                       // Convert reader into buffered reader then into the Fasta struct (and iterator)
                 let mut in_buf_reader = BufReader::new(in_buf);
 
                 // TODO: Should be auto-detect and handle...
@@ -480,7 +489,6 @@ impl Converter {
                     while let Err(z) = seq_queue_in.push(d) {
                         d = z;
                         backoff.snooze();
-                        fasta_thread_spins = fasta_thread_spins.saturating_add(1);
 
                         if backoff.is_completed() {
                             std::thread::park();
@@ -493,8 +501,7 @@ impl Converter {
                 while seq_queue_in.push(Work::Shutdown).is_err() {
                     backoff.snooze();
                 }
-
-                log::info!("fasta_thread_spins: {}", fasta_thread_spins);
+                println!("Shutdown signal sent");
             });
 
             let fasta_thread_clone = fasta_thread.thread().clone();
@@ -503,20 +510,28 @@ impl Converter {
             // Idea: split into queue's for headers, IDs, sequence, etc....
             // Thread that handles the heavy lifting of the incoming Seq structs
             // TODO: Set compression stuff here...
+            let compression_workers_thread = Arc::clone(&compression_workers);
             let reader_handle = s.spawn(move |_| {
-                let mut headers = StringBlockStore::default().with_block_size(512 * 1024);
+                let mut headers = StringBlockStore::default()
+                    .with_block_size(512 * 1024)
+                    .with_compression_worker(Arc::clone(&compression_workers_thread));
                 let mut seqlocs = SeqLocs::default();
-                let mut ids = StringBlockStore::default().with_block_size(512 * 1024);
+                let mut ids = StringBlockStore::default()
+                    .with_block_size(512 * 1024)
+                    .with_compression_worker(Arc::clone(&compression_workers_thread));
                 let mut ids_string = Vec::new();
-                let mut masking = Masking::default();
-                let mut sequences = SequenceBlockStore::default().with_block_size(512 * 1024);
+                let mut masking = Masking::default()
+                    .with_compression_worker(Arc::clone(&compression_workers_thread));
+                let mut sequences = SequenceBlockStore::default()
+                    .with_block_size(512 * 1024)
+                    .with_compression_worker(Arc::clone(&compression_workers_thread));
 
                 // For each Sequence in the fasta file, make it upper case (masking is stored separately)
                 // Add the sequence to the SequenceBlocks, get the SeqLocs and store them in Location struct
                 // And store that in seq_locs Vec...
 
                 let backoff = Backoff::new();
-                loop {
+                'outer: loop {
                     backoff.reset(); // Reset the backoff
                     fasta_thread_clone.unpark(); // Unpark the FASTA thread so it can continue to read
                     match seq_queue_out.pop() {
@@ -532,9 +547,9 @@ impl Converter {
                             }
 
                             // Capitalize sequence
-                            if let Some(x) = seq {
+                            if let Some(mut x) = seq {
                                 x.make_ascii_uppercase();
-                                let loc = sequences.add(&mut seq.unwrap()[..]);
+                                let loc = sequences.add(&mut x[..]);
                                 location.sequence = Some(seqlocs.add_locs(&loc));
                             }
 
@@ -555,7 +570,7 @@ impl Converter {
                         Some(Work::FastqPayload(_)) => {
                             panic!("Received FASTQ payload in FASTA thread")
                         }
-                        Some(Work::Shutdown) => break,
+                        Some(Work::Shutdown) => break 'outer,
                         None => {
                             fasta_thread_clone.unpark();
                             backoff.snooze();
@@ -566,20 +581,38 @@ impl Converter {
                         }
                     }
                 }
+                println!("Shutting down");
 
                 headers.write_block_locations();
+                println!("Headers written");
                 ids.write_block_locations();
+                println!("IDs written");
                 sequences.write_block_locations();
+                println!("Sequences written");
                 masking.write_block_locations();
+                println!("Masking written");
+
+                println!("Returning...");
 
                 (seqlocs, headers, ids, ids_string, masking, sequences)
             });
 
+            println!("Join fasta thread");
             // Join the FASTA thread (ot block until it can be joined)
             fasta_thread.join().unwrap();
 
+            println!("Join reader thread");
             reader_handle.thread().unpark();
             let j = reader_handle.join().expect("Unable to join thread");
+            println!("Reader joined");
+
+            let backoff = Backoff::new();
+            while output_queue.len() > 0 {
+                backoff.snooze();
+            }
+
+            output_worker.shutdown();
+
             seq_locs = Some(j.0);
             headers = Some(j.1);
             ids = Some(j.2);
@@ -587,26 +620,34 @@ impl Converter {
             masking = Some(j.4);
             sequences = Some(j.5);
 
-            headers_location = NonZeroU64::new(out_fh.stream_position().unwrap());
-            headers.as_mut().unwrap().write_header(headers_location.unwrap().get(), &mut out_fh);
+            println!("Grabbing lock");
+            let mut out_buffer = out_fh.lock().unwrap();
+            println!("Got lock");
 
-            ids_location = NonZeroU64::new(out_fh.stream_position().unwrap());
-            ids.as_mut().unwrap().write_header(ids_location.unwrap().get(), &mut out_fh);
+            headers_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            headers
+                .as_mut()
+                .unwrap()
+                .write_header(headers_location.unwrap().get(), &mut *out_buffer);
 
-            masking_location = NonZeroU64::new(out_fh.stream_position().unwrap());
+            ids_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            ids.as_mut()
+                .unwrap()
+                .write_header(ids_location.unwrap().get(), &mut *out_buffer);
+
+            masking_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
             masking
                 .as_mut()
                 .unwrap()
-                .write_header(masking_location.unwrap().get(), &mut out_fh);
+                .write_header(masking_location.unwrap().get(), &mut *out_buffer);
 
-            sequences_location = NonZeroU64::new(out_fh.stream_position().unwrap());
+            sequences_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
             sequences
                 .as_mut()
                 .unwrap()
-                .write_header(sequences_location.unwrap().get(), &mut out_fh);
+                .write_header(sequences_location.unwrap().get(), &mut *out_buffer);
 
-            out_fh.flush().expect("Unable to flush output buffer");
-
+            out_buffer.flush().expect("Unable to flush output buffer");
         })
         .expect("Error");
 
@@ -643,8 +684,8 @@ enum Work {
 mod tests {
     use super::*;
     use crate::datatypes::*;
-    use std::io::Cursor;
     use std::fs::File;
+    use std::io::Cursor;
 
     fn init() {
         let _ = env_logger::builder().is_test(true).try_init();
@@ -665,7 +706,7 @@ mod tests {
 
         let converter = Converter::default().with_threads(6).with_block_size(8192);
 
-        converter.convert(&mut in_buf, &mut out_buf);
+        let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {:#?}", x)
@@ -691,6 +732,5 @@ mod tests {
             bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
         todo!();
-
     }
 }

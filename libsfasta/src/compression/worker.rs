@@ -133,7 +133,8 @@ impl Worker {
         for _ in 0..self.threads {
             let queue = Arc::clone(self.queue.as_ref().unwrap());
             let shutdown = Arc::clone(&self.shutdown_flag);
-            let handle = thread::spawn(move || compression_worker(queue, shutdown));
+            let output_queue = Arc::clone(self.writer.as_ref().unwrap());
+            let handle = thread::spawn(move || compression_worker(queue, shutdown, output_queue));
             self.handles.push(handle);
         }
     }
@@ -173,7 +174,11 @@ impl Worker {
     }
 }
 
-fn compression_worker(queue: Arc<ArrayQueue<CompressorWork>>, shutdown: Arc<AtomicBool>) {
+fn compression_worker(
+    queue: Arc<ArrayQueue<CompressorWork>>,
+    shutdown: Arc<AtomicBool>,
+    output_queue: Arc<ArrayQueue<OutputBlock>>,
+) {
     let mut result;
     let backoff = Backoff::new();
 
@@ -192,6 +197,8 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressorWork>>, shutdown: Arc<Atom
                 }
             }
             Some(CompressorWork::Compress(work)) => {
+                println!("Got stuff to compress");
+
                 #[cfg(not(test))]
                 let mut output = Vec::with_capacity(work.input.len());
 
@@ -273,7 +280,12 @@ fn compression_worker(queue: Arc<ArrayQueue<CompressorWork>>, shutdown: Arc<Atom
                     ),
                 };
 
-                // TODO: Here we need to submit it
+                let output_block = OutputBlock {
+                    data: output,
+                    location: work.location,
+                };
+
+                output_queue.push(output_block).unwrap();
             }
             Some(CompressorWork::Decompress(work)) => {
                 todo!();
@@ -288,9 +300,4 @@ mod tests {
     use super::*;
     use flate2::Compression;
     use rand::prelude::*;
-
-    #[test]
-    pub fn test_compression() {
-        todo!();
-    }
 }
