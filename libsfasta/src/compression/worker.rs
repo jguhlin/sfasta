@@ -197,14 +197,10 @@ fn compression_worker(
                 }
             }
             Some(CompressorWork::Compress(work)) => {
-                println!("Got stuff to compress");
-
-                #[cfg(not(test))]
-                let mut output = Vec::with_capacity(work.input.len());
-
                 // Tests fail otherwise for buffer too small
-                #[cfg(test)]
-                let mut output = Vec::with_capacity(8192);
+                let min_size = std::cmp::max(work.input.len(), 8192);
+
+                let mut output = Vec::with_capacity(min_size);
 
                 match work.compression_config.compression_type {
                     #[cfg(not(target_arch = "wasm32"))]

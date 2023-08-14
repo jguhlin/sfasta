@@ -44,6 +44,10 @@ impl StringBlockStore {
         self.inner.write_block_locations();
     }
 
+    pub fn block_len(&self) -> usize {
+        self.inner.block_len()
+    }
+
     pub fn finalize(&mut self) {
         self.inner.finalize();
     }

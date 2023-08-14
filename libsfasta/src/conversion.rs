@@ -250,8 +250,6 @@ impl Converter {
 
         let out_buffer = Arc::new(Mutex::new(out_fh));
 
-        println!("Big function");
-
         let (
             ids,
             mut seqlocs,
@@ -260,8 +258,6 @@ impl Converter {
             masking_location,
             sequences_location,
         ) = self.process(&mut in_buf, Arc::clone(&out_buffer));
-
-        println!("Big function done");
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
@@ -280,9 +276,8 @@ impl Converter {
 
         let mut seqlocs_location = 0;
 
-        println!("Trying to get lock");
         let mut out_buffer_thread = out_buffer.lock().unwrap();
-        println!("Got lock");
+
         // Build the index in another thread...
         thread::scope(|s| {
             // Start a thread to build the index...
@@ -338,8 +333,6 @@ impl Converter {
 
         drop(out_buffer_thread);
 
-        println!("Done with scope");
-
         sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
         sfasta.directory.index_loc = NonZeroU64::new(dual_index_pos);
         sfasta.directory.headers_loc = headers_location;
@@ -350,10 +343,7 @@ impl Converter {
 
         // sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
 
-        println!("Getting lock");
-
         let mut out_buffer_lock = out_buffer.lock().unwrap();
-        println!("Got lock for directory_location");
         out_buffer_lock
             .seek(SeekFrom::Start(directory_location))
             .expect("Unable to rewind to start of the file");
@@ -365,8 +355,9 @@ impl Converter {
 
         let start_time = std::time::Instant::now();
 
+        let bincode_config_fixed = bincode::config::standard().with_fixed_int_encoding();
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
-        bincode::encode_into_std_write(dir, &mut *out_buffer_lock, bincode_config)
+        bincode::encode_into_std_write(dir, &mut *out_buffer_lock, bincode_config_fixed)
             .expect("Unable to write directory to file");
 
         let end = out_buffer_lock.stream_position().unwrap();
@@ -389,12 +380,6 @@ impl Converter {
         );
 
         drop(out_buffer_lock);
-
-        println!(
-            "Out Buffer Arc Counts: {} {}",
-            Arc::strong_count(&out_buffer),
-            Arc::weak_count(&out_buffer)
-        );
 
         // Pull out of Arc and Mutex
         match Arc::try_unwrap(out_buffer) {
@@ -462,8 +447,6 @@ impl Converter {
         let seq_queue_in = Arc::clone(&seq_queue);
         let seq_queue_out = Arc::clone(&seq_queue);
 
-        println!("New thread");
-
         // Pop to a new thread that pushes sequence into the sequence buffer...
         thread::scope(|s| {
             let fasta_thread = s.spawn(|_| {
@@ -501,7 +484,6 @@ impl Converter {
                 while seq_queue_in.push(Work::Shutdown).is_err() {
                     backoff.snooze();
                 }
-                println!("Shutdown signal sent");
             });
 
             let fasta_thread_clone = fasta_thread.thread().clone();
@@ -581,30 +563,20 @@ impl Converter {
                         }
                     }
                 }
-                println!("Shutting down");
 
                 headers.write_block_locations();
-                println!("Headers written");
                 ids.write_block_locations();
-                println!("IDs written");
-                sequences.write_block_locations();
-                println!("Sequences written");
                 masking.write_block_locations();
-                println!("Masking written");
-
-                println!("Returning...");
+                sequences.write_block_locations();
 
                 (seqlocs, headers, ids, ids_string, masking, sequences)
             });
 
-            println!("Join fasta thread");
             // Join the FASTA thread (ot block until it can be joined)
             fasta_thread.join().unwrap();
 
-            println!("Join reader thread");
             reader_handle.thread().unpark();
             let j = reader_handle.join().expect("Unable to join thread");
-            println!("Reader joined");
 
             let backoff = Backoff::new();
             while output_queue.len() > 0 {
@@ -620,10 +592,9 @@ impl Converter {
             masking = Some(j.4);
             sequences = Some(j.5);
 
-            println!("Grabbing lock");
             let mut out_buffer = out_fh.lock().unwrap();
-            println!("Got lock");
 
+            // Rewrite the headers with the complete information now...
             headers_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
             headers
                 .as_mut()
@@ -731,6 +702,6 @@ mod tests {
         let _metadata: Metadata =
             bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
-        todo!();
+        // TODO: Add more tests
     }
 }

@@ -749,9 +749,13 @@ impl SeqLocs {
                 .seek(SeekFrom::Start(self.seqlocs_chunks_position))
                 .unwrap();
 
+            log::debug!("Seeking to position: {}", self.seqlocs_chunks_position);
+
             let chunk = index as usize / self.seqlocs_chunk_size as usize;
             let offset = index as usize % self.seqlocs_chunk_size as usize;
             let byte_offset = self.seqlocs_chunks_offsets.as_ref().unwrap()[chunk];
+
+            log::debug!("Seeking to: {}", byte_offset);
             in_buf.seek(SeekFrom::Current(byte_offset as i64)).unwrap();
             let length: u32 = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
             let seqlocs_chunk_raw: Vec<u8> =
@@ -764,6 +768,8 @@ impl SeqLocs {
                     .unwrap()
                     .0;
             let seqloc = seqlocs_chunk[offset].clone();
+
+            log::debug!("Got SeqLoc");
             Ok(Some(seqloc))
         }
     }

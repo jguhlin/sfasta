@@ -81,18 +81,14 @@ fn worker<W>(
 ) where
     W: Write + Seek + Send + Sync + Seek,
 {
-    println!("IO Worker Started");
     let backoff = Backoff::new();
 
     // Hold the mutex for the entire duration
     let output = Arc::clone(&output_buffer);
     let mut output = output.lock().unwrap();
 
-    println!("IO Worker Got Lock");
-
     loop {
         if shutdown_flag.load(Ordering::Relaxed) {
-            println!("IO Worker Shutting Down");
             break;
         }
 
@@ -101,15 +97,14 @@ fn worker<W>(
             let data = block.data;
 
             // Get current location
-
             let current_location = output.stream_position().unwrap();
-            println!("Current location: {}", current_location);
+
             output.write_all(&data).unwrap();
             location.store(current_location, Ordering::Relaxed);
         } else {
             backoff.snooze();
             if backoff.is_completed() {
-                thread::sleep(Duration::from_millis(25));
+                thread::sleep(Duration::from_millis(5));
                 backoff.reset();
             }
         }

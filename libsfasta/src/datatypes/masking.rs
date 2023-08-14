@@ -1,5 +1,6 @@
 // NOTE: I've spent lots of time converting this to bitvec so that bool would be 1bit instead of 8bits (1 bytes)
-// Compressed, this saves < 1Mbp on a 2.3Gbp uncompressed FASTA file... and triple the length for masking.
+// Compressed, this saves < 1Mbp on a 2.3Gbp uncompressed FASTA file... and triple the length in time for masking.
+// TODO: Try stream vbytes for this...
 use std::io::{Read, Seek, Write};
 use std::sync::Arc;
 
@@ -127,7 +128,26 @@ mod tests {
     fn test_masking() {
         use simdutf8::basic::from_utf8;
 
-        let mut masking = Masking::default();
+        let output_buffer = Arc::new(std::sync::Mutex::new(Box::new(std::io::Cursor::new(
+            Vec::with_capacity(1024 * 1024),
+        ))));
+
+        let mut output_worker =
+            crate::io::worker::Worker::new(output_buffer).with_buffer_size(1024);
+        output_worker.start();
+
+        let output_queue = output_worker.get_queue();
+
+        let mut compression_workers = crate::compression::worker::Worker::new()
+            .with_buffer_size(16)
+            .with_threads(1_u16)
+            .with_output_queue(Arc::clone(&output_queue));
+
+        compression_workers.start();
+        let compression_workers = Arc::new(compression_workers);
+
+        let mut masking =
+            Masking::default().with_compression_worker(Arc::clone(&compression_workers));
         let test_seqs = vec![
             "ATCGGGGCAACTACTACGATCAcccccccccaccatgcacatcatctacAAAActcgacaAcatcgacgactacgaa",
             "aaaaaaaaaaaaTACTACGATCAcccccccccaccatgcacatcatctacAAAActcgacaAcatcgacgactACGA",

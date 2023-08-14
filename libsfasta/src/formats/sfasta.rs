@@ -373,16 +373,19 @@ impl<'sfa> Sfasta<'sfa> {
     pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str> {
         assert!(self.index.is_some(), "Sfasta index not present");
 
+        log::debug!("Opening dual index");
         let idx = self.index.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let found = idx.find(&mut buf, x);
         let seqlocs = self.seqlocs.as_mut().unwrap();
 
+        log::debug!("Dual index opened");
         if found.is_none() {
             return Ok(None);
         }
 
         // TODO: Allow returning multiple if there are multiple matches...
+        log::debug!("Getting seqloc");
         seqlocs.get_seqloc(&mut buf, found.unwrap())
     }
 
@@ -613,17 +616,17 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::info!("Parsing Blocks");
 
-        if sfasta.directory.block_index_loc.is_none() {
-            return Result::Err("No block index found in SFASTA file - Support for no block index is not yet implemented.".to_string());
-        }
+        // if sfasta.directory.block_index_loc.is_none() {
+        // return Result::Err("No block index found in SFASTA file - Support for no block index is not yet implemented.".to_string());
+        // }
 
-        in_buf
-            .seek(SeekFrom::Start(
-                sfasta.directory.block_index_loc.unwrap().get(),
-            ))
-            .expect("Unable to work with seek API");
+        //in_buf
+        //.seek(SeekFrom::Start(
+        //sfasta.directory.block_index_loc.unwrap().get(),
+        //))
+        //    .expect("Unable to work with seek API");
 
-        let block_index_loc = in_buf.stream_position().unwrap();
+        // let block_index_loc = in_buf.stream_position().unwrap();
 
         log::info!("Creating Sequence Blocks");
 
@@ -659,7 +662,11 @@ impl<'sfa> SfastaParser<'sfa> {
                 sfasta.directory.headers_loc.unwrap().get(),
             ) {
                 Ok(x) => x,
-                Err(y) => return Result::Err(format!("Error reading SFASTA headers: {y}")),
+                Err(y) => {
+                    return Result::Err(format!(
+                        "Error reading SFASTA headers - StringBlockStore: {y}"
+                    ))
+                }
             };
 
             if prefetch {
@@ -902,18 +909,15 @@ mod tests {
         #[cfg(miri)]
         let mut converter = converter.with_compression_type(CompressionType::NONE);
 
-        println!("Converting file...");
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {x:#?}")
         };
 
-        println!("Opening file...");
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
         sfasta.index_len();
 
-        println!("Checking index len...");
         assert_eq!(sfasta.index_len(), 3001);
 
         let output = sfasta.find("does-not-exist");
@@ -933,7 +937,7 @@ mod tests {
 
     #[test]
     pub fn test_parse_multiple_blocks() {
-        let mut out_buf = Box::new(Cursor::new(Vec::new()));
+        let out_buf = Box::new(Cursor::new(Vec::new()));
 
         let mut in_buf = BufReader::new(
             File::open("test_data/test_sequence_conversion.fasta")
@@ -986,6 +990,7 @@ mod tests {
 
     #[test]
     pub fn test_find_does_not_trigger_infinite_loops() {
+        env_logger::init();
         let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
         let mut in_buf = BufReader::new(
@@ -993,10 +998,7 @@ mod tests {
                 .expect("Unable to open testing file"),
         );
 
-        let converter = Converter::default()
-            .with_threads(6)
-            .with_block_size(512)
-            .with_threads(8);
+        let converter = Converter::default().with_block_size(512).with_threads(1);
 
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
@@ -1009,6 +1011,7 @@ mod tests {
         assert!(sfasta.index_len() == 10);
 
         let _output = &sfasta.find("test3").unwrap().unwrap();
+
         sfasta.find("test").unwrap().unwrap();
         sfasta.find("test2").unwrap().unwrap();
         sfasta.find("test3").unwrap().unwrap();

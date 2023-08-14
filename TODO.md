@@ -4,3 +4,4 @@
 * Use Pulp to speed up on certain platforms
 * Magic chunkify struct
 * All prefetch functions should coerce a BufReader
+* Is stream vbytes better than zstd for masking?
