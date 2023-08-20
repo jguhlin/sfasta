@@ -277,6 +277,8 @@ impl SeqLocs {
             seqlocs_chunk_offset.push(current_offset);
             let as_bytes = bincode::encode_to_vec(chunk, bincode_config).unwrap();
             let compressed = compressor.compress(&as_bytes).unwrap();
+
+            // Write out the uncompressed length as u32
             match bincode::encode_into_std_write(
                 as_bytes.len() as u32,
                 &mut out_buf,
@@ -288,6 +290,7 @@ impl SeqLocs {
                 }
             }
 
+            // Write out the compressed SeqLoc chunk
             match bincode::encode_into_std_write(&compressed, &mut out_buf, bincode_config) {
                 Ok(x) => {
                     current_offset += x as u32;
@@ -347,7 +350,7 @@ impl SeqLocs {
             );
 
             // TODO: Also should be customizable compression level
-            let mut compressor = zstd::stream::Encoder::new(&mut compressed_buf, 3)
+            let mut compressor = zstd::bulk::Compressor::new(3)
                 .expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
@@ -355,8 +358,7 @@ impl SeqLocs {
             bincoded = bincode::encode_to_vec(chunk, bincode_config)
                 .expect("Unable to bincode locs into compressor");
 
-            compressor.write_all(&bincoded).unwrap();
-            compressor.finish().unwrap();
+            compressor.compress_to_buffer(&bincoded, &mut compressed_buf).unwrap();
 
             bincode::encode_into_std_write(&compressed_buf[..], &mut out_buf, bincode_config)
                 .expect("Unable to write Sequence Blocks to file");
@@ -615,7 +617,7 @@ impl SeqLocs {
             .unwrap();
 
         let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
+            .with_variable_int_encoding()
             .with_limit::<{ 2 * 1024 * 1024 }>();
 
         if self.compressed_seq_buffer.is_none() {
@@ -669,7 +671,7 @@ impl SeqLocs {
 
             log::info!("Prefetching SeqLocs");
 
-            let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+            let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
             in_buf
                 .seek(SeekFrom::Start(self.seqlocs_chunks_position))
@@ -743,7 +745,7 @@ impl SeqLocs {
             let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
             decompressor.include_magicbytes(false).unwrap();
 
-            let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+            let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
             in_buf
                 .seek(SeekFrom::Start(self.seqlocs_chunks_position))
@@ -755,18 +757,22 @@ impl SeqLocs {
             let offset = index as usize % self.seqlocs_chunk_size as usize;
             let byte_offset = self.seqlocs_chunks_offsets.as_ref().unwrap()[chunk];
 
-            log::debug!("Seeking to: {}", byte_offset);
+            log::debug!("Seeking additional byte offset: {}", byte_offset);
             in_buf.seek(SeekFrom::Current(byte_offset as i64)).unwrap();
             let length: u32 = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+            log::debug!("Length: {}", length);
             let seqlocs_chunk_raw: Vec<u8> =
                 bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+            log::debug!("Got SeqLocs Chunk Raw: {}", seqlocs_chunk_raw.len());
             let seqlocs_chunk_compressed: Vec<u8> = decompressor
                 .decompress(&seqlocs_chunk_raw, length as usize)
                 .unwrap();
+            log::debug!("Got SeqLocs Chunk Compressed");
             let seqlocs_chunk: Vec<SeqLoc> =
                 bincode::decode_from_slice(&seqlocs_chunk_compressed, bincode_config)
                     .unwrap()
                     .0;
+            log::debug!("Got SeqLocs Chunk");
             let seqloc = seqlocs_chunk[offset].clone();
 
             log::debug!("Got SeqLoc");
