@@ -350,15 +350,17 @@ impl SeqLocs {
             );
 
             // TODO: Also should be customizable compression level
-            let mut compressor = zstd::bulk::Compressor::new(3)
-                .expect("Unable to create zstd encoder");
+            let mut compressor =
+                zstd::bulk::Compressor::new(3).expect("Unable to create zstd encoder");
             compressor.include_magicbytes(false).unwrap();
             compressor.long_distance_matching(true).unwrap();
 
             bincoded = bincode::encode_to_vec(chunk, bincode_config)
                 .expect("Unable to bincode locs into compressor");
 
-            compressor.compress_to_buffer(&bincoded, &mut compressed_buf).unwrap();
+            compressor
+                .compress_to_buffer(&bincoded, &mut compressed_buf)
+                .unwrap();
 
             bincode::encode_into_std_write(&compressed_buf[..], &mut out_buf, bincode_config)
                 .expect("Unable to write Sequence Blocks to file");

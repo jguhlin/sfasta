@@ -212,8 +212,7 @@ impl BytesBlockStore {
             self.finalize();
         }
 
-        let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         assert!(self.compression_worker.is_some());
         self.check_complete();
