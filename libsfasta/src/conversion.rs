@@ -395,7 +395,7 @@ impl Converter {
         out_fh: Arc<Mutex<Box<W>>>,
     ) -> (
         Vec<std::sync::Arc<String>>,
-        SeqLocs,
+        SeqLocsStoreBuilder,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
@@ -431,7 +431,7 @@ impl Converter {
         let compression_workers = Arc::new(compression_workers);
 
         // Some defaults
-        let mut seq_locs: Option<SeqLocs> = None;
+        let mut seq_locs: Option<SeqLocsStoreBuilder> = None;
         let mut headers = None;
         let mut headers_location = None;
         let mut ids = None;
@@ -497,7 +497,7 @@ impl Converter {
                 let mut headers = StringBlockStoreBuilder::default()
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
-                let mut seqlocs = SeqLocs::default();
+                let mut seqlocs = SeqLocsStoreBuilder::default();
                 let mut ids = StringBlockStoreBuilder::default()
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));

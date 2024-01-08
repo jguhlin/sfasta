@@ -27,10 +27,10 @@ log = "0.4.20"
 crossbeam = "0.8.1"
 static_assertions = "1.1.0"
 bincode = { version = "2.0.0-rc.3" } #, features = ["serde"] }
-bytelines = "=2.2.2"
+bytelines = "2.5.0"
 simdutf8 = {version = "0.1.4", features = ["aarch64_neon"] }
 rayon = "1.7.0"
-itertools = "0.11.0"
+itertools = "0.12.0"
 bitvec = "1.0.1"
 env_logger = "0.10.0"
 getrandom = { version = "0.2.10", features = ["js"] }

@@ -24,7 +24,7 @@ pub struct Sfasta<'sfa> {
     pub index: Option<DualIndex>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlockStore>,
-    pub seqlocs: Option<SeqLocs>,
+    pub seqlocs: Option<SeqLocsStoreBuilder>,
     pub headers: Option<StringBlockStore>,
     pub ids: Option<StringBlockStore>,
     pub masking: Option<Masking>,
@@ -584,7 +584,7 @@ impl<'sfa> SfastaParser<'sfa> {
 
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
-            let mut seqlocs = match SeqLocs::from_buffer(&mut in_buf, seqlocs_loc) {
+            let mut seqlocs = match SeqLocsStoreBuilder::from_buffer(&mut in_buf, seqlocs_loc) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA seqlocs: {y}")),
             };

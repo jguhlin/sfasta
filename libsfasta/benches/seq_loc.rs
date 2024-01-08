@@ -80,28 +80,28 @@ impl TrupleStructLocSeqLocs {
 pub fn benchmark_add_locs(c: &mut Criterion) {
     let loc = Loc::new(0, 0, 128);
 
-    let mut seqlocs = SeqLocs::default();
+    let mut seqlocs = SeqLocsStoreBuilder::default();
     let locs = vec![loc.clone(); 128];
 
     c.bench_with_input(BenchmarkId::new("add_locs", 128), &locs, |b, s| {
         b.iter(|| seqlocs.add_locs(&s))
     });
 
-    let mut seqlocs = SeqLocs::default();
+    let mut seqlocs = SeqLocsStoreBuilder::default();
     let locs = vec![loc.clone(); 256];
 
     c.bench_with_input(BenchmarkId::new("add_locs", 256), &locs, |b, s| {
         b.iter(|| seqlocs.add_locs(&s))
     });
 
-    let mut seqlocs = SeqLocs::default();
+    let mut seqlocs = SeqLocsStoreBuilder::default();
     let locs = vec![loc.clone(); 512];
 
     c.bench_with_input(BenchmarkId::new("add_locs", 512), &locs, |b, s| {
         b.iter(|| seqlocs.add_locs(&s))
     });
 
-    let mut seqlocs = SeqLocs::default();
+    let mut seqlocs = SeqLocsStoreBuilder::default();
     let locs = vec![loc.clone(); 1024];
 
     c.bench_with_input(BenchmarkId::new("add_locs", 1024), &locs, |b, s| {
@@ -118,7 +118,7 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
         &locs,
         |b, s| {
             b.iter(|| {
-                let mut seqlocs = SeqLocs::default();
+                let mut seqlocs = SeqLocsStoreBuilder::default();
                 for _ in 0..1024 * 8 {
                     seqlocs.add_locs(&s);
                 }
@@ -131,7 +131,7 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
         &locs,
         |b, s| {
             b.iter(|| {
-                let mut seqlocs = SeqLocs::default();
+                let mut seqlocs = SeqLocsStoreBuilder::default();
                 for _ in 0..1024 * 16 {
                     seqlocs.add_locs(&s);
                 }
@@ -144,7 +144,7 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
         &locs,
         |b, s| {
             b.iter(|| {
-                let mut seqlocs = SeqLocs::default();
+                let mut seqlocs = SeqLocsStoreBuilder::default();
                 for _ in 0..1024 * 32 {
                     seqlocs.add_locs(&s);
                 }
