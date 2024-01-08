@@ -825,7 +825,7 @@ impl SeqLoc {
     }
 
     // Convert Vec of Locs to the ranges of the sequence...
-    pub fn seq_location_splits(block_size: u32, sequence: &[Loc]) -> Vec<std::ops::Range<u32>> {
+    pub fn seq_location_splits(sequence: &[Loc]) -> Vec<std::ops::Range<u32>> {
         let mut locations = Vec::with_capacity(sequence.len());
 
         if sequence.is_empty() {
@@ -834,12 +834,10 @@ impl SeqLoc {
 
         let mut start = 0;
 
-        if let seq = sequence {
-            for loc in seq {
-                let len = loc.len;
-                locations.push(start..start + len);
-                start += len;
-            }
+        for loc in sequence {
+            let len = loc.len;
+            locations.push(start..start + len);
+            start += len;
         }
         locations
     }
@@ -866,7 +864,7 @@ impl SeqLoc {
             self.sequence.as_ref().unwrap().1 as usize,
         );
 
-        let splits = SeqLoc::seq_location_splits(block_size, &locs);
+        let splits = SeqLoc::seq_location_splits(&locs);
 
         let end = range.end - 1;
 

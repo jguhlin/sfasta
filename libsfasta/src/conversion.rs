@@ -502,7 +502,7 @@ impl Converter {
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
                 let mut ids_string = Vec::new();
-                let mut masking = Masking::default()
+                let mut masking = MaskingStoreBuilder::default()
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
                 let mut sequences = SequenceBlockStore::default()
                     .with_block_size(512 * 1024)

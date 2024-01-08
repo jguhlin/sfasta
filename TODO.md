@@ -5,3 +5,4 @@
 * Magic chunkify struct
 * All prefetch functions should coerce a BufReader
 * Is stream vbytes better than zstd for masking?
+* Start using needletail instead of custom made solution

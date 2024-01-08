@@ -4,16 +4,16 @@ use std::sync::Arc;
 use simdutf8::basic::from_utf8;
 
 use crate::compression::*;
-use crate::datatypes::{BytesBlockStore, Loc};
+use crate::datatypes::{BytesBlockStoreBuilder, Loc};
 
 pub struct StringBlockStore {
-    inner: BytesBlockStore,
+    inner: BytesBlockStoreBuilder,
 }
 
 impl Default for StringBlockStore {
     fn default() -> Self {
         StringBlockStore {
-            inner: BytesBlockStore::default()
+            inner: BytesBlockStoreBuilder::default()
                 .with_block_size(512 * 1024)
                 .with_compression(CompressionConfig {
                     compression_type: CompressionType::LZ4,
@@ -67,7 +67,7 @@ impl StringBlockStore {
     where
         R: Read + Seek,
     {
-        let inner = match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
+        let inner = match BytesBlockStoreBuilder::from_buffer(&mut in_buf, starting_pos) {
             Ok(inner) => inner,
             Err(e) => return Err(e),
         };

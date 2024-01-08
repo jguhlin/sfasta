@@ -10,10 +10,10 @@ use simdutf8::basic::from_utf8;
 
 use crate::compression::CompressionConfig;
 use crate::compression::CompressionType;
-use crate::datatypes::{BytesBlockStore, Loc};
+use crate::datatypes::{BytesBlockStoreBuilder, Loc};
 
 pub struct SequenceBlockStore {
-    inner: BytesBlockStore,
+    inner: BytesBlockStoreBuilder,
 }
 
 impl Default for SequenceBlockStore {
@@ -23,7 +23,7 @@ impl Default for SequenceBlockStore {
             .with_compression_level(3);
 
         SequenceBlockStore {
-            inner: BytesBlockStore::default()
+            inner: BytesBlockStoreBuilder::default()
                 .with_block_size(512 * 1024)
                 .with_compression(compression_config),
         }
@@ -69,7 +69,7 @@ impl SequenceBlockStore {
     where
         R: Read + Seek,
     {
-        let inner = match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
+        let inner = match BytesBlockStoreBuilder::from_buffer(&mut in_buf, starting_pos) {
             Ok(inner) => inner,
             Err(e) => return Err(e),
         };

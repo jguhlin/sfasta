@@ -4,23 +4,23 @@
 use std::io::{Read, Seek, Write};
 use std::sync::Arc;
 
-use crate::datatypes::{BytesBlockStore, Loc};
+use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
 
 use pulp::Arch;
 
-pub struct Masking {
-    inner: BytesBlockStore,
+pub struct MaskingStoreBuilder {
+    inner: BytesBlockStoreBuilder,
 }
 
-impl Default for Masking {
+impl Default for MaskingStoreBuilder {
     fn default() -> Self {
-        Masking {
-            inner: BytesBlockStore::default().with_block_size(512 * 1024),
+        MaskingStoreBuilder {
+            inner: BytesBlockStoreBuilder::default().with_block_size(512 * 1024),
         }
     }
 }
 
-impl Masking {
+impl MaskingStoreBuilder {
     pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
     where
         W: Write + Seek,
@@ -74,7 +74,13 @@ impl Masking {
     pub fn finalize(&mut self) {
         self.inner.finalize();
     }
+}
 
+pub struct Masking {
+    inner: BytesBlockStore,
+}
+
+impl Masking {
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
@@ -146,8 +152,8 @@ mod tests {
         compression_workers.start();
         let compression_workers = Arc::new(compression_workers);
 
-        let mut masking =
-            Masking::default().with_compression_worker(Arc::clone(&compression_workers));
+        let mut masking = MaskingStoreBuilder::default()
+            .with_compression_worker(Arc::clone(&compression_workers));
         let test_seqs = vec![
             "ATCGGGGCAACTACTACGATCAcccccccccaccatgcacatcatctacAAAActcgacaAcatcgacgactacgaa",
             "aaaaaaaaaaaaTACTACGATCAcccccccccaccatgcacatcatctacAAAActcgacaAcatcgacgactACGA",
