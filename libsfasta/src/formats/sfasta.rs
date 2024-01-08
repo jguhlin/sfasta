@@ -27,27 +27,8 @@ pub struct Sfasta<'sfa> {
     pub seqlocs: Option<SeqLocs>,
     pub headers: Option<StringBlockStore>,
     pub ids: Option<StringBlockStore>,
-    pub masking: Option<MaskingStoreBuilder>,
+    pub masking: Option<Masking>,
 }
-/*
-impl<'sfa> Clone for Sfasta<'sfa> {
-    fn clone(&self) -> Self {
-        Sfasta {
-            version: self.version,
-            directory: self.directory.clone(),
-            parameters: self.parameters.clone(),
-            metadata: self.metadata.clone(),
-            index_directory: self.index_directory.clone(),
-            index: self.index.clone(),
-            buf: None,
-            sequenceblocks: self.sequenceblocks.clone(),
-            seqlocs: self.seqlocs.clone(),
-            headers: self.headers.clone(),
-            ids: self.ids.clone(),
-            masking: self.masking.clone(),
-        }
-    }
-} */
 
 impl<'sfa> Default for Sfasta<'sfa> {
     fn default() -> Self {
@@ -693,7 +674,7 @@ impl<'sfa> SfastaParser<'sfa> {
 
         log::info!("Opening Masking");
         if sfasta.directory.masking_loc.is_some() {
-            sfasta.masking = match MaskingStoreBuilder::from_buffer(
+            sfasta.masking = match Masking::from_buffer(
                 &mut in_buf,
                 sfasta.directory.masking_loc.unwrap().get(),
             ) {

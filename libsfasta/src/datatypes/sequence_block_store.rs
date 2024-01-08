@@ -10,19 +10,19 @@ use simdutf8::basic::from_utf8;
 
 use crate::compression::CompressionConfig;
 use crate::compression::CompressionType;
-use crate::datatypes::{BytesBlockStoreBuilder, Loc};
+use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
 
-pub struct SequenceBlockStore {
+pub struct SequenceBlockStoreBuilder {
     inner: BytesBlockStoreBuilder,
 }
 
-impl Default for SequenceBlockStore {
+impl Default for SequenceBlockStoreBuilder {
     fn default() -> Self {
         let compression_config = CompressionConfig::new()
             .with_compression_type(CompressionType::ZSTD)
             .with_compression_level(3);
 
-        SequenceBlockStore {
+        SequenceBlockStoreBuilder {
             inner: BytesBlockStoreBuilder::default()
                 .with_block_size(512 * 1024)
                 .with_compression(compression_config),
@@ -30,7 +30,7 @@ impl Default for SequenceBlockStore {
     }
 }
 
-impl SequenceBlockStore {
+impl SequenceBlockStoreBuilder {
     pub fn with_compression_worker(
         mut self,
         compression_worker: Arc<crate::compression::Worker>,
@@ -64,12 +64,18 @@ impl SequenceBlockStore {
     pub fn finalize(&mut self) {
         self.inner.finalize();
     }
+}
 
+pub struct SequenceBlockStore {
+    inner: BytesBlockStore,
+}
+
+impl SequenceBlockStore {
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
     {
-        let inner = match BytesBlockStoreBuilder::from_buffer(&mut in_buf, starting_pos) {
+        let inner = match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
             Ok(inner) => inner,
             Err(e) => return Err(e),
         };
@@ -125,7 +131,7 @@ mod tests {
 
     #[test]
     fn test_add_id() {
-        let mut store = SequenceBlockStore {
+        let mut store = SequenceBlockStoreBuilder {
             ..Default::default()
         };
 

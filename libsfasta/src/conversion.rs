@@ -494,17 +494,17 @@ impl Converter {
             // TODO: Set compression stuff here...
             let compression_workers_thread = Arc::clone(&compression_workers);
             let reader_handle = s.spawn(move |_| {
-                let mut headers = StringBlockStore::default()
+                let mut headers = StringBlockStoreBuilder::default()
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
                 let mut seqlocs = SeqLocs::default();
-                let mut ids = StringBlockStore::default()
+                let mut ids = StringBlockStoreBuilder::default()
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
                 let mut ids_string = Vec::new();
                 let mut masking = MaskingStoreBuilder::default()
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
-                let mut sequences = SequenceBlockStore::default()
+                let mut sequences = SequenceBlockStoreBuilder::default()
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
 

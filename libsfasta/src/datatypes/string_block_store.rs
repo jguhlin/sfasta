@@ -4,15 +4,15 @@ use std::sync::Arc;
 use simdutf8::basic::from_utf8;
 
 use crate::compression::*;
-use crate::datatypes::{BytesBlockStoreBuilder, Loc};
+use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
 
-pub struct StringBlockStore {
+pub struct StringBlockStoreBuilder {
     inner: BytesBlockStoreBuilder,
 }
 
-impl Default for StringBlockStore {
+impl Default for StringBlockStoreBuilder {
     fn default() -> Self {
-        StringBlockStore {
+        StringBlockStoreBuilder {
             inner: BytesBlockStoreBuilder::default()
                 .with_block_size(512 * 1024)
                 .with_compression(CompressionConfig {
@@ -24,7 +24,7 @@ impl Default for StringBlockStore {
     }
 }
 
-impl StringBlockStore {
+impl StringBlockStoreBuilder {
     pub fn with_compression_worker(
         mut self,
         compression_worker: Arc<crate::compression::Worker>,
@@ -62,12 +62,18 @@ impl StringBlockStore {
             .add(input.as_bytes())
             .expect("Failed to add string to block store")
     }
+}
 
+pub struct StringBlockStore {
+    inner: BytesBlockStore,
+}
+
+impl StringBlockStore {
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
     {
-        let inner = match BytesBlockStoreBuilder::from_buffer(&mut in_buf, starting_pos) {
+        let inner = match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
             Ok(inner) => inner,
             Err(e) => return Err(e),
         };
@@ -123,7 +129,7 @@ mod tests {
 
     #[test]
     fn test_add_id() {
-        let mut store = StringBlockStore {
+        let mut store = StringBlockStoreBuilder {
             ..Default::default()
         };
 
