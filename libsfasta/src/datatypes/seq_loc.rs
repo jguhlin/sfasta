@@ -6,16 +6,16 @@
 //! SeqLocsStore is the collection of all seqlocs
 //! SeqLocs are the complete data for a specific sequence
 //! Locs are the pointers to the sequence data (and strings, etc)
-//! 
+//!
 //! New Approach: Write this in 5 streams. One for each
 //! - Sequence
 //! - Masking
 //! - Scores
 //! - Headers
 //! - IDs
-//! 
+//!
 //! Each is pointed to by an index(u64) stored in the dual index, so ID search -> u64, u64 points to each of these streams as the proper location
-//! 
+//!
 
 // Make it like a b-tree
 
@@ -330,12 +330,10 @@ impl SeqLocsStoreBuilder {
 
         log::debug!("Wrote header - SeqLoc Write to buffer complete");
         seqlocs_location
-    }  
-
-
+    }
 }
 
-/// SeqLoc is per sequence data, specifying the location of 
+/// SeqLoc is per sequence data, specifying the location of
 #[derive(Clone, Debug, bincode::Encode, bincode::Decode, Default, PartialEq, Eq)]
 pub struct SeqLoc {
     pub sequence: Option<(u64, u32)>,
@@ -357,12 +355,7 @@ impl SeqLoc {
     }
 
     #[allow(clippy::len_without_is_empty)]
-    pub fn len<R>(
-        &self,
-        seqlocs: &mut SeqLocsStore,
-        mut in_buf: &mut R,
-        block_size: u32,
-    ) -> usize
+    pub fn len<R>(&self, seqlocs: &mut SeqLocsStore, mut in_buf: &mut R, block_size: u32) -> usize
     where
         R: Read + Seek,
     {
@@ -752,201 +745,201 @@ impl SeqLocsStore {
         self.block_locations.is_some()
     }
 
-        /// Get a particular block of Locs from the store
-        pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[Loc]
-        where
-            R: Read + Seek,
-        {
-            if !self.is_initialized() {
-                panic!("Unable to get SeqLoc as SeqLocs are not initialized");
-            }
-    
-            if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
-                let cache = self.cache.as_ref().unwrap();
-                &cache.1
-            } else {
-                let seqlocs = self.get_block_uncached(in_buf, block);
-    
-                self.cache = Some((block, seqlocs));
-    
-                &self.cache.as_ref().unwrap().1
-            }
+    /// Get a particular block of Locs from the store
+    pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> &[Loc]
+    where
+        R: Read + Seek,
+    {
+        if !self.is_initialized() {
+            panic!("Unable to get SeqLoc as SeqLocs are not initialized");
         }
-    
-        /// Get a particular block of Locs from the store, without using a cache
-        fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<Loc>
-        where
-            R: Read + Seek,
-        {
-            let block_locations = self.block_locations.as_ref().unwrap();
-            let block_location = block_locations[block as usize];
-            in_buf
-                .seek(SeekFrom::Start(self.location + block_location))
-                .unwrap();
-    
-            let bincode_config = bincode::config::standard()
-                .with_variable_int_encoding()
-                .with_limit::<{ 2 * 1024 * 1024 }>();
-    
-            if self.compressed_seq_buffer.is_none() {
-                self.compressed_seq_buffer = Some(Vec::with_capacity(256 * 1024));
-            } else {
-                self.compressed_seq_buffer.as_mut().unwrap().clear();
-            }
-    
-            let compressed_block = self.compressed_seq_buffer.as_mut().unwrap();
-    
-            *compressed_block = bincode::decode_from_std_read(&mut in_buf, bincode_config)
+
+        if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
+            let cache = self.cache.as_ref().unwrap();
+            &cache.1
+        } else {
+            let seqlocs = self.get_block_uncached(in_buf, block);
+
+            self.cache = Some((block, seqlocs));
+
+            &self.cache.as_ref().unwrap().1
+        }
+    }
+
+    /// Get a particular block of Locs from the store, without using a cache
+    fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<Loc>
+    where
+        R: Read + Seek,
+    {
+        let block_locations = self.block_locations.as_ref().unwrap();
+        let block_location = block_locations[block as usize];
+        in_buf
+            .seek(SeekFrom::Start(self.location + block_location))
+            .unwrap();
+
+        let bincode_config = bincode::config::standard()
+            .with_variable_int_encoding()
+            .with_limit::<{ 2 * 1024 * 1024 }>();
+
+        if self.compressed_seq_buffer.is_none() {
+            self.compressed_seq_buffer = Some(Vec::with_capacity(256 * 1024));
+        } else {
+            self.compressed_seq_buffer.as_mut().unwrap().clear();
+        }
+
+        let compressed_block = self.compressed_seq_buffer.as_mut().unwrap();
+
+        *compressed_block = bincode::decode_from_std_read(&mut in_buf, bincode_config)
+            .expect("Unable to read block");
+
+        let mut zstd_decompressor = zstd_decompressor(None);
+
+        if self.decompression_buffer.is_none() {
+            self.decompression_buffer = Some(Vec::with_capacity(512 * 1024));
+        }
+
+        let decompressed = self.decompression_buffer.as_mut().unwrap();
+
+        zstd_decompressor
+            .decompress_to_buffer(compressed_block, decompressed)
+            .unwrap();
+
+        // decompressor.read_to_end(decompressed).unwrap();
+
+        let locs: Vec<Loc> =
+            bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
                 .expect("Unable to read block");
-    
-            let mut zstd_decompressor = zstd_decompressor(None);
-    
-            if self.decompression_buffer.is_none() {
-                self.decompression_buffer = Some(Vec::with_capacity(512 * 1024));
-            }
-    
-            let decompressed = self.decompression_buffer.as_mut().unwrap();
-    
-            zstd_decompressor
-                .decompress_to_buffer(compressed_block, decompressed)
+        locs
+    }
+
+    /// Load up all SeqLocs from a file
+    pub fn get_all_seqlocs<R>(
+        &mut self,
+        in_buf: &mut R,
+    ) -> Result<Option<&Vec<SeqLoc>>, &'static str>
+    where
+        R: Read + Seek,
+    {
+        if self.index.is_none() {
+            // Because this is sequential reading, we use a BufReader
+            let mut in_buf = std::io::BufReader::new(in_buf);
+
+            let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
+            decompressor
+                .set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true))
                 .unwrap();
-    
-            // decompressor.read_to_end(decompressed).unwrap();
-    
-            let locs: Vec<Loc> =
-                bincode::decode_from_std_read(&mut decompressed.as_slice(), bincode_config)
-                    .expect("Unable to read block");
-            locs
-        }
-    
-        /// Load up all SeqLocs from a file
-        pub fn get_all_seqlocs<R>(
-            &mut self,
-            in_buf: &mut R,
-        ) -> Result<Option<&Vec<SeqLoc>>, &'static str>
-        where
-            R: Read + Seek,
-        {
-            if self.index.is_none() {
-                // Because this is sequential reading, we use a BufReader
-                let mut in_buf = std::io::BufReader::new(in_buf);
-    
-                let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
+            decompressor.include_magicbytes(false).unwrap();
+
+            log::info!("Prefetching SeqLocs");
+
+            let bincode_config = bincode::config::standard().with_variable_int_encoding();
+
+            in_buf
+                .seek(SeekFrom::Start(self.seqlocs_chunks_position))
+                .unwrap();
+            let mut seqlocs = Vec::with_capacity(self.total_seqlocs);
+            let mut length: u32;
+
+            // Go to the start, then just read sequentially..
+            in_buf
+                .seek(SeekFrom::Start(
+                    self.seqlocs_chunks_position
+                        + self.seqlocs_chunks_offsets.as_ref().unwrap()[0] as u64,
+                ))
+                .unwrap();
+
+            log::debug!(
+                "Reading {} chunks of SeqLocs",
+                self.seqlocs_chunks_offsets.as_ref().unwrap().len()
+            );
+            let mut seqlocs_chunk_raw = Vec::with_capacity(64 * 1024);
+            let mut seqlocs_chunk_compressed: Vec<u8> = Vec::with_capacity(64 * 1024);
+            let mut seqlocs_chunk: Vec<SeqLoc>;
+            // TODO: Zero copy deserialization possible here?
+            for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
+                length = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+
+                seqlocs_chunk_raw.clear();
+                seqlocs_chunk_raw.reserve(length as usize);
+
+                seqlocs_chunk_compressed.clear();
+                seqlocs_chunk_compressed =
+                    bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+
                 decompressor
-                    .set_parameter(zstd::stream::raw::DParameter::ForceIgnoreChecksum(true))
+                    .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
                     .unwrap();
-                decompressor.include_magicbytes(false).unwrap();
-    
-                log::info!("Prefetching SeqLocs");
-    
-                let bincode_config = bincode::config::standard().with_variable_int_encoding();
-    
-                in_buf
-                    .seek(SeekFrom::Start(self.seqlocs_chunks_position))
-                    .unwrap();
-                let mut seqlocs = Vec::with_capacity(self.total_seqlocs);
-                let mut length: u32;
-    
-                // Go to the start, then just read sequentially..
-                in_buf
-                    .seek(SeekFrom::Start(
-                        self.seqlocs_chunks_position
-                            + self.seqlocs_chunks_offsets.as_ref().unwrap()[0] as u64,
-                    ))
-                    .unwrap();
-    
-                log::debug!(
-                    "Reading {} chunks of SeqLocs",
-                    self.seqlocs_chunks_offsets.as_ref().unwrap().len()
-                );
-                let mut seqlocs_chunk_raw = Vec::with_capacity(64 * 1024);
-                let mut seqlocs_chunk_compressed: Vec<u8> = Vec::with_capacity(64 * 1024);
-                let mut seqlocs_chunk: Vec<SeqLoc>;
-                // TODO: Zero copy deserialization possible here?
-                for _offset in self.seqlocs_chunks_offsets.as_ref().unwrap().iter() {
-                    length = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-    
-                    seqlocs_chunk_raw.clear();
-                    seqlocs_chunk_raw.reserve(length as usize);
-    
-                    seqlocs_chunk_compressed.clear();
-                    seqlocs_chunk_compressed =
-                        bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-    
-                    decompressor
-                        .decompress_to_buffer(&seqlocs_chunk_compressed, &mut seqlocs_chunk_raw)
-                        .unwrap();
-    
-                    seqlocs_chunk = bincode::decode_from_slice(&seqlocs_chunk_raw, bincode_config)
-                        .unwrap()
-                        .0;
-                    seqlocs.append(&mut seqlocs_chunk);
-                }
-                self.index = Some(seqlocs);
+
+                seqlocs_chunk = bincode::decode_from_slice(&seqlocs_chunk_raw, bincode_config)
+                    .unwrap()
+                    .0;
+                seqlocs.append(&mut seqlocs_chunk);
             }
-    
-            log::debug!("Finished");
-    
-            return Ok(self.index.as_ref());
+            self.index = Some(seqlocs);
         }
-    
-        /// Get a particular SeqLoc from the store
-        pub fn get_seqloc<R>(
-            &mut self,
-            in_buf: &mut R,
-            index: u32,
-        ) -> Result<Option<SeqLoc>, &'static str>
-        where
-            R: Read + Seek,
-        {
-            if !self.is_initialized() {
-                return Err("Unable to get SeqLoc as SeqLocs are not initialized");
-            }
-    
-            if self.index.is_some() && index as usize >= self.index.as_ref().unwrap().len() {
-                return Err("Index out of bounds");
-            }
-    
-            if self.index.is_some() {
-                Ok(Some(self.index.as_ref().unwrap()[index as usize].clone()))
-            } else {
-                let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
-                decompressor.include_magicbytes(false).unwrap();
-    
-                let bincode_config = bincode::config::standard().with_variable_int_encoding();
-    
-                in_buf
-                    .seek(SeekFrom::Start(self.seqlocs_chunks_position))
-                    .unwrap();
-    
-                log::debug!("Seeking to position: {}", self.seqlocs_chunks_position);
-    
-                let chunk = index as usize / self.seqlocs_chunk_size as usize;
-                let offset = index as usize % self.seqlocs_chunk_size as usize;
-                let byte_offset = self.seqlocs_chunks_offsets.as_ref().unwrap()[chunk];
-    
-                log::debug!("Seeking additional byte offset: {}", byte_offset);
-                in_buf.seek(SeekFrom::Current(byte_offset as i64)).unwrap();
-                let length: u32 = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
-                log::debug!("Length: {}", length);
-                let seqlocs_chunk_raw: Vec<u8> =
-                    bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
-                log::debug!("Got SeqLocs Chunk Raw: {}", seqlocs_chunk_raw.len());
-                let seqlocs_chunk_compressed: Vec<u8> = decompressor
-                    .decompress(&seqlocs_chunk_raw, length as usize)
-                    .unwrap();
-                log::debug!("Got SeqLocs Chunk Compressed");
-                let seqlocs_chunk: Vec<SeqLoc> =
-                    bincode::decode_from_slice(&seqlocs_chunk_compressed, bincode_config)
-                        .unwrap()
-                        .0;
-                log::debug!("Got SeqLocs Chunk");
-                let seqloc = seqlocs_chunk[offset].clone();
-    
-                log::debug!("Got SeqLoc");
-                Ok(Some(seqloc))
-            }
+
+        log::debug!("Finished");
+
+        return Ok(self.index.as_ref());
+    }
+
+    /// Get a particular SeqLoc from the store
+    pub fn get_seqloc<R>(
+        &mut self,
+        in_buf: &mut R,
+        index: u32,
+    ) -> Result<Option<SeqLoc>, &'static str>
+    where
+        R: Read + Seek,
+    {
+        if !self.is_initialized() {
+            return Err("Unable to get SeqLoc as SeqLocs are not initialized");
         }
+
+        if self.index.is_some() && index as usize >= self.index.as_ref().unwrap().len() {
+            return Err("Index out of bounds");
+        }
+
+        if self.index.is_some() {
+            Ok(Some(self.index.as_ref().unwrap()[index as usize].clone()))
+        } else {
+            let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
+            decompressor.include_magicbytes(false).unwrap();
+
+            let bincode_config = bincode::config::standard().with_variable_int_encoding();
+
+            in_buf
+                .seek(SeekFrom::Start(self.seqlocs_chunks_position))
+                .unwrap();
+
+            log::debug!("Seeking to position: {}", self.seqlocs_chunks_position);
+
+            let chunk = index as usize / self.seqlocs_chunk_size as usize;
+            let offset = index as usize % self.seqlocs_chunk_size as usize;
+            let byte_offset = self.seqlocs_chunks_offsets.as_ref().unwrap()[chunk];
+
+            log::debug!("Seeking additional byte offset: {}", byte_offset);
+            in_buf.seek(SeekFrom::Current(byte_offset as i64)).unwrap();
+            let length: u32 = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+            log::debug!("Length: {}", length);
+            let seqlocs_chunk_raw: Vec<u8> =
+                bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+            log::debug!("Got SeqLocs Chunk Raw: {}", seqlocs_chunk_raw.len());
+            let seqlocs_chunk_compressed: Vec<u8> = decompressor
+                .decompress(&seqlocs_chunk_raw, length as usize)
+                .unwrap();
+            log::debug!("Got SeqLocs Chunk Compressed");
+            let seqlocs_chunk: Vec<SeqLoc> =
+                bincode::decode_from_slice(&seqlocs_chunk_compressed, bincode_config)
+                    .unwrap()
+                    .0;
+            log::debug!("Got SeqLocs Chunk");
+            let seqloc = seqlocs_chunk[offset].clone();
+
+            log::debug!("Got SeqLoc");
+            Ok(Some(seqloc))
+        }
+    }
 }
 
 #[cfg(test)]

@@ -15,9 +15,13 @@ mod formats;
 pub mod io;
 pub mod masking;
 pub mod utils;
+pub mod bplustree;
+pub mod block_index;
 
 pub mod prelude;
 
 pub use crate::datatypes::structs::*;
 pub use crate::io::*;
 pub use crate::utils::*;
+pub use crate::bplustree::*;
+pub use crate::block_index::*;
