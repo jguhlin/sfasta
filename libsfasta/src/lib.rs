@@ -6,6 +6,8 @@ extern crate rayon;
 #[macro_use]
 extern crate itertools;
 
+pub mod block_index;
+pub mod bplustree;
 pub mod compression;
 pub mod convenience;
 pub mod conversion;
@@ -15,13 +17,11 @@ mod formats;
 pub mod io;
 pub mod masking;
 pub mod utils;
-pub mod bplustree;
-pub mod block_index;
 
 pub mod prelude;
 
+pub use crate::block_index::*;
+pub use crate::bplustree::*;
 pub use crate::datatypes::structs::*;
 pub use crate::io::*;
 pub use crate::utils::*;
-pub use crate::bplustree::*;
-pub use crate::block_index::*;

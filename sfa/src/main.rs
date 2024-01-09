@@ -4,10 +4,10 @@ extern crate mimalloc;
 use mimalloc::MiMalloc;
 use rand_core::block;
 
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+// #[global_allocator]
+// static GLOBAL: MiMalloc = MiMalloc;
 
-static MEM: &str = "Mimalloc";
+// static MEM: &str = "Mimalloc";
 
 extern crate clap;
 extern crate indicatif;
