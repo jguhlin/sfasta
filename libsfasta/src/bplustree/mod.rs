@@ -3,16 +3,17 @@
 //! 
 //! Todo: Set it up so we can append nodes to it (keys should already be in order, remember?). For very large indices.
 //! But this is a TODO for now...
+//! 
+//! TODO: Should have a values only store for ordinal keys
+//! (don't need to store the keys)
 
-struct BTree<K: KeyType<K: KeyType, V: ValueType>> {
-    root: Option<Box<Node>>,
+struct BPlusTree<K: KeyType<K: KeyType, V: ValueType>> {
+    root: Box<Node<K, V>>,
     order: usize,
     depth: usize,
-    _value_type: PhantomData<V>,
-    _key_type: PhantomData<K>,
 }
 
-impl<K: KeyType, V: ValueType> BTree<K, V> {
+impl<K: KeyType, V: ValueType> BPlusTree<K, V> {
     fn new(order: usize, items: Vec<(K, V)>) -> Self {
         // Keys should be sorted
         assert!(items.is_sorted_by_key(|(k, _)| k));
@@ -24,8 +25,6 @@ impl<K: KeyType, V: ValueType> BTree<K, V> {
             root: Some(Box::new(root)),
             order,
             depth: 0,
-            _value_type: PhantomData,
-            _key_type: PhantomData,
         };
 
         // Calculate depth
@@ -33,8 +32,7 @@ impl<K: KeyType, V: ValueType> BTree<K, V> {
 
         // We can calculate the values that split the keys into the nodes
         let split_values: Vec<K> = tree.split_values(items.len());
-
-        
+      
        
     }
 
@@ -60,7 +58,7 @@ impl<K: KeyType, V: ValueType> BTree<K, V> {
 }
 
 // Impl for K as u64
-impl<V: ValueType> BTree<u64, V> {
+impl<V: ValueType> BPlusTree<u64, V> {
     fn split_values(&self, keys: &[u64]) -> Vec<u64> {
         // Split values are the values that split the keys into the nodes
         // So if we have 96,000,000 keys, and o=4, then we need to find the 3 keys that split into even chunks
