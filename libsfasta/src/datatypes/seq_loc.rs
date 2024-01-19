@@ -586,10 +586,6 @@ impl SeqLocsStore {
         log::info!("Prefetched {} seqlocs", self.total_locs);
     }
 
-    pub fn is_initialized(&self) -> bool {
-        self.block_locations.is_some()
-    }
-
     /// Open SeqLocs object from a file (buffer)
     pub fn from_buffer<R>(mut in_buf: &mut R, pos: u64) -> Result<Self, String>
     where
