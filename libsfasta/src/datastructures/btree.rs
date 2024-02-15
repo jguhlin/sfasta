@@ -85,6 +85,12 @@ impl<K, V> Node<K, V> {
                 i += 1;
             }
             self.children.as_mut().unwrap()[i].insert(key, value);
+
+            if self.children.as_ref().unwrap()[i].needs_split() {
+                let (split_key, new_node) = self.children.as_mut().unwrap()[i].split();
+                self.keys.insert(i, split_key);
+                self.children.as_mut().unwrap().insert(i + 1, new_node);
+            }
         }
     }
 
@@ -111,7 +117,11 @@ impl<K, V> Node<K, V> {
             next: self.next.take(),
             order: self.order,
         });
-        (self.keys.pop().unwrap(), new_node)
+        (new_node.keys.pop().unwrap(), new_node)
+    }
+
+    pub fn needs_split(&self) -> bool {
+        self.keys.len() == 2 * self.order as usize - 1
     }
 }
 
