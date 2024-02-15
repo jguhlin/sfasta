@@ -10,6 +10,7 @@ pub mod block_index;
 pub mod compression;
 pub mod convenience;
 pub mod conversion;
+pub mod datastructures;
 pub mod datatypes;
 pub mod dual_level_index;
 mod formats;
