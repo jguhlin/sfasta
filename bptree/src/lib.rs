@@ -1,4 +1,4 @@
-struct BPlusTree<K, V> {
+pub struct BPlusTree<K, V> {
     root: Option<Box<Node<K, V>>>,
     order: u8,
 }
@@ -80,12 +80,15 @@ impl<K, V> Node<K, V> {
                 i -= 1;
             }
         } else {
+
+            // Find the child we should insert into
             let mut i = 0;
-            while i < self.keys.len() && self.keys[i] < key {
+            while i < self.keys.len() && key > self.keys[i] {
                 i += 1;
             }
             self.children.as_mut().unwrap()[i].insert(key, value);
 
+            // Split if necessary
             if self.children.as_ref().unwrap()[i].needs_split() {
                 let (split_key, new_node) = self.children.as_mut().unwrap()[i].split();
                 self.keys.insert(i, split_key);
@@ -93,7 +96,7 @@ impl<K, V> Node<K, V> {
             }
         }
     }
-
+            
     pub fn split(&mut self) -> (K, Box<Node<K, V>>) {
         let mid = self.keys.len() / 2;
 
@@ -126,4 +129,19 @@ impl<K, V> Node<K, V> {
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests {
+    #[test]
+    fn simple_addition() {
+        let mut tree = super::BPlusTree::new(3);
+        tree.insert(1, "one");
+        tree.insert(2, "two");
+        tree.insert(3, "three");
+        tree.insert(4, "four");
+        tree.insert(5, "five");
+        tree.insert(6, "six");
+        tree.insert(7, "seven");
+        tree.insert(8, "eight");
+        tree.insert(9, "nine");
+        tree.insert(10, "ten");
+    }
+}
