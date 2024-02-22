@@ -1,0 +1,15 @@
+[package]
+name = "bptree"
+version = "0.0.1"
+authors = ["Joseph Guhlin <joseph.guhlin@gmail.com>"]
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "B+ Tree for libsfasta"
+repository = "https://github.com/jguhlin/sfasta"
+
+[lib]
+crate-type = ["rlib", "cdylib"]
+name = "libbptree"
+path = "src/lib.rs"
+
+[dependencies]

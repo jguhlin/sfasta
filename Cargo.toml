@@ -2,7 +2,8 @@
 resolver = "2"
 members = [
 	"libsfasta",
-	"sfa"
+	"sfa",
+	"bptree"
 ]
 
 # [profile.release]
