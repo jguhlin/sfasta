@@ -143,8 +143,9 @@ pub fn bench_search(c: &mut Criterion) {
 }
 
 criterion_group!(name = add_locs_large;
-    config = Criterion::default().measurement_time(std::time::Duration::from_secs(60));
-    targets = bench_large_tree, bench_search
+    config = Criterion::default().measurement_time(std::time::Duration::from_secs(10));
+    // targets = bench_large_tree, bench_search
+    targets = bench_search, bench_large_tree
 );
 
 // criterion_main!(add_locs, add_locs_large);
