@@ -136,6 +136,7 @@ impl<K, V> Node<K, V> {
     {
         if self.is_leaf {
             let i = self.keys.binary_search(&key).ok()?;
+            assert!(i < self.values.as_ref().unwrap().len());
             Some(self.values.as_ref().unwrap()[i])
         } else {
             // B+ tree search, so we need to find the correct child node
