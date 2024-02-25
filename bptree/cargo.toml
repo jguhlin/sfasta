@@ -18,6 +18,7 @@ harness = false
 
 [dependencies]
 pulp = "0.18.8"
+bumpalo = {version = "3.15.3", features = ["boxed", "collections"]}
 
 [dev-dependencies]
 criterion = "0.5.1"

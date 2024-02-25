@@ -1,17 +1,22 @@
+use bumpalo::Bump;
 use pulp::Arch;
+
 use std::marker::PhantomData;
+
+// This is an insertion-only B+ tree, deletions are simply not supported
+// Meant for a read-many, write-once on-disk database
 
 #[derive(Debug)]
 pub struct BPlusTree<'tree, K, V> {
     root: Node<K, V>,
-    order: u8,
+    order: usize,
     phantom: PhantomData<&'tree Node<K, V>>,
 }
 
 impl<'tree, K, V> BPlusTree<'tree, K, V> {
-    pub fn new(order: u8) -> Self {
+    pub fn new(order: usize) -> Self {
         BPlusTree {
-            root: Node::leaf(),
+            root: Node::leaf(order),
             order,
             phantom: PhantomData,
         }
@@ -20,25 +25,69 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
     pub fn insert(&mut self, key: K, value: V)
     where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug,
+        V: std::fmt::Debug + Copy,
     {
-        match self.root.insert(self.order as usize, key, value) {
+        match self.root.insert(self.order, key, value) {
             InsertionAction::Success => (),
             InsertionAction::NodeSplit(new_key, new_node) => {
-                let mut old_root = Node::internal();
+                let mut old_root = Node::internal(self.order);
                 std::mem::swap(&mut self.root, &mut old_root);
+
+                let old_root = Box::new(old_root);
 
                 if old_root.keys[0] < new_key {
                     self.root.keys.push(new_key);
-                    self.root.children.as_mut().unwrap().push(Box::new(old_root));
+                    self.root.children.as_mut().unwrap().push(old_root);
                     self.root.children.as_mut().unwrap().push(new_node);
-                    
                 } else {
                     self.root.keys.push(old_root.keys[0]);
                     self.root.children.as_mut().unwrap().push(new_node);
-                    self.root.children.as_mut().unwrap().push(Box::new(old_root));
+                    self.root.children.as_mut().unwrap().push(old_root);
                 }
-            },
+            }
+        }
+    }
+
+    pub fn search(&self, key: K) -> Option<V>
+    where
+        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+        V: std::fmt::Debug + Copy,
+    {
+        self.root.search(key)
+    }
+
+    // TODO: Specialization for when key is u64
+    pub fn batch_insert(&mut self, keys: Vec<K>, values: Vec<V>)
+    where
+        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default,
+        V: std::fmt::Debug + Copy,
+    {
+        unimplemented!(); // TODO: Need to do more, easy to make leaf nodes, but making internal nodes and root nodes needs more thinking
+        assert!(keys.len() == values.len());
+
+        // Sort the keys and values together
+        let mut zipped = keys.iter().zip(values.iter()).collect::<Vec<_>>();
+        zipped.sort_by(|&(&k1, _), &(k2, _)| k1.cmp(k2));
+        // let (keys, values): (Vec<&K>, Vec<&V>) = zipped.into_iter().unzip();
+
+        let mut nodes = Vec::with_capacity(keys.len() / self.order + 1);
+
+        let chunks = zipped.chunks(self.order);
+        for chunk in chunks {
+            let mut keys = Vec::with_capacity(self.order);
+            let mut values = Vec::with_capacity(self.order);
+            for (key, value) in chunk {
+                keys.push(**key);
+                values.push(**value);
+            }
+            let node = Node {
+                is_leaf: true,
+                keys,
+                children: None,
+                values: Some(values),
+                next: None,
+            };
+            nodes.push(node);
         }
     }
 }
@@ -60,23 +109,43 @@ pub struct Node<K, V> {
 }
 
 impl<K, V> Node<K, V> {
-    pub fn internal() -> Self {
+    pub fn internal(order: usize) -> Self {
         Node {
             is_leaf: false,
-            keys: Vec::new(),
-            children: Some(Vec::new()),
+            keys: Vec::with_capacity(order - 1),
+            children: Some(Vec::with_capacity(order)),
             values: None,
             next: None,
         }
     }
 
-    pub fn leaf() -> Self {
+    pub fn leaf(order: usize) -> Self {
         Node {
             is_leaf: true,
-            keys: Vec::new(),
+            keys: Vec::with_capacity(order),
             children: None,
-            values: Some(Vec::new()),
+            values: Some(Vec::with_capacity(order)),
             next: None,
+        }
+    }
+
+    pub fn search(&self, key: K) -> Option<V>
+    where
+        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+        V: std::fmt::Debug + Copy,
+    {
+        if self.is_leaf {
+            let i = self.keys.binary_search(&key).ok()?;
+            Some(self.values.as_ref().unwrap()[i])
+        } else {
+            // B+ tree search, so we need to find the correct child node
+            let i = self
+                .keys
+                .iter()
+                .map(|k| *k > key)
+                .position(|x| x)
+                .unwrap_or(self.keys.len());
+            self.children.as_ref().unwrap()[i].search(key)
         }
     }
 
@@ -85,12 +154,15 @@ impl<K, V> Node<K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
-        let i = self
-            .keys
-            .iter()
-            .map(|k| *k > key)
-            .position(|x| x)
-            .unwrap_or(self.keys.len());
+        /* let i = self
+        .keys
+        .iter()
+        .map(|k| *k > key)
+        .position(|x| x)
+        .unwrap_or(self.keys.len()); */
+
+        // Binary search
+        let i = self.keys.binary_search(&key).unwrap_or_else(|x| x);
 
         if self.is_leaf {
             // Find insertion point
@@ -100,7 +172,10 @@ impl<K, V> Node<K, V> {
         } else {
             // Insert into child node
             if self.children.as_mut().unwrap().len() <= i {
-                self.children.as_mut().unwrap().push(Box::new(Node::leaf()));
+                self.children
+                    .as_mut()
+                    .unwrap()
+                    .push(Box::new(Node::leaf(order)));
             }
             match self.children.as_mut().unwrap()[i].insert(order, key, value) {
                 InsertionAction::NodeSplit(new_key, new_node) => {
@@ -127,10 +202,9 @@ impl<K, V> Node<K, V> {
                         // This is a B+ tree, drop keys
                         new_keys.pop();
                         self.keys = new_keys;
-
                     }
                     assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1);
-                },
+                }
                 InsertionAction::Success => (),
             };
         }
@@ -143,7 +217,7 @@ impl<K, V> Node<K, V> {
         }
     }
 
-    pub fn split(&mut self) -> (K, Box<Node<K, V>>) 
+    pub fn split(&mut self) -> (K, Box<Node<K, V>>)
     where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
     {
@@ -244,5 +318,20 @@ mod tests {
                 }
             }
         }
+    }
+
+    #[test]
+    fn search() {
+        let mut tree = super::BPlusTree::new(96);
+        for i in 0..8192_u64 {
+            tree.insert(i, i);
+        }
+
+        for i in 0..8192_u64 {
+            assert_eq!(tree.search(i), Some(i));
+        }
+
+        // Find value does not exist
+        assert_eq!(tree.search(8192), None);
     }
 }
