@@ -144,7 +144,7 @@ impl<K, V> Node<K, V> {
                 .iter()
                 .map(|k| *k > key)
                 .position(|x| x)
-                .unwrap_or(self.keys.len());
+                .unwrap_or(self.keys.len() - 1);
             self.children.as_ref().unwrap()[i].search(key)
         }
     }
