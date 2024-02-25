@@ -149,7 +149,7 @@ impl<K, V> Node<K, V> {
                 .position(|x| x)
                 .unwrap_or(self.keys.len() - 1); */
             let mut i = self.keys.binary_search(&key).unwrap_or_else(|x| x);
-            if i == self.keys.len() {
+            if i == self.children.as_ref().unwrap().len() {
                 i -= 1;
             }
             assert!(i < self.children.as_ref().unwrap().len());
