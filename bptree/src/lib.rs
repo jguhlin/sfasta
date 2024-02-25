@@ -151,6 +151,7 @@ impl<K, V> Node<K, V> {
             if i == self.keys.len() {
                 i -= 1;
             }
+            assert!(i < self.children.as_ref().unwrap().len());
 
             self.children.as_ref().unwrap()[i].search(key)
         }
