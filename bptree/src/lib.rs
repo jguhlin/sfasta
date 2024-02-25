@@ -44,6 +44,9 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
                     self.root.children.as_mut().unwrap().push(new_node);
                     self.root.children.as_mut().unwrap().push(old_root);
                 }
+
+                assert!(self.root.keys.len() == self.root.children.as_ref().unwrap().len() - 1, "keys: {:#?}, children: {:#?}", self.root.keys, self.root.children.as_ref().unwrap());
+                println!("Root Key Count: {}, Children Count: {}", self.root.keys.len(), self.root.children.as_ref().unwrap().len());
             }
         }
     }
@@ -182,56 +185,44 @@ impl<K, V> Node<K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
-        /* let i = self
-        .keys
-        .iter()
-        .map(|k| *k > key)
-        .position(|x| x)
-        .unwrap_or(self.keys.len()); */
-
-        // Binary search
-        let i = self.keys.binary_search(&key).unwrap_or_else(|x| x);
+        let mut i = match self.keys.binary_search(&key) {
+            Ok(i) => i,
+            Err(i) => i,
+        };
 
         if self.is_leaf {
-            // Find insertion point
+            println!("Leaf Key Count: {}, Values Count: {}", self.keys.len(), self.values.as_ref().unwrap().len());
+            println!("Leaf Values: {:#?}", self.values.as_ref().unwrap());
+        } else {
+            println!("Internal Node Key Count: {}, Children Count: {}, Keys: {:#?}", self.keys.len(), self.children.as_ref().unwrap().len(), self.keys);
+        }
+
+        if self.is_leaf {
             self.keys.insert(i, key);
             self.values.as_mut().unwrap().insert(i, value);
             assert!(self.keys.len() == self.values.as_ref().unwrap().len());
         } else {
             // Insert into child node
             if self.children.as_mut().unwrap().len() <= i {
-                self.children
-                    .as_mut()
-                    .unwrap()
-                    .push(Box::new(Node::leaf(order)));
+                i = self.children.as_ref().unwrap().len() - 1;
             }
+
             match self.children.as_mut().unwrap()[i].insert(order, key, value) {
                 InsertionAction::NodeSplit(new_key, new_node) => {
-                    // TODO: Make assertion that new_key is in the correct place
-                    assert!(
-                        i == self
-                            .keys
-                            .iter()
-                            .map(|k| *k > new_key)
-                            .position(|x| x)
-                            .unwrap_or(self.keys.len())
-                    );
+                    let new_node_insertion = match self.keys.binary_search(&new_key) {
+                        Ok(i) => i + 1,
+                        Err(i) => i,
+                    };
 
-                    // We don't insert keys at the start or the end
-                    self.keys.insert(i, new_key);
-                    self.children.as_mut().unwrap().insert(i + 1, new_node);
+                    self.keys.insert(new_node_insertion, new_key);
+                    self.children.as_mut().unwrap().insert(new_node_insertion, new_node);
 
-                    if self.keys.len() == self.children.as_ref().unwrap().len() {
-                        // Rekey
-                        let mut new_keys = Vec::new();
-                        for child in self.children.as_ref().unwrap().iter() {
-                            new_keys.push(child.keys[0]);
-                        }
-                        // This is a B+ tree, drop the first key
-                        new_keys.remove(0);
+                    // This is just fixing a bug... delete it...
+                    /* if self.keys.len() == self.children.as_ref().unwrap().len() {
+                        let new_keys = self.children.as_ref().unwrap().iter().skip(1).map(|child| child.keys[0]).collect::<Vec<_>>();
                         self.keys = new_keys;
-                    }
-                    assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1);
+                    } */
+                    assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1, "keys: {:#?}, children: {:#?}", self.keys, self.children.as_ref().unwrap());
                 }
                 InsertionAction::Success => {
                     assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1, "keys: {:#?}, children: {:#?}", self.keys, self.children.as_ref().unwrap());
@@ -250,6 +241,7 @@ impl<K, V> Node<K, V> {
     pub fn split(&mut self) -> (K, Box<Node<K, V>>)
     where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+        V: std::fmt::Debug,
     {
         let mid = self.keys.len() / 2;
 
@@ -270,8 +262,18 @@ impl<K, V> Node<K, V> {
             keys: self.keys.split_off(mid),
             children,
             values,
-            next: self.next.take(),
+            next: None // TODO
+            // next: self.next.take(),
         });
+
+        if self.is_leaf {
+            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
+            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
+        } else {
+            assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1, "keys: {:#?}, children: {:#?}", self.keys, self.children.as_ref().unwrap());
+            assert!(new_node.keys.len() == new_node.children.as_ref().unwrap().len() - 1, "keys: {:#?}, children: {:#?}", new_node.keys, new_node.children.as_ref().unwrap());
+        }
+
         (new_node.keys[0], new_node)
     }
 
@@ -299,22 +301,10 @@ mod tests {
 
     #[test]
     fn tree_structure() {
-        let mut tree = super::BPlusTree::new(2);
-        tree.insert(1 as u64, 1 as u64);
-        tree.insert(15 as u64, 1 as u64);
-        tree.insert(0 as u64, 1 as u64);
-        tree.insert(32 as u64, 1 as u64);
-        tree.insert(128 as u64, 1 as u64);
-        tree.insert(64 as u64, 1 as u64);
-        tree.insert(31 as u64, 1 as u64);
-        tree.insert(97 as u64, 1 as u64);
-        tree.insert(95 as u64, 1 as u64);
-        tree.insert(96 as u64, 1 as u64);
-        tree.insert(1005 as u64, 1 as u64);
-        tree.insert(2 as u64, 1 as u64);
-        tree.insert(3 as u64, 1 as u64);
-        tree.insert(4 as u64, 1 as u64);
-        tree.insert(5 as u64, 1 as u64);
+        let mut tree = super::BPlusTree::new(4);
+        for i in 0..1024_u64 {
+            tree.insert(i, i);
+        }
 
         // Iterate through the tree, all leaves should have keys.len() == vales.len()
         // All internal nodes should have keys.len() == children.len() - 1
