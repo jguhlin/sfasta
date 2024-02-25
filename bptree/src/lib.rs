@@ -141,28 +141,37 @@ impl<K, V> Node<K, V> {
         } else {
             // B+ tree search, so we need to find the correct child node
             // TODO: Not certain this is correct...
-          
+
             /* let i = self
-                .keys
-                .iter()
-                .map(|k| *k > key)
-                .position(|x| x)
-                .unwrap_or(self.children.as_ref().unwrap().len() - 1); */
+            .keys
+            .iter()
+            .map(|k| *k > key)
+            .position(|x| x)
+            .unwrap_or(self.children.as_ref().unwrap().len() - 1); */
             // let mut i = self.keys.binary_search(&key).unwrap_or_else(|x| x);
             // if i == self.children.as_ref().unwrap().len() {
-                // i -= 1;
+            // i -= 1;
             // }
 
             let i = match self.keys.binary_search(&key) {
-                Ok(i) => i+1,
+                Ok(i) => i + 1,
                 Err(i) => i,
-            };           
+            };
 
             // println!("Keys: {:#?}", self.keys);
             // println!("Search Key: {:#?}", key);
             // println!("i: {}, children_len: {}", i, self.children.as_ref().unwrap().len());
 
-            assert!(i < self.children.as_ref().unwrap().len());
+            assert!(
+                i < self.children.as_ref().unwrap().len(),
+                "i: {}, children_len: {}, key: {:#?}, keys: {:#?}, keys_len: {}",
+                i,
+                self.children.as_ref().unwrap().len(),
+                key,
+                self.keys,
+                self.keys.len()
+
+            );
 
             self.children.as_ref().unwrap()[i].search(key)
         }
@@ -218,13 +227,15 @@ impl<K, V> Node<K, V> {
                         for child in self.children.as_ref().unwrap().iter() {
                             new_keys.push(child.keys[0]);
                         }
-                        // This is a B+ tree, drop keys
-                        new_keys.pop();
+                        // This is a B+ tree, drop the first key
+                        new_keys.remove(0);
                         self.keys = new_keys;
                     }
                     assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1);
                 }
-                InsertionAction::Success => (),
+                InsertionAction::Success => {
+                    assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1, "keys: {:#?}, children: {:#?}", self.keys, self.children.as_ref().unwrap());
+                },
             };
         }
 
@@ -265,7 +276,7 @@ impl<K, V> Node<K, V> {
     }
 
     pub fn needs_split(&self, order: usize) -> bool {
-        self.keys.len() >= 2 * order
+        self.keys.len() >= order
     }
 }
 
@@ -341,7 +352,6 @@ mod tests {
 
     #[test]
     fn search() {
-
         let mut tree = super::BPlusTree::new(96);
         for i in 0..1024_u64 {
             tree.insert(i, i);
@@ -362,5 +372,13 @@ mod tests {
 
         // Find value does not exist
         assert_eq!(tree.search(8192), None);
+
+        let mut tree = super::BPlusTree::new(32);
+        for i in 0..1024 * 1024 {
+            tree.insert(i as u64, i as u64);
+        }
+        for i in 0..1024 * 1024 {
+            tree.search(i as u64);
+        }
     }
 }
