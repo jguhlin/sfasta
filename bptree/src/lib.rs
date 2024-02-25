@@ -140,12 +140,18 @@ impl<K, V> Node<K, V> {
         } else {
             // B+ tree search, so we need to find the correct child node
             // TODO: Not certain this is correct...
+            /*
             let i = self
                 .keys
                 .iter()
                 .map(|k| *k > key)
                 .position(|x| x)
-                .unwrap_or(self.keys.len() - 1);
+                .unwrap_or(self.keys.len() - 1); */
+            let mut i = self.keys.binary_search(&key).unwrap_or_else(|x| x);
+            if i == self.keys.len() {
+                i -= 1;
+            }
+
             self.children.as_ref().unwrap()[i].search(key)
         }
     }
