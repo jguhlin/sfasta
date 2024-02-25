@@ -12,4 +12,12 @@ crate-type = ["rlib", "cdylib"]
 name = "libbptree"
 path = "src/lib.rs"
 
+[[bench]]
+name = "tree"
+harness = false
+
 [dependencies]
+pulp = "0.18.8"
+
+[dev-dependencies]
+criterion = "0.5.1"

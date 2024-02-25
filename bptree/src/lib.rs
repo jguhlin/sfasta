@@ -1,103 +1,152 @@
-pub struct BPlusTree<K, V> {
-    root: Option<Box<Node<K, V>>>,
+use pulp::Arch;
+use std::marker::PhantomData;
+
+#[derive(Debug)]
+pub struct BPlusTree<'tree, K, V> {
+    root: Node<K, V>,
     order: u8,
+    phantom: PhantomData<&'tree Node<K, V>>,
 }
 
-impl<K, V> BPlusTree<K, V> {
+impl<'tree, K, V> BPlusTree<'tree, K, V> {
     pub fn new(order: u8) -> Self {
-        BPlusTree { root: None, order }
+        BPlusTree {
+            root: Node::leaf(),
+            order,
+            phantom: PhantomData,
+        }
     }
 
     pub fn insert(&mut self, key: K, value: V)
     where
-        K: PartialOrd + PartialEq,
+        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+        V: std::fmt::Debug,
     {
-        if self.root.is_none() {
-            self.root = Some(Box::new(Node::leaf(self.order)));
-        }
+        match self.root.insert(self.order as usize, key, value) {
+            InsertionAction::Success => (),
+            InsertionAction::NodeSplit(new_key, new_node) => {
+                let mut old_root = Node::internal();
+                std::mem::swap(&mut self.root, &mut old_root);
 
-        let mut root = self.root.take().unwrap();
-        if root.keys.len() == 2 * self.order as usize - 1 {
-            let (split_key, new_node) = root.split();
-            let mut new_root = Box::new(Node::root(self.order));
-            new_root.keys.push(split_key);
-            new_root.children.as_mut().unwrap().push(root);
-            new_root.children.as_mut().unwrap().push(new_node);
-            root = new_root;
+                if old_root.keys[0] < new_key {
+                    self.root.keys.push(new_key);
+                    self.root.children.as_mut().unwrap().push(Box::new(old_root));
+                    self.root.children.as_mut().unwrap().push(new_node);
+                    
+                } else {
+                    self.root.keys.push(old_root.keys[0]);
+                    self.root.children.as_mut().unwrap().push(new_node);
+                    self.root.children.as_mut().unwrap().push(Box::new(old_root));
+                }
+            },
         }
-        root.insert(key, value);
-        self.root = Some(root);
     }
 }
 
+// Must use
+#[must_use]
+pub enum InsertionAction<K, V> {
+    Success,
+    NodeSplit(K, Box<Node<K, V>>),
+}
+
+#[derive(Debug)]
 pub struct Node<K, V> {
     pub is_leaf: bool,
     pub keys: Vec<K>,
     pub children: Option<Vec<Box<Node<K, V>>>>,
     pub values: Option<Vec<V>>,
     pub next: Option<Box<Node<K, V>>>, // Does this need to be a u64 until loaded?
-
-    // TODO: don't serialize this...
-    pub order: u8,
 }
 
 impl<K, V> Node<K, V> {
-    pub fn root(order: u8) -> Self {
+    pub fn internal() -> Self {
         Node {
             is_leaf: false,
             keys: Vec::new(),
             children: Some(Vec::new()),
             values: None,
             next: None,
-            order,
         }
     }
 
-    pub fn leaf(order: u8) -> Self {
+    pub fn leaf() -> Self {
         Node {
             is_leaf: true,
             keys: Vec::new(),
             children: None,
             values: Some(Vec::new()),
             next: None,
-            order,
         }
     }
 
-    pub fn insert(&mut self, key: K, value: V)
+    pub fn insert(&mut self, order: usize, key: K, value: V) -> InsertionAction<K, V>
     where
-        K: PartialOrd + PartialEq,
+        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+        V: std::fmt::Debug,
     {
+        let i = self
+            .keys
+            .iter()
+            .map(|k| *k > key)
+            .position(|x| x)
+            .unwrap_or(self.keys.len());
+
         if self.is_leaf {
-            self.keys.push(key);
-            self.values.as_mut().unwrap().push(value);
-
-            // Sort keys and values
-            let mut i = self.keys.len() - 1;
-            while i > 0 && self.keys[i] < self.keys[i - 1] {
-                self.keys.swap(i, i - 1);
-                self.values.as_mut().unwrap().swap(i, i - 1);
-                i -= 1;
-            }
+            // Find insertion point
+            self.keys.insert(i, key);
+            self.values.as_mut().unwrap().insert(i, value);
+            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
         } else {
-
-            // Find the child we should insert into
-            let mut i = 0;
-            while i < self.keys.len() && key > self.keys[i] {
-                i += 1;
+            // Insert into child node
+            if self.children.as_mut().unwrap().len() <= i {
+                self.children.as_mut().unwrap().push(Box::new(Node::leaf()));
             }
-            self.children.as_mut().unwrap()[i].insert(key, value);
+            match self.children.as_mut().unwrap()[i].insert(order, key, value) {
+                InsertionAction::NodeSplit(new_key, new_node) => {
+                    // TODO: Make assertion that new_key is in the correct place
+                    assert!(
+                        i == self
+                            .keys
+                            .iter()
+                            .map(|k| *k > new_key)
+                            .position(|x| x)
+                            .unwrap_or(self.keys.len())
+                    );
 
-            // Split if necessary
-            if self.children.as_ref().unwrap()[i].needs_split() {
-                let (split_key, new_node) = self.children.as_mut().unwrap()[i].split();
-                self.keys.insert(i, split_key);
-                self.children.as_mut().unwrap().insert(i + 1, new_node);
-            }
+                    // We don't insert keys at the start or the end
+                    self.keys.insert(i, new_key);
+                    self.children.as_mut().unwrap().insert(i + 1, new_node);
+
+                    if self.keys.len() == self.children.as_ref().unwrap().len() {
+                        // Rekey
+                        let mut new_keys = Vec::new();
+                        for child in self.children.as_ref().unwrap().iter() {
+                            new_keys.push(child.keys[0]);
+                        }
+                        // This is a B+ tree, drop keys
+                        new_keys.pop();
+                        self.keys = new_keys;
+
+                    }
+                    assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1);
+                },
+                InsertionAction::Success => (),
+            };
+        }
+
+        if self.needs_split(order) {
+            let (new_key, new_node) = self.split();
+            InsertionAction::NodeSplit(new_key, new_node)
+        } else {
+            InsertionAction::Success
         }
     }
-            
-    pub fn split(&mut self) -> (K, Box<Node<K, V>>) {
+
+    pub fn split(&mut self) -> (K, Box<Node<K, V>>) 
+    where
+        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    {
         let mid = self.keys.len() / 2;
 
         let values = if self.values.is_some() {
@@ -112,26 +161,25 @@ impl<K, V> Node<K, V> {
             None
         };
 
-        let mut new_node = Box::new(Node {
+        let new_node = Box::new(Node {
             is_leaf: self.is_leaf,
             keys: self.keys.split_off(mid),
             children,
             values,
             next: self.next.take(),
-            order: self.order,
         });
-        (new_node.keys.pop().unwrap(), new_node)
+        (new_node.keys[0], new_node)
     }
 
-    pub fn needs_split(&self) -> bool {
-        self.keys.len() == 2 * self.order as usize - 1
+    pub fn needs_split(&self, order: usize) -> bool {
+        self.keys.len() >= 2 * order
     }
 }
 
 #[cfg(test)]
 mod tests {
     #[test]
-    fn simple_addition() {
+    fn simple_insertions() {
         let mut tree = super::BPlusTree::new(3);
         tree.insert(1, "one");
         tree.insert(2, "two");
@@ -143,5 +191,58 @@ mod tests {
         tree.insert(8, "eight");
         tree.insert(9, "nine");
         tree.insert(10, "ten");
+    }
+
+    #[test]
+    fn tree_structure() {
+        let mut tree = super::BPlusTree::new(2);
+        tree.insert(1 as u64, 1 as u64);
+        tree.insert(15 as u64, 1 as u64);
+        tree.insert(0 as u64, 1 as u64);
+        tree.insert(32 as u64, 1 as u64);
+        tree.insert(128 as u64, 1 as u64);
+        tree.insert(64 as u64, 1 as u64);
+        tree.insert(31 as u64, 1 as u64);
+        tree.insert(97 as u64, 1 as u64);
+        tree.insert(95 as u64, 1 as u64);
+        tree.insert(96 as u64, 1 as u64);
+        tree.insert(1005 as u64, 1 as u64);
+        tree.insert(2 as u64, 1 as u64);
+        tree.insert(3 as u64, 1 as u64);
+        tree.insert(4 as u64, 1 as u64);
+        tree.insert(5 as u64, 1 as u64);
+
+        // Iterate through the tree, all leaves should have keys.len() == vales.len()
+        // All internal nodes should have keys.len() == children.len() - 1
+        let mut stack = vec![&tree.root];
+        while let Some(node) = stack.pop() {
+            if node.is_leaf {
+                println!("{:#?}", node);
+                assert_eq!(node.keys.len(), node.values.as_ref().unwrap().len());
+            } else {
+                println!("{:#?}", node);
+                assert_eq!(node.keys.len(), node.children.as_ref().unwrap().len() - 1);
+                for child in node.children.as_ref().unwrap().iter() {
+                    stack.push(child);
+                }
+            }
+        }
+
+        // Check that the keys are ordered
+        let mut stack = vec![&tree.root];
+        while let Some(node) = stack.pop() {
+            if node.is_leaf {
+                for i in 1..node.keys.len() {
+                    assert!(node.keys[i - 1] < node.keys[i]);
+                }
+            } else {
+                for i in 1..node.keys.len() {
+                    assert!(node.keys[i - 1] < node.keys[i]);
+                }
+                for child in node.children.as_ref().unwrap().iter() {
+                    stack.push(child);
+                }
+            }
+        }
     }
 }
