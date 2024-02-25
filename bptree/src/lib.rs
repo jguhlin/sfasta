@@ -147,8 +147,7 @@ impl<K, V> Node<K, V> {
                 .map(|k| *k > key)
                 .position(|x| x)
                 .unwrap_or(self.keys.len() - 1); */
-            let arch = Arch::new();
-            let mut i = arch.dispatch(|| self.keys.binary_search(&key).unwrap_or_else(|x| x));
+            let mut i = self.keys.binary_search(&key).unwrap_or_else(|x| x);
             if i == self.keys.len() {
                 i -= 1;
             }
