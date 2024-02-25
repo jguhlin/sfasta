@@ -141,20 +141,27 @@ impl<K, V> Node<K, V> {
         } else {
             // B+ tree search, so we need to find the correct child node
             // TODO: Not certain this is correct...
-            
-            let i = self
+          
+            /* let i = self
                 .keys
                 .iter()
                 .map(|k| *k > key)
                 .position(|x| x)
-                .unwrap_or(self.children.as_ref().unwrap().len() - 1);
+                .unwrap_or(self.children.as_ref().unwrap().len() - 1); */
             // let mut i = self.keys.binary_search(&key).unwrap_or_else(|x| x);
-            // println!("Keys: {:#?}", self.keys);
-            // println!("Search Key: {:#?}", key);
-            // println!("i: {}, children_len: {}", i, self.children.as_ref().unwrap().len());
             // if i == self.children.as_ref().unwrap().len() {
                 // i -= 1;
             // }
+
+            let i = match self.keys.binary_search(&key) {
+                Ok(i) => i+1,
+                Err(i) => i,
+            };           
+
+            // println!("Keys: {:#?}", self.keys);
+            // println!("Search Key: {:#?}", key);
+            // println!("i: {}, children_len: {}", i, self.children.as_ref().unwrap().len());
+
             assert!(i < self.children.as_ref().unwrap().len());
 
             self.children.as_ref().unwrap()[i].search(key)
@@ -334,6 +341,16 @@ mod tests {
 
     #[test]
     fn search() {
+
+        let mut tree = super::BPlusTree::new(96);
+        for i in 0..1024_u64 {
+            tree.insert(i, i);
+        }
+
+        for i in 0..1024_u64 {
+            assert_eq!(tree.search(i), Some(i));
+        }
+
         let mut tree = super::BPlusTree::new(96);
         for i in 0..8192_u64 {
             tree.insert(i, i);
