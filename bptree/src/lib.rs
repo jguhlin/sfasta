@@ -1,3 +1,5 @@
+#![feature(is_sorted)]
+
 use bumpalo::Bump;
 use pulp::Arch;
 
@@ -27,6 +29,7 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug + Copy,
     {
+        assert!(self.root.keys.is_sorted());
         match self.root.insert(self.order, key, value) {
             InsertionAction::Success => (),
             InsertionAction::NodeSplit(new_key, new_node) => {
@@ -138,43 +141,21 @@ impl<K, V> Node<K, V> {
         V: std::fmt::Debug + Copy,
     {
         if self.is_leaf {
-            let i = self.keys.binary_search(&key).ok()?;
+            let i = match self.keys.binary_search(&key) {
+                Ok(i) => i,
+                Err(_) => return None, // This is the leaf, if it's not found here it won't be found
+            };
+            // Leaf K->V are 1 to 1 mapping
             assert!(i < self.values.as_ref().unwrap().len());
             Some(self.values.as_ref().unwrap()[i])
         } else {
             // B+ tree search, so we need to find the correct child node
             // TODO: Not certain this is correct...
 
-            /* let i = self
-            .keys
-            .iter()
-            .map(|k| *k > key)
-            .position(|x| x)
-            .unwrap_or(self.children.as_ref().unwrap().len() - 1); */
-            // let mut i = self.keys.binary_search(&key).unwrap_or_else(|x| x);
-            // if i == self.children.as_ref().unwrap().len() {
-            // i -= 1;
-            // }
-
             let i = match self.keys.binary_search(&key) {
                 Ok(i) => i + 1,
                 Err(i) => i,
             };
-
-            // println!("Keys: {:#?}", self.keys);
-            // println!("Search Key: {:#?}", key);
-            // println!("i: {}, children_len: {}", i, self.children.as_ref().unwrap().len());
-
-            assert!(
-                i < self.children.as_ref().unwrap().len(),
-                "i: {}, children_len: {}, key: {:#?}, keys: {:#?}, keys_len: {}",
-                i,
-                self.children.as_ref().unwrap().len(),
-                key,
-                self.keys,
-                self.keys.len()
-
-            );
 
             self.children.as_ref().unwrap()[i].search(key)
         }
@@ -185,17 +166,11 @@ impl<K, V> Node<K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
+        assert!(self.keys.is_sorted());
         let mut i = match self.keys.binary_search(&key) {
             Ok(i) => i,
             Err(i) => i,
         };
-
-        if self.is_leaf {
-            println!("Leaf Key Count: {}, Values Count: {}", self.keys.len(), self.values.as_ref().unwrap().len());
-            println!("Leaf Values: {:#?}", self.values.as_ref().unwrap());
-        } else {
-            println!("Internal Node Key Count: {}, Children Count: {}, Keys: {:#?}", self.keys.len(), self.children.as_ref().unwrap().len(), self.keys);
-        }
 
         if self.is_leaf {
             self.keys.insert(i, key);
@@ -203,14 +178,14 @@ impl<K, V> Node<K, V> {
             assert!(self.keys.len() == self.values.as_ref().unwrap().len());
         } else {
             // Insert into child node
-            if self.children.as_mut().unwrap().len() <= i {
-                i = self.children.as_ref().unwrap().len() - 1;
+            if i >= self.children.as_mut().unwrap().len()  {
+                i = self.children.as_ref().unwrap().len().saturating_sub(1);
             }
 
             match self.children.as_mut().unwrap()[i].insert(order, key, value) {
                 InsertionAction::NodeSplit(new_key, new_node) => {
                     let new_node_insertion = match self.keys.binary_search(&new_key) {
-                        Ok(i) => i + 1,
+                        Ok(i) => i,
                         Err(i) => i,
                     };
 
@@ -230,6 +205,8 @@ impl<K, V> Node<K, V> {
             };
         }
 
+        assert!(self.keys.is_sorted());
+
         if self.needs_split(order) {
             let (new_key, new_node) = self.split();
             InsertionAction::NodeSplit(new_key, new_node)
@@ -243,7 +220,12 @@ impl<K, V> Node<K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
-        let mid = self.keys.len() / 2;
+        assert!(self.keys.is_sorted());
+        let mid = if self.is_leaf {
+            self.keys.len() / 2
+        } else {
+            self.children.as_ref().unwrap().len() / 2
+        };
 
         let values = if self.values.is_some() {
             Some(self.values.as_mut().unwrap().split_off(mid))
@@ -252,14 +234,21 @@ impl<K, V> Node<K, V> {
         };
 
         let children = if self.children.is_some() {
-            Some(self.children.as_mut().unwrap().split_off(mid))
+            let children = self.children.as_mut().unwrap().split_off(mid);
+            assert!(children.len() > 1, "Split off: {}, Node: {:#?}, Children: {:#?}", mid, self, self.children.as_ref().unwrap());
+            Some(children)
         } else {
             None
         };
 
+        // Re-key original node as well
+        if !self.is_leaf {
+            self.keys = self.children.as_ref().unwrap().iter().skip(1).map(|child| child.keys[0]).collect::<Vec<_>>();
+        }
+
         let new_node = Box::new(Node {
             is_leaf: self.is_leaf,
-            keys: self.keys.split_off(mid),
+            keys,
             children,
             values,
             next: None // TODO
@@ -286,7 +275,7 @@ impl<K, V> Node<K, V> {
 mod tests {
     #[test]
     fn simple_insertions() {
-        let mut tree = super::BPlusTree::new(3);
+        let mut tree = super::BPlusTree::new(6);
         tree.insert(1, "one");
         tree.insert(2, "two");
         tree.insert(3, "three");
@@ -301,7 +290,7 @@ mod tests {
 
     #[test]
     fn tree_structure() {
-        let mut tree = super::BPlusTree::new(4);
+        let mut tree = super::BPlusTree::new(8);
         for i in 0..1024_u64 {
             tree.insert(i, i);
         }
