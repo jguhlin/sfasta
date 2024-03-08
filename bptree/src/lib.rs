@@ -243,6 +243,7 @@ impl<K, V> Node<K, V> {
 
         // Re-key original node as well
         if !self.is_leaf {
+            // TODO: This is likely where the error is!
             self.keys = self.children.as_ref().unwrap().iter().skip(1).map(|child| child.keys[0]).collect::<Vec<_>>();
         }
 
