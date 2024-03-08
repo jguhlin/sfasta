@@ -246,6 +246,8 @@ impl<K, V> Node<K, V> {
             self.keys = self.children.as_ref().unwrap().iter().skip(1).map(|child| child.keys[0]).collect::<Vec<_>>();
         }
 
+        let keys = self.keys.split_off(mid);
+
         let new_node = Box::new(Node {
             is_leaf: self.is_leaf,
             keys,
@@ -273,6 +275,29 @@ impl<K, V> Node<K, V> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn basic_tree() {
+        let mut tree = super::BPlusTree::new(6);
+        tree.insert(0, 0);
+
+        println!("{:#?}", tree);
+
+        for i in 1..7 {
+            tree.insert(i, i);
+        }
+
+        println!("{:#?}", tree);
+
+        for i in 8..18 {
+            tree.insert(i, i);
+        }
+        println!("{:#?}", tree);
+
+        assert!(tree.root.is_leaf);
+        panic!("Not implemented");
+        
+    }
+
     #[test]
     fn simple_insertions() {
         let mut tree = super::BPlusTree::new(6);
