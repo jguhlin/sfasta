@@ -49,6 +49,7 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
                         self.root.children.as_mut().unwrap().push(old_root);
                     }
                 } else {
+                    println!("New Key: {:?}", new_key);
                     // Root is an internal node, just add the new node
                     self.root.keys.push(new_key);
                     self.root.children.as_mut().unwrap().push(new_node);
@@ -191,7 +192,11 @@ impl<K, V> Node<K, V> {
             self.values.as_mut().unwrap().insert(i, value);
             assert!(self.keys.len() == self.values.as_ref().unwrap().len());
         } else {
-            assert!(self.keys.len() + 1 == self.children.as_ref().unwrap().len(), "{:#?}", self);
+            assert!(
+                self.keys.len() + 1 == self.children.as_ref().unwrap().len(),
+                "{:#?}",
+                self
+            );
             // Insert into child node
             if i >= self.children.as_mut().unwrap().len() {
                 i = self.children.as_ref().unwrap().len().saturating_sub(1);
@@ -275,7 +280,7 @@ impl<K, V> Node<K, V> {
 
         let children = if self.children.is_some() {
             assert!(mid < self.children.as_ref().unwrap().len());
-            let children = self.children.as_mut().unwrap().split_off(mid);
+            let children = self.children.as_mut().unwrap().split_off(mid + 1);
             assert!(
                 children.len() > 1,
                 "Split off: {}, Node: {:#?}, Children: {:#?}",
@@ -291,7 +296,7 @@ impl<K, V> Node<K, V> {
         assert!(mid < self.keys.len());
         let keys = self.keys.split_off(mid);
 
-        let new_node = Box::new(Node {
+        let mut new_node = Box::new(Node {
             is_leaf: self.is_leaf,
             keys,
             children,
@@ -305,7 +310,6 @@ impl<K, V> Node<K, V> {
             assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
         } else {
             // Last key from original node gets deleted
-            self.keys.pop();
 
             assert!(
                 self.keys.len() == self.children.as_ref().unwrap().len() - 1,
@@ -323,11 +327,28 @@ impl<K, V> Node<K, V> {
             assert!(self.keys.len() == self.values.as_ref().unwrap().len());
             assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
         } else {
-            assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1);
-            assert!(new_node.keys.len() == new_node.children.as_ref().unwrap().len() - 1);
+            assert!(
+                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
+                "{} {}",
+                self.keys.len(),
+                self.children.as_ref().unwrap().len()
+            );
+            assert!(
+                new_node.keys.len() == new_node.children.as_ref().unwrap().len(),
+                "{} {} {:#?}",
+                new_node.keys.len(),
+                new_node.children.as_ref().unwrap().len(),
+                new_node
+            );
         }
 
-        (new_node.keys[0], new_node)
+        let new_key = if self.is_leaf {
+            new_node.keys[0]
+        } else {
+            new_node.keys.pop().unwrap()
+        };
+
+        (new_key, new_node)
     }
 
     pub fn needs_split(&self, order: usize) -> bool {
@@ -459,10 +480,14 @@ mod tests {
 
     #[test]
     fn search() {
-        let mut tree = super::BPlusTree::new(96);
+        let mut tree = super::BPlusTree::new(8);
         for i in 0..1024_u64 {
             tree.insert(i, i);
         }
+
+        // When order is 8, 64 can't be found
+        // Let's do the search "manually"
+        println!("{:?}", tree.root.keys);
 
         for i in 0..1024_u64 {
             assert_eq!(tree.search(i), Some(i));
@@ -480,12 +505,16 @@ mod tests {
         // Find value does not exist
         assert_eq!(tree.search(8192), None);
 
-        let mut tree = super::BPlusTree::new(32);
-        for i in 0..1024 * 1024 {
+        let mut tree = super::BPlusTree::new(64);
+        for i in 0..(1024 * 1024) {
             tree.insert(i as u64, i as u64);
         }
-        for i in 0..1024 * 1024 {
-            tree.search(i as u64);
+        for i in 0..(1024 * 1024) {
+            assert!(tree.search(i as u64) == Some(i as u64), "i: {}", i);
         }
+
+        // Things that should not be found
+        assert!(tree.search(1024 * 1024) == None);
+        assert!(tree.search(1024 * 1024 + 1) == None);
     }
 }
