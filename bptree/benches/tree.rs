@@ -1,5 +1,7 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
+use bumpalo::Bump;
+
 use libbptree::*;
 
 pub fn bench_large_tree(c: &mut Criterion) {
@@ -62,6 +64,23 @@ pub fn bench_large_tree(c: &mut Criterion) {
                     tree.insert(i, i);
                 }
                 tree
+            });
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("Build Tree Bumpalo - 128_369_206 Elements");
+    group.sample_size(20);
+
+    for order in [32, 64, 128, 256, 512, 1024, 2048].iter() {
+        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
+            b.iter(|| {
+                let bump = Bump::new();
+                let tree = bump.alloc(BPlusTree::new(order));
+                for i in 0..128_369_206_u64 {
+                    tree.insert(i, i);
+                }
+                bump
             });
         });
     }
@@ -129,6 +148,25 @@ pub fn bench_search(c: &mut Criterion) {
     for order in [32, 64, 128, 256, 512, 1024, 2048].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             let mut tree = BPlusTree::new(order);
+            for i in 0..128_369_206 {
+                tree.insert(i as u64, i as u64);
+            }
+            b.iter(|| {
+                for i in (0..128_369_206).step_by(1000) {
+                    tree.search(i as u64);
+                }
+            })
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("Search Tree Bumpalo - 128_369_206 Elements");
+    group.sample_size(100);
+
+    for order in [32, 64, 128, 256, 512, 1024, 2048].iter() {
+        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
+            let bump = Bump::new();
+            let tree = bump.alloc(BPlusTree::new(order));
             for i in 0..128_369_206 {
                 tree.insert(i as u64, i as u64);
             }
