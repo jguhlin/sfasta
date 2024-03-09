@@ -1,7 +1,16 @@
 #![feature(is_sorted)]
 
-use bumpalo::Bump;
-use pulp::Arch;
+// Ideas:
+// Bumpalo / pulp to speed things up?
+// succinct data structures to compact storage?
+//
+// Todo:
+// Make storable on disk
+// Batch insertion
+// Able to load only part of the tree from disk
+// 
+// use bumpalo::Bump;
+// use pulp::Arch;
 
 use std::marker::PhantomData;
 
