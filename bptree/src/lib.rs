@@ -155,8 +155,6 @@ impl<K, V> Node<K, V> {
             Some(self.values.as_ref().unwrap()[i])
         } else {
             // B+ tree search, so we need to find the correct child node
-            // TODO: Not certain this is correct...
-
             let i = match self.keys.binary_search(&key) {
                 Ok(i) => i + 1,
                 Err(i) => i,
@@ -172,7 +170,7 @@ impl<K, V> Node<K, V> {
         V: std::fmt::Debug,
     {
         assert!(self.keys.is_sorted());
-        let mut i = match self.keys.binary_search(&key) {
+        let i = match self.keys.binary_search(&key) {
             Ok(i) => i,
             Err(i) => i,
         };
