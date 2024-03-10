@@ -75,7 +75,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("Tree Build Comparison");
+    let mut group = c.benchmark_group("128m Build");
     group.sample_size(10);
 
     for order in [32, 128].iter() {
