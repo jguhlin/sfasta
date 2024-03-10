@@ -74,6 +74,22 @@ pub fn bench_large_tree(c: &mut Criterion) {
     }
     group.finish();
 
+    let mut group = c.benchmark_group("Build Tree Bumpalo - 1 Million Elements");
+    group.sample_size(20);
+
+    for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
+        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
+            b.iter(|| {
+                let bump = Bump::new();
+                let tree = bump.alloc(BPlusTree::new(order));
+                for i in 0..1024 * 1024_u64 {
+                    tree.insert(i, i);
+                }
+            });
+        });
+    }
+    group.finish();
+
     let mut group = c.benchmark_group("Build Tree - 128_369_206 Elements");
     group.sample_size(20);
 
