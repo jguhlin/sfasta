@@ -127,7 +127,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     let values = black_box(values);
 
     let mut group = c.benchmark_group("Build Tree Fractal - 128_369_206 Elements");
-    group.sample_size(20);
+    group.sample_size(2);
 
     for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
@@ -145,7 +145,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
 
 
     let mut group = c.benchmark_group("Build Tree SortedVec - 128_369_206 Elements");
-    group.sample_size(20);
+    group.sample_size(2);
 
     for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
@@ -161,7 +161,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     group.finish();
 
     let mut group = c.benchmark_group("Build Tree - 128_369_206 Elements");
-    group.sample_size(20);
+    group.sample_size(2);
 
     for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
