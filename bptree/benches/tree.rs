@@ -196,7 +196,7 @@ criterion_group!(name = add_locs_large;
     config = Criterion::default().measurement_time(std::time::Duration::from_secs(10));
     // targets = bench_large_tree, bench_search
     // targets = bench_search, bench_large_tree
-    targets = bench_large_tree
+    targets = bench_large_tree, bench_search
 );
 
 // criterion_main!(add_locs, add_locs_large);
