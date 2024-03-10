@@ -9,25 +9,25 @@
 //
 // use bumpalo::Bump;
 use pulp::Arch;
-use ordsearch::OrderedCollection;
 
 use std::marker::PhantomData;
+use eytzinger::SliceExt;
 
 // This is an insertion-only B+ tree, deletions are simply not supported
 // Meant for a read-many, write-once on-disk database
 
 #[derive(Debug)]
-pub struct OrdSearchTree<'tree, K, V> {
+pub struct EytzingerTree<'tree, K, V> {
     root: Node<K, V>,
     order: usize,
     phantom: PhantomData<&'tree Node<K, V>>,
 }
 
-impl<'tree, K, V> OrdSearchTree<'tree, K, V> {
+impl<'tree, K, V> EytzingerTree<'tree, K, V> {
     pub fn new(order: usize) -> Self {
         let mut root = Node::leaf(order);
         root.is_root = true;
-        OrdSearchTree {
+        EytzingerTree {
             root,
             order,
             phantom: PhantomData,
@@ -450,7 +450,7 @@ mod tests {
 
     #[test]
     fn basic_tree() {
-        let mut tree = super::OrdSearchTree::new(6);
+        let mut tree = super::EytzingerTree::new(6);
         tree.insert(0, 0);
 
         for i in 1..=7 {
@@ -465,7 +465,7 @@ mod tests {
 
     #[test]
     fn simple_insertions() {
-        let mut tree = super::OrdSearchTree::new(6);
+        let mut tree = super::EytzingerTree::new(6);
         tree.insert(1, "one");
         tree.insert(2, "two");
         tree.insert(3, "three");
@@ -480,7 +480,7 @@ mod tests {
 
     #[test]
     fn tree_structure() {
-        let mut tree = super::OrdSearchTree::new(8);
+        let mut tree = super::EytzingerTree::new(8);
         for i in 0..1024_u64 {
             tree.insert(i, i);
         }
@@ -524,7 +524,7 @@ mod tests {
 
     #[test]
     fn search() {
-        let mut tree = super::OrdSearchTree::new(8);
+        let mut tree = super::EytzingerTree::new(8);
         for i in 0..1024_u64 {
             tree.insert(i, i);
         }
@@ -536,7 +536,7 @@ mod tests {
             assert_eq!(tree.search(i), Some(i));
         }
 
-        let mut tree = super::OrdSearchTree::new(96);
+        let mut tree = super::EytzingerTree::new(96);
         for i in 0..8192_u64 {
             tree.insert(i, i);
         }
@@ -548,7 +548,7 @@ mod tests {
         // Find value does not exist
         assert_eq!(tree.search(8192), None);
 
-        let mut tree = super::OrdSearchTree::new(64);
+        let mut tree = super::EytzingerTree::new(64);
         for i in 0..(1024 * 1024) {
             tree.insert(i as u64, i as u64);
         }
@@ -561,7 +561,7 @@ mod tests {
         assert!(tree.search(1024 * 1024 + 1) == None);
 
         // New tree
-        let mut tree = super::OrdSearchTree::new(8);
+        let mut tree = super::EytzingerTree::new(8);
         for i in 1024..2048_u64 {
             tree.insert(i, i);
         }

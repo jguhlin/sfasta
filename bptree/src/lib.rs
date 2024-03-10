@@ -2,8 +2,8 @@
 
 pub mod bplustree;
 pub mod fractal;
-pub mod ordsearch;
+pub mod eytzinger;
 
 pub use bplustree::*;
 pub use fractal::*;
-pub use ordsearch::*;
+pub use eytzinger::*;

@@ -8,7 +8,6 @@
 // Able to load only part of the tree from disk
 //
 // use bumpalo::Bump;
-use ordsearch::OrderedCollection;
 use pulp::Arch;
 
 use std::marker::PhantomData;
