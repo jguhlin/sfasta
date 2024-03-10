@@ -6,11 +6,13 @@ use libbptree::bplustree::*;
 use libbptree::sorted_vec::*;
 // use libbptree::fractal::*;
 
+// Early tests had bumpalo increasing performance, but that is no longer the case...
+
 pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("Build Tree - 64");
     group.sample_size(500);
 
-    for order in [8, 64, 256, 1024, 8192, 32768].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             b.iter(|| {
                 let mut tree = BPlusTree::new(order);
@@ -26,7 +28,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("Build Tree SortedVec - 64");
     group.sample_size(500);
 
-    for order in [8, 64, 256, 1024, 8192, 32768].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             b.iter(|| {
                 let mut tree = SortedVecTree::new(order);
@@ -38,7 +40,6 @@ pub fn bench_large_tree(c: &mut Criterion) {
         });
     }
     group.finish();
-
 
     /*
 
@@ -64,7 +65,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     group.sample_size(500);
 
     //for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             b.iter(|| {
                 let mut tree = BPlusTree::new(order);
@@ -80,8 +81,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("Build Tree SortedVec - 1024");
     group.sample_size(500);
 
-    //for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             b.iter(|| {
                 let mut tree = SortedVecTree::new(order);
@@ -97,8 +97,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("Build Tree - 1 Million Elements");
     group.sample_size(20);
 
-    //for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             b.iter(|| {
                 let mut tree = BPlusTree::new(order);
@@ -114,8 +113,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("Build Tree SortedVec - 1 Million Elements");
     group.sample_size(20);
 
-    //for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             b.iter(|| {
                 let mut tree = SortedVecTree::new(order);
@@ -128,19 +126,17 @@ pub fn bench_large_tree(c: &mut Criterion) {
     }
     group.finish();
 
-
-    let mut group = c.benchmark_group("Build Tree Bumpalo - 1 Million Elements");
+    let mut group = c.benchmark_group("Build Tree SortedVec - 128_369_206 Elements");
     group.sample_size(20);
 
-    //for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             b.iter(|| {
-                let bump = Bump::new();
-                let tree = bump.alloc(BPlusTree::new(order));
-                for i in 0..1024 * 1024_u64 {
+                let mut tree = SortedVecTree::new(order);
+                for i in 0..128_369_206_u64 {
                     tree.insert(i, i);
                 }
+                tree
             });
         });
     }
@@ -149,8 +145,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("Build Tree - 128_369_206 Elements");
     group.sample_size(20);
 
-    // for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             b.iter(|| {
                 let mut tree = BPlusTree::new(order);
@@ -163,48 +158,13 @@ pub fn bench_large_tree(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("Build Tree SortedVec - 128_369_206 Elements");
-    group.sample_size(20);
-
-    // for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
-        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
-            b.iter(|| {
-                let mut tree = SortedVecTree::new(order);
-                for i in 0..128_369_206_u64 {
-                    tree.insert(i, i);
-                }
-                tree
-            });
-        });
-    }
-    group.finish();
-
-    let mut group = c.benchmark_group("Build Tree Bumpalo - 128_369_206 Elements");
-    group.sample_size(20);
-
-    // for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
-        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
-            b.iter(|| {
-                let bump = Bump::new();
-                let tree = bump.alloc(BPlusTree::new(order));
-                for i in 0..128_369_206_u64 {
-                    tree.insert(i, i);
-                }
-                bump
-            });
-        });
-    }
-    group.finish();
 }
 
 pub fn bench_search(c: &mut Criterion) {
     let mut group = c.benchmark_group("Search Tree - 64");
     group.sample_size(500);
 
-    // for order in [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             let mut tree = BPlusTree::new(order);
             for i in 0..64_u64 {
@@ -222,8 +182,7 @@ pub fn bench_search(c: &mut Criterion) {
     let mut group = c.benchmark_group("Search Tree - 1024");
     group.sample_size(500);
 
-    // for order in [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             let mut tree = BPlusTree::new(order);
             for i in 0..1024_u64 {
@@ -241,8 +200,7 @@ pub fn bench_search(c: &mut Criterion) {
     let mut group = c.benchmark_group("Search Tree - 1 Million Elements");
     group.sample_size(100);
 
-    //for order in [32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             let mut tree = BPlusTree::new(order);
             for i in 0..1024 * 1024 {
@@ -260,8 +218,7 @@ pub fn bench_search(c: &mut Criterion) {
     let mut group = c.benchmark_group("Search Tree - 128_369_206 Elements");
     group.sample_size(100);
 
-    //for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
+    for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
             let mut tree = BPlusTree::new(order);
             for i in 0..128_369_206 {
@@ -276,25 +233,6 @@ pub fn bench_search(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("Search Tree Bumpalo - 128_369_206 Elements");
-    group.sample_size(100);
-
-    // for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
-    for order in [8, 64, 256, 1024, 8192, 16384, 32768, 65536, 131072].iter() {
-        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
-            let bump = Bump::new();
-            let tree = bump.alloc(BPlusTree::new(order));
-            for i in 0..128_369_206 {
-                tree.insert(i as u64, i as u64);
-            }
-            b.iter(|| {
-                for i in (0..128_369_206).step_by(1000) {
-                    tree.search(i as u64);
-                }
-            })
-        });
-    }
-    group.finish();
 }
 
 criterion_group!(name = add_locs_large;

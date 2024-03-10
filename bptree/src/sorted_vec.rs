@@ -211,10 +211,7 @@ where
                     if i >= self.children.as_ref().unwrap().len() {
                         self.children.as_mut().unwrap().push(new_node);
                     } else {
-                        self.children
-                            .as_mut()
-                            .unwrap()
-                            .insert(i, new_node);
+                        self.children.as_mut().unwrap().insert(i, new_node);
                     }
                 }
                 InsertionAction::Success => (),
@@ -255,7 +252,7 @@ where
         let keys = self.keys.split_at(mid);
         let orig_keys = unsafe { SortedVec::from_sorted(keys.0.to_vec()) };
         let keys = unsafe { SortedVec::from_sorted(keys.1.to_vec()) };
-        self.keys = orig_keys;       
+        self.keys = orig_keys;
 
         let mut new_node = Box::new(Node {
             is_root: false,
@@ -304,9 +301,13 @@ mod tests {
 
         let (new_key, new_node) = node.split();
         assert_eq!(new_key, 6);
-        assert_eq!(new_node.keys, unsafe { SortedVec::from_sorted(vec![6, 7, 8, 9, 10, 11]) });
+        assert_eq!(new_node.keys, unsafe {
+            SortedVec::from_sorted(vec![6, 7, 8, 9, 10, 11])
+        });
         assert_eq!(new_node.values, Some(vec![6, 7, 8, 9, 10, 11]));
-        assert_eq!(node.keys, unsafe { SortedVec::from_sorted(vec![1, 2, 3, 4, 5]) });
+        assert_eq!(node.keys, unsafe {
+            SortedVec::from_sorted(vec![1, 2, 3, 4, 5])
+        });
         assert_eq!(node.values, Some(vec![1, 2, 3, 4, 5]));
 
         let mut node = super::Node {
@@ -320,7 +321,10 @@ mod tests {
 
         let (new_key, new_node) = node.split();
         assert!(new_key == 14);
-        assert_eq!(new_node.keys, SortedVec::from_unsorted((14..28).collect::<Vec<_>>()));
+        assert_eq!(
+            new_node.keys,
+            SortedVec::from_unsorted((14..28).collect::<Vec<_>>())
+        );
         assert_eq!(new_node.values, Some((14..28).collect::<Vec<_>>()));
         assert_eq!(node.keys.to_vec(), (0..14).collect::<Vec<_>>());
         assert_eq!(node.values, Some((0..14).collect::<Vec<_>>()));
