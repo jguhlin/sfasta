@@ -8,25 +8,22 @@
 // Able to load only part of the tree from disk
 //
 // use bumpalo::Bump;
-use ordsearch::OrderedCollection;
 use pulp::Arch;
+use ordsearch::OrderedCollection;
 
 use std::marker::PhantomData;
 
 // This is an insertion-only B+ tree, deletions are simply not supported
 // Meant for a read-many, write-once on-disk database
 
+#[derive(Debug)]
 pub struct OrdSearchTree<'tree, K, V> {
     root: Node<K, V>,
     order: usize,
     phantom: PhantomData<&'tree Node<K, V>>,
 }
 
-impl<'tree, K, V> OrdSearchTree<'tree, K, V>
-where
-    K: Ord + Eq + std::fmt::Debug + Clone + Copy,
-    V: std::fmt::Debug + Copy,
-{
+impl<'tree, K, V> OrdSearchTree<'tree, K, V> {
     pub fn new(order: usize) -> Self {
         let mut root = Node::leaf(order);
         root.is_root = true;
@@ -51,7 +48,7 @@ where
                 old_root.is_root = true;
                 self.root.is_root = false;
                 new_node.is_root = false;
-
+                    
                 std::mem::swap(&mut self.root, &mut old_root);
 
                 if old_root.keys[0] < new_key {
@@ -83,43 +80,33 @@ pub enum InsertionAction<K, V> {
     NodeSplit(K, Box<Node<K, V>>),
 }
 
+#[derive(Debug)]
 pub struct Node<K, V> {
     pub is_root: bool,
     pub is_leaf: bool,
     pub keys: Vec<K>,
-    pub okeys: OrderedCollection<K>,
     pub children: Option<Vec<Box<Node<K, V>>>>,
     pub values: Option<Vec<V>>,
     pub next: Option<Box<Node<K, V>>>, // Does this need to be a u64 until loaded?
 }
 
 impl<K, V> Node<K, V> {
-    pub fn internal(order: usize) -> Self
-    where
-        K: Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug + Copy,
-    {
+    pub fn internal(order: usize) -> Self {
         Node {
             is_root: false,
             is_leaf: false,
             keys: Vec::with_capacity(order - 1),
-            okeys: OrderedCollection::from(Vec::new()),
             children: Some(Vec::with_capacity(order)),
             values: None,
             next: None,
         }
     }
 
-    pub fn leaf(order: usize) -> Self
-    where
-        K: Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug + Copy,
-    {
+    pub fn leaf(order: usize) -> Self {
         Node {
             is_root: false,
             is_leaf: true,
             keys: Vec::with_capacity(order),
-            okeys: OrderedCollection::from(Vec::new()),
             children: None,
             values: Some(Vec::with_capacity(order)),
             next: None,
@@ -164,7 +151,14 @@ impl<K, V> Node<K, V> {
         if self.is_leaf {
             self.keys.insert(i, key);
             self.values.as_mut().unwrap().insert(i, value);
+            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
         } else {
+            assert!(
+                self.keys.len() + 1 == self.children.as_ref().unwrap().len(),
+                "{:#?}",
+                self
+            );
+
             // Insert into child node
             match self.children.as_mut().unwrap()[i].insert(order, key, value) {
                 InsertionAction::NodeSplit(new_key, new_node) => {
@@ -183,8 +177,23 @@ impl<K, V> Node<K, V> {
                             .unwrap()
                             .insert(new_node_insertion, new_node);
                     }
+
+                    assert!(
+                        self.keys.len() == self.children.as_ref().unwrap().len() - 1,
+                        "keys: {:#?}, children: {:#?}",
+                        self.keys,
+                        self.children.as_ref().unwrap()
+                    );
                 }
-                InsertionAction::Success => ()
+                InsertionAction::Success => {
+                    // Don't have to do anything...
+                    assert!(
+                        self.keys.len() == self.children.as_ref().unwrap().len() - 1,
+                        "keys: {:#?}, children: {:#?}",
+                        self.keys,
+                        self.children.as_ref().unwrap()
+                    );
+                }
             };
         }
 
@@ -227,6 +236,13 @@ impl<K, V> Node<K, V> {
         let children = if self.children.is_some() {
             assert!(mid < self.children.as_ref().unwrap().len());
             let children = self.children.as_mut().unwrap().split_off(mid + 1);
+            assert!(
+                children.len() > 1,
+                "Split off: {}, Node: {:#?}, Children: {:#?}",
+                mid,
+                self,
+                self.children.as_ref().unwrap()
+            );
             Some(children)
         } else {
             None
@@ -239,12 +255,46 @@ impl<K, V> Node<K, V> {
             is_root: false,
             is_leaf: self.is_leaf,
             keys,
-            okeys: OrderedCollection::from(self.keys.clone()),
             children,
             values,
             next: None, // TODO
                         // next: self.next.take(),
         });
+
+        if self.is_leaf {
+            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
+            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
+        } else {
+            assert!(
+                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
+                "keys: {:#?}, children: {:#?}\n New Node: {:#?}",
+                self.keys,
+                self.children.as_ref().unwrap(),
+                new_node
+            );
+        }
+
+        assert!(self.keys.is_sorted());
+        assert!(new_node.keys.is_sorted());
+
+        if self.is_leaf {
+            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
+            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
+        } else {
+            assert!(
+                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
+                "{} {}",
+                self.keys.len(),
+                self.children.as_ref().unwrap().len()
+            );
+            assert!(
+                new_node.keys.len() == new_node.children.as_ref().unwrap().len(),
+                "{} {} {:#?}",
+                new_node.keys.len(),
+                new_node.children.as_ref().unwrap().len(),
+                new_node
+            );
+        }
 
         let new_key = if self.is_leaf {
             new_node.keys[0].clone()
@@ -274,6 +324,13 @@ impl<K, V> Node<K, V> {
         let children = if self.children.is_some() {
             assert!(mid < self.children.as_ref().unwrap().len());
             let children = self.children.as_mut().unwrap().split_off(mid + 1);
+            assert!(
+                children.len() > 1,
+                "Split off: {}, Node: {:#?}, Children: {:#?}",
+                mid,
+                self,
+                self.children.as_ref().unwrap()
+            );
             Some(children)
         } else {
             None
@@ -286,15 +343,46 @@ impl<K, V> Node<K, V> {
             is_root: false,
             is_leaf: self.is_leaf,
             keys,
-            okeys: OrderedCollection::from(self.keys.clone()),
             children,
             values,
             next: None, // TODO
                         // next: self.next.take(),
         });
 
+        if self.is_leaf {
+            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
+            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
+        } else {
+            assert!(
+                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
+                "keys: {:#?}, children: {:#?}\n New Node: {:#?}",
+                self.keys,
+                self.children.as_ref().unwrap(),
+                new_node
+            );
+        }
+
         assert!(self.keys.is_sorted());
         assert!(new_node.keys.is_sorted());
+
+        if self.is_leaf {
+            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
+            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
+        } else {
+            assert!(
+                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
+                "{} {}",
+                self.keys.len(),
+                self.children.as_ref().unwrap().len()
+            );
+            assert!(
+                new_node.keys.len() == new_node.children.as_ref().unwrap().len(),
+                "{} {} {:#?}",
+                new_node.keys.len(),
+                new_node.children.as_ref().unwrap().len(),
+                new_node
+            );
+        }
 
         let new_key = if self.is_leaf {
             new_node.keys[0].clone()
@@ -318,7 +406,6 @@ mod tests {
             is_root: false,
             is_leaf: true,
             keys: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-            okeys: super::OrderedCollection::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
             children: None,
             values: Some(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
             next: None,
@@ -341,7 +428,6 @@ mod tests {
             is_root: false,
             is_leaf: true,
             keys: (0..28).collect(),
-            okeys: super::OrderedCollection::from((0..28).collect::<Vec<i32>>()),
             children: None,
             values: Some((0..28).collect()),
             next: None,
@@ -408,7 +494,9 @@ mod tests {
             } else {
                 assert_eq!(
                     node.keys.len() + 1,
-                    node.children.as_ref().unwrap().len()
+                    node.children.as_ref().unwrap().len(),
+                    "Node: {:#?}",
+                    node
                 );
                 for child in node.children.as_ref().unwrap().iter() {
                     stack.push(child);

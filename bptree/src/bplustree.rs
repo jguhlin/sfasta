@@ -86,7 +86,7 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
         zipped.sort_by(|&(&k1, _), &(k2, _)| k1.cmp(k2));
         // let (keys, values): (Vec<&K>, Vec<&V>) = zipped.into_iter().unzip();
 
-        let mut nodes = Vec::with_capacity(keys.len() / self.order + 1);
+        let mut nodes = Vec::new();
 
         let chunks = zipped.chunks(self.order);
         for chunk in chunks {
@@ -131,8 +131,8 @@ impl<K, V> Node<K, V> {
         Node {
             is_root: false,
             is_leaf: false,
-            keys: Vec::with_capacity(order - 1),
-            children: Some(Vec::with_capacity(order)),
+            keys: Vec::new(),
+            children: Some(Vec::new()),
             values: None,
             next: None,
         }
@@ -142,9 +142,9 @@ impl<K, V> Node<K, V> {
         Node {
             is_root: false,
             is_leaf: true,
-            keys: Vec::with_capacity(order),
+            keys: Vec::new(),
             children: None,
-            values: Some(Vec::with_capacity(order)),
+            values: Some(Vec::new()),
             next: None,
         }
     }
@@ -265,7 +265,6 @@ impl<K, V> Node<K, V> {
         let values = if self.values.is_some() {
             assert!(mid < self.values.as_ref().unwrap().len());
             let mut values = self.values.as_mut().unwrap().split_off(mid);
-            values.reserve(self.values.as_ref().unwrap().capacity());
             Some(values)
         } else {
             None
@@ -274,7 +273,6 @@ impl<K, V> Node<K, V> {
         let children = if self.children.is_some() {
             assert!(mid < self.children.as_ref().unwrap().len());
             let mut children = self.children.as_mut().unwrap().split_off(mid + 1);
-            children.reserve(self.children.as_ref().unwrap().capacity());
             assert!(
                 children.len() > 1,
                 "Split off: {}, Node: {:#?}, Children: {:#?}",
