@@ -3,6 +3,7 @@
 // succinct data structures to compact storage?
 //
 // Todo:
+// Try sorted_vec ?
 // Make storable on disk
 // Batch insertion
 // Able to load only part of the tree from disk
@@ -50,15 +51,9 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
 
                 std::mem::swap(&mut self.root, &mut old_root);
 
-                if old_root.keys[0] < new_key {
-                    self.root.keys.push(new_key);
-                    self.root.children.as_mut().unwrap().push(old_root);
-                    self.root.children.as_mut().unwrap().push(new_node);
-                } else {
-                    self.root.keys.push(old_root.keys[0]);
-                    self.root.children.as_mut().unwrap().push(new_node);
-                    self.root.children.as_mut().unwrap().push(old_root);
-                }
+                self.root.keys.push(new_key);
+                self.root.children.as_mut().unwrap().push(old_root);
+                self.root.children.as_mut().unwrap().push(new_node);
             }
         }
     }
