@@ -209,10 +209,11 @@ where
             }
         }
 
-        if !self.is_leaf {        
+        if !self.is_leaf {
             for child_i in 0..self.children.as_ref().unwrap().len() {
                 while self.children.as_mut().unwrap()[child_i].needs_split(order) {
-                    let (new_key, new_node) = self.children.as_mut().unwrap()[child_i].split(order, buffer_size);
+                    let (new_key, new_node) =
+                        self.children.as_mut().unwrap()[child_i].split(order, buffer_size);
                     let i = self.keys.insert(new_key) + 1;
                     if i >= self.children.as_ref().unwrap().len() {
                         self.children.as_mut().unwrap().push(new_node);
