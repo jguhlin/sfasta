@@ -2,7 +2,8 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 
 use bumpalo::Bump;
 
-use libbptree::*;
+use libbptree::bplustree::*;
+use libbptree::fractal::*;
 
 pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("Build Tree - 64");
@@ -20,6 +21,26 @@ pub fn bench_large_tree(c: &mut Criterion) {
         });
     }
     group.finish();
+
+    /*
+
+    Not worth it until working...
+
+    let mut group = c.benchmark_group("Build Tree Fractal - 64");
+    group.sample_size(500);
+
+    for order in [8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, 8192].iter() {
+        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
+            b.iter(|| {
+                let mut tree = FractalTree::new(order, order / 2);
+                for i in 0..64_u64 {
+                    tree.insert(i, i);
+                }
+                tree
+            });
+        });
+    }
+    group.finish(); */
 
     let mut group = c.benchmark_group("Build Tree - 1024");
     group.sample_size(500);
@@ -183,7 +204,8 @@ pub fn bench_search(c: &mut Criterion) {
 criterion_group!(name = add_locs_large;
     config = Criterion::default().measurement_time(std::time::Duration::from_secs(10));
     // targets = bench_large_tree, bench_search
-    targets = bench_search, bench_large_tree
+    // targets = bench_search, bench_large_tree
+    targets = bench_large_tree
 );
 
 // criterion_main!(add_locs, add_locs_large);
