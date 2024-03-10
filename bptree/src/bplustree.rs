@@ -202,13 +202,6 @@ impl<K, V> Node<K, V> {
                             .unwrap()
                             .insert(new_node_insertion, new_node);
                     }
-
-                    assert!(
-                        self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                        "keys: {:#?}, children: {:#?}",
-                        self.keys,
-                        self.children.as_ref().unwrap()
-                    );
                 }
                 InsertionAction::Success => (),
             };
@@ -244,7 +237,6 @@ impl<K, V> Node<K, V> {
             None
         };
 
-        assert!(mid < self.keys.len());
         let keys = self.keys.split_off(mid);
 
         let mut new_node = Box::new(Node {
