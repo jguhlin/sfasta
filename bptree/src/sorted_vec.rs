@@ -273,8 +273,6 @@ where
             new_node.keys.remove_index(0)
         };
 
-        println!("New key: {:?}", new_key);
-
         (new_key, new_node)
     }
 
