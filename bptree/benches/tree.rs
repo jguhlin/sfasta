@@ -41,7 +41,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
                 {
                     let mut tree = SortedVecTree::new(*i);
                     for i in values1m.iter() {
-                        tree.insert(i, i);
+                        tree.insert(*i, *i);
                     }
                     tree
                 }
@@ -53,7 +53,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
                     {
                         let mut tree = FractalTree::new(*order, *buffer_size);
                         for i in values1m.iter() {
-                            tree.insert(i, i);
+                            tree.insert(*i, *i);
                         }
                         tree.flush_all();
                         tree
@@ -66,7 +66,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
                 {
                     let mut tree = BPlusTree::new(*i);
                     for i in values1m.iter() {
-                        tree.insert(i, i);
+                        tree.insert(*i, *i);
                     }
                     tree
                 }
