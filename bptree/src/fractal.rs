@@ -6,6 +6,7 @@
 // Able to load only part of the tree from disk
 
 // Todo: Still an ERROR here. If we need to split nodes multiple times it only happens once!
+// Todo: Many nodes could be flushed in parallel...
 
 // use bumpalo::Bump;
 // use pulp::Arch;
