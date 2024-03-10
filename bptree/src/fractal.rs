@@ -46,7 +46,7 @@ where
     }
 
     pub fn insert(&mut self, key: K, value: V) {
-        if self.root.insert(self.order, key, value) {
+        if self.root.insert(self.buffer_size, key, value) {
             self.flush(false);
         }
     }
@@ -57,21 +57,21 @@ where
         V: std::fmt::Debug + Copy,
     {
         assert!(self.root.keys.is_sorted());
-        match self.root.flush(self.order, self.buffer_size, all) {
-            InsertionAction::Success => (),
-            InsertionAction::NodeSplit(new_key, mut new_node) => {
-                let old_root = Node::internal(self.order, self.buffer_size);
-                let mut old_root = Box::new(old_root);
-                old_root.is_root = true;
-                self.root.is_root = false;
-                new_node.is_root = false;
+        self.root.flush(self.order, self.buffer_size, all);
 
-                std::mem::swap(&mut self.root, &mut old_root);
+        while self.root.needs_split(self.order) {
+            let (new_key, mut new_node) = self.root.split(self.order, self.buffer_size);
+            let old_root = Node::internal(self.order, self.buffer_size);
+            let mut old_root = Box::new(old_root);
+            old_root.is_root = true;
+            self.root.is_root = false;
+            new_node.is_root = false;
 
-                self.root.keys.push(new_key);
-                self.root.children.as_mut().unwrap().push(old_root);
-                self.root.children.as_mut().unwrap().push(new_node);
-            }
+            std::mem::swap(&mut self.root, &mut old_root);
+
+            self.root.keys.push(new_key);
+            self.root.children.as_mut().unwrap().push(old_root);
+            self.root.children.as_mut().unwrap().push(new_node);
         }
     }
 
@@ -152,6 +152,8 @@ where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug + Copy,
     {
+        assert!(self.buffer.is_empty());
+
         let i = self.keys.binary_search(&key);
 
         if self.is_leaf {
@@ -182,17 +184,12 @@ where
         self.buffer.len() >= buffer_size
     }
 
-    pub fn flush(&mut self, order: usize, buffer_size: usize, all: bool) -> InsertionAction<K, V> {
+    pub fn flush(&mut self, order: usize, buffer_size: usize, all: bool) {
         // This flushes the buffer down the tree, or if a leaf node, into the tree
-        // The danger here is the buffer is larger than the order, so we need to split the node
-        // multiple times, which can't be handled right now...
-
-        // Sort the buffer
-        // self.buffer.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
         if self.is_leaf {
-            // self.keys.reserve(self.buffer.len());
-            // self.values.as_mut().unwrap().reserve(self.buffer.len());
+            self.keys.reserve(self.buffer.len());
+            self.values.as_mut().unwrap().reserve(self.buffer.len());
             for (key, value) in self.buffer.drain(..) {
                 let i = self.keys.insert(key);
                 self.values.as_mut().unwrap().insert(i, value);
@@ -204,56 +201,48 @@ where
                     Err(i) => i,
                 };
                 // Insert into child node
-                let result = self.children.as_mut().unwrap()[i].insert(order, key, value);
+                let result = self.children.as_mut().unwrap()[i].insert(buffer_size, key, value);
 
-                if result || all {
-                    match self.children.as_mut().unwrap()[i].flush(order, buffer_size, all) {
-                        InsertionAction::NodeSplit(new_key, new_node) => {
-                            let i = self.keys.insert(new_key) + 1;
+                if result {
+                    self.children.as_mut().unwrap()[i].flush(order, buffer_size, false);
+                }
+            }
+        }
 
-                            if i >= self.children.as_ref().unwrap().len() {
-                                self.children.as_mut().unwrap().push(new_node);
-                            } else {
-                                self.children.as_mut().unwrap().insert(i, new_node);
-                            }
-                        }
-                        InsertionAction::Success => (),
-                    };
+        if !self.is_leaf {        
+            for child_i in 0..self.children.as_ref().unwrap().len() {
+                while self.children.as_mut().unwrap()[child_i].needs_split(order) {
+                    let (new_key, new_node) = self.children.as_mut().unwrap()[child_i].split(order, buffer_size);
+                    let i = self.keys.insert(new_key) + 1;
+                    if i >= self.children.as_ref().unwrap().len() {
+                        self.children.as_mut().unwrap().push(new_node);
+                    } else {
+                        self.children.as_mut().unwrap().insert(i, new_node);
+                    }
                 }
             }
         }
 
         if all && !self.is_leaf {
             for child_i in 0..self.children.as_ref().unwrap().len() {
-                match self.children.as_mut().unwrap()[child_i].flush(order, buffer_size, all) {
-                    InsertionAction::NodeSplit(new_key, new_node) => {
-                        let i = self.keys.insert(new_key) + 1;
-
-                        if i >= self.children.as_ref().unwrap().len() {
-                            self.children.as_mut().unwrap().push(new_node);
-                        } else {
-                            self.children.as_mut().unwrap().insert(i, new_node);
-                        }
-                    }
-                    InsertionAction::Success => (),
-                };
+                self.children.as_mut().unwrap()[child_i].flush(order, buffer_size, all);
             }
         }
 
-        if self.needs_split(order) {
-            let (new_key, new_node) = self.split();
-            InsertionAction::NodeSplit(new_key, new_node)
-        } else {
-            InsertionAction::Success
+        if all && self.buffer.len() > 0 {
+            panic!("Buffer not empty!");
         }
     }
 
-    pub fn split(&mut self) -> (K, Box<Node<K, V>>)
+    pub fn split(&mut self, order: usize, buffer_size: usize) -> (K, Box<Node<K, V>>)
     where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
         assert!(self.keys.is_sorted());
+
+        self.flush(order, buffer_size, true);
+
         let mid = self.keys.len() / 2;
 
         let values = if self.values.is_some() {
@@ -324,7 +313,7 @@ mod tests {
         // New Node: keys: [6, 7, 8, 9, 10, 11], values: [6, 7, 8, 9, 10, 11]
         // New key: 6
 
-        let (new_key, new_node) = node.split();
+        let (new_key, new_node) = node.split(2, 2);
         assert_eq!(new_key, 6);
         assert_eq!(new_node.keys, unsafe {
             SortedVec::from_sorted(vec![6, 7, 8, 9, 10, 11])
@@ -345,7 +334,7 @@ mod tests {
             buffer: Vec::with_capacity(8),
         };
 
-        let (new_key, new_node) = node.split();
+        let (new_key, new_node) = node.split(2, 2);
         assert!(new_key == 14);
         assert_eq!(
             new_node.keys,
@@ -355,7 +344,7 @@ mod tests {
         assert_eq!(node.keys.to_vec(), (0..14).collect::<Vec<_>>());
         assert_eq!(node.values, Some((0..14).collect::<Vec<_>>()));
 
-        let (new_key, new_node_) = node.split();
+        let (new_key, new_node_) = node.split(2, 2);
         assert!(new_key == 7);
         assert_eq!(new_node_.keys.to_vec(), (7..14).collect::<Vec<_>>());
         assert_eq!(new_node_.values, Some((7..14).collect::<Vec<_>>()));
@@ -452,7 +441,7 @@ mod tests {
         let mut values_8192 = (0..8192_u64).collect::<Vec<u64>>();
         values_8192.shuffle(&mut rng);
 
-        let mut tree = super::FractalTree::new(8, 4);
+        let mut tree = super::FractalTree::new(8, 8);
 
         for i in values_1024.iter() {
             tree.insert(*i, *i);
@@ -464,7 +453,7 @@ mod tests {
             assert_eq!(tree.search(*i), Some(*i));
         }
 
-        let mut tree = super::FractalTree::new(96, 32);
+        let mut tree = super::FractalTree::new(16, 32);
 
         for i in values_8192.iter() {
             tree.insert(*i, *i);
