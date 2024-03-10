@@ -39,7 +39,7 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug + Copy,
     {
-        assert!(self.root.keys.is_sorted());
+        assert!(self.root.keys.is_sorted(), "Root Keys: {:?}", self.root.keys);
         match self.root.insert(self.order, key, value) {
             InsertionAction::Success => (),
             InsertionAction::NodeSplit(new_key, mut new_node) => {
@@ -174,6 +174,7 @@ impl<K, V> Node<K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
+
         assert!(self.keys.is_sorted());
         let i = match self.keys.binary_search(&key) {
             Ok(i) => i,
@@ -189,7 +190,7 @@ impl<K, V> Node<K, V> {
                 InsertionAction::NodeSplit(new_key, new_node) => {
                     let new_node_insertion = match self.keys.binary_search(&new_key) {
                         Ok(i) => i,
-                        Err(i) => i + 1,
+                        Err(i) => i,
                     };
 
                     if new_node_insertion >= self.children.as_ref().unwrap().len() {
@@ -197,10 +198,12 @@ impl<K, V> Node<K, V> {
                         self.children.as_mut().unwrap().push(new_node);
                     } else {
                         self.keys.insert(new_node_insertion, new_key);
+                        // TODO: Should this have a special to hit 0?
                         self.children
                             .as_mut()
                             .unwrap()
-                            .insert(new_node_insertion, new_node);
+                            .insert(new_node_insertion + 1, new_node);
+                        
                     }
                 }
                 InsertionAction::Success => (),
@@ -265,6 +268,8 @@ impl<K, V> Node<K, V> {
 
 #[cfg(test)]
 mod tests {
+    use rand::prelude::*;
+
     #[test]
     fn split() {
         let mut node = super::Node {
@@ -318,13 +323,14 @@ mod tests {
         let mut tree = super::BPlusTree::new(6);
         tree.insert(0, 0);
 
-        for i in 1..=7 {
-            tree.insert(i, i);
-        }
+        let mut rng = thread_rng();
+        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        values.shuffle(&mut rng);
 
-        for i in 8..18 {
-            tree.insert(i, i);
+        for i in values.iter() {
+            tree.insert(*i, *i);
         }
+        
         assert!(!tree.root.is_leaf);
     }
 
@@ -346,8 +352,13 @@ mod tests {
     #[test]
     fn tree_structure() {
         let mut tree = super::BPlusTree::new(8);
-        for i in 0..1024_u64 {
-            tree.insert(i, i);
+
+        let mut rng = thread_rng();
+        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        values.shuffle(&mut rng);
+
+        for i in values.iter() {
+            tree.insert(*i, *i);
         }
 
         // Iterate through the tree, all leaves should have keys.len() == vales.len()
@@ -390,35 +401,51 @@ mod tests {
     #[test]
     fn search() {
         let mut tree = super::BPlusTree::new(8);
-        for i in 0..1024_u64 {
-            tree.insert(i, i);
+        
+        let mut rng = thread_rng();
+        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        values.shuffle(&mut rng);
+        
+        for i in values.iter() {
+            tree.insert(*i, *i);
         }
 
         // When order is 8, 64 can't be found
         // Let's do the search "manually"
 
-        for i in 0..1024_u64 {
-            assert_eq!(tree.search(i), Some(i));
+        for i in values.iter() {
+            assert_eq!(tree.search(*i), Some(*i));
         }
 
         let mut tree = super::BPlusTree::new(96);
-        for i in 0..8192_u64 {
-            tree.insert(i, i);
+        
+        let mut rng = thread_rng();
+        let mut values = (0..8192_u64).collect::<Vec<u64>>();
+
+        values.shuffle(&mut rng);
+        for i in values.iter() {
+            tree.insert(*i, *i); 
         }
 
-        for i in 0..8192_u64 {
-            assert_eq!(tree.search(i), Some(i));
+        for i in values.iter() {
+            assert_eq!(tree.search(*i), Some(*i));
         }
 
         // Find value does not exist
         assert_eq!(tree.search(8192), None);
 
         let mut tree = super::BPlusTree::new(64);
-        for i in 0..(1024 * 1024) {
-            tree.insert(i as u64, i as u64);
+        
+        let mut rng = thread_rng();
+        let mut values = (0..(1024*1024_u64)).collect::<Vec<u64>>();
+
+        values.shuffle(&mut rng);
+        for i in values.iter() {
+            tree.insert(*i, *i);
         }
-        for i in 0..(1024 * 1024) {
-            assert!(tree.search(i as u64) == Some(i as u64), "i: {}", i);
+        
+        for i in values.iter() {
+            assert!(tree.search(*i) == Some(*i), "i: {}", i);
         }
 
         // Things that should not be found
