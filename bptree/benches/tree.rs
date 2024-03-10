@@ -34,47 +34,6 @@ pub fn bench_large_tree(c: &mut Criterion) {
     values128m.shuffle(&mut rng);
     let values128m = black_box(values128m);
 
-    let mut group = c.benchmark_group("Tree Build Comparison");
-    for order in [8_usize, 16, 32, 64].iter() {
-        for buffer_size in [8_usize, 32, 128].iter() {
-            group.bench_with_input(
-                BenchmarkId::new("FractalTree", format!("{}-{}", order, buffer_size)),
-                &(*order, *buffer_size),
-                |b, (order, buffer_size)| {
-                    b.iter(|| {
-                        let mut tree = FractalTree::new(*order, *buffer_size);
-                        for i in values1m.iter() {
-                            tree.insert(*i, *i);
-                        }
-                        tree.flush_all();
-                        tree
-                    })
-                },
-            );
-        }
-
-        group.bench_with_input(BenchmarkId::new("SortedVec", order), order, |b, i| {
-            b.iter(|| {
-                let mut tree = SortedVecTree::new(*i);
-                for i in values1m.iter() {
-                    tree.insert(*i, *i);
-                }
-                tree
-            })
-        });
-
-        group.bench_with_input(BenchmarkId::new("Naive Vec", order), order, |b, i| {
-            b.iter(|| {
-                let mut tree = BPlusTree::new(*i);
-                for i in values1m.iter() {
-                    tree.insert(*i, *i);
-                }
-                tree
-            })
-        });
-    }
-    group.finish();
-
     let mut group = c.benchmark_group("128m Build");
     group.sample_size(10);
 
@@ -116,6 +75,49 @@ pub fn bench_large_tree(c: &mut Criterion) {
             ));
     }
     group.finish();
+
+    let mut group = c.benchmark_group("Tree Build Comparison");
+    for order in [8_usize, 16, 32, 64].iter() {
+        for buffer_size in [8_usize, 32, 128].iter() {
+            group.bench_with_input(
+                BenchmarkId::new("FractalTree", format!("{}-{}", order, buffer_size)),
+                &(*order, *buffer_size),
+                |b, (order, buffer_size)| {
+                    b.iter(|| {
+                        let mut tree = FractalTree::new(*order, *buffer_size);
+                        for i in values1m.iter() {
+                            tree.insert(*i, *i);
+                        }
+                        tree.flush_all();
+                        tree
+                    })
+                },
+            );
+        }
+
+        group.bench_with_input(BenchmarkId::new("SortedVec", order), order, |b, i| {
+            b.iter(|| {
+                let mut tree = SortedVecTree::new(*i);
+                for i in values1m.iter() {
+                    tree.insert(*i, *i);
+                }
+                tree
+            })
+        });
+
+        group.bench_with_input(BenchmarkId::new("Naive Vec", order), order, |b, i| {
+            b.iter(|| {
+                let mut tree = BPlusTree::new(*i);
+                for i in values1m.iter() {
+                    tree.insert(*i, *i);
+                }
+                tree
+            })
+        });
+    }
+    group.finish();
+
+
 }
 
 pub fn bench_search(c: &mut Criterion) {
