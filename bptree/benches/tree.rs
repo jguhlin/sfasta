@@ -2,6 +2,7 @@ use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criteri
 
 use bumpalo::Bump;
 use rand::prelude::*;
+use xxhash_rust::xxh3::xxh3_64;
 
 use libbptree::bplustree::*;
 use libbptree::sorted_vec::*;
@@ -15,7 +16,7 @@ use libbptree::fractal::*;
 pub fn bench_large_tree(c: &mut Criterion) {
     let mut rng = thread_rng();
 
-    let mut values = (0..1024_u64).collect::<Vec<u64>>();
+    let mut values = (0..1024_u64).map(|x| xxh3_64(&x.to_le_bytes())).collect::<Vec<u64>>();
     values.shuffle(&mut rng);
     let values = black_box(values);
 
@@ -72,7 +73,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("Build Tree - 1 Million Elements");
     group.sample_size(20);
 
-    let mut values: Vec<u64> = (0..(1024 * 1024_u64)).collect::<Vec<u64>>();
+    let mut values: Vec<u64> = (0..(1024 * 1024_u64)).map(|x| xxh3_64(&x.to_le_bytes())).collect::<Vec<u64>>();
     values.shuffle(&mut rng);
     let values = black_box(values);
 
@@ -122,7 +123,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut values: Vec<u64> = (0..128_369_206_u64).collect::<Vec<u64>>();
+    let mut values: Vec<u64> = (0..128_369_206_u64).map(|x| xxh3_64(&x.to_le_bytes())).collect::<Vec<u64>>();
     values.shuffle(&mut rng);
     let values = black_box(values);
 
