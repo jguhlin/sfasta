@@ -37,8 +37,8 @@ pub fn bench_large_tree(c: &mut Criterion) {
     let mut group = c.benchmark_group("128m Build");
     group.sample_size(10);
 
-    for order in [32, 128].iter() {
-        for buffer_size in [64_usize, 512, 1024].iter() {
+    for order in [32, 64, 128].iter() {
+        for buffer_size in [32_usize, 64_usize, 128].iter() {
             group.bench_with_input(BenchmarkId::new("FractalTree", format!("{}-{}", order, buffer_size)), &(*order, *buffer_size),
             |b, (order, buffer_size)| b.iter(||
                 {
