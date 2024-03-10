@@ -75,12 +75,10 @@ pub fn bench_large_tree(c: &mut Criterion) {
     }
     group.finish();
 
-    /*
-
     let mut group = c.benchmark_group("Tree Build Comparison");
     group.sample_size(10);
 
-    for order in [8_usize, 16, 32, 64].iter() {
+    for order in [32, 128].iter() {
         group.bench_with_input(BenchmarkId::new("SortedVec", order), order,
             |b, i| b.iter(||
                 {
@@ -92,7 +90,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
                 }
             ));
 
-            for buffer_size in [8_usize, 16, 32, 64, 128].iter() {
+            for buffer_size in [64_usize, 512, 1024].iter() {
                 group.bench_with_input(BenchmarkId::new("FractalTree", format!("{}-{}", order, buffer_size)), &(*order, *buffer_size),
                 |b, (order, buffer_size)| b.iter(||
                     {
@@ -118,7 +116,6 @@ pub fn bench_large_tree(c: &mut Criterion) {
             ));
     }
     group.finish();
-    */
 }
 
 pub fn bench_search(c: &mut Criterion) {
