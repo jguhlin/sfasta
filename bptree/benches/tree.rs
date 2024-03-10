@@ -39,7 +39,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::new("SortedVec", order), order, 
             |b, i| b.iter(|| 
                 {
-                    let mut tree = SortedVecTree::new(*order);
+                    let mut tree = SortedVecTree::new(*i);
                     for i in values1m.iter() {
                         tree.insert(i, i);
                     }
