@@ -15,7 +15,7 @@ use sorted_vec::SortedVec;
 use std::marker::PhantomData;
 
 // This is an insertion-only B+ tree, deletions are simply not supported
-// Meant for a read-many, write-once on-disk database
+// Meant for a write-many, write-once to disk, read-only-and-many database
 
 #[derive(Debug)]
 pub struct FractalTree<'tree, K, V>
@@ -188,13 +188,17 @@ where
         // multiple times, which can't be handled right now...
 
         // Sort the buffer
-        self.buffer.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
+        // self.buffer.sort_unstable_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
 
-        for (key, value) in self.buffer.drain(..) {
-            if self.is_leaf {
+        if self.is_leaf {
+            // self.keys.reserve(self.buffer.len());
+            // self.values.as_mut().unwrap().reserve(self.buffer.len());
+            for (key, value) in self.buffer.drain(..) {
                 let i = self.keys.insert(key);
                 self.values.as_mut().unwrap().insert(i, value);
-            } else {
+            }
+        } else {
+            for (key, value) in self.buffer.drain(..) {
                 let i = match self.keys.binary_search(&key) {
                     Ok(i) => i,
                     Err(i) => i,
