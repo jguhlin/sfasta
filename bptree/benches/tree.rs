@@ -5,12 +5,14 @@ use rand::prelude::*;
 
 use libbptree::bplustree::*;
 use libbptree::sorted_vec::*;
-// use libbptree::fractal::*;
+use libbptree::fractal::*;
+
+// Todo:
+// [ ] - If Fractal is faster, need to test for order & buffer size for speed!
 
 // Early tests had bumpalo increasing performance, but that is no longer the case...
 
 pub fn bench_large_tree(c: &mut Criterion) {
-
     let mut rng = thread_rng();
 
     let mut values = (0..1024_u64).collect::<Vec<u64>>();
@@ -44,6 +46,23 @@ pub fn bench_large_tree(c: &mut Criterion) {
                 for i in values.iter() {
                     tree.insert(i, i);
                 }
+                tree
+            });
+        });
+    }
+    group.finish();
+
+    let mut group = c.benchmark_group("Build Tree Fractal - 1024");
+    group.sample_size(500);
+
+    for order in [8, 64, 128, 256, 1024].iter() {
+        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
+            b.iter(|| {
+                let mut tree = FractalTree::new(order, order);
+                for i in values.iter() {
+                    tree.insert(i, i);
+                }
+                tree.flush_all();
                 tree
             });
         });
@@ -86,12 +105,47 @@ pub fn bench_large_tree(c: &mut Criterion) {
     }
     group.finish();
 
-    let mut group = c.benchmark_group("Build Tree SortedVec - 128_369_206 Elements");
+    let mut group = c.benchmark_group("Build Tree Fractal - 1 Million Elements");
     group.sample_size(20);
+
+    for order in [8, 64, 128, 256, 1024].iter() {
+        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
+            b.iter(|| {
+                let mut tree = FractalTree::new(order, order);
+                for i in values.iter() {
+                    tree.insert(i, i);
+                }
+                tree.flush_all();
+                tree
+            });
+        });
+    }
+    group.finish();
 
     let mut values: Vec<u64> = (0..128_369_206_u64).collect::<Vec<u64>>();
     values.shuffle(&mut rng);
     let values = black_box(values);
+
+    let mut group = c.benchmark_group("Build Tree Fractal - 128_369_206 Elements");
+    group.sample_size(20);
+
+    for order in [8, 64, 128, 256, 1024].iter() {
+        group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
+            b.iter(|| {
+                let mut tree = FractalTree::new(order, order);
+                for i in values.iter() {
+                    tree.insert(i, i);
+                }
+                tree.flush_all();
+                tree
+            });
+        });
+    }
+    group.finish();
+
+
+    let mut group = c.benchmark_group("Build Tree SortedVec - 128_369_206 Elements");
+    group.sample_size(20);
 
     for order in [8, 64, 128, 256, 1024].iter() {
         group.bench_with_input(BenchmarkId::from_parameter(order), order, |b, &order| {
@@ -121,7 +175,6 @@ pub fn bench_large_tree(c: &mut Criterion) {
         });
     }
     group.finish();
-
 }
 
 pub fn bench_search(c: &mut Criterion) {
@@ -196,7 +249,6 @@ pub fn bench_search(c: &mut Criterion) {
         });
     }
     group.finish();
-
 }
 
 criterion_group!(name = add_locs_large;

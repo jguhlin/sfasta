@@ -281,6 +281,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use rand::prelude::*;
 
     #[test]
     fn split() {
@@ -342,13 +343,14 @@ mod tests {
         let mut tree = super::SortedVecTree::new(6);
         tree.insert(0, 0);
 
-        for i in 1..=7 {
-            tree.insert(i, i);
+        let mut rng = thread_rng();
+        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        values.shuffle(&mut rng);
+
+        for i in values.iter() {
+            tree.insert(*i, *i);
         }
 
-        for i in 8..18 {
-            tree.insert(i, i);
-        }
         assert!(!tree.root.is_leaf);
     }
 
@@ -370,8 +372,13 @@ mod tests {
     #[test]
     fn tree_structure() {
         let mut tree = super::SortedVecTree::new(8);
-        for i in 0..1024_u64 {
-            tree.insert(i, i);
+
+        let mut rng = thread_rng();
+        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        values.shuffle(&mut rng);
+
+        for i in values.iter() {
+            tree.insert(*i, *i);
         }
 
         // Iterate through the tree, all leaves should have keys.len() == vales.len()
@@ -413,25 +420,34 @@ mod tests {
 
     #[test]
     fn search() {
+        let mut rng = thread_rng();
+        let mut values_1024 = (0..1024_u64).collect::<Vec<u64>>();
+        values_1024.shuffle(&mut rng);
+
+        let mut values_8192 = (0..8192_u64).collect::<Vec<u64>>();
+        values_8192.shuffle(&mut rng);
+
         let mut tree = super::SortedVecTree::new(8);
-        for i in 0..1024_u64 {
-            tree.insert(i, i);
+
+        for i in values_1024.iter() {
+            tree.insert(*i, *i);
         }
 
         // When order is 8, 64 can't be found
         // Let's do the search "manually"
 
-        for i in 0..1024_u64 {
-            assert_eq!(tree.search(i), Some(i));
+        for i in values_1024.iter() {
+            assert_eq!(tree.search(*i), Some(*i));
         }
 
         let mut tree = super::SortedVecTree::new(96);
-        for i in 0..8192_u64 {
-            tree.insert(i, i);
+
+        for i in values_8192.iter() {
+            tree.insert(*i, *i);
         }
 
-        for i in 0..8192_u64 {
-            assert_eq!(tree.search(i), Some(i));
+        for i in values_8192.iter() {
+            assert_eq!(tree.search(*i), Some(*i));
         }
 
         // Find value does not exist

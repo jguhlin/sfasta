@@ -1,12 +1,15 @@
-// Ideas:
-// Bumpalo / pulp to speed things up?
-// succinct data structures to compact storage?
-//
+// This is a derivation of the SortedVec tree (fastest, so far)
+// Fractal adds a buffer so that insertions etc... are done in batches, rather than immediately
 // Todo:
-// Trying out fractal tree
-//
+// Look into eytzinger (instead of sorted vec?) or ordsearch?
+// Storable on disk
+// Able to load only part of the tree from disk
+
+// Todo: Still an ERROR here. If we need to split nodes multiple times it only happens once!
+
 // use bumpalo::Bump;
 // use pulp::Arch;
+use sorted_vec::SortedVec;
 
 use std::marker::PhantomData;
 
@@ -14,14 +17,22 @@ use std::marker::PhantomData;
 // Meant for a read-many, write-once on-disk database
 
 #[derive(Debug)]
-pub struct FractalTree<'tree, K, V> {
+pub struct FractalTree<'tree, K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
     root: Node<K, V>,
     order: usize,
-    buffer_size: usize,
     phantom: PhantomData<&'tree Node<K, V>>,
+    buffer_size: usize,
 }
 
-impl<'tree, K, V> FractalTree<'tree, K, V> {
+impl<'tree, K, V> FractalTree<'tree, K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
     pub fn new(order: usize, buffer_size: usize) -> Self {
         let mut root = Node::leaf(order, buffer_size);
         root.is_root = true;
@@ -33,34 +44,42 @@ impl<'tree, K, V> FractalTree<'tree, K, V> {
         }
     }
 
-    pub fn insert(&mut self, key: K, value: V)
+    pub fn insert(&mut self, key: K, value: V) {
+        if self.root.insert(self.order, key, value) {
+            self.flush(false);
+        }
+    }
+
+    pub fn flush(&mut self, all: bool)
     where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug + Copy,
     {
         assert!(self.root.keys.is_sorted());
-        match self.root.insert(self.order, self.buffer_size, key, value) {
+        match self.root.flush(self.order, self.buffer_size, all) {
             InsertionAction::Success => (),
-            InsertionAction::Buffering => (),
             InsertionAction::NodeSplit(new_key, mut new_node) => {
-                let mut old_root = Node::internal(self.order, self.buffer_size);
-                old_root.is_root = true;
-                std::mem::swap(&mut self.root, &mut old_root);
+                let old_root = Node::internal(self.order, self.buffer_size);
                 let mut old_root = Box::new(old_root);
-                old_root.is_root = false;
+                old_root.is_root = true;
+                self.root.is_root = false;
                 new_node.is_root = false;
 
-                if old_root.keys[0] < new_key {
-                    self.root.keys.push(new_key);
-                    self.root.children.as_mut().unwrap().push(old_root);
-                    self.root.children.as_mut().unwrap().push(new_node);
-                } else {
-                    self.root.keys.push(old_root.keys[0]);
-                    self.root.children.as_mut().unwrap().push(new_node);
-                    self.root.children.as_mut().unwrap().push(old_root);
-                }
+                std::mem::swap(&mut self.root, &mut old_root);
+
+                self.root.keys.push(new_key);
+                self.root.children.as_mut().unwrap().push(old_root);
+                self.root.children.as_mut().unwrap().push(new_node);
             }
         }
+    }
+
+    pub fn flush_all(&mut self)
+    where
+        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+        V: std::fmt::Debug + Copy,
+    {
+        self.flush(true);
     }
 
     pub fn search(&self, key: K) -> Option<V>
@@ -74,31 +93,43 @@ impl<'tree, K, V> FractalTree<'tree, K, V> {
 
 // Must use
 #[must_use]
-pub enum InsertionAction<K, V> {
+pub enum InsertionAction<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
     Success,
     NodeSplit(K, Box<Node<K, V>>),
-    Buffering,
 }
 
 #[derive(Debug)]
-pub struct Node<K, V> {
+pub struct Node<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
     pub is_root: bool,
     pub is_leaf: bool,
-    pub keys: Vec<K>,
+    pub keys: SortedVec<K>,
     pub children: Option<Vec<Box<Node<K, V>>>>,
     pub values: Option<Vec<V>>,
-    pub buffer: Vec<(K, V)>, // This is an insertion-only implementation, otherwise would use an Enum to specify options...
-                             // TODO: At the end, this should be only in the "creation" phase, and another datastructure should handle in-memory / loading / etc...
+    pub next: Option<Box<Node<K, V>>>, // Does this need to be a u64 until loaded?
+    pub buffer: Vec<(K, V)>,
 }
 
-impl<K, V> Node<K, V> {
+impl<K, V> Node<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
     pub fn internal(order: usize, buffer_size: usize) -> Self {
         Node {
             is_root: false,
             is_leaf: false,
-            keys: Vec::with_capacity(order - 1),
+            keys: SortedVec::with_capacity(order),
             children: Some(Vec::with_capacity(order)),
             values: None,
+            next: None,
             buffer: Vec::with_capacity(buffer_size),
         }
     }
@@ -107,9 +138,10 @@ impl<K, V> Node<K, V> {
         Node {
             is_root: false,
             is_leaf: true,
-            keys: Vec::with_capacity(order),
+            keys: SortedVec::with_capacity(order),
             children: None,
             values: Some(Vec::with_capacity(order)),
+            next: None,
             buffer: Vec::with_capacity(buffer_size),
         }
     }
@@ -119,8 +151,10 @@ impl<K, V> Node<K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug + Copy,
     {
+        let i = self.keys.binary_search(&key);
+
         if self.is_leaf {
-            let i = match self.keys.binary_search(&key) {
+            let i = match i {
                 Ok(i) => i,
                 Err(_) => return None, // This is the leaf, if it's not found here it won't be found
             };
@@ -129,7 +163,7 @@ impl<K, V> Node<K, V> {
             Some(self.values.as_ref().unwrap()[i])
         } else {
             // B+ tree search, so we need to find the correct child node
-            let i = match self.keys.binary_search(&key) {
+            let i = match i {
                 Ok(i) => i + 1,
                 Err(i) => i,
             };
@@ -138,103 +172,73 @@ impl<K, V> Node<K, V> {
         }
     }
 
-    pub fn insert(
-        &mut self,
-        order: usize,
-        buffer_size: usize,
-        key: K,
-        value: V,
-    ) -> InsertionAction<K, V>
+    pub fn insert(&mut self, buffer_size: usize, key: K, value: V) -> bool
     where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
-        assert!(self.keys.is_sorted());
-
         self.buffer.push((key, value));
-        if self.buffer.len() < buffer_size {
-            return InsertionAction::Buffering;
-        } else {
-            self.flush(order, buffer_size)
-        }
+        self.buffer.len() >= buffer_size
     }
 
-    pub fn flush(&mut self, order: usize, buffer_size: usize) -> InsertionAction<K, V>
-    where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug,
-    {
+    pub fn flush(&mut self, order: usize, buffer_size: usize, all: bool) -> InsertionAction<K, V> {
+        // This flushes the buffer down the tree, or if a leaf node, into the tree
+        // The danger here is the buffer is larger than the order, so we need to split the node
+        // multiple times, which can't be handled right now...
+
         // Sort the buffer
         self.buffer.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap());
-        // Insert into the node
+
         for (key, value) in self.buffer.drain(..) {
-            let i = match self.keys.binary_search(&key) {
-                Ok(i) => i,
-                Err(i) => i,
-            };
-
             if self.is_leaf {
-                self.keys.insert(i, key);
+                let i = self.keys.insert(key);
                 self.values.as_mut().unwrap().insert(i, value);
-                assert!(self.keys.len() == self.values.as_ref().unwrap().len());
             } else {
+                let i = match self.keys.binary_search(&key) {
+                    Ok(i) => i,
+                    Err(i) => i,
+                };
                 // Insert into child node
-                match self.children.as_mut().unwrap()[i].insert(order, buffer_size, key, value) {
-                    InsertionAction::NodeSplit(new_key, new_node) => {
-                        let new_node_insertion = match self.keys.binary_search(&new_key) {
-                            Ok(i) => i,
-                            Err(i) => i + 1,
-                        };
+                let result = self.children.as_mut().unwrap()[i].insert(order, key, value);
 
-                        if new_node_insertion >= self.children.as_ref().unwrap().len() {
-                            self.keys.push(new_key);
+                if result || all {
+                    match self.children.as_mut().unwrap()[i].flush(order, buffer_size, all) {
+                        InsertionAction::NodeSplit(new_key, new_node) => {
+                            let i = self.keys.insert(new_key) + 1;
+
+                            if i >= self.children.as_ref().unwrap().len() {
+                                self.children.as_mut().unwrap().push(new_node);
+                            } else {
+                                self.children.as_mut().unwrap().insert(i, new_node);
+                            }
+                        }
+                        InsertionAction::Success => (),
+                    };
+                }
+            }
+        }
+
+        if all && !self.is_leaf {
+            for child_i in 0..self.children.as_ref().unwrap().len() {
+                match self.children.as_mut().unwrap()[child_i].flush(order, buffer_size, all) {
+                    InsertionAction::NodeSplit(new_key, new_node) => {
+                        let i = self.keys.insert(new_key) + 1;
+
+                        if i >= self.children.as_ref().unwrap().len() {
                             self.children.as_mut().unwrap().push(new_node);
                         } else {
-                            self.keys.insert(new_node_insertion, new_key);
-                            self.children
-                                .as_mut()
-                                .unwrap()
-                                .insert(new_node_insertion, new_node);
+                            self.children.as_mut().unwrap().insert(i, new_node);
                         }
-
-                        assert!(
-                            self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                            "keys: {:#?}, children: {:#?}",
-                            self.keys,
-                            self.children.as_ref().unwrap()
-                        );
                     }
-                    InsertionAction::Success => {
-                        // Don't have to do anything...
-                        assert!(
-                            self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                            "keys: {:#?}, children: {:#?}",
-                            self.keys,
-                            self.children.as_ref().unwrap()
-                        );
-                    }
-                    InsertionAction::Buffering => (),
+                    InsertionAction::Success => (),
                 };
             }
         }
 
-        assert!(self.keys.is_sorted());
-
         if self.needs_split(order) {
             let (new_key, new_node) = self.split();
-
-            if self.is_leaf {
-                assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            } else {
-                assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1);
-            }
             InsertionAction::NodeSplit(new_key, new_node)
         } else {
-            if self.is_leaf {
-                assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            } else {
-                assert!(self.keys.len() == self.children.as_ref().unwrap().len() - 1);
-            }
             InsertionAction::Success
         }
     }
@@ -248,165 +252,40 @@ impl<K, V> Node<K, V> {
         let mid = self.keys.len() / 2;
 
         let values = if self.values.is_some() {
-            assert!(mid < self.values.as_ref().unwrap().len());
-            Some(self.values.as_mut().unwrap().split_off(mid))
+            let values = self.values.as_mut().unwrap().split_off(mid);
+            Some(values)
         } else {
             None
         };
 
-        let children = if self.children.is_some() {
-            assert!(mid < self.children.as_ref().unwrap().len());
+        let children: Option<Vec<Box<Node<K, V>>>> = if self.children.is_some() {
             let children = self.children.as_mut().unwrap().split_off(mid + 1);
-            assert!(
-                children.len() > 1,
-                "Split off: {}, Node: {:#?}, Children: {:#?}",
-                mid,
-                self,
-                self.children.as_ref().unwrap()
-            );
             Some(children)
         } else {
             None
         };
 
         assert!(mid < self.keys.len());
-        let keys = self.keys.split_off(mid);
+        let keys = self.keys.split_at(mid);
+        let orig_keys = unsafe { SortedVec::from_sorted(keys.0.to_vec()) };
+        let keys = unsafe { SortedVec::from_sorted(keys.1.to_vec()) };
+        self.keys = orig_keys;
 
         let mut new_node = Box::new(Node {
             is_root: false,
             is_leaf: self.is_leaf,
+            buffer: Vec::with_capacity(self.buffer.capacity()),
             keys,
             children,
             values,
-            buffer: Vec::with_capacity(self.buffer.capacity()),
+            next: None, // TODO
+                        // next: self.next.take(),
         });
-
-        if self.is_leaf {
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
-        } else {
-            assert!(
-                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                "keys: {:#?}, children: {:#?}\n New Node: {:#?}",
-                self.keys,
-                self.children.as_ref().unwrap(),
-                new_node
-            );
-        }
-
-        assert!(self.keys.is_sorted());
-        assert!(new_node.keys.is_sorted());
-
-        if self.is_leaf {
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
-        } else {
-            assert!(
-                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                "{} {}",
-                self.keys.len(),
-                self.children.as_ref().unwrap().len()
-            );
-            assert!(
-                new_node.keys.len() == new_node.children.as_ref().unwrap().len(),
-                "{} {} {:#?}",
-                new_node.keys.len(),
-                new_node.children.as_ref().unwrap().len(),
-                new_node
-            );
-        }
 
         let new_key = if self.is_leaf {
             new_node.keys[0].clone()
         } else {
-            new_node.keys.remove(0)
-        };
-
-        (new_key, new_node)
-    }
-
-    // Split root into 2
-    pub fn split_root(&mut self) -> (K, Box<Node<K, V>>)
-    where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug,
-    {
-        assert!(self.keys.is_sorted());
-        let mid = self.keys.len() / 2;
-
-        let values = if self.values.is_some() {
-            assert!(mid < self.values.as_ref().unwrap().len());
-            Some(self.values.as_mut().unwrap().split_off(mid))
-        } else {
-            None
-        };
-
-        let children = if self.children.is_some() {
-            assert!(mid < self.children.as_ref().unwrap().len());
-            let children = self.children.as_mut().unwrap().split_off(mid + 1);
-            assert!(
-                children.len() > 1,
-                "Split off: {}, Node: {:#?}, Children: {:#?}",
-                mid,
-                self,
-                self.children.as_ref().unwrap()
-            );
-            Some(children)
-        } else {
-            None
-        };
-
-        assert!(mid < self.keys.len());
-        let keys = self.keys.split_off(mid);
-
-        let mut new_node = Box::new(Node {
-            is_root: false,
-            is_leaf: self.is_leaf,
-            keys,
-            children,
-            values,
-            buffer: Vec::with_capacity(self.buffer.capacity()),
-        });
-
-        if self.is_leaf {
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
-        } else {
-            assert!(
-                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                "keys: {:#?}, children: {:#?}\n New Node: {:#?}",
-                self.keys,
-                self.children.as_ref().unwrap(),
-                new_node
-            );
-        }
-
-        assert!(self.keys.is_sorted());
-        assert!(new_node.keys.is_sorted());
-
-        if self.is_leaf {
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
-        } else {
-            assert!(
-                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                "{} {}",
-                self.keys.len(),
-                self.children.as_ref().unwrap().len()
-            );
-            assert!(
-                new_node.keys.len() == new_node.children.as_ref().unwrap().len(),
-                "{} {} {:#?}",
-                new_node.keys.len(),
-                new_node.children.as_ref().unwrap().len(),
-                new_node
-            );
-        }
-
-        let new_key = if self.is_leaf {
-            new_node.keys[0].clone()
-        } else {
-            new_node.keys.pop().unwrap()
+            new_node.keys.remove_index(0)
         };
 
         (new_key, new_node)
@@ -419,15 +298,19 @@ impl<K, V> Node<K, V> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use rand::prelude::*;
+
     #[test]
     fn split() {
         let mut node = super::Node {
             is_root: false,
             is_leaf: true,
-            keys: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+            keys: unsafe { SortedVec::from_sorted(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) },
             children: None,
             values: Some(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
-            buffer: Vec::with_capacity(256),
+            next: None,
+            buffer: Vec::with_capacity(8),
         };
 
         // Initial node: keys: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]
@@ -438,32 +321,40 @@ mod tests {
 
         let (new_key, new_node) = node.split();
         assert_eq!(new_key, 6);
-        assert_eq!(new_node.keys, vec![6, 7, 8, 9, 10, 11]);
+        assert_eq!(new_node.keys, unsafe {
+            SortedVec::from_sorted(vec![6, 7, 8, 9, 10, 11])
+        });
         assert_eq!(new_node.values, Some(vec![6, 7, 8, 9, 10, 11]));
-        assert_eq!(node.keys, vec![1, 2, 3, 4, 5]);
+        assert_eq!(node.keys, unsafe {
+            SortedVec::from_sorted(vec![1, 2, 3, 4, 5])
+        });
         assert_eq!(node.values, Some(vec![1, 2, 3, 4, 5]));
 
         let mut node = super::Node {
             is_root: false,
             is_leaf: true,
-            keys: (0..28).collect(),
+            keys: SortedVec::from_unsorted((0..28).collect()),
             children: None,
             values: Some((0..28).collect()),
-            buffer: Vec::with_capacity(256),
+            next: None,
+            buffer: Vec::with_capacity(8),
         };
 
         let (new_key, new_node) = node.split();
         assert!(new_key == 14);
-        assert_eq!(new_node.keys, (14..28).collect::<Vec<_>>());
+        assert_eq!(
+            new_node.keys,
+            SortedVec::from_unsorted((14..28).collect::<Vec<_>>())
+        );
         assert_eq!(new_node.values, Some((14..28).collect::<Vec<_>>()));
-        assert_eq!(node.keys, (0..14).collect::<Vec<_>>());
+        assert_eq!(node.keys.to_vec(), (0..14).collect::<Vec<_>>());
         assert_eq!(node.values, Some((0..14).collect::<Vec<_>>()));
 
         let (new_key, new_node_) = node.split();
         assert!(new_key == 7);
-        assert_eq!(new_node_.keys, (7..14).collect::<Vec<_>>());
+        assert_eq!(new_node_.keys.to_vec(), (7..14).collect::<Vec<_>>());
         assert_eq!(new_node_.values, Some((7..14).collect::<Vec<_>>()));
-        assert_eq!(node.keys, (0..7).collect::<Vec<_>>());
+        assert_eq!(node.keys.to_vec(), (0..7).collect::<Vec<_>>());
         assert_eq!(node.values, Some((0..7).collect::<Vec<_>>()));
     }
 
@@ -472,13 +363,14 @@ mod tests {
         let mut tree = super::FractalTree::new(6, 3);
         tree.insert(0, 0);
 
-        for i in 1..=7 {
-            tree.insert(i, i);
+        let mut rng = thread_rng();
+        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        values.shuffle(&mut rng);
+
+        for i in values.iter() {
+            tree.insert(*i, *i);
         }
 
-        for i in 8..18 {
-            tree.insert(i, i);
-        }
         assert!(!tree.root.is_leaf);
     }
 
@@ -499,9 +391,14 @@ mod tests {
 
     #[test]
     fn tree_structure() {
-        let mut tree = super::FractalTree::new(8, 4);
-        for i in 0..1024_u64 {
-            tree.insert(i, i);
+        let mut tree = super::FractalTree::new(8, 3);
+
+        let mut rng = thread_rng();
+        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        values.shuffle(&mut rng);
+
+        for i in values.iter() {
+            tree.insert(*i, *i);
         }
 
         // Iterate through the tree, all leaves should have keys.len() == vales.len()
@@ -543,25 +440,35 @@ mod tests {
 
     #[test]
     fn search() {
+        let mut rng = thread_rng();
+        let mut values_1024 = (0..1024_u64).collect::<Vec<u64>>();
+        values_1024.shuffle(&mut rng);
+
+        let mut values_8192 = (0..8192_u64).collect::<Vec<u64>>();
+        values_8192.shuffle(&mut rng);
+
         let mut tree = super::FractalTree::new(8, 4);
-        for i in 0..1024_u64 {
-            tree.insert(i, i);
+
+        for i in values_1024.iter() {
+            tree.insert(*i, *i);
         }
 
-        // When order is 8, 64 can't be found
-        // Let's do the search "manually"
+        tree.flush_all();
 
-        for i in 0..1024_u64 {
-            assert_eq!(tree.search(i), Some(i));
+        for i in values_1024.iter() {
+            assert_eq!(tree.search(*i), Some(*i));
         }
 
-        let mut tree = super::FractalTree::new(96, 24);
-        for i in 0..8192_u64 {
-            tree.insert(i, i);
+        let mut tree = super::FractalTree::new(96, 32);
+
+        for i in values_8192.iter() {
+            tree.insert(*i, *i);
         }
 
-        for i in 0..8192_u64 {
-            assert_eq!(tree.search(i), Some(i));
+        tree.flush_all();
+
+        for i in values_8192.iter() {
+            assert_eq!(tree.search(*i), Some(*i));
         }
 
         // Find value does not exist
@@ -571,6 +478,9 @@ mod tests {
         for i in 0..(1024 * 1024) {
             tree.insert(i as u64, i as u64);
         }
+
+        tree.flush_all();
+
         for i in 0..(1024 * 1024) {
             assert!(tree.search(i as u64) == Some(i as u64), "i: {}", i);
         }
@@ -584,6 +494,8 @@ mod tests {
         for i in 1024..2048_u64 {
             tree.insert(i, i);
         }
+
+        tree.flush_all();
 
         for i in 1024..2048_u64 {
             assert_eq!(tree.search(i), Some(i));

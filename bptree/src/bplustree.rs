@@ -39,7 +39,11 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug + Copy,
     {
-        assert!(self.root.keys.is_sorted(), "Root Keys: {:?}", self.root.keys);
+        assert!(
+            self.root.keys.is_sorted(),
+            "Root Keys: {:?}",
+            self.root.keys
+        );
         match self.root.insert(self.order, key, value) {
             InsertionAction::Success => (),
             InsertionAction::NodeSplit(new_key, mut new_node) => {
@@ -174,7 +178,6 @@ impl<K, V> Node<K, V> {
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
-
         assert!(self.keys.is_sorted());
         let i = match self.keys.binary_search(&key) {
             Ok(i) => i,
@@ -203,7 +206,6 @@ impl<K, V> Node<K, V> {
                             .as_mut()
                             .unwrap()
                             .insert(new_node_insertion + 1, new_node);
-                        
                     }
                 }
                 InsertionAction::Success => (),
@@ -330,7 +332,7 @@ mod tests {
         for i in values.iter() {
             tree.insert(*i, *i);
         }
-        
+
         assert!(!tree.root.is_leaf);
     }
 
@@ -401,11 +403,11 @@ mod tests {
     #[test]
     fn search() {
         let mut tree = super::BPlusTree::new(8);
-        
+
         let mut rng = thread_rng();
         let mut values = (0..1024_u64).collect::<Vec<u64>>();
         values.shuffle(&mut rng);
-        
+
         for i in values.iter() {
             tree.insert(*i, *i);
         }
@@ -418,13 +420,13 @@ mod tests {
         }
 
         let mut tree = super::BPlusTree::new(96);
-        
+
         let mut rng = thread_rng();
         let mut values = (0..8192_u64).collect::<Vec<u64>>();
 
         values.shuffle(&mut rng);
         for i in values.iter() {
-            tree.insert(*i, *i); 
+            tree.insert(*i, *i);
         }
 
         for i in values.iter() {
@@ -435,15 +437,15 @@ mod tests {
         assert_eq!(tree.search(8192), None);
 
         let mut tree = super::BPlusTree::new(64);
-        
+
         let mut rng = thread_rng();
-        let mut values = (0..(1024*1024_u64)).collect::<Vec<u64>>();
+        let mut values = (0..(1024 * 1024_u64)).collect::<Vec<u64>>();
 
         values.shuffle(&mut rng);
         for i in values.iter() {
             tree.insert(*i, *i);
         }
-        
+
         for i in values.iter() {
             assert!(tree.search(*i) == Some(*i), "i: {}", i);
         }
