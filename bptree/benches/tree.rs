@@ -55,6 +55,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
                         for i in values1m.iter() {
                             tree.insert(i, i);
                         }
+                        tree.flush_all();
                         tree
                     }
                 ));
