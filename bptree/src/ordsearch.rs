@@ -16,18 +16,21 @@ use std::marker::PhantomData;
 // This is an insertion-only B+ tree, deletions are simply not supported
 // Meant for a read-many, write-once on-disk database
 
-#[derive(Debug)]
-pub struct BPlusTree<'tree, K, V> {
+pub struct OrdSearchTree<'tree, K, V> {
     root: Node<K, V>,
     order: usize,
     phantom: PhantomData<&'tree Node<K, V>>,
 }
 
-impl<'tree, K, V> BPlusTree<'tree, K, V> {
+impl<'tree, K, V> OrdSearchTree<'tree, K, V>
+where
+    K: Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
     pub fn new(order: usize) -> Self {
         let mut root = Node::leaf(order);
         root.is_root = true;
-        BPlusTree {
+        OrdSearchTree {
             root,
             order,
             phantom: PhantomData,
@@ -71,42 +74,6 @@ impl<'tree, K, V> BPlusTree<'tree, K, V> {
     {
         self.root.search(key)
     }
-
-    // TODO: Specialization for when key is u64
-    pub fn batch_insert(&mut self, keys: Vec<K>, values: Vec<V>)
-    where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default,
-        V: std::fmt::Debug + Copy,
-    {
-        unimplemented!(); // TODO: Need to do more, easy to make leaf nodes, but making internal nodes and root nodes needs more thinking
-        assert!(keys.len() == values.len());
-
-        // Sort the keys and values together
-        let mut zipped = keys.iter().zip(values.iter()).collect::<Vec<_>>();
-        zipped.sort_by(|&(&k1, _), &(k2, _)| k1.cmp(k2));
-        // let (keys, values): (Vec<&K>, Vec<&V>) = zipped.into_iter().unzip();
-
-        let mut nodes = Vec::with_capacity(keys.len() / self.order + 1);
-
-        let chunks = zipped.chunks(self.order);
-        for chunk in chunks {
-            let mut keys = Vec::with_capacity(self.order);
-            let mut values = Vec::with_capacity(self.order);
-            for (key, value) in chunk {
-                keys.push(**key);
-                values.push(**value);
-            }
-            let node = Node {
-                is_root: false,
-                is_leaf: true,
-                keys,
-                children: None,
-                values: Some(values),
-                next: None,
-            };
-            nodes.push(node);
-        }
-    }
 }
 
 // Must use
@@ -116,33 +83,43 @@ pub enum InsertionAction<K, V> {
     NodeSplit(K, Box<Node<K, V>>),
 }
 
-#[derive(Debug)]
 pub struct Node<K, V> {
     pub is_root: bool,
     pub is_leaf: bool,
     pub keys: Vec<K>,
+    pub okeys: OrderedCollection<K>,
     pub children: Option<Vec<Box<Node<K, V>>>>,
     pub values: Option<Vec<V>>,
     pub next: Option<Box<Node<K, V>>>, // Does this need to be a u64 until loaded?
 }
 
 impl<K, V> Node<K, V> {
-    pub fn internal(order: usize) -> Self {
+    pub fn internal(order: usize) -> Self
+    where
+        K: Ord + Eq + std::fmt::Debug + Clone + Copy,
+        V: std::fmt::Debug + Copy,
+    {
         Node {
             is_root: false,
             is_leaf: false,
             keys: Vec::with_capacity(order - 1),
+            okeys: OrderedCollection::from(Vec::new()),
             children: Some(Vec::with_capacity(order)),
             values: None,
             next: None,
         }
     }
 
-    pub fn leaf(order: usize) -> Self {
+    pub fn leaf(order: usize) -> Self
+    where
+        K: Ord + Eq + std::fmt::Debug + Clone + Copy,
+        V: std::fmt::Debug + Copy,
+    {
         Node {
             is_root: false,
             is_leaf: true,
             keys: Vec::with_capacity(order),
+            okeys: OrderedCollection::from(Vec::new()),
             children: None,
             values: Some(Vec::with_capacity(order)),
             next: None,
@@ -187,14 +164,7 @@ impl<K, V> Node<K, V> {
         if self.is_leaf {
             self.keys.insert(i, key);
             self.values.as_mut().unwrap().insert(i, value);
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
         } else {
-            assert!(
-                self.keys.len() + 1 == self.children.as_ref().unwrap().len(),
-                "{:#?}",
-                self
-            );
-
             // Insert into child node
             match self.children.as_mut().unwrap()[i].insert(order, key, value) {
                 InsertionAction::NodeSplit(new_key, new_node) => {
@@ -213,23 +183,8 @@ impl<K, V> Node<K, V> {
                             .unwrap()
                             .insert(new_node_insertion, new_node);
                     }
-
-                    assert!(
-                        self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                        "keys: {:#?}, children: {:#?}",
-                        self.keys,
-                        self.children.as_ref().unwrap()
-                    );
                 }
-                InsertionAction::Success => {
-                    // Don't have to do anything...
-                    assert!(
-                        self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                        "keys: {:#?}, children: {:#?}",
-                        self.keys,
-                        self.children.as_ref().unwrap()
-                    );
-                }
+                InsertionAction::Success => ()
             };
         }
 
@@ -264,24 +219,14 @@ impl<K, V> Node<K, V> {
 
         let values = if self.values.is_some() {
             assert!(mid < self.values.as_ref().unwrap().len());
-            let mut values = self.values.as_mut().unwrap().split_off(mid);
-            values.reserve(self.values.as_ref().unwrap().capacity());
-            Some(values)
+            Some(self.values.as_mut().unwrap().split_off(mid))
         } else {
             None
         };
 
         let children = if self.children.is_some() {
             assert!(mid < self.children.as_ref().unwrap().len());
-            let mut children = self.children.as_mut().unwrap().split_off(mid + 1);
-            children.reserve(self.children.as_ref().unwrap().capacity());
-            assert!(
-                children.len() > 1,
-                "Split off: {}, Node: {:#?}, Children: {:#?}",
-                mid,
-                self,
-                self.children.as_ref().unwrap()
-            );
+            let children = self.children.as_mut().unwrap().split_off(mid + 1);
             Some(children)
         } else {
             None
@@ -294,46 +239,12 @@ impl<K, V> Node<K, V> {
             is_root: false,
             is_leaf: self.is_leaf,
             keys,
+            okeys: OrderedCollection::from(self.keys.clone()),
             children,
             values,
             next: None, // TODO
                         // next: self.next.take(),
         });
-
-        if self.is_leaf {
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
-        } else {
-            assert!(
-                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                "keys: {:#?}, children: {:#?}\n New Node: {:#?}",
-                self.keys,
-                self.children.as_ref().unwrap(),
-                new_node
-            );
-        }
-
-        assert!(self.keys.is_sorted());
-        assert!(new_node.keys.is_sorted());
-
-        if self.is_leaf {
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
-        } else {
-            assert!(
-                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                "{} {}",
-                self.keys.len(),
-                self.children.as_ref().unwrap().len()
-            );
-            assert!(
-                new_node.keys.len() == new_node.children.as_ref().unwrap().len(),
-                "{} {} {:#?}",
-                new_node.keys.len(),
-                new_node.children.as_ref().unwrap().len(),
-                new_node
-            );
-        }
 
         let new_key = if self.is_leaf {
             new_node.keys[0].clone()
@@ -363,13 +274,6 @@ impl<K, V> Node<K, V> {
         let children = if self.children.is_some() {
             assert!(mid < self.children.as_ref().unwrap().len());
             let children = self.children.as_mut().unwrap().split_off(mid + 1);
-            assert!(
-                children.len() > 1,
-                "Split off: {}, Node: {:#?}, Children: {:#?}",
-                mid,
-                self,
-                self.children.as_ref().unwrap()
-            );
             Some(children)
         } else {
             None
@@ -382,46 +286,15 @@ impl<K, V> Node<K, V> {
             is_root: false,
             is_leaf: self.is_leaf,
             keys,
+            okeys: OrderedCollection::from(self.keys.clone()),
             children,
             values,
             next: None, // TODO
                         // next: self.next.take(),
         });
 
-        if self.is_leaf {
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
-        } else {
-            assert!(
-                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                "keys: {:#?}, children: {:#?}\n New Node: {:#?}",
-                self.keys,
-                self.children.as_ref().unwrap(),
-                new_node
-            );
-        }
-
         assert!(self.keys.is_sorted());
         assert!(new_node.keys.is_sorted());
-
-        if self.is_leaf {
-            assert!(self.keys.len() == self.values.as_ref().unwrap().len());
-            assert!(new_node.keys.len() == new_node.values.as_ref().unwrap().len());
-        } else {
-            assert!(
-                self.keys.len() == self.children.as_ref().unwrap().len() - 1,
-                "{} {}",
-                self.keys.len(),
-                self.children.as_ref().unwrap().len()
-            );
-            assert!(
-                new_node.keys.len() == new_node.children.as_ref().unwrap().len(),
-                "{} {} {:#?}",
-                new_node.keys.len(),
-                new_node.children.as_ref().unwrap().len(),
-                new_node
-            );
-        }
 
         let new_key = if self.is_leaf {
             new_node.keys[0].clone()
@@ -445,6 +318,7 @@ mod tests {
             is_root: false,
             is_leaf: true,
             keys: vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
+            okeys: super::OrderedCollection::from(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
             children: None,
             values: Some(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
             next: None,
@@ -467,6 +341,7 @@ mod tests {
             is_root: false,
             is_leaf: true,
             keys: (0..28).collect(),
+            okeys: super::OrderedCollection::from((0..28).collect::<Vec<i32>>()),
             children: None,
             values: Some((0..28).collect()),
             next: None,
@@ -489,7 +364,7 @@ mod tests {
 
     #[test]
     fn basic_tree() {
-        let mut tree = super::BPlusTree::new(6);
+        let mut tree = super::OrdSearchTree::new(6);
         tree.insert(0, 0);
 
         for i in 1..=7 {
@@ -504,7 +379,7 @@ mod tests {
 
     #[test]
     fn simple_insertions() {
-        let mut tree = super::BPlusTree::new(6);
+        let mut tree = super::OrdSearchTree::new(6);
         tree.insert(1, "one");
         tree.insert(2, "two");
         tree.insert(3, "three");
@@ -519,7 +394,7 @@ mod tests {
 
     #[test]
     fn tree_structure() {
-        let mut tree = super::BPlusTree::new(8);
+        let mut tree = super::OrdSearchTree::new(8);
         for i in 0..1024_u64 {
             tree.insert(i, i);
         }
@@ -533,9 +408,7 @@ mod tests {
             } else {
                 assert_eq!(
                     node.keys.len() + 1,
-                    node.children.as_ref().unwrap().len(),
-                    "Node: {:#?}",
-                    node
+                    node.children.as_ref().unwrap().len()
                 );
                 for child in node.children.as_ref().unwrap().iter() {
                     stack.push(child);
@@ -563,7 +436,7 @@ mod tests {
 
     #[test]
     fn search() {
-        let mut tree = super::BPlusTree::new(8);
+        let mut tree = super::OrdSearchTree::new(8);
         for i in 0..1024_u64 {
             tree.insert(i, i);
         }
@@ -575,7 +448,7 @@ mod tests {
             assert_eq!(tree.search(i), Some(i));
         }
 
-        let mut tree = super::BPlusTree::new(96);
+        let mut tree = super::OrdSearchTree::new(96);
         for i in 0..8192_u64 {
             tree.insert(i, i);
         }
@@ -587,7 +460,7 @@ mod tests {
         // Find value does not exist
         assert_eq!(tree.search(8192), None);
 
-        let mut tree = super::BPlusTree::new(64);
+        let mut tree = super::OrdSearchTree::new(64);
         for i in 0..(1024 * 1024) {
             tree.insert(i as u64, i as u64);
         }
@@ -600,7 +473,7 @@ mod tests {
         assert!(tree.search(1024 * 1024 + 1) == None);
 
         // New tree
-        let mut tree = super::BPlusTree::new(8);
+        let mut tree = super::OrdSearchTree::new(8);
         for i in 1024..2048_u64 {
             tree.insert(i, i);
         }
