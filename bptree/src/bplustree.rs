@@ -131,8 +131,8 @@ impl<K, V> Node<K, V> {
         Node {
             is_root: false,
             is_leaf: false,
-            keys: Vec::new(),
-            children: Some(Vec::new()),
+            keys: Vec::with_capacity(order),
+            children: Some(Vec::with_capacity(order)),
             values: None,
             next: None,
         }
@@ -142,9 +142,9 @@ impl<K, V> Node<K, V> {
         Node {
             is_root: false,
             is_leaf: true,
-            keys: Vec::new(),
+            keys: Vec::with_capacity(order),
             children: None,
-            values: Some(Vec::new()),
+            values: Some(Vec::with_capacity(order)),
             next: None,
         }
     }
