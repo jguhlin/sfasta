@@ -384,6 +384,7 @@ where
     K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
     V: std::fmt::Debug + Copy,
 {
+    #[inline]
     pub fn search(&self, key: &K) -> Option<V>
     where
         K: PartialOrd + PartialEq + Eq,
