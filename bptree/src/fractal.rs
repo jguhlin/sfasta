@@ -394,13 +394,11 @@ where
         if self.is_leaf {
             let i = match i {
                 Ok(i) => i,
-                Err(_) => return None, // This is the leaf, if it's not found here it won't be found
+                Err(_) => return None,
             };
-            // Leaf K->V are 1 to 1 mapping
             assert!(i < self.values.as_ref().unwrap().len());
             Some(self.values.as_ref().unwrap()[i])
         } else {
-            // B+ tree search, so we need to find the correct child node
             let i = match i {
                 Ok(i) => i + 1,
                 Err(i) => i,
