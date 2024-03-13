@@ -1,16 +1,17 @@
 // This is a derivation of the SortedVec tree (fastest, so far)
 // Fractal adds a buffer so that insertions etc... are done in batches, rather than immediately
 // Todo:
-// Look into eytzinger (instead of sorted vec?) or ordsearch?
 // Storable on disk
 // Able to load only part of the tree from disk
 
-// Todo: Still an ERROR here. If we need to split nodes multiple times it only happens once!
-// Todo: Many nodes could be flushed in parallel...
+// Notes:
+// [x] Look into eytzinger (instead of sorted vec?) or ordsearch? -- Neither worked well here
 
 // use bumpalo::Bump;
-use eytzinger::*;
+// use eytzinger::*;
 use sorted_vec::SortedVec;
+use bincode::{config, Decode, Encode};
+// use pulp::Arch;
 
 // This is an insertion-only B+ tree, deletions are simply not supported
 // Meant for a write-many, write-once to disk, read-only-and-many database
@@ -316,7 +317,29 @@ where
 {
     fn from(tree: FractalTree<K, V>) -> Self {
         FractalTreeRead {
-            root: tree.root.into(),
+            root: tree.root.into()
+        }
+    }
+}
+
+#[derive(Debug, Encode, Decode)]
+pub struct FractalTreeDisk<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + 'static,
+    V: std::fmt::Debug + Copy + 'static,
+{
+    root: NodeDisk<K, V>,
+}
+
+// Conversion impl for FractalTree to FractalTreeRead
+impl<K, V> From<FractalTreeRead<K, V>> for FractalTreeDisk<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default,
+    V: std::fmt::Debug + Copy,
+{
+    fn from(tree: FractalTreeRead<K, V>) -> Self {
+        FractalTreeDisk {
+            root: tree.root.into()
         }
     }
 }
@@ -410,6 +433,57 @@ where
 
             self.children.as_ref().unwrap()[i].search(key)
         }
+    } 
+}
+
+#[derive(Debug, Encode, Decode)]
+pub struct NodeDisk<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + 'static,
+    V: std::fmt::Debug + Copy + 'static,
+{
+    pub is_root: bool,
+    pub is_leaf: bool,
+    pub keys: Vec<K>,
+    pub children: Option<Vec<Box<NodeDisk<K, V>>>>,
+    pub values: Option<Vec<V>>,
+}
+
+// Conversion for Box<Node> to Box<NodeRead>
+impl<K, V> From<Box<NodeRead<K, V>>> for Box<NodeDisk<K, V>>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default,
+    V: std::fmt::Debug + Copy,
+{
+    fn from(node: Box<NodeRead<K, V>>) -> Self {
+        Box::new((*node).into())
+    }
+}
+
+impl<K, V> From<NodeRead<K, V>> for NodeDisk<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default,
+    V: std::fmt::Debug + Copy,
+{
+    fn from(node: NodeRead<K, V>) -> Self {
+        let NodeRead {
+            is_root,
+            is_leaf,
+            keys,
+            children,
+            values,
+        } = node;
+
+        NodeDisk {
+            is_root,
+            is_leaf,
+            keys: keys.into_vec(),
+            children: children.map(|children| {
+                children.into_iter().map(|child| child.into()).collect()
+            }),
+            values,
+        }
+
     }
 }
 
@@ -441,6 +515,8 @@ where
 mod tests {
     use super::*;
     use rand::prelude::*;
+    use xxhash_rust::xxh3::xxh3_64;
+    use human_size::{Size, SpecificSize, Kilobyte};
 
     #[test]
     fn split() {
@@ -727,4 +803,32 @@ mod tests {
             assert_eq!(tree.search(i), Some(*i));
         }
     }
+
+    #[ignore]
+    #[test]
+    fn size_of_super_large() {
+        let values128m = (0..128_369_206_u64)
+        .map(|x| xxh3_64(&x.to_le_bytes()))
+        .collect::<Vec<u64>>();
+
+        let mut tree: FractalTree<_, _> = FractalTree::new(1024, 1024);
+        for i in values128m.iter() {
+            tree.insert(*i, *i);
+        }
+        tree.flush_all();
+        let tree: FractalTreeRead<_, _> = tree.into();
+        let tree: FractalTreeDisk<_, _> = tree.into();
+
+        let config = config::standard();
+        let encoded: Vec<u8> = bincode::encode_to_vec(&tree, config).unwrap();
+        println!("Size of 128m tree: {}", encoded.len());
+
+        let size2: SpecificSize<human_size::Gigabyte> = format!("{} B", encoded.len()).parse().unwrap();
+
+        println!("Size of 128m tree: {}", size2);
+        
+        panic!();
+    }
+
+
 }

@@ -19,10 +19,13 @@ harness = false
 [dependencies]
 pulp = "0.18.8"
 bumpalo = {version = "3.15.4", features = ["boxed", "collections"]}
-eytzinger = "1.1.1"
+# eytzinger = "1.1.1"
 sorted-vec = "0.8.3"
+# ordsearch = "0.2.7"
+bincode = "2.0.0-rc.3"
 
 [dev-dependencies]
 criterion = "0.5.1"
 rand = "0.8.5"
 xxhash-rust = { version = "0.8.10", features = ["xxh3"] }
+human-size = "0.4.3"
