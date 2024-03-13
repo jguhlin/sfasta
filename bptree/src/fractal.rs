@@ -9,10 +9,8 @@
 // Todo: Many nodes could be flushed in parallel...
 
 // use bumpalo::Bump;
-// use pulp::Arch;
 use eytzinger::*;
 use sorted_vec::SortedVec;
-use pulp::Arch;
 
 // This is an insertion-only B+ tree, deletions are simply not supported
 // Meant for a write-many, write-once to disk, read-only-and-many database
@@ -147,6 +145,7 @@ where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug + Copy,
     {
+        #[cfg(debug_assertions)]
         assert!(self.buffer.is_empty());
 
         let i = self.keys.binary_search(&key);
@@ -156,11 +155,10 @@ where
                 Ok(i) => i,
                 Err(_) => return None, // This is the leaf, if it's not found here it won't be found
             };
-            // Leaf K->V are 1 to 1 mapping
+            #[cfg(debug_assertions)]
             assert!(i < self.values.as_ref().unwrap().len());
             Some(self.values.as_ref().unwrap()[i])
         } else {
-            // B+ tree search, so we need to find the correct child node
             let i = match i {
                 Ok(i) => i + 1,
                 Err(i) => i,
@@ -235,6 +233,7 @@ where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug,
     {
+        #[cfg(debug_assertions)]
         assert!(self.keys.is_sorted());
 
         self.flush(order, buffer_size, true);
@@ -255,6 +254,7 @@ where
             None
         };
 
+        #[cfg(debug_assertions)]
         assert!(mid < self.keys.len());
         let keys = self.keys.split_at(mid);
         let orig_keys = unsafe { SortedVec::from_sorted(keys.0.to_vec()) };
@@ -388,19 +388,18 @@ where
     K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
     V: std::fmt::Debug + Copy,
 {
-    #[inline]
     pub fn search(&self, key: &K) -> Option<V>
     where
         K: PartialOrd + PartialEq + Eq,
     {
-        let arch = Arch::new();
-        let i = arch.dispatch(|| self.keys.binary_search(&key));
+        let i = self.keys.binary_search(&key);
        
         if self.is_leaf {
             let i = match i {
                 Ok(i) => i,
                 Err(_) => return None,
             };
+            #[cfg(debug_assertions)]
             assert!(i < self.values.as_ref().unwrap().len());
             Some(self.values.as_ref().unwrap()[i])
         } else {
