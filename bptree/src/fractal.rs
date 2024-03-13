@@ -12,6 +12,7 @@
 // use pulp::Arch;
 use eytzinger::*;
 use sorted_vec::SortedVec;
+use pulp::Arch;
 
 // This is an insertion-only B+ tree, deletions are simply not supported
 // Meant for a write-many, write-once to disk, read-only-and-many database
@@ -389,7 +390,8 @@ where
     where
         K: PartialOrd + PartialEq + Eq,
     {
-        let i = self.keys.binary_search(&key);
+        let arch = Arch::new();
+        let i = arch.dispatch(|| self.keys.binary_search(&key));
        
         if self.is_leaf {
             let i = match i {
