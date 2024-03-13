@@ -4,12 +4,7 @@ use bumpalo::Bump;
 use rand::prelude::*;
 use xxhash_rust::xxh3::xxh3_64;
 
-use libbptree::bplustree::*;
 use libbptree::fractal::*;
-use libbptree::sorted_vec::*;
-
-// Todo:
-// [ ] - If Fractal is faster, need to test for order & buffer size for speed!
 
 // Early tests had bumpalo increasing performance, but that is no longer the case...
 
@@ -76,7 +71,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
             );
         }
 
-        group.bench_with_input(BenchmarkId::new("SortedVec", order), order, |b, i| {
+        /*group.bench_with_input(BenchmarkId::new("SortedVec", order), order, |b, i| {
             b.iter(|| {
                 let mut tree = SortedVecTree::new(*i);
                 for i in values1m.iter() {
@@ -94,7 +89,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
                 }
                 tree
             })
-        });
+        }); */
     }
     group.finish();
 }
@@ -171,7 +166,7 @@ criterion_group!(name = add_locs_large;
     // targets = bench_large_tree, bench_search
     // targets = bench_search, bench_large_tree
     // targets = bench_large_tree, bench_search
-    targets = bench_search
+    targets = bench_search, bench_large_tree
 );
 
 // criterion_main!(add_locs, add_locs_large);
