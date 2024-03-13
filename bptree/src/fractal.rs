@@ -143,8 +143,7 @@ where
 
     pub fn search(&self, key: K) -> Option<V>
     where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug + Copy,
+        K: PartialOrd,
     {
         #[cfg(debug_assertions)]
         assert!(self.buffer.is_empty());
@@ -161,7 +160,7 @@ where
             Some(self.values.as_ref().unwrap()[i])
         } else {
             let i = match i {
-                Ok(i) => i + 1,
+                Ok(i) => i.saturating_add(1),
                 Err(i) => i,
             };
 
@@ -427,7 +426,7 @@ where
             Some(self.values.as_ref().unwrap()[i])
         } else {
             let i = match i {
-                Ok(i) => i + 1,
+                Ok(i) => i.saturating_add(1),
                 Err(i) => i,
             };
 
