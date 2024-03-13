@@ -9,7 +9,7 @@
 // Able to load only part of the tree from disk
 //
 // use bumpalo::Bump;
-use pulp::Arch;
+// use pulp::Arch;
 
 use std::marker::PhantomData;
 

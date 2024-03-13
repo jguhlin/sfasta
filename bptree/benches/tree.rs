@@ -39,17 +39,20 @@ pub fn bench_large_tree(c: &mut Criterion) {
 
     for order in [32, 64, 128, 256, 512, 1024].iter() {
         for buffer_size in [32_usize, 64_usize, 128, 256].iter() {
-            group.bench_with_input(BenchmarkId::new("FractalTree", format!("{}-{}", order, buffer_size)), &(*order, *buffer_size),
-            |b, (order, buffer_size)| b.iter(||
-                {
-                    let mut tree = FractalTree::new(*order, *buffer_size);
-                    for i in values128m.iter() {
-                        tree.insert(*i, *i);
-                    }
-                    tree.flush_all();
-                    tree
-                }
-            ));
+            group.bench_with_input(
+                BenchmarkId::new("FractalTree", format!("{}-{}", order, buffer_size)),
+                &(*order, *buffer_size),
+                |b, (order, buffer_size)| {
+                    b.iter(|| {
+                        let mut tree = FractalTree::new(*order, *buffer_size);
+                        for i in values128m.iter() {
+                            tree.insert(*i, *i);
+                        }
+                        tree.flush_all();
+                        tree
+                    })
+                },
+            );
         }
     }
     group.finish();
@@ -94,8 +97,6 @@ pub fn bench_large_tree(c: &mut Criterion) {
         });
     }
     group.finish();
-
-
 }
 
 pub fn bench_search(c: &mut Criterion) {
@@ -122,7 +123,11 @@ pub fn bench_search(c: &mut Criterion) {
     let mut group = c.benchmark_group("Search Tree Comparison");
     group.sample_size(500);
     group.measurement_time(std::time::Duration::from_secs(120));
-    for order in [32, 64, 96, 128, 196, 256, 428, 512, 768, 1024, 2048, 4096, 8192].iter() {
+    for order in [
+        32, 64, 96, 128, 196, 256, 428, 512, 768, 1024, 2048, 4096, 8192,
+    ]
+    .iter()
+    {
         let mut tree = FractalTree::new(*order, 128);
         for i in values128m.iter() {
             tree.insert(*i, *i);
@@ -142,6 +147,21 @@ pub fn bench_search(c: &mut Criterion) {
                 })
             },
         );
+
+        let tree = FractalTreeRead::from(tree);
+
+        group.bench_with_input(
+            BenchmarkId::new("FractalTreeRead", format!("{}", order)),
+            order,
+            |b, _order| {
+                b.iter(|| {
+                    for i in values128m.iter().step_by(1024) {
+                        tree.search(i);
+                    }
+                })
+            },
+        );
+
     }
     group.finish();
 }

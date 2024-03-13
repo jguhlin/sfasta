@@ -10,26 +10,24 @@
 
 // use bumpalo::Bump;
 // use pulp::Arch;
+use eytzinger::*;
 use sorted_vec::SortedVec;
-
-use std::marker::PhantomData;
 
 // This is an insertion-only B+ tree, deletions are simply not supported
 // Meant for a write-many, write-once to disk, read-only-and-many database
 
 #[derive(Debug)]
-pub struct FractalTree<'tree, K, V>
+pub struct FractalTree<K, V>
 where
     K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
     V: std::fmt::Debug + Copy,
 {
     root: Node<K, V>,
     order: usize,
-    phantom: PhantomData<&'tree Node<K, V>>,
     buffer_size: usize,
 }
 
-impl<'tree, K, V> FractalTree<'tree, K, V>
+impl<K, V> FractalTree<K, V>
 where
     K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
     V: std::fmt::Debug + Copy,
@@ -40,7 +38,6 @@ where
         FractalTree {
             root,
             order,
-            phantom: PhantomData,
             buffer_size,
         }
     }
@@ -114,7 +111,6 @@ where
     pub keys: SortedVec<K>,
     pub children: Option<Vec<Box<Node<K, V>>>>,
     pub values: Option<Vec<V>>,
-    pub next: Option<Box<Node<K, V>>>, // Does this need to be a u64 until loaded?
     pub buffer: Vec<(K, V)>,
 }
 
@@ -130,7 +126,6 @@ where
             keys: SortedVec::with_capacity(order),
             children: Some(Vec::with_capacity(order)),
             values: None,
-            next: None,
             buffer: Vec::with_capacity(buffer_size),
         }
     }
@@ -142,7 +137,6 @@ where
             keys: SortedVec::with_capacity(order),
             children: None,
             values: Some(Vec::with_capacity(order)),
-            next: None,
             buffer: Vec::with_capacity(buffer_size),
         }
     }
@@ -273,8 +267,8 @@ where
             keys,
             children,
             values,
-            next: None, // TODO
-                        // next: self.next.take(),
+            // next: None, // TODO
+            // next: self.next.take(),
         });
 
         let new_key = if self.is_leaf {
@@ -291,6 +285,155 @@ where
     }
 }
 
+#[derive(Debug)]
+pub struct FractalTreeRead<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
+    root: NodeRead<K, V>,
+}
+
+impl<K, V> FractalTreeRead<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + std::fmt::Display,
+    V: std::fmt::Debug + Copy,
+{
+    pub fn search(&self, key: &K) -> Option<V> {
+        self.root.search(&key)
+    }
+}
+
+// Conversion impl for FractalTree to FractalTreeRead
+impl<K, V> From<FractalTree<K, V>> for FractalTreeRead<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default,
+    V: std::fmt::Debug + Copy,
+{
+    fn from(tree: FractalTree<K, V>) -> Self {
+        FractalTreeRead {
+            root: tree.root.into(),
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct NodeRead<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
+    pub is_root: bool,
+    pub is_leaf: bool,
+    pub keys: SortedVec<K>,
+    pub children: Option<Vec<Box<NodeRead<K, V>>>>,
+    pub values: Option<Vec<V>>,
+}
+
+// Conversion for Box<Node> to Box<NodeRead>
+impl<K, V> From<Box<Node<K, V>>> for Box<NodeRead<K, V>>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default,
+    V: std::fmt::Debug + Copy,
+{
+    fn from(node: Box<Node<K, V>>) -> Self {
+        Box::new((*node).into())
+    }
+}
+
+// Conversion for Node to NodeRead
+// Todo: conversion may benefit from bumpalo or arch?
+impl<K, V> From<Node<K, V>> for NodeRead<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default,
+    V: std::fmt::Debug + Copy,
+{
+    fn from(node: Node<K, V>) -> Self {
+        let Node {
+            is_root,
+            is_leaf,
+            keys,
+            children,
+            values,
+            buffer: _,
+        } = node;
+
+        let children = if children.is_some() {
+            let children = children.unwrap();
+            let mut new_children = Vec::with_capacity(children.len());
+            for child in children {
+                new_children.push(child.into());
+            }
+            Some(new_children)
+        } else {
+            None
+        };
+
+        NodeRead {
+            is_root,
+            is_leaf,
+            keys,
+            children,
+            values,
+        }
+    }
+}
+
+impl<K, V> NodeRead<K, V>
+where
+    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
+    V: std::fmt::Debug + Copy,
+{
+    pub fn search(&self, key: &K) -> Option<V>
+    where
+        K: PartialOrd + PartialEq + Eq,
+    {
+        let i = self.keys.binary_search(&key);
+       
+        if self.is_leaf {
+            let i = match i {
+                Ok(i) => i,
+                Err(_) => return None, // This is the leaf, if it's not found here it won't be found
+            };
+            // Leaf K->V are 1 to 1 mapping
+            assert!(i < self.values.as_ref().unwrap().len());
+            Some(self.values.as_ref().unwrap()[i])
+        } else {
+            // B+ tree search, so we need to find the correct child node
+            let i = match i {
+                Ok(i) => i + 1,
+                Err(i) => i,
+            };
+
+            self.children.as_ref().unwrap()[i].search(key)
+        }
+    }
+}
+
+// Modified
+// https://www.bazhenov.me/posts/faster-binary-search-in-rust/
+pub fn binary_search_branchless<K>(data: &[K], target: &K) -> usize
+where
+        K: PartialOrd + PartialEq + Ord + Eq + Clone + Copy,
+{
+    let mut idx = 1;
+    while idx < data.len() {
+        // TODO: Add (But arch specific)
+        // unsafe {
+        // let prefetch = data.as_ptr().wrapping_offset(2 * idx as isize);
+        // _mm_prefetch::<_MM_HINT_T0>(ptr::addr_of!(prefetch) as *const i8);
+        // }
+        let el = data[idx];
+        idx = 2 * idx + usize::from(el < *target);
+        println!("{idx:b}");
+    }
+
+    idx >>= idx.trailing_ones() + 1;
+    println!("final: {idx:b}");
+
+    idx
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -304,7 +447,6 @@ mod tests {
             keys: unsafe { SortedVec::from_sorted(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) },
             children: None,
             values: Some(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
-            next: None,
             buffer: Vec::with_capacity(8),
         };
 
@@ -331,7 +473,6 @@ mod tests {
             keys: SortedVec::from_unsorted((0..28).collect()),
             children: None,
             values: Some((0..28).collect()),
-            next: None,
             buffer: Vec::with_capacity(8),
         };
 
@@ -502,6 +643,85 @@ mod tests {
         }
         for i in 2048..4096_u64 {
             assert_eq!(tree.search(i), None);
+        }
+    }
+    
+    /*
+    #[test]
+    fn eytzinger_tests() {
+
+        let sorted_vec = (15..20).collect::<Vec<u64>>();
+        let mut eytzinger_vec = sorted_vec.clone();
+        eytzinger_vec.eytzingerize(&mut eytzinger::permutation::InplacePermutator);
+        let mut eyt = vec![0];
+        eyt.extend(eytzinger_vec.clone());
+        let eytzinger_vec = eyt;
+
+        let eyt_index = binary_search_branchless(&eytzinger_vec, &0);
+        let eyt_index = binary_search_branchless(&eytzinger_vec, &1000);
+
+        let sorted_vec = (15..20).collect::<Vec<u64>>();
+        let mut eytzinger_vec = sorted_vec.clone();
+        eytzinger_vec.eytzingerize(&mut eytzinger::permutation::InplacePermutator);
+        let mut eyt = vec![0];
+        eyt.extend(eytzinger_vec.clone());
+        let eytzinger_vec = eyt;
+
+        println!("{:#?}", eytzinger_vec);
+        let eyt_index = binary_search_branchless(&eytzinger_vec, &15);
+        println!("Index: {}", eyt_index);
+        let translated_index = eytzinger::foundation::get_permutation_element(sorted_vec.len()-1, eyt_index-1);
+        println!(
+            "Sorted Vec Index: {}",
+            translated_index
+        );
+        println!("Sorted Vec Value: {}", sorted_vec[translated_index]);
+
+        // Not found value
+        let sorted_vec = (0..1000).step_by(15).collect::<Vec<u64>>();
+        let mut eytzinger_vec = sorted_vec.clone();
+        eytzinger_vec.eytzingerize(&mut eytzinger::permutation::InplacePermutator);
+        let mut eyt = vec![0];
+        eyt.extend(eytzinger_vec.clone());
+        let eytzinger_vec = eyt;
+
+        println!("{:#?}", eytzinger_vec);
+        let eyt_index = binary_search_branchless(&eytzinger_vec, &30);
+        let normal_search = sorted_vec.binary_search(&30);
+        println!("Normal Search: {:?}", normal_search);
+        println!("Index: {:?}", eyt_index);
+        let translated_index = eytzinger::foundation::get_permutation_element(sorted_vec.len()-1, eyt_index-1);
+        println!(
+            "Sorted Vec Index: {}",
+            translated_index
+        );
+        println!("Sorted Vec Value: {}", sorted_vec[translated_index]);
+
+        panic!();
+    }
+    */
+
+    #[test]
+    fn search_noderead() {
+        let mut rng = thread_rng();
+        let mut values_1024 = (0..1024_u64).collect::<Vec<u64>>();
+        values_1024.shuffle(&mut rng);
+
+        let mut values_8192 = (0..8192_u64).collect::<Vec<u64>>();
+        values_8192.shuffle(&mut rng);
+
+        let mut tree = super::FractalTree::new(32, 8);
+
+        for i in values_1024.iter() {
+            tree.insert(*i, *i);
+        }
+
+        tree.flush_all();
+
+        let tree = FractalTreeRead::from(tree);
+
+        for i in values_1024.iter() {
+            assert_eq!(tree.search(i), Some(*i));
         }
     }
 }
