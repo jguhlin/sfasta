@@ -5,7 +5,8 @@
 // Able to load only part of the tree from disk
 
 // Notes:
-// [x] Look into eytzinger (instead of sorted vec?) or ordsearch? -- Neither worked well here
+// [x] Look into eytzinger (instead of sorted vec?) or ordsearch? 
+//     -- Neither worked well here
 
 // use bumpalo::Bump;
 // use eytzinger::*;
@@ -421,8 +422,10 @@ where
                 Ok(i) => i,
                 Err(_) => return None,
             };
+
             #[cfg(debug_assertions)]
             assert!(i < self.values.as_ref().unwrap().len());
+            
             Some(self.values.as_ref().unwrap()[i])
         } else {
             let i = match i {
@@ -482,32 +485,7 @@ where
             }),
             values,
         }
-
     }
-}
-
-// Modified
-// https://www.bazhenov.me/posts/faster-binary-search-in-rust/
-pub fn binary_search_branchless<K>(data: &[K], target: &K) -> usize
-where
-        K: PartialOrd + PartialEq + Ord + Eq + Clone + Copy,
-{
-    let mut idx = 1;
-    while idx < data.len() {
-        // TODO: Add (But arch specific)
-        // unsafe {
-        // let prefetch = data.as_ptr().wrapping_offset(2 * idx as isize);
-        // _mm_prefetch::<_MM_HINT_T0>(ptr::addr_of!(prefetch) as *const i8);
-        // }
-        let el = data[idx];
-        idx = 2 * idx + usize::from(el < *target);
-        println!("{idx:b}");
-    }
-
-    idx >>= idx.trailing_ones() + 1;
-    println!("final: {idx:b}");
-
-    idx
 }
 
 #[cfg(test)]
