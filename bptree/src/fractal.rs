@@ -303,6 +303,9 @@ where
     pub fn search(&self, key: &K) -> Option<V> {
         self.root.search(&key)
     }
+
+    // Todo: add search many function
+
 }
 
 // Conversion impl for FractalTree to FractalTreeRead
