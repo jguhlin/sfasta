@@ -5,13 +5,13 @@
 // Able to load only part of the tree from disk
 
 // Notes:
-// [x] Look into eytzinger (instead of sorted vec?) or ordsearch? 
+// [x] Look into eytzinger (instead of sorted vec?) or ordsearch?
 //     -- Neither worked well here
 
 // use bumpalo::Bump;
 // use eytzinger::*;
-use sorted_vec::SortedVec;
 use bincode::{config, Decode, Encode};
+use sorted_vec::SortedVec;
 // use pulp::Arch;
 
 // This is an insertion-only B+ tree, deletions are simply not supported
@@ -306,7 +306,6 @@ where
     }
 
     // Todo: add search many function
-
 }
 
 // Conversion impl for FractalTree to FractalTreeRead
@@ -317,7 +316,7 @@ where
 {
     fn from(tree: FractalTree<K, V>) -> Self {
         FractalTreeRead {
-            root: tree.root.into()
+            root: tree.root.into(),
         }
     }
 }
@@ -339,7 +338,7 @@ where
 {
     fn from(tree: FractalTreeRead<K, V>) -> Self {
         FractalTreeDisk {
-            root: tree.root.into()
+            root: tree.root.into(),
         }
     }
 }
@@ -416,7 +415,7 @@ where
         K: PartialOrd + PartialEq + Eq,
     {
         let i = self.keys.binary_search(&key);
-       
+
         if self.is_leaf {
             let i = match i {
                 Ok(i) => i,
@@ -425,7 +424,7 @@ where
 
             #[cfg(debug_assertions)]
             assert!(i < self.values.as_ref().unwrap().len());
-            
+
             Some(self.values.as_ref().unwrap()[i])
         } else {
             let i = match i {
@@ -435,7 +434,7 @@ where
 
             self.children.as_ref().unwrap()[i].search(key)
         }
-    } 
+    }
 }
 
 #[derive(Debug, Encode, Decode)]
@@ -480,9 +479,8 @@ where
             is_root,
             is_leaf,
             keys: keys.into_vec(),
-            children: children.map(|children| {
-                children.into_iter().map(|child| child.into()).collect()
-            }),
+            children: children
+                .map(|children| children.into_iter().map(|child| child.into()).collect()),
             values,
         }
     }
@@ -491,9 +489,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use human_size::{Kilobyte, Size, SpecificSize};
     use rand::prelude::*;
     use xxhash_rust::xxh3::xxh3_64;
-    use human_size::{Size, SpecificSize, Kilobyte};
 
     #[test]
     fn split() {
@@ -701,7 +699,7 @@ mod tests {
             assert_eq!(tree.search(i), None);
         }
     }
-    
+
     /*
     #[test]
     fn eytzinger_tests() {
@@ -785,8 +783,8 @@ mod tests {
     #[test]
     fn size_of_super_large() {
         let values128m = (0..128_369_206_u64)
-        .map(|x| xxh3_64(&x.to_le_bytes()))
-        .collect::<Vec<u64>>();
+            .map(|x| xxh3_64(&x.to_le_bytes()))
+            .collect::<Vec<u64>>();
 
         let mut tree: FractalTree<_, _> = FractalTree::new(1024, 1024);
         for i in values128m.iter() {
@@ -800,12 +798,11 @@ mod tests {
         let encoded: Vec<u8> = bincode::encode_to_vec(&tree, config).unwrap();
         println!("Size of 128m tree: {}", encoded.len());
 
-        let size2: SpecificSize<human_size::Gigabyte> = format!("{} B", encoded.len()).parse().unwrap();
+        let size2: SpecificSize<human_size::Gigabyte> =
+            format!("{} B", encoded.len()).parse().unwrap();
 
         println!("Size of 128m tree: {}", size2);
-        
+
         panic!();
     }
-
-
 }

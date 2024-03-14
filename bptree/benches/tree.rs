@@ -156,7 +156,6 @@ pub fn bench_search(c: &mut Criterion) {
                 })
             },
         );
-
     }
     group.finish();
 }
