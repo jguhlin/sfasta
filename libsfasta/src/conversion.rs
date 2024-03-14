@@ -262,8 +262,7 @@ impl Converter {
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
-        let mut indexer =
-            crate::dual_level_index::DualIndexBuilder::with_capacity(seqlocs.index_len());
+        let mut indexer = libbptree::FractalTree::new(1024, 1024);
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
@@ -283,10 +282,10 @@ impl Converter {
             // Start a thread to build the index...
             let index_handle = Some(s.spawn(|_| {
                 for (i, id) in ids.into_iter().enumerate() {
-                    indexer.add(id, i as u32);
+                    indexer.insert(*id, i as u32);
                 }
 
-                let indexer: DualIndexWriter = indexer.into();
+                let indexer: FractalTree = indexer.into();
                 indexer
             }));
 

@@ -6,6 +6,7 @@
 use std::io::{Read, Seek, SeekFrom};
 use std::sync::RwLock;
 
+use libbptree::FractalTree;
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 
@@ -21,7 +22,7 @@ pub struct Sfasta<'sfa> {
     pub parameters: Parameters,
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
-    pub index: Option<DualIndex>,
+    pub index: Option<FractalTree<u64, (String, u64)>>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlockStore>,
     pub seqlocs: Option<SeqLocsStoreBuilder>,
@@ -91,10 +92,9 @@ impl<'sfa> Sfasta<'sfa> {
     }
 
     pub fn seq_slice(&mut self, seqloc: &SeqLoc, range: std::ops::Range<u32>) -> Vec<Loc> {
-        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let block_size = self.get_block_size();
 
-        seqloc.seq_slice(self.seqlocs.as_mut().unwrap(), &mut buf, block_size, range)
+        seqloc.seq_slice(block_size, range)
     }
 
     /// Get a Sequence object by ID.
@@ -109,7 +109,7 @@ impl<'sfa> Sfasta<'sfa> {
 
         let matches = matches.unwrap();
 
-        let id = if matches.ids.is_some() {
+        let id = if !matches.ids.is_empty() {
             Some(self.get_id(matches.ids.as_ref().unwrap()).unwrap())
         } else {
             None

@@ -20,6 +20,7 @@ name = "libsfasta"
 path = "src/lib.rs"
 
 [dependencies]
+bptree = { path = "../bptree" }
 rand = "0.8.5"
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"

@@ -20,8 +20,7 @@ use sorted_vec::SortedVec;
 #[derive(Debug)]
 pub struct FractalTree<K, V>
 where
-    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-    V: std::fmt::Debug + Copy,
+    K: PartialOrd + PartialEq + Ord + Eq + Clone,
 {
     root: Node<K, V>,
     order: usize,
@@ -30,8 +29,7 @@ where
 
 impl<K, V> FractalTree<K, V>
 where
-    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-    V: std::fmt::Debug + Copy,
+    K: PartialOrd + PartialEq + Ord + Eq + Clone
 {
     pub fn new(order: usize, buffer_size: usize) -> Self {
         let mut root = Node::leaf(order, buffer_size);
@@ -51,8 +49,7 @@ where
 
     pub fn flush(&mut self, all: bool)
     where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug + Copy,
+        K: PartialOrd + PartialEq + Ord + Eq + Clone
     {
         assert!(self.root.keys.is_sorted());
         self.root.flush(self.order, self.buffer_size, all);
@@ -75,13 +72,12 @@ where
 
     pub fn flush_all(&mut self)
     where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug + Copy,
+        K: PartialOrd + PartialEq + Ord + Eq + Clone
     {
         self.flush(true);
     }
 
-    pub fn search(&self, key: K) -> Option<V>
+    pub fn search(&self, key: K) -> Option<&V>
     where
         K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
         V: std::fmt::Debug + Copy,
@@ -94,8 +90,7 @@ where
 #[must_use]
 pub enum InsertionAction<K, V>
 where
-    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-    V: std::fmt::Debug + Copy,
+    K: PartialOrd + PartialEq + Ord + Eq + Clone
 {
     Success,
     NodeSplit(K, Box<Node<K, V>>),
@@ -104,8 +99,7 @@ where
 #[derive(Debug)]
 pub struct Node<K, V>
 where
-    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-    V: std::fmt::Debug + Copy,
+    K: PartialOrd + PartialEq + Ord + Eq + Clone
 {
     pub is_root: bool,
     pub is_leaf: bool,
@@ -117,8 +111,7 @@ where
 
 impl<K, V> Node<K, V>
 where
-    K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-    V: std::fmt::Debug + Copy,
+    K: PartialOrd + PartialEq + Ord + Eq + Clone
 {
     pub fn internal(order: usize, buffer_size: usize) -> Self {
         Node {
@@ -142,7 +135,7 @@ where
         }
     }
 
-    pub fn search(&self, key: K) -> Option<V>
+    pub fn search(&self, key: K) -> Option<&V>
     where
         K: PartialOrd,
     {
@@ -158,7 +151,7 @@ where
             };
             #[cfg(debug_assertions)]
             assert!(i < self.values.as_ref().unwrap().len());
-            Some(self.values.as_ref().unwrap()[i])
+            Some(&self.values.as_ref().unwrap()[i])
         } else {
             let i = match i {
                 Ok(i) => i.saturating_add(1),
@@ -171,8 +164,7 @@ where
 
     pub fn insert(&mut self, buffer_size: usize, key: K, value: V) -> bool
     where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug,
+        K: PartialOrd + PartialEq + Ord + Eq + Clone
     {
         self.buffer.push((key, value));
         self.buffer.len() >= buffer_size
@@ -231,8 +223,7 @@ where
 
     pub fn split(&mut self, order: usize, buffer_size: usize) -> (K, Box<Node<K, V>>)
     where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug,
+        K: PartialOrd + PartialEq + Ord + Eq + Clone
     {
         #[cfg(debug_assertions)]
         assert!(self.keys.is_sorted());
@@ -646,7 +637,7 @@ mod tests {
         tree.flush_all();
 
         for i in values_1024.iter() {
-            assert_eq!(tree.search(*i), Some(*i));
+            assert_eq!(tree.search(*i), Some(i));
         }
 
         let mut tree = super::FractalTree::new(16, 32);
@@ -658,7 +649,7 @@ mod tests {
         tree.flush_all();
 
         for i in values_8192.iter() {
-            assert_eq!(tree.search(*i), Some(*i));
+            assert_eq!(tree.search(*i), Some(i));
         }
 
         // Find value does not exist
@@ -672,7 +663,7 @@ mod tests {
         tree.flush_all();
 
         for i in 0..(1024 * 1024) {
-            assert!(tree.search(i as u64) == Some(i as u64), "i: {}", i);
+            assert!(tree.search(i as u64) == Some(&i), "i: {}", i);
         }
 
         // Things that should not be found
@@ -688,7 +679,7 @@ mod tests {
         tree.flush_all();
 
         for i in 1024..2048_u64 {
-            assert_eq!(tree.search(i), Some(i));
+            assert_eq!(tree.search(i), Some(&i));
         }
 
         // Things that should not be found
