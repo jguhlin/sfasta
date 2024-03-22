@@ -17,3 +17,4 @@ libsfasta/test_data/uniprot_sprot.fasta.gz
 *.profraw
 coverage/
 target/
+vendor/
