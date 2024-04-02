@@ -3,7 +3,8 @@ resolver = "2"
 members = [
 	"libsfasta",
 	"sfa",
-	"bptree"
+	"fractaltree",
+	"compression",
 ]
 
 # [profile.release]
@@ -17,3 +18,4 @@ debug = true
 
 [profile.dev.package."*"]
 opt-level = 3
+

@@ -4,8 +4,11 @@ extern crate mimalloc;
 use mimalloc::MiMalloc;
 use rand_core::block;
 
-// #[global_allocator]
-// static GLOBAL: MiMalloc = MiMalloc;
+// When not windows, use mimalloc
+#[cfg(not(windows))]
+#[global_allocator]
+#[cfg(not(windows))]
+static GLOBAL: MiMalloc = MiMalloc;
 
 // static MEM: &str = "Mimalloc";
 

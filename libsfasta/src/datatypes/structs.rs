@@ -1,7 +1,7 @@
 use std::any::Any;
 use std::io::prelude::*;
 
-use crate::compression::CompressionType;
+use libcompression::*;
 
 // SuperTrait -- needed for pyO3
 pub trait ReadAndSeek: Read + Seek {}

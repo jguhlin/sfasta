@@ -7,12 +7,10 @@ extern crate rayon;
 extern crate itertools;
 
 pub mod block_index;
-pub mod compression;
 pub mod convenience;
 pub mod conversion;
 pub mod datastructures;
 pub mod datatypes;
-pub mod dual_level_index;
 mod formats;
 pub mod io;
 pub mod masking;
@@ -20,7 +18,6 @@ pub mod utils;
 
 pub mod prelude;
 
-pub use crate::block_index::*;
 pub use crate::datatypes::structs::*;
 pub use crate::io::*;
 pub use crate::utils::*;

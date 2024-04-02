@@ -12,11 +12,7 @@ use std::time::Duration;
 use crossbeam::queue::ArrayQueue;
 use crossbeam::utils::Backoff;
 
-#[derive(Debug, Clone)]
-pub struct OutputBlock {
-    pub data: Vec<u8>,
-    pub location: Arc<AtomicU64>,
-}
+use libcompression::*;
 
 pub struct Worker<W: Write + Seek + Send + Seek + 'static> {
     queue: Option<Arc<ArrayQueue<OutputBlock>>>,

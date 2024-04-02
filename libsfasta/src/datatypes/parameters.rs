@@ -1,6 +1,6 @@
 use crate::*;
 
-use crate::compression::CompressionType;
+use libcompression::*;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct Parameters {

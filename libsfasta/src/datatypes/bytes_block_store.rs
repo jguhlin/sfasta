@@ -7,8 +7,8 @@ use bitvec::store;
 use crossbeam::utils::Backoff;
 use rayon::str::Bytes;
 
-use crate::compression::{CompressionConfig, CompressionType, Worker};
 use crate::datatypes::Loc;
+use libcompression::*;
 
 /// This underlies most storage. It is a block store that stores bytes of any type and compresses them
 /// Typically not used directly, but used by sequence_block_store and string_block_store
@@ -30,7 +30,7 @@ pub struct BytesBlockStoreBuilder {
     pub compression_config: Arc<CompressionConfig>,
 
     /// Compression worker. Enables multithreading for compression.
-    compression_worker: Option<Arc<Worker>>,
+    compression_worker: Option<Arc<CompressionWorker>>,
 
     /// Whether the block store is finalized
     finalized: bool,
@@ -64,7 +64,7 @@ impl BytesBlockStoreBuilder {
     }
 
     /// Set the compression worker.
-    pub fn with_compression_worker(mut self, compression_worker: Arc<Worker>) -> Self {
+    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self {
         self.compression_worker = Some(compression_worker);
         self
     }
@@ -484,7 +484,7 @@ mod tests {
 
         let output_queue = output_worker.get_queue();
 
-        let mut compression_workers = crate::compression::worker::Worker::new()
+        let mut compression_workers = CompressionWorker::new()
             .with_buffer_size(16)
             .with_threads(1_u16)
             .with_output_queue(Arc::clone(&output_queue));

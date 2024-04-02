@@ -1,1 +1,0 @@
-Neither cute nucleotides nor naf_like are implemented at this stage.

@@ -5,6 +5,7 @@ use std::io::{Read, Seek, Write};
 use std::sync::Arc;
 
 use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
+use libcompression::*;
 
 use pulp::Arch;
 
@@ -37,10 +38,7 @@ impl MaskingStoreBuilder {
         self
     }
 
-    pub fn with_compression_worker(
-        mut self,
-        compression_worker: Arc<crate::compression::Worker>,
-    ) -> Self {
+    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self {
         self.inner = self.inner.with_compression_worker(compression_worker);
         self
     }
@@ -144,7 +142,7 @@ mod tests {
 
         let output_queue = output_worker.get_queue();
 
-        let mut compression_workers = crate::compression::worker::Worker::new()
+        let mut compression_workers = CompressionWorker::new()
             .with_buffer_size(16)
             .with_threads(1_u16)
             .with_output_queue(Arc::clone(&output_queue));

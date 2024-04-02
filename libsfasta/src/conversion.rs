@@ -6,15 +6,16 @@
 use crossbeam::queue::ArrayQueue;
 use crossbeam::thread;
 use crossbeam::utils::Backoff;
+use xxhash_rust::xxh3::{self, xxh3_64};
 
 use std::io::{BufReader, Read, Seek, SeekFrom, Write};
 use std::num::NonZeroU64;
 use std::sync::{Arc, Mutex};
 
-use crate::compression::useful::CompressionType;
 use crate::datatypes::*;
-use crate::dual_level_index::*;
 use crate::formats::*;
+use libcompression::*;
+use libfractaltree::{FractalTree, FractalTreeDisk, FractalTreeRead};
 
 /// Main conversion struct
 ///
@@ -262,7 +263,7 @@ impl Converter {
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
         // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
-        let mut indexer = libbptree::FractalTree::new(1024, 1024);
+        let mut indexer = libfractaltree::FractalTree::new(1024, 1024);
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
@@ -282,10 +283,11 @@ impl Converter {
             // Start a thread to build the index...
             let index_handle = Some(s.spawn(|_| {
                 for (i, id) in ids.into_iter().enumerate() {
-                    indexer.insert(*id, i as u32);
+                    let id = xxh3_64(id.as_bytes());
+                    indexer.insert(id, i as u32);
                 }
 
-                let indexer: FractalTree = indexer.into();
+                let indexer: FractalTree<_, _> = indexer.into();
                 indexer
             }));
 
@@ -311,7 +313,7 @@ impl Converter {
                     .stream_position()
                     .expect("Unable to work with seek API");
 
-                let mut index = index_handle.unwrap().join().unwrap();
+                let index = index_handle.unwrap().join().unwrap();
                 log::info!(
                     "Writing index to file. {}",
                     out_buffer_thread.stream_position().unwrap()
@@ -320,7 +322,14 @@ impl Converter {
                 let start = out_buffer_thread.stream_position().unwrap();
 
                 let start_time = std::time::Instant::now();
-                index.write_to_buffer(&mut *out_buffer_thread);
+                let index: FractalTreeDisk<u64, u32> = index.into();
+
+                // TODO: Optimize storage in FractalTreeDisk struct
+                // So we can specifically open and decompress certain blocks, instead of the whole thing
+                // This is a hack and an important TODO
+                bincode::encode_into_std_write(index, &mut *out_buffer_thread, bincode_config)
+                    .expect("Unable to write index to file");
+
                 let end_time = std::time::Instant::now();
                 log::info!("Index write time: {:?}", end_time - start_time);
 
@@ -421,7 +430,7 @@ impl Converter {
         let output_queue = output_worker.get_queue();
 
         // Start the compression workers
-        let mut compression_workers = crate::compression::worker::Worker::new()
+        let mut compression_workers = CompressionWorker::new()
             .with_buffer_size(8192)
             .with_threads(threads as u16)
             .with_output_queue(Arc::clone(&output_queue));
@@ -519,19 +528,18 @@ impl Converter {
                         Some(Work::FastaPayload(seq)) => {
                             let (seqid, seqheader, seq, _) = seq.into_parts();
 
-                            let mut location = SeqLoc::new();
+                            let mut seqloc = SeqLoc::new();
 
                             let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
                             if let Some(x) = masked {
-                                let x = seqlocs.add_locs(&x);
-                                location.masking = Some(x);
+                                seqloc.add_masking_locs(x);
                             }
 
                             // Capitalize sequence
                             if let Some(mut x) = seq {
                                 x.make_ascii_uppercase();
                                 let loc = sequences.add(&mut x[..]);
-                                location.sequence = Some(seqlocs.add_locs(&loc));
+                                seqloc.add_sequence_locs(loc);
                             }
 
                             let myid = std::sync::Arc::new(seqid.unwrap());
@@ -539,14 +547,13 @@ impl Converter {
                             let idloc = ids.add(&(*myid));
 
                             if let Some(x) = seqheader {
-                                let x = seqlocs.add_locs(&headers.add(&x));
-                                location.headers = Some((x.0, x.1 as u8));
+                                let x = headers.add(&x);
+                                seqloc.add_header_locs(x);
                             }
 
-                            let x = seqlocs.add_locs(&idloc);
-                            location.ids = Some((x.0, x.1 as u8));
+                            seqloc.add_id_locs(idloc);
 
-                            seqlocs.add_to_index(location);
+                            seqlocs.add_to_index(seqloc);
                         }
                         Some(Work::FastqPayload(_)) => {
                             panic!("Received FASTQ payload in FASTA thread")

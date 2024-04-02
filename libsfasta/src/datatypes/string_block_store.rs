@@ -3,8 +3,8 @@ use std::sync::Arc;
 
 use simdutf8::basic::from_utf8;
 
-use crate::compression::*;
 use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
+use libcompression::*;
 
 pub struct StringBlockStoreBuilder {
     inner: BytesBlockStoreBuilder,
@@ -25,10 +25,7 @@ impl Default for StringBlockStoreBuilder {
 }
 
 impl StringBlockStoreBuilder {
-    pub fn with_compression_worker(
-        mut self,
-        compression_worker: Arc<crate::compression::Worker>,
-    ) -> Self {
+    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self {
         self.inner = self.inner.with_compression_worker(compression_worker);
         self
     }

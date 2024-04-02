@@ -19,11 +19,7 @@
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::sync::{atomic::AtomicU64, Arc};
 
-use stream_vbyte::{
-    encode::encode,
-    decode::decode,
-    scalar::Scalar
-};
+use stream_vbyte::{decode::decode, encode::encode, scalar::Scalar};
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each type
@@ -53,7 +49,6 @@ pub struct SeqLocOnDisk {
 
 impl From<SeqLoc> for SeqLocOnDisk {
     fn from(seqloc: SeqLoc) -> Self {
-
         let SeqLoc {
             sequence,
             masking,
@@ -64,62 +59,42 @@ impl From<SeqLoc> for SeqLocOnDisk {
             locs,
         } = seqloc;
 
-        let total_length = (sequence
-                + masking
-                + scores
-                + signal
-                + headers
-                + ids) * 3;
+        let total_length = (sequence + masking + scores + signal + headers + ids) * 3;
 
         let mut compressed: Vec<u8> = vec![0; total_length as usize];
-        
+
         // TODO: Is there a way to directly access the Vec<Loc> to get Vec<u32>'s?
-        let nums = locs.iter().map(|loc| loc.get_values()).flatten().collect::<Vec<u32>>();
+        let nums = locs
+            .iter()
+            .map(|loc| loc.get_values())
+            .flatten()
+            .collect::<Vec<u32>>();
 
         let encoded_length = encode::<Scalar>(&nums, &mut compressed);
         compressed.truncate(encoded_length);
 
         // Todo: Does this actually save any space?
-        let values_uncompressed = vec![
-            sequence,
-            masking,
-            scores,
-            signal,
-            headers,
-            ids,
-        ];
+        let values_uncompressed = vec![sequence, masking, scores, signal, headers, ids];
 
         let values_uncompressed =
-        unsafe {
-            std::mem::transmute::<Vec<u16>, Vec<u32>>(values_uncompressed)
-        };
+            unsafe { std::mem::transmute::<Vec<u16>, Vec<u32>>(values_uncompressed) };
 
         let mut values = vec![0; values_uncompressed.len() * 5];
         let encoded_length = encode::<Scalar>(&values_uncompressed, &mut values);
         values.truncate(encoded_length);
 
-        SeqLocOnDisk {
-            values,
-            compressed
-        }
+        SeqLocOnDisk { values, compressed }
     }
 }
 
 // Todo: compress seq, masking, scores, signal, headers, ids
 impl From<SeqLocOnDisk> for SeqLoc {
     fn from(ondisk: SeqLocOnDisk) -> Self {
-
-        let SeqLocOnDisk {
-            values,
-            compressed,
-        } = ondisk;
-
+        let SeqLocOnDisk { values, compressed } = ondisk;
 
         let mut values_uncompressed: Vec<u32> = vec![0; 6];
         decode::<Scalar>(&values, 6, &mut values_uncompressed);
-        let values = unsafe {
-            std::mem::transmute::<Vec<u32>, Vec<u16>>(values_uncompressed)
-        };
+        let values = unsafe { std::mem::transmute::<Vec<u32>, Vec<u16>>(values_uncompressed) };
 
         let sequence = values[0];
         let masking = values[1];
@@ -128,12 +103,7 @@ impl From<SeqLocOnDisk> for SeqLoc {
         let headers = values[4];
         let ids = values[5];
 
-        let integers_len = (sequence
-                + masking
-                + scores
-                + signal
-                + headers
-                + ids) as usize * 3;
+        let integers_len = (sequence + masking + scores + signal + headers + ids) as usize * 3;
 
         let mut decoded = vec![0; integers_len];
 
@@ -141,7 +111,10 @@ impl From<SeqLocOnDisk> for SeqLoc {
         // See if any benefit...
         decode::<Scalar>(&compressed, integers_len, &mut decoded);
 
-        let locs = decoded.chunks_exact(3).map(|chunk| Loc::from(chunk)).collect::<Vec<Loc>>();
+        let locs = decoded
+            .chunks_exact(3)
+            .map(|chunk| Loc::from(chunk))
+            .collect::<Vec<Loc>>();
 
         SeqLoc {
             sequence,
@@ -150,7 +123,7 @@ impl From<SeqLocOnDisk> for SeqLoc {
             signal,
             headers,
             ids,
-            locs,            
+            locs,
         }
     }
 }
@@ -169,8 +142,8 @@ impl From<SeqLocOnDisk> for SeqLoc {
 /// Handles access to SeqLocs
 #[derive(Clone)]
 pub struct SeqLocsStoreBuilder {
-    location: u64,
-    data: Vec<(SeqLoc, Arc<AtomicU64>)>,
+    pub location: u64,
+    pub data: Vec<(SeqLoc, Arc<AtomicU64>)>,
 }
 
 impl Default for SeqLocsStoreBuilder {
@@ -219,14 +192,15 @@ impl SeqLocsStoreBuilder {
 
         for (seqloc, location) in data.into_iter() {
             let seqloc = SeqLocOnDisk::from(seqloc);
-            let pos = out_buf.stream_position().expect("Unable to work with seek API");
+            let pos = out_buf
+                .stream_position()
+                .expect("Unable to work with seek API");
             bincode::encode_into_std_write(seqloc, &mut out_buf, bincode_config)
                 .expect("Unable to write SeqLoc to file");
             location.store(pos, std::sync::atomic::Ordering::Relaxed);
         }
 
         self.location
-
     }
 }
 
@@ -239,15 +213,81 @@ impl SeqLoc {
             signal: 0,
             headers: 0,
             ids: 0,
-            locs: Vec::new(),            
+            locs: Vec::new(),
         }
     }
 
+    #[inline(always)]
+    fn masking_pos(&self) -> usize {
+        self.sequence as usize
+    }
+
+    #[inline(always)]
+    fn scores_pos(&self) -> usize {
+        (self.sequence + self.masking) as usize
+    }
+
+    #[inline(always)]
+    fn signal_pos(&self) -> usize {
+        (self.sequence + self.masking + self.scores) as usize
+    }
+
+    #[inline(always)]
+    fn headers_pos(&self) -> usize {
+        (self.sequence + self.masking + self.scores + self.signal) as usize
+    }
+
+    #[inline(always)]
+    fn ids_pos(&self) -> usize {
+        (self.sequence + self.masking + self.scores + self.signal + self.headers) as usize
+    }
+
+    pub fn get_sequence(&self) -> &[Loc] {
+        &self.locs[0..self.sequence as usize]
+    }
+
+    pub fn get_masking(&self) -> &[Loc] {
+        &self.locs[self.sequence as usize..self.masking_pos()]
+    }
+
+    pub fn get_scores(&self) -> &[Loc] {
+        &self.locs[self.masking_pos()..self.scores_pos()]
+    }
+
+    pub fn get_signal(&self) -> &[Loc] {
+        &self.locs[self.scores_pos()..self.signal_pos()]
+    }
+
+    pub fn get_headers(&self) -> &[Loc] {
+        &self.locs[self.signal_pos()..self.headers_pos()]
+    }
+
+    pub fn get_ids(&self) -> &[Loc] {
+        &self.locs[self.headers_pos()..self.ids_pos()]
+    }
+
+    pub fn add_masking_locs(&mut self, locs: Vec<Loc>) {
+        self.masking = locs.len() as u16;
+        self.locs.extend(locs);
+    }
+
+    pub fn add_sequence_locs(&mut self, locs: Vec<Loc>) {
+        self.sequence = locs.len() as u16;
+        self.locs.extend(locs);
+    }
+
+    pub fn add_header_locs(&mut self, locs: Vec<Loc>) {
+        self.headers = locs.len() as u16;
+        self.locs.extend(locs);
+    }
+
+    pub fn add_id_locs(&mut self, locs: Vec<Loc>) {
+        self.ids = locs.len() as u16;
+        self.locs.extend(locs);
+    }
+
     #[allow(clippy::len_without_is_empty)]
-    pub fn len<R>(&self) -> usize
-    where
-        R: Read + Seek,
-    {
+    pub fn len(&self) -> usize {
         self.locs.iter().map(|loc| loc.len as usize).sum()
     }
 
@@ -273,11 +313,7 @@ impl SeqLoc {
     // Have to map ranges to the Vec<Locs>
     // TODO: Make generic over sequence, scores, and masking
     // TODO: Should work on staggered Locs, even though they do not exist....
-    pub fn seq_slice(
-        &self,
-        block_size: u32,
-        range: std::ops::Range<u32>,
-    ) -> Vec<Loc> {
+    pub fn seq_slice(&self, block_size: u32, range: std::ops::Range<u32>) -> Vec<Loc> {
         let mut new_locs = Vec::new();
 
         let locs = &self.locs;
@@ -376,8 +412,8 @@ pub struct SeqLocsStore {
     location: u64,
     data: Vec<SeqLoc>,
     locations: Vec<u64>, // On-disk location of each seqloc, useful for finding the right one
-                         // when they are all loaded into memory...
-                         // Use binary search
+    // when they are all loaded into memory...
+    // Use binary search
     preloaded: bool,
 }
 
@@ -396,8 +432,7 @@ impl SeqLocsStore {
     }
 
     /// Get SeqLoc object from a file (buffer)
-    pub fn from_existing(pos: u64) -> Result<Self, String>
-    {
+    pub fn from_existing(pos: u64) -> Result<Self, String> {
         let store = SeqLocsStore {
             location: pos,
             data: Vec::new(),
@@ -409,34 +444,31 @@ impl SeqLocsStore {
     }
 
     /// Load up all SeqLocs from a file
-    pub fn get_all_seqlocs<R>(
-        &mut self,
-        mut in_buf: &mut R,
-    ) -> Result<&Vec<SeqLoc>, &'static str>
+    pub fn get_all_seqlocs<R>(&mut self, mut in_buf: &mut R) -> Result<&Vec<SeqLoc>, &'static str>
     where
         R: Read + Seek,
+    {
+        log::info!("Prefetching SeqLocs");
+
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 8 * 1024 * 1024 }>(); // 8Mbp
+
+        in_buf.seek(SeekFrom::Start(self.location)).unwrap();
+
+        // Basically keep going until we get an error, and assume that's the EOF
+        // or a different data type...
+        while let Ok(seqloc) =
+            bincode::decode_from_std_read::<SeqLocOnDisk, _, _>(&mut in_buf, bincode_config)
         {
-            log::info!("Prefetching SeqLocs");
+            let seqloc = SeqLoc::from(seqloc);
+            let pos = in_buf.stream_position().unwrap();
+            self.locations.push(pos);
+            self.data.push(seqloc);
+        }
 
-            let bincode_config = bincode::config::standard()
-                .with_fixed_int_encoding()
-                .with_limit::<{8 * 1024 * 1024}>(); // 8Mbp
-
-            in_buf
-                .seek(SeekFrom::Start(self.location))
-                .unwrap();
-
-            // Basically keep going until we get an error, and assume that's the EOF
-            // or a different data type...
-            while let Ok(seqloc) = bincode::decode_from_std_read::<SeqLocOnDisk, _, _>(&mut in_buf, bincode_config) {
-                let seqloc = SeqLoc::from(seqloc);
-                let pos = in_buf.stream_position().unwrap();
-                self.locations.push(pos);
-                self.data.push(seqloc);
-            }
-
-            log::debug!("Finished");
-            return Ok(&self.data);
+        log::debug!("Finished");
+        return Ok(&self.data);
     }
 
     /// Get a particular SeqLoc from the store
@@ -449,8 +481,8 @@ impl SeqLocsStore {
         R: Read + Seek,
     {
         let bincode_config = bincode::config::standard()
-                .with_fixed_int_encoding()
-                .with_limit::<{8 * 1024 * 1024}>(); // 8Mbp
+            .with_fixed_int_encoding()
+            .with_limit::<{ 8 * 1024 * 1024 }>(); // 8Mbp
 
         in_buf.seek(SeekFrom::Start(loc)).unwrap();
         let seqloc: Result<SeqLocOnDisk, _> = bincode::decode_from_std_read(in_buf, bincode_config);
@@ -500,7 +532,7 @@ mod tests {
         assert_eq!(slice, vec![Loc::new(0, 5, 4)]);
         let block_size = 262144;
         seqloc.sequence += 2;
-        
+
         seqloc.locs.extend(vec![
             Loc::new(3097440, 261735, 262144 - 261735),
             Loc::new(3097441, 0, 1274),
@@ -518,7 +550,7 @@ mod tests {
         assert_eq!(slice, vec![Loc::new(3097440, 261735, 20)]);
 
         seqloc.sequence += 2;
-        
+
         seqloc.locs.extend(vec![
             Loc::new(1652696, 260695, 262144 - 260695),
             Loc::new(1652697, 0, 28424),

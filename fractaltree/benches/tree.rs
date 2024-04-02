@@ -1,10 +1,9 @@
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
 
-use bumpalo::Bump;
 use rand::prelude::*;
 use xxhash_rust::xxh3::xxh3_64;
 
-use libbptree::fractal::*;
+use libfractaltree::*;
 
 // Early tests had bumpalo increasing performance, but that is no longer the case...
 
@@ -39,7 +38,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
                 &(*order, *buffer_size),
                 |b, (order, buffer_size)| {
                     b.iter(|| {
-                        let mut tree = FractalTree::new(*order, *buffer_size);
+                        let mut tree = FractalTreeBuild::new(*order, *buffer_size);
                         for i in values128m.iter() {
                             tree.insert(*i, *i);
                         }
@@ -60,7 +59,7 @@ pub fn bench_large_tree(c: &mut Criterion) {
                 &(*order, *buffer_size),
                 |b, (order, buffer_size)| {
                     b.iter(|| {
-                        let mut tree = FractalTree::new(*order, *buffer_size);
+                        let mut tree = FractalTreeBuild::new(*order, *buffer_size);
                         for i in values1m.iter() {
                             tree.insert(*i, *i);
                         }
@@ -123,7 +122,7 @@ pub fn bench_search(c: &mut Criterion) {
     ]
     .iter()
     {
-        let mut tree = FractalTree::new(*order, 128);
+        let mut tree = FractalTreeBuild::new(*order, 128);
         for i in values128m.iter() {
             tree.insert(*i, *i);
         }
