@@ -9,12 +9,15 @@ use xxhash_rust::xxh3::{self, xxh3_64};
 use std::{
     io::{BufReader, Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
-    sync::{Arc, Mutex},
+    sync::{
+        atomic::{AtomicU64, Ordering},
+        Arc, Mutex, RwLock,
+    },
 };
 
 use crate::{datatypes::*, formats::*};
 use libcompression::*;
-use libfractaltree::{FractalTree, FractalTreeDisk, FractalTreeRead};
+use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
 
 /// Main conversion struct
 ///
@@ -180,7 +183,8 @@ impl Converter
     where
         W: Write + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        // IMPORTANT: Headers must ALWAYS be fixed int encoding
+        let bincode_config = crate::BINCODE_CONFIG.with_fixed_int_encoding();
 
         out_fh
             .write_all("sfasta".as_bytes())
@@ -222,9 +226,6 @@ impl Converter
         // Track how much space each individual element takes up
         let mut debug_size: Vec<(String, usize)> = Vec::new();
 
-        // Trying out var int encoding
-        let bincode_config = bincode::config::standard().with_variable_int_encoding();
-
         assert!(self.block_size < u32::MAX as usize);
 
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
@@ -261,13 +262,10 @@ impl Converter
 
         let out_buffer = Arc::new(Mutex::new(out_fh));
 
-        let (ids, mut seqlocs, headers_location, ids_location, masking_location, sequences_location) =
+        let (ids, mut seqlocs, headers_location, ids_location, masking_location, sequences_location, ids_to_locs) =
             self.process(&mut in_buf, Arc::clone(&out_buffer));
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
-
-        // TODO: Support for Index32 (and even smaller! What if only 1 or 2 sequences?)
-        let mut indexer = libfractaltree::FractalTree::new(1024, 1024);
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
@@ -276,7 +274,7 @@ impl Converter
         // This will then point to the different location blocks where the sequence is...
         //
         // TODO: Optional index can probably be handled better...
-        let mut dual_index_pos = 0;
+        let mut fractaltree_pos = 0;
 
         let mut seqlocs_location = 0;
 
@@ -284,16 +282,7 @@ impl Converter
 
         // Build the index in another thread...
         thread::scope(|s| {
-            // Start a thread to build the index...
-            let index_handle = Some(s.spawn(|_| {
-                for (i, id) in ids.into_iter().enumerate() {
-                    let id = xxh3_64(id.as_bytes());
-                    indexer.insert(id, i as u32);
-                }
-
-                let indexer: FractalTree<_, _> = indexer.into();
-                indexer
-            }));
+            let mut indexer = libfractaltree::FractalTreeBuild::new(128, 256);
 
             // Use the main thread to write the sequence locations...
             log::info!(
@@ -309,11 +298,23 @@ impl Converter
                 out_buffer_thread.stream_position().unwrap()
             );
 
+            // WIP This is going by index instead it should go by u32 of seqloc location
+            // Start a thread to build the index...
+            let index_handle = Some(s.spawn(|_| {
+                for (id, loc) in ids_to_locs.into_iter() {
+                    let id = xxh3_64(id.as_bytes());
+                    indexer.insert(id as u32, loc.load(Ordering::Relaxed) as u32);
+                }
+                indexer.flush_all();
+
+                indexer
+            }));
+
             let end = out_buffer_thread.stream_position().unwrap();
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
-                dual_index_pos = out_buffer_thread
+                fractaltree_pos = out_buffer_thread
                     .stream_position()
                     .expect("Unable to work with seek API");
 
@@ -326,12 +327,10 @@ impl Converter
                 let start = out_buffer_thread.stream_position().unwrap();
 
                 let start_time = std::time::Instant::now();
-                let index: FractalTreeDisk<u64, u32> = index.into();
+                let mut index: FractalTreeDisk = index.into();
 
-                // TODO: Optimize storage in FractalTreeDisk struct
-                // So we can specifically open and decompress certain blocks, instead of the whole thing
-                // This is a hack and an important TODO
-                bincode::encode_into_std_write(index, &mut *out_buffer_thread, bincode_config)
+                index
+                    .write_to_buffer(&mut *out_buffer_thread)
                     .expect("Unable to write index to file");
 
                 let end_time = std::time::Instant::now();
@@ -346,7 +345,7 @@ impl Converter
         drop(out_buffer_thread);
 
         sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
-        sfasta.directory.index_loc = NonZeroU64::new(dual_index_pos);
+        sfasta.directory.index_loc = NonZeroU64::new(fractaltree_pos);
         sfasta.directory.headers_loc = headers_location;
         sfasta.directory.ids_loc = ids_location;
         sfasta.directory.masking_loc = masking_location;
@@ -367,7 +366,8 @@ impl Converter
 
         let start_time = std::time::Instant::now();
 
-        let bincode_config_fixed = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config_fixed = crate::BINCODE_CONFIG.with_fixed_int_encoding();
+
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
         bincode::encode_into_std_write(dir, &mut *out_buffer_lock, bincode_config_fixed)
             .expect("Unable to write directory to file");
@@ -407,6 +407,7 @@ impl Converter
         Option<NonZeroU64>,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
+        Vec<(std::sync::Arc<String>, Arc<AtomicU64>)>,
     )
     where
         W: WriteAndSeek + 'convert + Send + Sync + 'static,
@@ -447,6 +448,7 @@ impl Converter
         let mut masking_location = None;
         let mut sequences = None;
         let mut sequences_location = None;
+        let mut ids_to_locs = Arc::new(RwLock::new(Vec::new()));
 
         // Sequence queue for the generator
         let seq_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192 * 2));
@@ -455,6 +457,7 @@ impl Converter
 
         // Pop to a new thread that pushes sequence into the sequence buffer...
         thread::scope(|s| {
+            let mut ids_to_locs = Arc::clone(&ids_to_locs);
             let fasta_thread = s.spawn(|_| {
                 let mut in_buf_reader = BufReader::new(in_buf);
 
@@ -500,6 +503,8 @@ impl Converter
             // TODO: Set compression stuff here...
             let compression_workers_thread = Arc::clone(&compression_workers);
             let reader_handle = s.spawn(move |_| {
+                let mut ids_to_locs = ids_to_locs.write().unwrap();
+
                 let mut headers = StringBlockStoreBuilder::default()
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
@@ -551,7 +556,8 @@ impl Converter
 
                             seqloc.add_id_locs(idloc);
 
-                            seqlocs.add_to_index(seqloc);
+                            let loc = seqlocs.add_to_index(seqloc);
+                            ids_to_locs.push((myid, loc));
                         }
                         Some(Work::FastqPayload(_)) => {
                             panic!("Received FASTQ payload in FASTA thread")
@@ -626,6 +632,9 @@ impl Converter
         })
         .expect("Error");
 
+        let ids_to_locs = Arc::try_unwrap(ids_to_locs).expect("Unable to get ids_to_locs");
+        let ids_to_locs = ids_to_locs.into_inner().expect("Unable to get ids_to_locs");
+
         (
             ids_string,
             seq_locs.expect("Error"),
@@ -633,6 +642,7 @@ impl Converter
             ids_location,
             masking_location,
             sequences_location,
+            ids_to_locs,
         )
     }
 }
@@ -673,9 +683,9 @@ mod tests
     {
         init();
 
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = crate::BINCODE_CONFIG.with_fixed_int_encoding();
 
-        let mut out_buf = Box::new(Cursor::new(Vec::new()));
+        let out_buf = Box::new(Cursor::new(Vec::new()));
 
         println!("test_data/test_convert.fasta");
         let mut in_buf =
@@ -699,7 +709,7 @@ mod tests
 
         let directory: DirectoryOnDisk = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
-        let dir = directory;
+        let _dir = directory;
 
         let _parameters: Parameters = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 

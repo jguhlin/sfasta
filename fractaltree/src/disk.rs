@@ -40,6 +40,11 @@ impl Default for FractalTreeDisk
 
 impl FractalTreeDisk
 {
+    pub fn len(&self) -> usize
+    {
+        self.root.len()
+    }
+
     pub fn search<R>(&mut self, in_buf: &mut R, key: u32) -> Option<&u32>
     where
         R: Read + Seek + Send + Sync,
@@ -60,8 +65,8 @@ impl FractalTreeDisk
 
         let tree_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        let config = bincode::config::standard().with_variable_int_encoding();
-        bincode::encode_into_std_write(&*self, &mut out_buf, config).unwrap();
+        let bincode_config = bincode::config::standard().with_variable_int_encoding();
+        bincode::encode_into_std_write(&*self, &mut out_buf, bincode_config).unwrap();
 
         Ok(tree_location)
     }
@@ -272,6 +277,21 @@ impl NodeDisk
             self.children.as_ref().unwrap().iter().all(|x| !x.state.is_some())
         }
     }
+
+    pub fn len(&self) -> usize
+    {
+        if self.is_leaf {
+            self.keys.len()
+        } else {
+            let mut len = 0;
+
+            for i in 0..self.children.as_ref().unwrap().len() {
+                len += self.children.as_ref().unwrap()[i].len();
+            }
+
+            len
+        }
+    }
 }
 
 #[cfg(test)]
@@ -377,6 +397,7 @@ mod tests
         assert!(*result.unwrap() == u32::MAX / 2);
     }
 
+    #[ignore]
     #[test]
     /// This is mostly to see how large a very large tree is (in gigs, and megabytes)
     fn tree_large_storage()
@@ -415,7 +436,6 @@ mod tests
         println!("Raw Vec Size: {}", size2);
         let size2: SpecificSize<human_size::multiples::Megabyte> = format!("{} B", raw_vec.len()).parse().unwrap();
         println!("Raw Vec Size: {}", size2);
-
 
         let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
 

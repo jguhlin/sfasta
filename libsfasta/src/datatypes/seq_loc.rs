@@ -16,11 +16,15 @@
 // are stored in blocks, and then the range of the sequence
 // SeqLoc stores Locs, which are (u32, u32, u32) (block, start, len) as struct Loc
 
+// TODO 5 Apr 2024 Add get_seqloc_by_index to SeqLocsStore
+// Just search through them all (or if prefetched, access direct...)
+
 use std::{
     io::{Read, Seek, SeekFrom, Write},
     sync::{atomic::AtomicU64, Arc},
 };
 
+use bincode::{BorrowDecode, Decode, Encode};
 use stream_vbyte::{decode::decode, encode::encode, scalar::Scalar};
 
 // So each SeqLoc is:
@@ -38,178 +42,6 @@ pub struct SeqLoc
     pub headers: u16,
     pub ids: u16,
     pub locs: Vec<Loc>,
-}
-
-// Optimized on-disk storage
-#[derive(Clone, Debug, bincode::Encode, bincode::Decode, Default, PartialEq, Eq)]
-pub struct SeqLocOnDisk
-{
-    pub values: Vec<u8>,
-    pub compressed: Vec<u8>,
-}
-// SeqLocOnDisk is a Vec<u32> of all the Loc data
-// Each u16 is the number of Locs / 3 (block, start, len) for each SeqLoc type
-// Integers can then be compressed with Stream VByte or other integer compression technique
-
-impl From<SeqLoc> for SeqLocOnDisk
-{
-    fn from(seqloc: SeqLoc) -> Self
-    {
-        let SeqLoc {
-            sequence,
-            masking,
-            scores,
-            signal,
-            headers,
-            ids,
-            locs,
-        } = seqloc;
-
-        let total_length = (sequence + masking + scores + signal + headers + ids) * 3;
-
-        let mut compressed: Vec<u8> = vec![0; total_length as usize];
-
-        // TODO: Is there a way to directly access the Vec<Loc> to get Vec<u32>'s?
-        let nums = locs.iter().map(|loc| loc.get_values()).flatten().collect::<Vec<u32>>();
-
-        let encoded_length = encode::<Scalar>(&nums, &mut compressed);
-        compressed.truncate(encoded_length);
-
-        // Todo: Does this actually save any space?
-        let values_uncompressed = vec![sequence, masking, scores, signal, headers, ids];
-
-        let values_uncompressed = unsafe { std::mem::transmute::<Vec<u16>, Vec<u32>>(values_uncompressed) };
-
-        let mut values = vec![0; values_uncompressed.len() * 5];
-        let encoded_length = encode::<Scalar>(&values_uncompressed, &mut values);
-        values.truncate(encoded_length);
-
-        SeqLocOnDisk { values, compressed }
-    }
-}
-
-// Todo: compress seq, masking, scores, signal, headers, ids
-impl From<SeqLocOnDisk> for SeqLoc
-{
-    fn from(ondisk: SeqLocOnDisk) -> Self
-    {
-        let SeqLocOnDisk { values, compressed } = ondisk;
-
-        let mut values_uncompressed: Vec<u32> = vec![0; 6];
-        decode::<Scalar>(&values, 6, &mut values_uncompressed);
-        let values = unsafe { std::mem::transmute::<Vec<u32>, Vec<u16>>(values_uncompressed) };
-
-        let sequence = values[0];
-        let masking = values[1];
-        let scores = values[2];
-        let signal = values[3];
-        let headers = values[4];
-        let ids = values[5];
-
-        let integers_len = (sequence + masking + scores + signal + headers + ids) as usize * 3;
-
-        let mut decoded = vec![0; integers_len];
-
-        // Todo: encode/decode benefit from pulp?
-        // See if any benefit...
-        decode::<Scalar>(&compressed, integers_len, &mut decoded);
-
-        let locs = decoded
-            .chunks_exact(3)
-            .map(|chunk| Loc::from(chunk))
-            .collect::<Vec<Loc>>();
-
-        SeqLoc {
-            sequence,
-            masking,
-            scores,
-            signal,
-            headers,
-            ids,
-            locs,
-        }
-    }
-}
-
-// pub sequence: Option<(u64, u32)>,
-// pub masking: Option<(u64, u32)>,
-// pub scores: Option<(u64, u32)>,
-// pub headers: Option<(u64, u8)>,
-// pub ids: Option<(u64, u8)>,
-
-// TODO! Need tests...
-// TODO: When data gets too large, pre-emptively compress it into memory (such as nt db, >200Gb).
-// TODO: Flatten seqlocs into a single vec, then use ordinals to find appropritate ones
-// TODO: Can convert this to use ByteBlockStore?
-
-/// Handles access to SeqLocs
-#[derive(Clone)]
-pub struct SeqLocsStoreBuilder
-{
-    pub location: u64,
-    pub data: Vec<(SeqLoc, Arc<AtomicU64>)>,
-}
-
-impl Default for SeqLocsStoreBuilder
-{
-    fn default() -> Self
-    {
-        SeqLocsStoreBuilder {
-            location: 0,
-            data: Vec::new(),
-        }
-    }
-}
-
-impl SeqLocsStoreBuilder
-{
-    /// Create a new SeqLocs object
-    pub fn new() -> Self
-    {
-        SeqLocsStoreBuilder::default()
-    }
-
-    /// Add a SeqLoc to the store
-    pub fn add_to_index(&mut self, seqloc: SeqLoc) -> Arc<AtomicU64>
-    {
-        let location = Arc::new(AtomicU64::new(0));
-        self.data.push((seqloc, Arc::clone(&location)));
-        location
-    }
-
-    /// Set the location u64 of the SeqLocs object
-    pub fn with_location(mut self, location: u64) -> Self
-    {
-        self.location = location;
-        self
-    }
-
-    /// Write a SeqLocs object to a file (buffer)
-    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> u64
-    where
-        W: Write + Seek,
-    {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-        if self.data.is_empty() {
-            panic!("Unable to write SeqLocs as there are none");
-        }
-
-        self.location = out_buf.stream_position().unwrap();
-
-        let mut data = Vec::new();
-        std::mem::swap(&mut self.data, &mut data);
-
-        for (seqloc, location) in data.into_iter() {
-            let seqloc = SeqLocOnDisk::from(seqloc);
-            let pos = out_buf.stream_position().expect("Unable to work with seek API");
-            bincode::encode_into_std_write(seqloc, &mut out_buf, bincode_config)
-                .expect("Unable to write SeqLoc to file");
-            location.store(pos, std::sync::atomic::Ordering::Relaxed);
-        }
-
-        self.location
-    }
 }
 
 impl SeqLoc
@@ -389,6 +221,126 @@ impl SeqLoc
     }
 }
 
+impl Encode for SeqLoc
+{
+    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E)
+        -> core::result::Result<(), bincode::error::EncodeError>
+    {
+        let SeqLoc {
+            sequence,
+            masking,
+            scores,
+            signal,
+            headers,
+            ids,
+            locs,
+        } = self;
+
+        let values: [u16; 6] = [*sequence, *masking, *scores, *signal, *headers, *ids];
+
+        // TODO: Is there a way to directly access the Vec<Loc> to get Vec<u32>'s?
+        // Check out bytemuck (and reddit question I asked about it)
+        let locs = locs.iter().map(|loc| loc.get_values()).flatten().collect::<Vec<u32>>();
+
+        bincode::Encode::encode(&values, encoder)?;
+        bincode::Encode::encode(&locs, encoder)?;
+        Ok(())
+    }
+}
+
+impl Decode for SeqLoc
+{
+    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> core::result::Result<Self, bincode::error::DecodeError>
+    {
+        let values: [u16; 6] = bincode::Decode::decode(decoder)?;
+
+        let locs: Vec<u32> = bincode::Decode::decode(decoder)?;
+        let locs = locs.chunks_exact(3).map(|chunk| Loc::from(chunk)).collect::<Vec<Loc>>();
+
+        Ok(SeqLoc {
+            sequence: values[0],
+            masking: values[1],
+            scores: values[2],
+            signal: values[3],
+            headers: values[4],
+            ids: values[5],
+            locs,
+        })
+    }
+}
+
+// TODO! Need tests...
+// TODO: When data gets too large, pre-emptively compress it into memory (such as nt db, >200Gb).
+// TODO: Flatten seqlocs into a single vec, then use ordinals to find appropritate ones
+// TODO: Can convert this to use ByteBlockStore?
+
+/// Handles access to SeqLocs
+#[derive(Clone)]
+pub struct SeqLocsStoreBuilder
+{
+    pub location: u64,
+    pub data: Vec<(SeqLoc, Arc<AtomicU64>)>,
+}
+
+impl Default for SeqLocsStoreBuilder
+{
+    fn default() -> Self
+    {
+        SeqLocsStoreBuilder {
+            location: 0,
+            data: Vec::new(),
+        }
+    }
+}
+
+impl SeqLocsStoreBuilder
+{
+    /// Create a new SeqLocs object
+    pub fn new() -> Self
+    {
+        SeqLocsStoreBuilder::default()
+    }
+
+    /// Add a SeqLoc to the store
+    pub fn add_to_index(&mut self, seqloc: SeqLoc) -> Arc<AtomicU64>
+    {
+        let location = Arc::new(AtomicU64::new(0));
+        self.data.push((seqloc, Arc::clone(&location)));
+        location
+    }
+
+    /// Set the location u64 of the SeqLocs object
+    pub fn with_location(mut self, location: u64) -> Self
+    {
+        self.location = location;
+        self
+    }
+
+    /// Write a SeqLocs object to a file (buffer)
+    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> u64
+    where
+        W: Write + Seek,
+    {
+        if self.data.is_empty() {
+            panic!("Unable to write SeqLocs as there are none");
+        }
+
+        self.location = out_buf.stream_position().unwrap();
+
+        let mut data = Vec::new();
+        std::mem::swap(&mut self.data, &mut data);
+
+        for (seqloc, location) in data.into_iter() {
+            let pos = out_buf.stream_position().expect("Unable to work with seek API");
+            bincode::encode_into_std_write(seqloc, &mut out_buf, crate::BINCODE_CONFIG)
+                .expect("Unable to write SeqLoc to file");
+            location.store(pos - self.location, std::sync::atomic::Ordering::Relaxed);
+        }
+
+        self.location
+    }
+}
+
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Hash)]
 pub struct Loc
 {
@@ -474,6 +426,17 @@ impl SeqLocsStore
         log::info!("Prefetched {} seqlocs", self.data.len());
     }
 
+    pub fn len<R>(&mut self, mut in_buf: &mut R) -> usize
+    where
+        R: Read + Seek,
+    {
+        if !self.preloaded {
+            self.get_all_seqlocs(&mut in_buf).expect("Unable to get all SeqLocs");
+        }
+
+        self.data.len()
+    }
+
     /// Get SeqLoc object from a file (buffer)
     pub fn from_existing(pos: u64) -> Result<Self, String>
     {
@@ -494,15 +457,13 @@ impl SeqLocsStore
     {
         log::info!("Prefetching SeqLocs");
 
-        let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
-            .with_limit::<{ 8 * 1024 * 1024 }>(); // 8Mbp
+        let bincode_config = crate::BINCODE_CONFIG.with_limit::<{ 8 * 1024 * 1024 }>(); // 8Mbp
 
         in_buf.seek(SeekFrom::Start(self.location)).unwrap();
 
         // Basically keep going until we get an error, and assume that's the EOF
         // or a different data type...
-        while let Ok(seqloc) = bincode::decode_from_std_read::<SeqLocOnDisk, _, _>(&mut in_buf, bincode_config) {
+        while let Ok(seqloc) = bincode::decode_from_std_read::<SeqLoc, _, _>(&mut in_buf, bincode_config) {
             let seqloc = SeqLoc::from(seqloc);
             let pos = in_buf.stream_position().unwrap();
             self.locations.push(pos);
@@ -518,12 +479,10 @@ impl SeqLocsStore
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
-            .with_limit::<{ 8 * 1024 * 1024 }>(); // 8Mbp
+        let bincode_config = crate::BINCODE_CONFIG.with_limit::<{ 512 * 1024 }>(); // 512kbp
 
         in_buf.seek(SeekFrom::Start(self.location + loc as u64)).unwrap();
-        let seqloc: Result<SeqLocOnDisk, _> = bincode::decode_from_std_read(in_buf, bincode_config);
+        let seqloc: Result<SeqLoc, _> = bincode::decode_from_std_read(in_buf, bincode_config);
         match seqloc {
             Ok(seqloc) => Ok(Some(SeqLoc::from(seqloc))),
             Err(_) => Ok(None),
@@ -607,5 +566,13 @@ mod tests
 
         let slice = seqloc.seq_slice(block_size, 2679..2952);
         assert_eq!(slice, vec![Loc::new(1652697, 1230, 2952 - 2679)]);
+    }
+
+    // Make sure if seqloc has no header it returns a 0 length &[Loc]
+    #[test]
+    fn header_zero()
+    {
+        let seqloc = SeqLoc::new();
+        assert_eq!(seqloc.get_headers().len(), 0);
     }
 }

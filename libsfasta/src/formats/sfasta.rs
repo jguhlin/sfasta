@@ -9,7 +9,7 @@ use std::{
 };
 
 use libcompression::*;
-use libfractaltree::FractalTreeRead;
+use libfractaltree::FractalTreeDisk;
 
 use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
@@ -26,7 +26,7 @@ pub struct Sfasta<'sfa>
     pub parameters: Parameters,
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
-    pub index: Option<FractalTreeRead>,
+    pub index: Option<FractalTreeDisk>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlockStore>,
     pub seqlocs: Option<SeqLocsStore>,
@@ -137,7 +137,10 @@ impl<'sfa> Sfasta<'sfa>
         };
 
         let sequence = if matches.sequence > 0 {
-            Some(self.get_sequence(&matches).unwrap())
+            Some(
+                self.get_sequence(&matches.get_sequence(), &matches.get_masking())
+                    .unwrap(),
+            )
         } else {
             None
         };
@@ -187,7 +190,7 @@ impl<'sfa> Sfasta<'sfa>
         };
 
         let sequence = if seqloc.sequence > 0 {
-            Some(self.get_sequence(seqloc).unwrap())
+            Some(self.get_sequence(seqloc.get_sequence(), seqloc.get_masking()).unwrap())
         } else {
             None
         };
@@ -217,7 +220,7 @@ impl<'sfa> Sfasta<'sfa>
     {
         let sequence = if seqloc.sequence > 0 {
             if cache {
-                Some(self.get_sequence(seqloc).unwrap())
+                Some(self.get_sequence(seqloc.get_sequence(), seqloc.get_masking()).unwrap())
             } else {
                 Some(self.get_sequence_nocache(seqloc).unwrap())
             }
@@ -253,25 +256,21 @@ impl<'sfa> Sfasta<'sfa>
 
     // TODO: Should return Result<Option<Sequence>, &str>
     // TODO: Should actually be what get_sequence_by_seqloc is!
-    pub fn get_sequence(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str>
+    pub fn get_sequence(&mut self, seqloc: &[Loc], maskingloc: &[Loc]) -> Result<Vec<u8>, &'static str>
     {
-        assert!(seqloc.sequence > 0);
-
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
-        let locs = seqloc.get_sequence();
 
         let mut seq: Vec<u8> = Vec::new();
 
         // Once stabilized, use write_all_vectored
-        for l in locs.iter().map(|x| x) {
+        for l in seqloc.iter().map(|x| x) {
             let seqblock = self.sequenceblocks.as_mut().unwrap().get_block(&mut *buf, l.block);
             seq.extend_from_slice(&seqblock[l.start as usize..(l.start + l.len) as usize]);
         }
 
-        if seqloc.masking > 0 && self.masking.is_some() {
+        if !maskingloc.is_empty() && self.masking.is_some() {
             let masking = self.masking.as_mut().unwrap();
-            let locs = seqloc.get_masking();
-            masking.mask_sequence(&mut *buf, &locs, &mut seq);
+            masking.mask_sequence(&mut *buf, maskingloc, &mut seq);
         }
 
         Ok(seq)
@@ -346,7 +345,7 @@ impl<'sfa> Sfasta<'sfa>
         let idx = self.index.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let key = xxh3_64(x.as_bytes());
-        let found = idx.search(key);
+        let found = idx.search(&mut buf, key as u32);
         let seqlocs = self.seqlocs.as_mut().unwrap();
 
         if found.is_none() {
@@ -355,7 +354,7 @@ impl<'sfa> Sfasta<'sfa>
 
         // TODO: Allow returning multiple if there are multiple matches...
         log::debug!("Getting seqloc");
-        seqlocs.get_seqloc(&mut buf, found.unwrap())
+        seqlocs.get_seqloc(&mut buf, *found.unwrap())
     }
 
     pub fn get_header(&mut self, locs: &[Loc]) -> Result<String, &'static str>
@@ -380,10 +379,11 @@ impl<'sfa> Sfasta<'sfa>
         Ok(ids.get_loaded(&locs))
     }
 
-    // TODO
-    // pub fn len(&self) -> usize {
-    // self.seqlocs.as_ref().unwrap().data.len()
-    // }
+    pub fn len(&mut self) -> usize
+    {
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        self.seqlocs.as_mut().unwrap().len(&mut buf)
+    }
 
     // Get length from SeqLoc (only for sequence)
     pub fn seqloc_len(&mut self, seqloc: &SeqLoc) -> usize
@@ -420,7 +420,7 @@ impl<'sfa> Sfasta<'sfa>
         self.seqlocs.as_mut().unwrap().prefetch(&mut buf);
 
         // TODO: Fail if index is not initialized yet (prefetch does it here, but still)
-        Ok(self.seqlocs.as_mut().unwrap().get_all_seqlocs(&mut buf).unwrap())
+        Ok(Some(self.seqlocs.as_mut().unwrap().get_all_seqlocs(&mut buf).unwrap()))
     }
 
     /// This is more expensive than getting it from the seqlocs
@@ -471,7 +471,7 @@ impl<'sfa> SfastaParser<'sfa>
     where
         R: 'sfa + Read + Seek + Send + Sync,
     {
-        let bincode_config = bincode::config::standard()
+        let bincode_config_fixed = crate::BINCODE_CONFIG
             .with_fixed_int_encoding()
             .with_limit::<{ 2 * 1024 * 1024 }>();
 
@@ -496,7 +496,7 @@ impl<'sfa> SfastaParser<'sfa>
         }
 
         let mut sfasta = Sfasta {
-            version: match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+            version: match bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA directory: {y}")),
             },
@@ -515,7 +515,7 @@ impl<'sfa> SfastaParser<'sfa>
 
         log::info!("Parsing DirectoryOnDisk");
 
-        let dir: DirectoryOnDisk = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+        let dir: DirectoryOnDisk = match bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA directory: {y}")),
         };
@@ -529,13 +529,13 @@ impl<'sfa> SfastaParser<'sfa>
 
         log::info!("Parsing Parameters");
 
-        sfasta.parameters = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+        sfasta.parameters = match bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA parameters: {y}")),
         };
 
         log::info!("Parsing Metadata");
-        sfasta.metadata = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+        sfasta.metadata = match bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed) {
             Ok(x) => x,
             Err(y) => return Result::Err(format!("Error reading SFASTA metadata: {y}")),
         };
@@ -543,14 +543,17 @@ impl<'sfa> SfastaParser<'sfa>
         // Next are the sequence blocks, which aren't important right now...
         // The index is much more important to us...
 
+        let bincode_config_variable = crate::BINCODE_CONFIG
+            .with_variable_int_encoding()
+            .with_limit::<{ 2 * 1024 * 1024 }>();
+
         log::info!("Loading Index");
-        // TODO: Handle no index
-        // TODO: Update
         if sfasta.directory.index_loc.is_some() {
-            sfasta.index = match DualIndex::new(&mut in_buf, sfasta.directory.index_loc.unwrap().get()) {
-                Ok(x) => Some(x),
-                Err(y) => return Result::Err(format!("Error reading SFASTA index: {y}")),
-            };
+            in_buf
+                .seek(SeekFrom::Start(sfasta.directory.index_loc.unwrap().get()))
+                .expect("Unable to work with seek API");
+            let tree: FractalTreeDisk = bincode::decode_from_std_read(&mut in_buf, bincode_config_variable).unwrap();
+            sfasta.index = Some(tree);
         } else {
             return Result::Err(
                 "No index found in SFASTA file - Support for no index is not yet implemented.".to_string(),
@@ -558,10 +561,13 @@ impl<'sfa> SfastaParser<'sfa>
         }
 
         log::info!("SeqLocs");
+        in_buf
+            .seek(SeekFrom::Start(sfasta.directory.seqlocs_loc.unwrap().get()))
+            .expect("Unable to work with seek API");
 
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
-            let mut seqlocs = match SeqLocsStore::from_buffer(&mut in_buf, seqlocs_loc) {
+            let mut seqlocs = match SeqLocsStore::from_existing(seqlocs_loc) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA seqlocs: {y}")),
             };
@@ -799,6 +805,7 @@ impl<'sfa> Iterator for Sequences<'sfa>
             self.cur_idx = idx;
         }
 
+        // TODO this is wrong (shouldn't be cur_idx)
         let seqloc = self
             .sfasta
             .get_seqloc(self.cur_idx)
@@ -806,28 +813,35 @@ impl<'sfa> Iterator for Sequences<'sfa>
             .expect(".");
 
         let id = if self.with_ids {
-            Some(self.sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap())
+            Some(self.sfasta.get_id(seqloc.get_ids()).unwrap())
         } else {
             None
         };
 
-        let header = if self.with_header && seqloc.headers.is_some() {
+        let header = seqloc.get_headers();
+
+        let header = if header.len() > 0 {
+            Some(self.sfasta.get_header(header).expect("Unable to fetch header"))
+        } else {
+            None
+        };
+
+        let sequences = seqloc.get_sequence();
+        let maskingloc = seqloc.get_masking();
+
+        let sequence = if !sequences.is_empty() {
             Some(
                 self.sfasta
-                    .get_header(seqloc.headers.as_ref().unwrap())
-                    .expect("Unable to fetch header"),
+                    .get_sequence(&sequences, &maskingloc)
+                    .expect("Unable to fetch sequence"),
             )
         } else {
             None
         };
 
-        let sequence = if self.with_sequences && seqloc.sequence.is_some() {
-            Some(self.sfasta.get_sequence(&seqloc).expect("Unable to fetch sequence"))
-        } else {
-            None
-        };
-
         // TODO: Scores
+
+        // TODO: Signal
 
         if self.mode == SeqMode::Linear {
             self.cur_idx += 1;
@@ -890,7 +904,9 @@ mod tests
 
         let output = &sfasta.find("needle_last").unwrap().unwrap();
 
-        let sequence = sfasta.get_sequence(output).unwrap();
+        let sequence = sfasta
+            .get_sequence(output.get_sequence(), output.get_masking())
+            .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
         assert!("ACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATA" == sequence);
     }
@@ -918,13 +934,17 @@ mod tests
 
         let output = &sfasta.find("test").unwrap().unwrap();
         println!("'test' seqloc: {output:#?}");
-        let sequence = sfasta.get_sequence(output).unwrap();
+        let sequence = sfasta
+            .get_sequence(output.get_sequence(), output.get_masking())
+            .unwrap();
         println!("'test' Sequence length: {}", sequence.len());
 
         let output = &sfasta.find("test3").unwrap().unwrap();
         println!("'test3' seqloc: {output:#?}");
 
-        let sequence = sfasta.get_sequence(output).unwrap();
+        let sequence = sfasta
+            .get_sequence(output.get_sequence(), output.get_masking())
+            .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
 
         let sequence = sequence.trim();
@@ -954,7 +974,6 @@ mod tests
     #[test]
     pub fn test_find_does_not_trigger_infinite_loops()
     {
-        env_logger::init();
         let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
         let mut in_buf = BufReader::new(
@@ -977,7 +996,8 @@ mod tests
 
         sfasta.find("test").unwrap().unwrap();
         sfasta.find("test2").unwrap().unwrap();
-        sfasta.find("test3").unwrap().unwrap();
+        let out = sfasta.find("test3").unwrap().unwrap();
+        println!("{:#?}", out);
         sfasta.find("test4").unwrap().unwrap();
         sfasta.find("test5").unwrap().unwrap();
     }
