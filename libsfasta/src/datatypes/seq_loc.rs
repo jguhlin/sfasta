@@ -514,7 +514,7 @@ impl SeqLocsStore
     }
 
     /// Get a particular SeqLoc from the store
-    pub fn get_seqloc<R>(&mut self, in_buf: &mut R, loc: u64) -> Result<Option<SeqLoc>, &'static str>
+    pub fn get_seqloc<R>(&mut self, in_buf: &mut R, loc: u32) -> Result<Option<SeqLoc>, &'static str>
     where
         R: Read + Seek,
     {
@@ -522,7 +522,7 @@ impl SeqLocsStore
             .with_fixed_int_encoding()
             .with_limit::<{ 8 * 1024 * 1024 }>(); // 8Mbp
 
-        in_buf.seek(SeekFrom::Start(loc)).unwrap();
+        in_buf.seek(SeekFrom::Start(self.location + loc as u64)).unwrap();
         let seqloc: Result<SeqLocOnDisk, _> = bincode::decode_from_std_read(in_buf, bincode_config);
         match seqloc {
             Ok(seqloc) => Ok(Some(SeqLoc::from(seqloc))),

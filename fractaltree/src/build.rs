@@ -26,7 +26,7 @@ impl FractalTreeBuild
         }
     }
 
-    pub fn insert(&mut self, key: u64, value: u32)
+    pub fn insert(&mut self, key: u32, value: u32)
     {
         if self.root.insert(self.buffer_size, key, value) {
             self.flush(false);
@@ -59,7 +59,7 @@ impl FractalTreeBuild
         self.flush(true);
     }
 
-    pub fn search(&self, key: u64) -> Option<u32>
+    pub fn search(&self, key: u32) -> Option<u32>
     {
         self.root.search(key)
     }
@@ -97,7 +97,7 @@ impl FractalTreeBuild
 pub enum InsertionAction
 {
     Success,
-    NodeSplit(u64, Box<Node>),
+    NodeSplit(u32, Box<Node>),
 }
 
 #[derive(Debug)]
@@ -105,10 +105,10 @@ pub struct Node
 {
     pub is_root: bool,
     pub is_leaf: bool,
-    pub keys: SortedVec<u64>,
+    pub keys: SortedVec<u32>,
     pub children: Option<Vec<Box<Node>>>,
     pub values: Option<Vec<u32>>,
-    pub buffer: Vec<(u64, u32)>,
+    pub buffer: Vec<(u32, u32)>,
 }
 
 impl Node
@@ -137,7 +137,7 @@ impl Node
         }
     }
 
-    pub fn search(&self, key: u64) -> Option<u32>
+    pub fn search(&self, key: u32) -> Option<u32>
     {
         #[cfg(debug_assertions)]
         assert!(self.buffer.is_empty());
@@ -162,7 +162,7 @@ impl Node
         }
     }
 
-    pub fn insert(&mut self, buffer_size: usize, key: u64, value: u32) -> bool
+    pub fn insert(&mut self, buffer_size: usize, key: u32, value: u32) -> bool
     {
         self.buffer.push((key, value));
         self.buffer.len() >= buffer_size
@@ -219,7 +219,7 @@ impl Node
         }
     }
 
-    pub fn split(&mut self, order: usize, buffer_size: usize) -> (u64, Box<Node>)
+    pub fn split(&mut self, order: usize, buffer_size: usize) -> (u32, Box<Node>)
     {
         #[cfg(debug_assertions)]
         assert!(self.keys.is_sorted());
@@ -341,7 +341,7 @@ mod tests
         tree.insert(0, 0);
 
         let mut rng = thread_rng();
-        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        let mut values = (0..1024_u32).collect::<Vec<u32>>();
         values.shuffle(&mut rng);
 
         for i in values.iter() {
@@ -373,7 +373,7 @@ mod tests
         let mut tree = super::FractalTreeBuild::new(8, 3);
 
         let mut rng = thread_rng();
-        let mut values = (0..1024_u64).collect::<Vec<u64>>();
+        let mut values = (0..1024_u32).collect::<Vec<u32>>();
         values.shuffle(&mut rng);
 
         for i in values.iter() {
@@ -421,10 +421,10 @@ mod tests
     fn search()
     {
         let mut rng = thread_rng();
-        let mut values_1024 = (0..1024_u64).collect::<Vec<u64>>();
+        let mut values_1024 = (0..1024_u32).collect::<Vec<u32>>();
         values_1024.shuffle(&mut rng);
 
-        let mut values_8192 = (0..8192_u64).collect::<Vec<u64>>();
+        let mut values_8192 = (0..8192_u32).collect::<Vec<u32>>();
         values_8192.shuffle(&mut rng);
 
         let mut tree = super::FractalTreeBuild::new(8, 8);
@@ -456,13 +456,13 @@ mod tests
 
         let mut tree = super::FractalTreeBuild::new(64, 32);
         for i in 0..(1024 * 1024) {
-            tree.insert(i as u64, i as u32);
+            tree.insert(i as u32, i as u32);
         }
 
         tree.flush_all();
 
         for i in 0..(1024 * 1024) {
-            assert!(tree.search(i as u64) == Some(i as u32), "i: {}", i);
+            assert!(tree.search(i as u32) == Some(i as u32), "i: {}", i);
         }
 
         // Things that should not be found
@@ -471,21 +471,21 @@ mod tests
 
         // New tree
         let mut tree = super::FractalTreeBuild::new(8, 4);
-        for i in 1024..2048_u64 {
+        for i in 1024..2048_u32 {
             tree.insert(i, i as u32);
         }
 
         tree.flush_all();
 
-        for i in 1024..2048_u64 {
+        for i in 1024..2048_u32 {
             assert_eq!(tree.search(i), Some(i as u32));
         }
 
         // Things that should not be found
-        for i in 0..1024_u64 {
+        for i in 0..1024_u32 {
             assert_eq!(tree.search(i), None);
         }
-        for i in 2048..4096_u64 {
+        for i in 2048..4096_u32 {
             assert_eq!(tree.search(i), None);
         }
     }
@@ -494,10 +494,10 @@ mod tests
     fn search_noderead()
     {
         let mut rng = thread_rng();
-        let mut values_1024 = (0..1024_u64).collect::<Vec<u64>>();
+        let mut values_1024 = (0..1024_u32).collect::<Vec<u32>>();
         values_1024.shuffle(&mut rng);
 
-        let mut values_8192 = (0..8192_u64).collect::<Vec<u64>>();
+        let mut values_8192 = (0..8192_u32).collect::<Vec<u32>>();
         values_8192.shuffle(&mut rng);
 
         let mut tree = super::FractalTreeBuild::new(32, 8);
@@ -519,9 +519,11 @@ mod tests
     #[test]
     fn size_of_super_large()
     {
-        let values128m = (0..128_369_206_u64)
+        let values128m = (0..128_369_206_u32)
             .map(|x| xxh3_64(&x.to_le_bytes()))
-            .collect::<Vec<u64>>();
+            // Grab the lower bits as a u32
+            .map(|x| x as u32)
+            .collect::<Vec<u32>>();
 
         let mut tree: FractalTreeBuild = FractalTreeBuild::new(128, 256);
         for i in values128m.iter() {
@@ -556,7 +558,8 @@ mod tests
     }
 
     #[test]
-    fn tree_build_and_find() {
+    fn tree_build_and_find()
+    {
         use std::io::{Seek, SeekFrom};
 
         let mut rng = thread_rng();
@@ -566,7 +569,7 @@ mod tests
         // Generate 1024 * 1024 random key value pairs
 
         for _ in 0..1024 * 1024 {
-            let key = rng.gen::<u64>();
+            let key = rng.gen::<u32>();
             let value = rng.gen::<u32>();
 
             tree.insert(key, value);

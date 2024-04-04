@@ -11,7 +11,7 @@ pub struct FractalTreeRead
 impl FractalTreeRead
 {
     // Assume root node is already loaded
-    pub fn search(&self, key: u64) -> Option<u32>
+    pub fn search(&self, key: u32) -> Option<u32>
     {
         self.root.search(key)
     }
@@ -29,14 +29,14 @@ pub struct NodeRead
 {
     pub is_root: bool,
     pub is_leaf: bool,
-    pub keys: SortedVec<u64>,
+    pub keys: SortedVec<u32>,
     pub children: Option<Vec<Box<NodeRead>>>,
     pub values: Option<Vec<u32>>,
 }
 
 impl NodeRead
 {
-    pub fn search(&self, key: u64) -> Option<u32>
+    pub fn search(&self, key: u32) -> Option<u32>
     {
         let i = self.keys.binary_search(&key);
 

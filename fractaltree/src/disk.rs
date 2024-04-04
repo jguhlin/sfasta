@@ -40,7 +40,7 @@ impl Default for FractalTreeDisk
 
 impl FractalTreeDisk
 {
-    pub fn search<R>(&mut self, in_buf: &mut R, key: u64) -> Option<&u32>
+    pub fn search<R>(&mut self, in_buf: &mut R, key: u32) -> Option<&u32>
     where
         R: Read + Seek + Send + Sync,
     {
@@ -73,12 +73,12 @@ pub struct NodeDisk
     pub is_root: bool,
     pub is_leaf: bool,
     pub state: Option<u32>, // None means in memory, Some(u32) is the location on the disk
-    pub keys: Vec<u64>,
+    pub keys: Vec<u32>,
     pub children: Option<Vec<Box<NodeDisk>>>,
     pub values: Option<Vec<u32>>,
 }
 
-// Concrete types, u64 u32
+// Concrete types, u32 u32
 impl Encode for NodeDisk
 {
     fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E)
@@ -109,7 +109,7 @@ impl Decode for NodeDisk
     fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> core::result::Result<Self, bincode::error::DecodeError>
     {
         let is_leaf: bool = bincode::Decode::decode(decoder)?;
-        let keys: Vec<u64> = bincode::Decode::decode(decoder)?;
+        let keys: Vec<u32> = bincode::Decode::decode(decoder)?;
 
         let values: Option<Vec<u32>> = if is_leaf {
             bincode::Decode::decode(decoder)?
@@ -148,7 +148,7 @@ impl BorrowDecode<'_> for NodeDisk
         let is_leaf: bool = bincode::Decode::decode(decoder)?;
 
         let keys: Vec<u8> = bincode::Decode::decode(decoder)?;
-        let mut keys: Box<[u64]> = VByte::read_array(&mut &keys[..]).unwrap();
+        let mut keys: Box<[u32]> = VByte::read_array(&mut &keys[..]).unwrap();
         let delta = keys[0];
         let arch = Arch::new();
         arch.dispatch(|| {
@@ -237,11 +237,10 @@ impl NodeDisk
         }
     }
 
-    pub fn search<R>(&mut self, in_buf: &mut R, start: u64, key: u64) -> Option<&u32>
+    pub fn search<R>(&mut self, in_buf: &mut R, start: u64, key: u32) -> Option<&u32>
     where
         R: Read + Seek + Send + Sync,
     {
-
         if self.state.is_some() {
             self.load(in_buf);
         }
@@ -279,7 +278,7 @@ impl NodeDisk
 mod tests
 {
     use super::*;
-    use human_size::SpecificSize;
+    use human_size::{Gigabyte, SpecificSize};
     use rand::prelude::*;
     use xxhash_rust::xxh3::xxh3_64;
 
@@ -291,7 +290,7 @@ mod tests
         let values: Vec<u32> = rng.sample_iter(rand::distributions::Standard).take(128).collect();
 
         let rng = thread_rng();
-        let mut keys: Vec<u64> = rng.sample_iter(rand::distributions::Standard).take(128).collect();
+        let mut keys: Vec<u32> = rng.sample_iter(rand::distributions::Standard).take(128).collect();
         keys.sort();
 
         let mut node = NodeDisk {
@@ -324,7 +323,8 @@ mod tests
     }
 
     #[test]
-    fn tree_storage() {
+    fn tree_storage()
+    {
         let mut rng = thread_rng();
 
         let mut tree = FractalTreeBuild::new(128, 256);
@@ -332,7 +332,7 @@ mod tests
         // Generate 1024 * 1024 random key value pairs
 
         for _ in 0..1024 * 1024 {
-            let key = rng.gen::<u64>();
+            let key = rng.gen::<u32>();
             let value = rng.gen::<u32>();
 
             tree.insert(key, value);
@@ -340,11 +340,12 @@ mod tests
 
         // Guaranteed insert to try and find later
         tree.insert(1, 1);
-        tree.insert(u64::MAX - 1, u32::MAX - 1);
-        tree.insert(u64::MAX / 2, u32::MAX / 2);
+        tree.insert(u32::MAX - 1, u32::MAX - 1);
+        tree.insert(u32::MAX / 2, u32::MAX / 2);
 
         let mut tree: FractalTreeDisk = tree.into();
         let orig_root_keys = tree.root.keys.clone();
+        println!("Root keys: {:?}", orig_root_keys);
 
         let mut buf = std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
         let tree_loc = tree.write_to_buffer(&mut buf).unwrap();
@@ -359,19 +360,82 @@ mod tests
         let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
 
         buf.seek(SeekFrom::Start(tree_loc)).unwrap();
-        let mut tree: FractalTreeDisk = bincode::decode_from_std_read(&mut buf, bincode::config::standard().with_variable_int_encoding()).unwrap();
+        let mut tree: FractalTreeDisk =
+            bincode::decode_from_std_read(&mut buf, bincode::config::standard().with_variable_int_encoding()).unwrap();
         assert!(tree.root.keys == orig_root_keys);
 
         let result = tree.search(&mut buf, 1);
         assert!(result.is_some());
         assert!(*result.unwrap() == 1);
 
-        let result = tree.search(&mut buf, u64::MAX - 1);
+        let result = tree.search(&mut buf, u32::MAX - 1);
         assert!(result.is_some());
         assert!(*result.unwrap() == u32::MAX - 1);
 
-        let result = tree.search(&mut buf, u64::MAX / 2);
+        let result = tree.search(&mut buf, u32::MAX / 2);
         assert!(result.is_some());
         assert!(*result.unwrap() == u32::MAX / 2);
+    }
+
+    #[test]
+    /// This is mostly to see how large a very large tree is (in gigs, and megabytes)
+    fn tree_large_storage()
+    {
+        let mut rng = thread_rng();
+
+        let mut tree = FractalTreeBuild::new(128, 256);
+
+        // Generate 1024 * 1024 random key value pairs
+
+        for _ in 0..160 * 1024 * 1024 {
+            let key = rng.gen::<u32>();
+            let value = rng.gen::<u32>();
+
+            tree.insert(key, value);
+        }
+
+        // Guaranteed insert to try and find later
+        tree.insert(1, 1);
+        tree.insert(u32::MAX - 1, u32::MAX - 1);
+        tree.insert(u32::MAX / 2, u32::MAX / 2);
+
+        let mut tree: FractalTreeDisk = tree.into();
+        let orig_root_keys = tree.root.keys.clone();
+
+        let mut buf = std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
+        let tree_loc = tree.write_to_buffer(&mut buf).unwrap();
+
+        // --------------------------------------------
+        // Load up the tree now
+
+        let raw_vec = buf.into_inner().unwrap().into_inner();
+
+        println!("Raw Vec Len: {}", raw_vec.len());
+        let size2: SpecificSize<human_size::multiples::Gigabyte> = format!("{} B", raw_vec.len()).parse().unwrap();
+        println!("Raw Vec Size: {}", size2);
+        let size2: SpecificSize<human_size::multiples::Megabyte> = format!("{} B", raw_vec.len()).parse().unwrap();
+        println!("Raw Vec Size: {}", size2);
+
+
+        let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
+
+        buf.seek(SeekFrom::Start(tree_loc)).unwrap();
+        let mut tree: FractalTreeDisk =
+            bincode::decode_from_std_read(&mut buf, bincode::config::standard().with_variable_int_encoding()).unwrap();
+        assert!(tree.root.keys == orig_root_keys);
+
+        let result = tree.search(&mut buf, 1);
+        assert!(result.is_some());
+        assert!(*result.unwrap() == 1);
+
+        let result = tree.search(&mut buf, u32::MAX - 1);
+        assert!(result.is_some());
+        assert!(*result.unwrap() == u32::MAX - 1);
+
+        let result = tree.search(&mut buf, u32::MAX / 2);
+        assert!(result.is_some());
+        assert!(*result.unwrap() == u32::MAX / 2);
+
+        panic!();
     }
 }

@@ -26,7 +26,7 @@ pub struct Sfasta<'sfa>
     pub parameters: Parameters,
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
-    pub index: Option<FractalTreeRead<u64, u32>>,
+    pub index: Option<FractalTreeRead>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlockStore>,
     pub seqlocs: Option<SeqLocsStore>,
@@ -346,7 +346,7 @@ impl<'sfa> Sfasta<'sfa>
         let idx = self.index.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let key = xxh3_64(x.as_bytes());
-        let found = idx.search(&key);
+        let found = idx.search(key);
         let seqlocs = self.seqlocs.as_mut().unwrap();
 
         if found.is_none() {
@@ -419,7 +419,7 @@ impl<'sfa> Sfasta<'sfa>
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.seqlocs.as_mut().unwrap().prefetch(&mut buf);
 
-        // TODO: Fail is index is not initialized yet (prefetch does it here, but still)
+        // TODO: Fail if index is not initialized yet (prefetch does it here, but still)
         Ok(self.seqlocs.as_mut().unwrap().get_all_seqlocs(&mut buf).unwrap())
     }
 
