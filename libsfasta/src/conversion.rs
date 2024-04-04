@@ -3,17 +3,16 @@
 //! Conversion functions for FASTA and FASTQ files. Multithreaded by default.
 
 // Easy, high-performance conversion functions
-use crossbeam::queue::ArrayQueue;
-use crossbeam::thread;
-use crossbeam::utils::Backoff;
+use crossbeam::{queue::ArrayQueue, thread, utils::Backoff};
 use xxhash_rust::xxh3::{self, xxh3_64};
 
-use std::io::{BufReader, Read, Seek, SeekFrom, Write};
-use std::num::NonZeroU64;
-use std::sync::{Arc, Mutex};
+use std::{
+    io::{BufReader, Read, Seek, SeekFrom, Write},
+    num::NonZeroU64,
+    sync::{Arc, Mutex},
+};
 
-use crate::datatypes::*;
-use crate::formats::*;
+use crate::{datatypes::*, formats::*};
 use libcompression::*;
 use libfractaltree::{FractalTree, FractalTreeDisk, FractalTreeRead};
 
@@ -26,7 +25,8 @@ use libfractaltree::{FractalTree, FractalTreeDisk, FractalTreeRead};
 /// let mut converter = Converter::default()
 ///    .with_threads(4);
 /// ```
-pub struct Converter {
+pub struct Converter
+{
     masking: bool,
     index: bool,
     threads: usize,
@@ -48,8 +48,10 @@ pub struct Converter {
 /// * quality scores: off
 /// * compression_type: ZSTD
 /// * compression_level: Default (3 for ZSTD)
-impl Default for Converter {
-    fn default() -> Self {
+impl Default for Converter
+{
+    fn default() -> Self
+    {
         Converter {
             threads: 8,
             block_size: 4 * 1024 * 1024,    // 4Mb
@@ -64,52 +66,61 @@ impl Default for Converter {
     }
 }
 
-impl Converter {
+impl Converter
+{
     // Builder configuration functions...
     /// Specify a dictionary to use for compression. Untested.
-    pub fn with_dict(mut self, dict: Vec<u8>) -> Self {
+    pub fn with_dict(mut self, dict: Vec<u8>) -> Self
+    {
         self.dict = Some(dict);
         self
     }
 
     /// Disable dictionary
-    pub fn without_dict(mut self) -> Self {
+    pub fn without_dict(mut self) -> Self
+    {
         self.dict = None;
         self
     }
 
     /// Enable masking
-    pub fn with_masking(mut self) -> Self {
+    pub fn with_masking(mut self) -> Self
+    {
         self.masking = true;
         self
     }
 
     /// Enable seq index
-    pub fn with_index(mut self) -> Self {
+    pub fn with_index(mut self) -> Self
+    {
         self.index = true;
         self
     }
 
     /// Disable index
-    pub fn without_index(mut self) -> Self {
+    pub fn without_index(mut self) -> Self
+    {
         self.index = false;
         self
     }
 
     /// Enable quality scores
-    pub fn with_scores(mut self) -> Self {
+    pub fn with_scores(mut self) -> Self
+    {
         self.quality_scores = true;
         self
     }
 
     /// Disable quality scores
-    pub fn without_scores(mut self) -> Self {
+    pub fn without_scores(mut self) -> Self
+    {
         self.quality_scores = false;
         self
     }
 
     /// Set the number of threads to use
-    pub fn with_threads(mut self, threads: usize) -> Self {
+    pub fn with_threads(mut self, threads: usize) -> Self
+    {
         assert!(
             threads < u16::MAX as usize,
             "Maximum number of supported threads is u16::MAX"
@@ -119,7 +130,8 @@ impl Converter {
     }
 
     /// Set the block size for the sequence blocks
-    pub fn with_block_size(mut self, block_size: usize) -> Self {
+    pub fn with_block_size(mut self, block_size: usize) -> Self
+    {
         assert!(
             block_size < u32::MAX as usize,
             "Block size must be less than u32::MAX (~4Gb)"
@@ -130,7 +142,8 @@ impl Converter {
     }
 
     /// Set the chunk size for the sequence locations
-    pub fn with_seqlocs_chunk_size(mut self, chunk_size: usize) -> Self {
+    pub fn with_seqlocs_chunk_size(mut self, chunk_size: usize) -> Self
+    {
         assert!(
             chunk_size < u32::MAX as usize,
             "Chunk size must be less than u32::MAX (~4Gb)"
@@ -142,19 +155,22 @@ impl Converter {
     }
 
     /// Set the compression type
-    pub fn with_compression_type(mut self, ct: CompressionType) -> Self {
+    pub fn with_compression_type(mut self, ct: CompressionType) -> Self
+    {
         self.compression_type = ct;
         self
     }
 
     /// Set the compression level
-    pub fn with_compression_level(mut self, level: i8) -> Self {
+    pub fn with_compression_level(mut self, level: i8) -> Self
+    {
         self.compression_level = Some(level);
         self
     }
 
     /// Reset compression level to default
-    pub fn with_default_compression_level(mut self) -> Self {
+    pub fn with_default_compression_level(mut self) -> Self
+    {
         self.compression_level = None;
         self
     }
@@ -177,13 +193,10 @@ impl Converter {
             .expect("Unable to write directory to file");
 
         // Write the directory
-        let directory_location = out_fh
-            .stream_position()
-            .expect("Unable to work with seek API");
+        let directory_location = out_fh.stream_position().expect("Unable to work with seek API");
 
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
-        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
-            .expect("Unable to write directory to file");
+        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config).expect("Unable to write directory to file");
 
         // Write the parameters
         bincode::encode_into_std_write(&sfasta.parameters, &mut out_fh, bincode_config)
@@ -239,26 +252,17 @@ impl Converter {
         // let in_buf = Arc::new(Mutex::new(in_buf));
         // let out_buf = Arc::new(Mutex::new(out_buf));
 
-        log::info!(
-            "Writing sequences start... {}",
-            out_fh.stream_position().unwrap()
-        );
+        log::info!("Writing sequences start... {}", out_fh.stream_position().unwrap());
 
-        // Calls the big function write_fasta_sequence to process both sequences and masking, and write them into a file....
-        // Function returns:
+        // Calls the big function write_fasta_sequence to process both sequences and masking, and write them into a
+        // file.... Function returns:
         // Vec<(String, Location)>
         // block_index_pos
 
         let out_buffer = Arc::new(Mutex::new(out_fh));
 
-        let (
-            ids,
-            mut seqlocs,
-            headers_location,
-            ids_location,
-            masking_location,
-            sequences_location,
-        ) = self.process(&mut in_buf, Arc::clone(&out_buffer));
+        let (ids, mut seqlocs, headers_location, ids_location, masking_location, sequences_location) =
+            self.process(&mut in_buf, Arc::clone(&out_buffer));
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
@@ -377,15 +381,10 @@ impl Converter {
 
         log::info!("DEBUG: {:?}", debug_size);
 
-        out_buffer_lock
-            .flush()
-            .expect("Unable to flush output file");
+        out_buffer_lock.flush().expect("Unable to flush output file");
 
         let conversion_end_time = std::time::Instant::now();
-        log::info!(
-            "Conversion time: {:?}",
-            conversion_end_time - conversion_start_time
-        );
+        log::info!("Conversion time: {:?}", conversion_end_time - conversion_start_time);
 
         drop(out_buffer_lock);
 
@@ -424,8 +423,7 @@ impl Converter {
         let output_buffer = Arc::clone(&out_fh);
 
         // Start the output I/O...
-        let mut output_worker =
-            crate::io::worker::Worker::new(output_buffer).with_buffer_size(1024);
+        let mut output_worker = crate::io::worker::Worker::new(output_buffer).with_buffer_size(1024);
         output_worker.start();
         let output_queue = output_worker.get_queue();
 
@@ -510,15 +508,15 @@ impl Converter {
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
                 let mut ids_string = Vec::new();
-                let mut masking = MaskingStoreBuilder::default()
-                    .with_compression_worker(Arc::clone(&compression_workers_thread));
+                let mut masking =
+                    MaskingStoreBuilder::default().with_compression_worker(Arc::clone(&compression_workers_thread));
                 let mut sequences = SequenceBlockStoreBuilder::default()
                     .with_block_size(512 * 1024)
                     .with_compression_worker(Arc::clone(&compression_workers_thread));
 
                 // For each Sequence in the fasta file, make it upper case (masking is stored separately)
-                // Add the sequence to the SequenceBlocks, get the SeqLocs and store them in Location struct
-                // And store that in seq_locs Vec...
+                // Add the sequence to the SequenceBlocks, get the SeqLocs and store them in Location
+                // struct And store that in seq_locs Vec...
 
                 let backoff = Backoff::new();
                 'outer: loop {
@@ -651,25 +649,28 @@ impl Converter {
 /// out_buffer
 
 #[derive(Debug)]
-enum Work {
+enum Work
+{
     FastaPayload(crate::datatypes::Sequence),
     FastqPayload(crate::datatypes::Sequence),
     Shutdown,
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use crate::datatypes::*;
-    use std::fs::File;
-    use std::io::Cursor;
+    use std::{fs::File, io::Cursor};
 
-    fn init() {
+    fn init()
+    {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
     #[test]
-    pub fn test_create_sfasta() {
+    pub fn test_create_sfasta()
+    {
         init();
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
@@ -677,9 +678,8 @@ mod tests {
         let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
         println!("test_data/test_convert.fasta");
-        let mut in_buf = BufReader::new(
-            File::open("test_data/test_convert.fasta").expect("Unable to open testing file"),
-        );
+        let mut in_buf =
+            BufReader::new(File::open("test_data/test_convert.fasta").expect("Unable to open testing file"));
 
         let converter = Converter::default().with_threads(6).with_block_size(8192);
 
@@ -697,16 +697,13 @@ mod tests {
 
         let _version: u64 = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
-        let directory: DirectoryOnDisk =
-            bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+        let directory: DirectoryOnDisk = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
         let dir = directory;
 
-        let _parameters: Parameters =
-            bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+        let _parameters: Parameters = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
-        let _metadata: Metadata =
-            bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+        let _metadata: Metadata = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
 
         // TODO: Add more tests
     }

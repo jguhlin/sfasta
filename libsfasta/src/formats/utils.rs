@@ -5,7 +5,8 @@ use libcompression::*;
 /// Return type of the file format detection function
 #[allow(dead_code)]
 #[derive(Debug, PartialEq, Eq)]
-pub enum FileFormat {
+pub enum FileFormat
+{
     Fasta,
     Fastq,
     Sfasta,
@@ -14,7 +15,8 @@ pub enum FileFormat {
 
 /// Detect the file format of a file. Prefer the file extension when available.
 #[allow(dead_code)]
-pub fn detect_file_format(buffer: &[u8]) -> Result<FileFormat, &'static str> {
+pub fn detect_file_format(buffer: &[u8]) -> Result<FileFormat, &'static str>
+{
     let buffer = from_utf8(buffer).expect("Unable to parse file as UTF-8");
     if buffer.starts_with('>') {
         Ok(FileFormat::Fasta)
@@ -30,7 +32,8 @@ pub fn detect_file_format(buffer: &[u8]) -> Result<FileFormat, &'static str> {
 
 /// Return the compression type of a file
 #[allow(dead_code)]
-pub fn detect_compression_format(buffer: &[u8]) -> Result<CompressionType, &'static str> {
+pub fn detect_compression_format(buffer: &[u8]) -> Result<CompressionType, &'static str>
+{
     Ok(match buffer {
         [0x1F, 0x8B, ..] => CompressionType::GZIP,
         [0x42, 0x5A, ..] => CompressionType::BZIP2,
@@ -47,11 +50,13 @@ pub fn detect_compression_format(buffer: &[u8]) -> Result<CompressionType, &'sta
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
 
     #[test]
-    fn test_detect_file_format() {
+    fn test_detect_file_format()
+    {
         let mut buf: &[u8; 10] = b">Test1\nATC";
         println!("{buf:#?}");
 

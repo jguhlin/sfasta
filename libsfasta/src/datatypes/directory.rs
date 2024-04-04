@@ -3,7 +3,8 @@ use crate::*;
 use std::num::NonZeroU64;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct DirectoryOnDisk {
+pub struct DirectoryOnDisk
+{
     pub index_loc: u64,
     pub ids_loc: u64,
     pub block_index_loc: u64,
@@ -13,8 +14,10 @@ pub struct DirectoryOnDisk {
     pub headers_loc: u64,
 }
 
-impl From<Directory> for DirectoryOnDisk {
-    fn from(dir: Directory) -> Self {
+impl From<Directory> for DirectoryOnDisk
+{
+    fn from(dir: Directory) -> Self
+    {
         DirectoryOnDisk {
             index_loc: match dir.index_loc {
                 Some(loc) => loc.get(),
@@ -48,8 +51,10 @@ impl From<Directory> for DirectoryOnDisk {
     }
 }
 
-impl DirectoryOnDisk {
-    pub fn sanity_check(&self, buffer_length: u64) -> Result<(), String> {
+impl DirectoryOnDisk
+{
+    pub fn sanity_check(&self, buffer_length: u64) -> Result<(), String>
+    {
         if self.index_loc > buffer_length {
             return Err(format!(
                 "Index location is outside of buffer: {} > {}",
@@ -106,7 +111,8 @@ impl DirectoryOnDisk {
 // , bincode::Encode, bincode::Decode
 // Directory should not be encoded, DirectoryOnDisk should be (can use .into or .from to get there and back)
 #[derive(Debug, Clone, Default)]
-pub struct Directory {
+pub struct Directory
+{
     pub index_loc: Option<NonZeroU64>,
     pub ids_loc: Option<NonZeroU64>,
     pub block_index_loc: Option<NonZeroU64>,
@@ -117,8 +123,10 @@ pub struct Directory {
     // TODO: Add pangenome stuff
 }
 
-impl From<DirectoryOnDisk> for Directory {
-    fn from(dir: DirectoryOnDisk) -> Self {
+impl From<DirectoryOnDisk> for Directory
+{
+    fn from(dir: DirectoryOnDisk) -> Self
+    {
         Directory {
             index_loc: NonZeroU64::new(dir.index_loc),
             ids_loc: NonZeroU64::new(dir.ids_loc),
@@ -131,73 +139,80 @@ impl From<DirectoryOnDisk> for Directory {
     }
 }
 
-/*impl Default for Directory {
-    fn default() -> Self {
-        Directory {
-            index_loc: None,
-            ids_loc: None,
-            block_index_loc: None,
-            seqlocs_loc: None,
-            scores_loc: None,
-            masking_loc: None,
-        }
-    }
-}*/
+// impl Default for Directory {
+// fn default() -> Self {
+// Directory {
+// index_loc: None,
+// ids_loc: None,
+// block_index_loc: None,
+// seqlocs_loc: None,
+// scores_loc: None,
+// masking_loc: None,
+// }
+// }
+// }
 
-impl Directory {
-    /* pub fn with_sequences(mut self) -> Self {
-        self.seqlocs_loc = Some(0);
-        self
-    } */
+impl Directory
+{
+    // pub fn with_sequences(mut self) -> Self {
+    // self.seqlocs_loc = Some(0);
+    // self
+    // }
 
-    pub fn with_scores(mut self) -> Self {
+    pub fn with_scores(mut self) -> Self
+    {
         self.scores_loc = NonZeroU64::new(1);
         self
     }
 
-    pub fn with_index(mut self) -> Self {
+    pub fn with_index(mut self) -> Self
+    {
         self.index_loc = NonZeroU64::new(1);
         self
     }
 
-    pub fn with_masking(mut self) -> Self {
+    pub fn with_masking(mut self) -> Self
+    {
         self.masking_loc = NonZeroU64::new(1);
         self
     }
 
-    pub fn dummy(&mut self) {
+    pub fn dummy(&mut self)
+    {
         // Dummy values...
         self.index_loc = NonZeroU64::new(std::u64::MAX);
         self.ids_loc = NonZeroU64::new(std::u64::MAX);
     }
 }
 
-impl bincode::Encode for Directory {
-    fn encode<E: bincode::enc::Encoder>(
-        &self,
-        encoder: &mut E,
-    ) -> core::result::Result<(), bincode::error::EncodeError> {
+impl bincode::Encode for Directory
+{
+    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E)
+        -> core::result::Result<(), bincode::error::EncodeError>
+    {
         let dir: DirectoryOnDisk = self.clone().into();
         bincode::Encode::encode(&dir, encoder)?;
         Ok(())
     }
 }
 
-impl bincode::Decode for Directory {
-    fn decode<D: bincode::de::Decoder>(
-        decoder: &mut D,
-    ) -> core::result::Result<Self, bincode::error::DecodeError> {
+impl bincode::Decode for Directory
+{
+    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> core::result::Result<Self, bincode::error::DecodeError>
+    {
         let dir: DirectoryOnDisk = bincode::Decode::decode(decoder)?;
         Ok(dir.into())
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
 
     #[test]
-    pub fn bincode_size_u64() {
+    pub fn bincode_size_u64()
+    {
         let x: u64 = 0;
         let y: u64 = std::u64::MAX;
         let z: u64 = std::u64::MAX - 1;
@@ -213,7 +228,8 @@ mod tests {
     }
 
     #[test]
-    pub fn bincode_size_directory_struct() {
+    pub fn bincode_size_directory_struct()
+    {
         let mut directory = Directory {
             index_loc: None,
             ids_loc: None,
@@ -237,19 +253,15 @@ mod tests {
         directory.scores_loc = NonZeroU64::new(std::u64::MAX);
         let dir: DirectoryOnDisk = directory.into();
         let encoded_2: Vec<u8> = bincode::encode_to_vec(dir, bincode_config).unwrap();
-        println!(
-            "{} {} {}",
-            encoded_0.len(),
-            encoded_1.len(),
-            encoded_2.len()
-        );
+        println!("{} {} {}", encoded_0.len(), encoded_1.len(), encoded_2.len());
 
         assert!(encoded_0.len() == encoded_1.len());
         assert!(encoded_0.len() == encoded_2.len());
     }
 
     #[test]
-    pub fn directory_constructors() {
+    pub fn directory_constructors()
+    {
         let d = Directory::default().with_scores();
         assert!(d.scores_loc == NonZeroU64::new(1));
 

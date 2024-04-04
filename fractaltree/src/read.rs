@@ -3,25 +3,21 @@ use libcompression::*;
 use sorted_vec::SortedVec;
 
 #[derive(Debug)]
-pub struct FractalTreeRead<K, V>
-where
-    K: Key,
-    V: Value,
+pub struct FractalTreeRead
 {
-    pub root: NodeRead<K, V>,
+    pub root: NodeRead,
 }
 
-impl<K, V> FractalTreeRead<K, V>
-where
-    K: Key,
-    V: Value,
+impl FractalTreeRead
 {
     // Assume root node is already loaded
-    pub fn search(&self, key: &K) -> Option<V> {
-        self.root.search(&key)
+    pub fn search(&self, key: u64) -> Option<u32>
+    {
+        self.root.search(key)
     }
 
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> usize
+    {
         self.root.len()
     }
 
@@ -29,26 +25,18 @@ where
 }
 
 #[derive(Debug)]
-pub struct NodeRead<K, V>
-where
-    K: Key,
-    V: Value,
+pub struct NodeRead
 {
     pub is_root: bool,
     pub is_leaf: bool,
-    pub keys: SortedVec<K>,
-    pub children: Option<Vec<Box<NodeRead<K, V>>>>,
-    pub values: Option<Vec<V>>,
+    pub keys: SortedVec<u64>,
+    pub children: Option<Vec<Box<NodeRead>>>,
+    pub values: Option<Vec<u32>>,
 }
 
-impl<K, V> NodeRead<K, V>
-where
-    K: Key,
-    V: Value,
+impl NodeRead
 {
-    pub fn search(&self, key: &K) -> Option<V>
-    where
-        K: PartialOrd + PartialEq + Eq,
+    pub fn search(&self, key: u64) -> Option<u32>
     {
         let i = self.keys.binary_search(&key);
 
@@ -73,7 +61,8 @@ where
     }
 
     // Have to do iteratively
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> usize
+    {
         if self.is_leaf {
             self.keys.len()
         } else {

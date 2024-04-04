@@ -6,11 +6,14 @@ pub mod worker;
 
 pub use worker::*;
 
-use std::fs::{metadata, File};
-use std::io::{BufReader, Read};
+use std::{
+    fs::{metadata, File},
+    io::{BufReader, Read},
+};
 
 #[inline]
-pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) {
+pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>)
+{
     let filesize = metadata(filename)
         .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
         .len();
@@ -26,8 +29,7 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
     let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
         compressed = true;
         Box::new(flate2::read::GzDecoder::new(file))
-    } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai")
-    {
+    } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai") {
         compressed = true;
         Box::new(snap::read::FrameDecoder::new(file))
     } else {
@@ -38,4 +40,5 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>) 
 }
 
 #[cfg(test)]
-mod tests {}
+mod tests
+{}

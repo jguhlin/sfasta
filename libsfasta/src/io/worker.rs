@@ -2,19 +2,23 @@
 //!
 //! This holds the output buffer, must finish and destroy to have access to it again.
 
-use std::io::{Seek, Write};
-use std::sync::atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering};
-use std::sync::{Arc, Condvar, Mutex};
-use std::thread;
-use std::thread::JoinHandle;
-use std::time::Duration;
+use std::{
+    io::{Seek, Write},
+    sync::{
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
+        Arc, Condvar, Mutex,
+    },
+    thread,
+    thread::JoinHandle,
+    time::Duration,
+};
 
-use crossbeam::queue::ArrayQueue;
-use crossbeam::utils::Backoff;
+use crossbeam::{queue::ArrayQueue, utils::Backoff};
 
 use libcompression::*;
 
-pub struct Worker<W: Write + Seek + Send + Seek + 'static> {
+pub struct Worker<W: Write + Seek + Send + Seek + 'static>
+{
     queue: Option<Arc<ArrayQueue<OutputBlock>>>,
     shutdown_flag: Arc<AtomicBool>,
     buffer_size: usize,
@@ -23,15 +27,18 @@ pub struct Worker<W: Write + Seek + Send + Seek + 'static> {
     output_buffer: Arc<Mutex<Box<W>>>,
 }
 
-impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
-    pub fn into_inner(self) -> Box<W> {
+impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
+{
+    pub fn into_inner(self) -> Box<W>
+    {
         match Arc::try_unwrap(self.output_buffer) {
             Ok(output_buffer) => output_buffer.into_inner().unwrap(),
             Err(_) => panic!("Could not unwrap output buffer"),
         }
     }
 
-    pub fn new(output_buffer: Arc<Mutex<Box<W>>>) -> Self {
+    pub fn new(output_buffer: Arc<Mutex<Box<W>>>) -> Self
+    {
         Self {
             queue: None,
             output_buffer,
@@ -40,13 +47,15 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
         }
     }
 
-    pub fn with_buffer_size(mut self, buffer_size: usize) -> Self {
+    pub fn with_buffer_size(mut self, buffer_size: usize) -> Self
+    {
         self.buffer_size = buffer_size;
         self
     }
 
     /// Starts the worker thread, and returns the JoinHandle.
-    pub fn start(&mut self) -> JoinHandle<()> {
+    pub fn start(&mut self) -> JoinHandle<()>
+    {
         let queue = Arc::new(ArrayQueue::new(self.buffer_size));
         self.queue = Some(Arc::clone(&queue));
 
@@ -57,24 +66,24 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
     }
 
     /// Manually shutdown the worker
-    pub fn shutdown(&mut self) {
+    pub fn shutdown(&mut self)
+    {
         self.shutdown_flag.store(true, Ordering::Relaxed);
     }
 
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> usize
+    {
         self.queue.as_ref().unwrap().len()
     }
 
-    pub fn get_queue(&self) -> Arc<ArrayQueue<OutputBlock>> {
+    pub fn get_queue(&self) -> Arc<ArrayQueue<OutputBlock>>
+    {
         Arc::clone(self.queue.as_ref().unwrap())
     }
 }
 
-fn worker<W>(
-    queue: Arc<ArrayQueue<OutputBlock>>,
-    shutdown_flag: Arc<AtomicBool>,
-    output_buffer: Arc<Mutex<W>>,
-) where
+fn worker<W>(queue: Arc<ArrayQueue<OutputBlock>>, shutdown_flag: Arc<AtomicBool>, output_buffer: Arc<Mutex<W>>)
+where
     W: Write + Seek + Send + Sync + Seek,
 {
     let backoff = Backoff::new();

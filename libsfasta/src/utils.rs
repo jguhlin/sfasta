@@ -1,13 +1,12 @@
-use std::cmp::min;
-use std::fmt;
-use std::io::Read;
 /// Opens files, including compressed files (gzip or snappy)
 use std::path::Path;
+use std::{cmp::min, fmt, io::Read};
 
 use bitpacking::{BitPacker, BitPacker8x};
 use crossbeam::channel;
 
-pub fn create_dict(input: &[u8], block_size: usize) -> Vec<u8> {
+pub fn create_dict(input: &[u8], block_size: usize) -> Vec<u8>
+{
     let block_counts = input.len() / block_size;
     let input = &input[..block_counts * block_size];
     let block_sizes = vec![block_size; block_counts];
@@ -15,20 +14,24 @@ pub fn create_dict(input: &[u8], block_size: usize) -> Vec<u8> {
 }
 
 // From: https://stackoverflow.com/questions/72571846/crossbeam-receiver-to-bufread
-pub struct CrossbeamReader {
+pub struct CrossbeamReader
+{
     input: channel::Receiver<ReaderData>,
     buffer: Vec<u8>,
     offset: usize,
     closed: bool,
 }
 
-pub enum ReaderData {
+pub enum ReaderData
+{
     Data(Vec<u8>),
     EOF,
 }
 
-impl CrossbeamReader {
-    pub fn from_channel(input: channel::Receiver<ReaderData>) -> CrossbeamReader {
+impl CrossbeamReader
+{
+    pub fn from_channel(input: channel::Receiver<ReaderData>) -> CrossbeamReader
+    {
         CrossbeamReader {
             input,
             buffer: Vec::with_capacity(2048),
@@ -38,8 +41,10 @@ impl CrossbeamReader {
     }
 }
 
-impl Read for CrossbeamReader {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+impl Read for CrossbeamReader
+{
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize>
+    {
         if self.closed {
             return Ok(0);
         }
@@ -64,20 +69,24 @@ impl Read for CrossbeamReader {
 // TODO: Test if possible to make it sorted, then make it sorted...
 // Called delta encoding, will give a bit better space and a small speed boost.
 #[derive(bincode::Encode, bincode::Decode)]
-pub enum Packed {
+pub enum Packed
+{
     Packed(Vec<u8>),
     Remainder(Vec<u32>),
 }
 
-impl Packed {
-    pub const fn is_packed(&self) -> bool {
+impl Packed
+{
+    pub const fn is_packed(&self) -> bool
+    {
         match self {
             Packed::Packed(_) => true,
             Packed::Remainder(_) => false,
         }
     }
 
-    pub fn unpack(&self, num_bits: u8) -> Result<Vec<u32>, String> {
+    pub fn unpack(&self, num_bits: u8) -> Result<Vec<u32>, String>
+    {
         match self {
             Packed::Packed(packed) => {
                 let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
@@ -98,8 +107,10 @@ impl Packed {
     }
 }
 
-impl fmt::Debug for Packed {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Packed
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
         let packed_type = match &self {
             Packed::Packed(_) => "Packed",
             Packed::Remainder(_) => "Remainder",
@@ -109,13 +120,16 @@ impl fmt::Debug for Packed {
 }
 
 #[derive(bincode::Encode, bincode::Decode)]
-pub struct Bitpacked {
+pub struct Bitpacked
+{
     num_bits: u8,
     packed: Packed,
 }
 
-impl fmt::Debug for Bitpacked {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl fmt::Debug for Bitpacked
+{
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result
+    {
         let packed_type = match &self.packed {
             Packed::Packed(_) => "Packed",
             Packed::Remainder(_) => "Remainder",
@@ -128,8 +142,10 @@ impl fmt::Debug for Bitpacked {
     }
 }
 
-impl Bitpacked {
-    pub fn decompress(&self) -> Vec<u32> {
+impl Bitpacked
+{
+    pub fn decompress(&self) -> Vec<u32>
+    {
         match self.packed {
             Packed::Packed(ref packed) => {
                 let mut decompressed = vec![0u32; BitPacker8x::BLOCK_LEN];
@@ -142,7 +158,8 @@ impl Bitpacked {
     }
 }
 
-pub fn unbitpack_u32(packed: Vec<Bitpacked>) -> Vec<u32> {
+pub fn unbitpack_u32(packed: Vec<Bitpacked>) -> Vec<u32>
+{
     let mut unpacked: Vec<u32> = Vec::with_capacity(packed.len() * BitPacker8x::BLOCK_LEN);
 
     let bitpacker = BitPacker8x::new();
@@ -163,7 +180,8 @@ pub fn unbitpack_u32(packed: Vec<Bitpacked>) -> Vec<u32> {
     unpacked
 }
 
-pub fn bitpack_u32(to_pack: &[u32]) -> (u8, Vec<Packed>) {
+pub fn bitpack_u32(to_pack: &[u32]) -> (u8, Vec<Packed>)
+{
     let bitpacker = BitPacker8x::new();
 
     let chunks = to_pack.chunks_exact(BitPacker8x::BLOCK_LEN);
@@ -184,29 +202,30 @@ pub fn bitpack_u32(to_pack: &[u32]) -> (u8, Vec<Packed>) {
         let mut packed = vec![0u8; 4 * BitPacker8x::BLOCK_LEN];
         bitpacker.compress(i, &mut packed[..], num_bits);
         bitpacked.push(Packed::Packed(packed)); // Names are hard...
-                                                //Bitpacked {
-                                                //num_bits,
-                                                //packed: Packed::Packed(packed)
+                                                // Bitpacked {
+                                                // num_bits,
+                                                // packed: Packed::Packed(packed)
                                                 //}
                                                 // });
     }
 
     if !remainder.is_empty() {
-        /*bitpacked.push(Bitpacked {
-            num_bits: 0,
-            packed: Packed::Remainder(remainder.to_vec()),
-        }); */
+        // bitpacked.push(Bitpacked {
+        // num_bits: 0,
+        // packed: Packed::Remainder(remainder.to_vec()),
+        // });
         bitpacked.push(Packed::Remainder(remainder.to_vec()));
     }
 
     (num_bits, bitpacked)
 }
 
-/* pub fn compress(ct: CompressionType, data: &[u8]) -> Vec<u8> {
+// pub fn compress(ct: CompressionType, data: &[u8]) -> Vec<u8> {
+//
+// }
 
-} */
-
-pub fn get_index_filename(filename: &str) -> String {
+pub fn get_index_filename(filename: &str) -> String
+{
     let filenamepath = Path::new(&filename);
     let filename = Path::new(filenamepath.file_name().unwrap())
         .file_stem()
@@ -225,7 +244,8 @@ pub fn get_index_filename(filename: &str) -> String {
 }
 
 /// Checks that the file extension ends in .sfasta or adds it if necessary
-pub fn check_extension(filename: &str) -> String {
+pub fn check_extension(filename: &str) -> String
+{
     if !filename.ends_with(".sfasta") {
         format!("{}.sfasta", filename)
     } else {
@@ -233,67 +253,66 @@ pub fn check_extension(filename: &str) -> String {
     }
 }
 
-/*
-pub fn get_good_sequence_coords(seq: &[u8]) -> Vec<(usize, usize)> {
-    let mut start: Option<usize> = None;
-    let mut end: usize;
-    let mut cur: usize = 0;
-    let mut start_coords;
-    let mut end_coords;
-    let mut coords: Vec<(usize, usize)> = Vec::with_capacity(64);
-    //let results = seq.windows(3).enumerate().filter(|(_y, x)| x != &[78, 78,
-    // 78]).map(|(y, _x)| y);
-
-    // Do we need to filter the sequence at all?
-    if bytecount::count(&seq, b'N') < 3 {
-        coords.push((0, seq.len()));
-        return coords;
-    }
-
-    let results = seq
-        .windows(3)
-        .enumerate()
-        .filter(|(_y, x)| bytecount::count(&x, b'N') < 3)
-        .map(|(y, _x)| y);
-
-    for pos in results {
-        match start {
-            None => {
-                start = Some(pos);
-                cur = pos;
-            }
-            Some(_x) => (),
-        };
-
-        if pos - cur > 1 {
-            end = cur;
-            start_coords = start.unwrap();
-            end_coords = end;
-            coords.push((start_coords, end_coords));
-            start = None;
-        } else {
-            cur = pos;
-        }
-    }
-
-    // Push final set of coords to the system
-    if start != None {
-        end = seq.len(); //cur;
-        start_coords = start.unwrap();
-        end_coords = end;
-        if end_coords - start_coords > 1 {
-            coords.push((start_coords, end_coords));
-        }
-    }
-
-    coords
-}
-*/
+// pub fn get_good_sequence_coords(seq: &[u8]) -> Vec<(usize, usize)> {
+// let mut start: Option<usize> = None;
+// let mut end: usize;
+// let mut cur: usize = 0;
+// let mut start_coords;
+// let mut end_coords;
+// let mut coords: Vec<(usize, usize)> = Vec::with_capacity(64);
+// let results = seq.windows(3).enumerate().filter(|(_y, x)| x != &[78, 78,
+// 78]).map(|(y, _x)| y);
+//
+// Do we need to filter the sequence at all?
+// if bytecount::count(&seq, b'N') < 3 {
+// coords.push((0, seq.len()));
+// return coords;
+// }
+//
+// let results = seq
+// .windows(3)
+// .enumerate()
+// .filter(|(_y, x)| bytecount::count(&x, b'N') < 3)
+// .map(|(y, _x)| y);
+//
+// for pos in results {
+// match start {
+// None => {
+// start = Some(pos);
+// cur = pos;
+// }
+// Some(_x) => (),
+// };
+//
+// if pos - cur > 1 {
+// end = cur;
+// start_coords = start.unwrap();
+// end_coords = end;
+// coords.push((start_coords, end_coords));
+// start = None;
+// } else {
+// cur = pos;
+// }
+// }
+//
+// Push final set of coords to the system
+// if start != None {
+// end = seq.len(); //cur;
+// start_coords = start.unwrap();
+// end_coords = end;
+// if end_coords - start_coords > 1 {
+// coords.push((start_coords, end_coords));
+// }
+// }
+//
+// coords
+// }
 
 // Copied from opinionated lib...
 // Mutability here because we change everything to uppercase
 #[inline]
-pub fn capitalize_nucleotides(slice: &mut [u8]) {
+pub fn capitalize_nucleotides(slice: &mut [u8])
+{
     // Convert to uppercase (using, what is hopefully a fast op)
     for nucl in slice.iter_mut() {
         // *x = _convert_nucl(*x);
@@ -314,7 +333,8 @@ pub fn capitalize_nucleotides(slice: &mut [u8]) {
 }
 
 #[inline]
-const fn _complement_nucl(nucl: u8) -> u8 {
+const fn _complement_nucl(nucl: u8) -> u8
+{
     // Should all be capitalized by now...
     // N -> 78
     // A -> 65
@@ -333,51 +353,53 @@ const fn _complement_nucl(nucl: u8) -> u8 {
 
 // Mutability here because we change everything to uppercase
 /// Complement nucleotides -- Reverse is easy enough with Rust internals
-pub fn complement_nucleotides(slice: &mut [u8]) {
+pub fn complement_nucleotides(slice: &mut [u8])
+{
     for x in slice.iter_mut() {
         *x = _complement_nucl(*x);
     }
 }
 
 #[inline]
-pub fn get_masking(seq: &[u8]) -> Vec<bool> {
+pub fn get_masking(seq: &[u8]) -> Vec<bool>
+{
     seq.iter().map(|&x| x > 96).collect()
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use std::io::BufRead;
-    /*
-        #[test]
-        pub fn test_get_good_sequence_coords() {
-            let coords = get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAA");
-            println!("{:#?}", coords);
-            assert!(coords == [(0, 19), (22, 47)]);
-
-            // TODO: Error, but such a minor edge case...
-            let coords =
-                get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAANNN");
-            println!("{:#?}", coords);
-            assert!(coords == [(0, 19), (22, 50)]);
-
-            // TODO: Error, but such a minor edge case...
-            let coords =
-                get_good_sequence_coords(b"NNNAAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAANNN");
-            println!("{:#?}", coords);
-            assert!(coords == [(1, 22), (25, 53)]);
-
-            let coords = get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-            println!("{:#?}", coords);
-            assert!(coords == [(0, 44)]);
-
-            let coords = get_good_sequence_coords(b"AAAAAAAANAAAAAAAAANAAAAAAAAAAAAAAAAAAAAAANAA");
-            println!("{:#?}", coords);
-            assert!(coords == [(0, 44)]);
-        }
-    */
+    // #[test]
+    // pub fn test_get_good_sequence_coords() {
+    // let coords = get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAA");
+    // println!("{:#?}", coords);
+    // assert!(coords == [(0, 19), (22, 47)]);
+    //
+    // TODO: Error, but such a minor edge case...
+    // let coords =
+    // get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAANNN");
+    // println!("{:#?}", coords);
+    // assert!(coords == [(0, 19), (22, 50)]);
+    //
+    // TODO: Error, but such a minor edge case...
+    // let coords =
+    // get_good_sequence_coords(b"NNNAAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAANNN");
+    // println!("{:#?}", coords);
+    // assert!(coords == [(1, 22), (25, 53)]);
+    //
+    // let coords = get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    // println!("{:#?}", coords);
+    // assert!(coords == [(0, 44)]);
+    //
+    // let coords = get_good_sequence_coords(b"AAAAAAAANAAAAAAAAANAAAAAAAAAAAAAAAAAAAAAANAA");
+    // println!("{:#?}", coords);
+    // assert!(coords == [(0, 44)]);
+    // }
     #[test]
-    pub fn test_complement_nucleotides() {
+    pub fn test_complement_nucleotides()
+    {
         let mut seq = b"AGTCCCNTNNNNTAAGATTTAGAGACCAAAAA".to_vec();
         complement_nucleotides(&mut seq);
         assert!(seq == b"TCAGGGNANNNNATTCTAAATCTCTGGTTTTT");
@@ -386,7 +408,8 @@ mod tests {
     }
 
     #[test]
-    pub fn test_capitalize_nucleotides() {
+    pub fn test_capitalize_nucleotides()
+    {
         let mut seq = b"agtcn".to_vec();
         capitalize_nucleotides(&mut seq);
         assert!(seq == b"AGTCN");
@@ -394,7 +417,8 @@ mod tests {
 
     // Test crossbeam reader channel
     #[test]
-    pub fn test_crossbeam_reader() {
+    pub fn test_crossbeam_reader()
+    {
         let (s, r) = crossbeam::channel::unbounded();
         for _ in 0..100 {
             s.send(ReaderData::Data(

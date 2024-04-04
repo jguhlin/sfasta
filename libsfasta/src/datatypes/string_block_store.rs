@@ -1,17 +1,22 @@
-use std::io::{Read, Seek, Write};
-use std::sync::Arc;
+use std::{
+    io::{Read, Seek, Write},
+    sync::Arc,
+};
 
 use simdutf8::basic::from_utf8;
 
 use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
 use libcompression::*;
 
-pub struct StringBlockStoreBuilder {
+pub struct StringBlockStoreBuilder
+{
     inner: BytesBlockStoreBuilder,
 }
 
-impl Default for StringBlockStoreBuilder {
-    fn default() -> Self {
+impl Default for StringBlockStoreBuilder
+{
+    fn default() -> Self
+    {
         StringBlockStoreBuilder {
             inner: BytesBlockStoreBuilder::default()
                 .with_block_size(512 * 1024)
@@ -24,8 +29,10 @@ impl Default for StringBlockStoreBuilder {
     }
 }
 
-impl StringBlockStoreBuilder {
-    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self {
+impl StringBlockStoreBuilder
+{
+    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self
+    {
         self.inner = self.inner.with_compression_worker(compression_worker);
         self
     }
@@ -37,35 +44,42 @@ impl StringBlockStoreBuilder {
         self.inner.write_header(pos, &mut out_buf);
     }
 
-    pub fn write_block_locations(&mut self) {
+    pub fn write_block_locations(&mut self)
+    {
         self.inner.write_block_locations();
     }
 
-    pub fn block_len(&self) -> usize {
+    pub fn block_len(&self) -> usize
+    {
         self.inner.block_len()
     }
 
-    pub fn finalize(&mut self) {
+    pub fn finalize(&mut self)
+    {
         self.inner.finalize();
     }
 
-    pub fn with_block_size(mut self, block_size: usize) -> Self {
+    pub fn with_block_size(mut self, block_size: usize) -> Self
+    {
         self.inner = self.inner.with_block_size(block_size);
         self
     }
 
-    pub fn add(&mut self, input: &str) -> Vec<Loc> {
+    pub fn add(&mut self, input: &str) -> Vec<Loc>
+    {
         self.inner
             .add(input.as_bytes())
             .expect("Failed to add string to block store")
     }
 }
 
-pub struct StringBlockStore {
+pub struct StringBlockStore
+{
     inner: BytesBlockStore,
 }
 
-impl StringBlockStore {
+impl StringBlockStore
+{
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
@@ -113,22 +127,23 @@ impl StringBlockStore {
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 
-    pub fn get_loaded(&self, loc: &[Loc]) -> String {
+    pub fn get_loaded(&self, loc: &[Loc]) -> String
+    {
         let string_as_bytes = self.inner.get_loaded(loc);
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use std::io::Cursor;
 
     #[test]
-    fn test_add_id() {
-        let mut store = StringBlockStoreBuilder {
-            ..Default::default()
-        };
+    fn test_add_id()
+    {
+        let mut store = StringBlockStoreBuilder { ..Default::default() };
 
         let test_ids = vec![
             "Medtr5g026775.t1",

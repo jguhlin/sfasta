@@ -4,17 +4,19 @@ use libsfasta::datatypes::seq_loc::*;
 
 use rand::Rng;
 
-use std::io::Cursor;
-use std::sync::Arc;
+use std::{io::Cursor, sync::Arc};
 
 #[derive(Default)]
-struct OriginalFormatSeqLocs {
+struct OriginalFormatSeqLocs
+{
     data: Option<Vec<(u32, u32, u32)>>,
     total_locs: usize,
 }
 
-impl OriginalFormatSeqLocs {
-    pub fn add_locs(&mut self, locs: &[(u32, u32, u32)]) -> (u64, u32) {
+impl OriginalFormatSeqLocs
+{
+    pub fn add_locs(&mut self, locs: &[(u32, u32, u32)]) -> (u64, u32)
+    {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(8192 * 64));
         }
@@ -28,20 +30,24 @@ impl OriginalFormatSeqLocs {
 }
 
 #[derive(Clone, Copy)]
-struct StructSeqLoc {
+struct StructSeqLoc
+{
     block: u32,
     start: u32,
     len: u32,
 }
 
 #[derive(Default)]
-struct StructLocSeqLocs {
+struct StructLocSeqLocs
+{
     data: Option<Vec<StructSeqLoc>>,
     total_locs: usize,
 }
 
-impl StructLocSeqLocs {
-    pub fn add_locs(&mut self, locs: &[StructSeqLoc]) -> (u64, u32) {
+impl StructLocSeqLocs
+{
+    pub fn add_locs(&mut self, locs: &[StructSeqLoc]) -> (u64, u32)
+    {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(8192 * 64));
         }
@@ -58,13 +64,16 @@ impl StructLocSeqLocs {
 struct TupleStructLoc(u32, u32, u32);
 
 #[derive(Default)]
-struct TrupleStructLocSeqLocs {
+struct TrupleStructLocSeqLocs
+{
     data: Option<Vec<TupleStructLoc>>,
     total_locs: usize,
 }
 
-impl TrupleStructLocSeqLocs {
-    pub fn add_locs(&mut self, locs: &[TupleStructLoc]) -> (u64, u32) {
+impl TrupleStructLocSeqLocs
+{
+    pub fn add_locs(&mut self, locs: &[TupleStructLoc]) -> (u64, u32)
+    {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(8192 * 64));
         }
@@ -77,7 +86,8 @@ impl TrupleStructLocSeqLocs {
     }
 }
 
-pub fn benchmark_add_locs(c: &mut Criterion) {
+pub fn benchmark_add_locs(c: &mut Criterion)
+{
     let loc = Loc::new(0, 0, 128);
 
     let mut seqlocs = SeqLocsStoreBuilder::default();
@@ -109,48 +119,37 @@ pub fn benchmark_add_locs(c: &mut Criterion) {
     });
 }
 
-fn benchmark_add_locs_large(c: &mut Criterion) {
+fn benchmark_add_locs_large(c: &mut Criterion)
+{
     let loc = Loc::new(0, 0, 128);
     let locs = vec![loc; 1024];
 
-    c.bench_with_input(
-        BenchmarkId::new("add_locs_large", 1024 * 1024 * 8),
-        &locs,
-        |b, s| {
-            b.iter(|| {
-                let mut seqlocs = SeqLocsStoreBuilder::default();
-                for _ in 0..1024 * 8 {
-                    seqlocs.add_locs(&s);
-                }
-            })
-        },
-    );
+    c.bench_with_input(BenchmarkId::new("add_locs_large", 1024 * 1024 * 8), &locs, |b, s| {
+        b.iter(|| {
+            let mut seqlocs = SeqLocsStoreBuilder::default();
+            for _ in 0..1024 * 8 {
+                seqlocs.add_locs(&s);
+            }
+        })
+    });
 
-    c.bench_with_input(
-        BenchmarkId::new("add_locs_large", 1024 * 1024 * 16),
-        &locs,
-        |b, s| {
-            b.iter(|| {
-                let mut seqlocs = SeqLocsStoreBuilder::default();
-                for _ in 0..1024 * 16 {
-                    seqlocs.add_locs(&s);
-                }
-            })
-        },
-    );
+    c.bench_with_input(BenchmarkId::new("add_locs_large", 1024 * 1024 * 16), &locs, |b, s| {
+        b.iter(|| {
+            let mut seqlocs = SeqLocsStoreBuilder::default();
+            for _ in 0..1024 * 16 {
+                seqlocs.add_locs(&s);
+            }
+        })
+    });
 
-    c.bench_with_input(
-        BenchmarkId::new("add_locs_large", 1024 * 1024 * 32),
-        &locs,
-        |b, s| {
-            b.iter(|| {
-                let mut seqlocs = SeqLocsStoreBuilder::default();
-                for _ in 0..1024 * 32 {
-                    seqlocs.add_locs(&s);
-                }
-            })
-        },
-    );
+    c.bench_with_input(BenchmarkId::new("add_locs_large", 1024 * 1024 * 32), &locs, |b, s| {
+        b.iter(|| {
+            let mut seqlocs = SeqLocsStoreBuilder::default();
+            for _ in 0..1024 * 32 {
+                seqlocs.add_locs(&s);
+            }
+        })
+    });
 
     let loc = StructSeqLoc {
         block: 0,
@@ -206,9 +205,9 @@ fn benchmark_add_locs_large(c: &mut Criterion) {
 }
 
 // Disabled while we work on the rest...
-/*criterion_group!(name = add_locs;
-config = Criterion::default(); //.measurement_time(std::time::Duration::from_secs(90));
-targets = benchmark_add_locs);*/
+// criterion_group!(name = add_locs;
+// config = Criterion::default(); //.measurement_time(std::time::Duration::from_secs(90));
+// targets = benchmark_add_locs);
 
 criterion_group!(name = add_locs_large;
     config = Criterion::default().measurement_time(std::time::Duration::from_secs(60));

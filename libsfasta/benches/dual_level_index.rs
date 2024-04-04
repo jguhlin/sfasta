@@ -4,10 +4,10 @@ use libsfasta::dual_level_index::*;
 
 use rand::Rng;
 
-use std::io::Cursor;
-use std::sync::Arc;
+use std::{io::Cursor, sync::Arc};
 
-pub fn build_dual_index(data: Vec<(String, u32)>) {
+pub fn build_dual_index(data: Vec<(String, u32)>)
+{
     let mut out_buf: Cursor<Vec<u8>> = Cursor::new(Vec::new());
     let mut di = DualIndexBuilder::new();
 
@@ -19,8 +19,9 @@ pub fn build_dual_index(data: Vec<(String, u32)>) {
     writer.write_to_buffer(&mut out_buf);
 }
 
-pub fn di_benchmark(c: &mut Criterion) {
-    //c.measurement_time(std::time::Duration::from_secs(90));
+pub fn di_benchmark(c: &mut Criterion)
+{
+    // c.measurement_time(std::time::Duration::from_secs(90));
 
     let mut rng = rand::thread_rng();
     let mut data = Vec::with_capacity(1_024 * 1_024);

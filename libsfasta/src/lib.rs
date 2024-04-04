@@ -18,6 +18,4 @@ pub mod utils;
 
 pub mod prelude;
 
-pub use crate::datatypes::structs::*;
-pub use crate::io::*;
-pub use crate::utils::*;
+pub use crate::{datatypes::structs::*, io::*, utils::*};

@@ -6,17 +6,19 @@ use libcompression::*;
 // TODO: Read for testing, and then implementation
 // TODO: Switch to BytesBlockStore for backing
 
-// Originally was using bitpacking, by Converting [u64] to [u32] of double length, and decompressing that. But that was giving errors and was intractable without a specific datastructure to handle it.
-// So now we are using zstd (look into zigzag, stream vbyte 64, etc, in the future)
-// But want something to work now
+// Originally was using bitpacking, by Converting [u64] to [u32] of double length, and decompressing that. But that was
+// giving errors and was intractable without a specific datastructure to handle it. So now we are using zstd (look into
+// zigzag, stream vbyte 64, etc, in the future) But want something to work now
 
 // This encodes everything as zstd blocks
 // So [u64] -> Multiple blocks of [u64] that are zstd compressed, with a block index
 
-// This is a specialized variant of Bytes Block Store, but we don't need the entire Loc system, just the # of the block and the location in the block (ordinal)
+// This is a specialized variant of Bytes Block Store, but we don't need the entire Loc system, just the # of the block
+// and the location in the block (ordinal)
 
 #[derive(Clone)]
-pub struct U64BlockStore {
+pub struct U64BlockStore
+{
     location: u64,
     block_index_pos: u64,
     block_locations: Option<Vec<u32>>,
@@ -29,8 +31,10 @@ pub struct U64BlockStore {
     counter: usize,
 }
 
-impl Default for U64BlockStore {
-    fn default() -> Self {
+impl Default for U64BlockStore
+{
+    fn default() -> Self
+    {
         U64BlockStore {
             location: 0,
             block_index_pos: 0,
@@ -46,19 +50,23 @@ impl Default for U64BlockStore {
     }
 }
 
-impl U64BlockStore {
-    pub fn with_location(loc: u64) -> Self {
+impl U64BlockStore
+{
+    pub fn with_location(loc: u64) -> Self
+    {
         let mut store = U64BlockStore::default();
         store.location = loc;
         store
     }
 
-    pub fn with_block_size(mut self, block_size: usize) -> Self {
+    pub fn with_block_size(mut self, block_size: usize) -> Self
+    {
         self.block_size = block_size as u64;
         self
     }
 
-    fn compress_block(&mut self) {
+    fn compress_block(&mut self)
+    {
         let mut compressor = zstd_encoder(3, &None);
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
@@ -82,19 +90,15 @@ impl U64BlockStore {
 
         let data = bincode::encode_to_vec(&block, bincode_config).unwrap();
 
-        let compressed_size = compressor
-            .compress_to_buffer(&data, &mut compressed)
-            .unwrap();
+        let compressed_size = compressor.compress_to_buffer(&data, &mut compressed).unwrap();
 
-        self.compressed_block_lens
-            .as_mut()
-            .unwrap()
-            .push(compressed_size);
+        self.compressed_block_lens.as_mut().unwrap().push(compressed_size);
 
         self.compressed_blocks.as_mut().unwrap().extend(compressed);
     }
 
-    pub fn add(&mut self, input: u64) -> usize {
+    pub fn add(&mut self, input: u64) -> usize
+    {
         if self.data.is_none() {
             self.data = Some(Vec::with_capacity(self.block_size as usize));
         }
@@ -110,7 +114,8 @@ impl U64BlockStore {
         self.counter
     }
 
-    pub fn emit_blocks(&mut self) -> Vec<&[u8]> {
+    pub fn emit_blocks(&mut self) -> Vec<&[u8]>
+    {
         while self.data.as_ref().unwrap().len() > 0 {
             self.compress_block();
         }
@@ -139,8 +144,7 @@ impl U64BlockStore {
 
         let starting_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
         // TODO: This is a lie, only zstd is supported as of right now...
-        bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
-            .unwrap();
+        bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
 
@@ -150,27 +154,22 @@ impl U64BlockStore {
 
         for compressed_block in compressed_blocks {
             let block_start = out_buf.seek(SeekFrom::Current(0)).unwrap();
-            bincode::encode_into_std_write(&compressed_block, &mut out_buf, bincode_config)
-                .unwrap();
+            bincode::encode_into_std_write(&compressed_block, &mut out_buf, bincode_config).unwrap();
             block_locations.push((block_start - starting_pos) as u32);
         }
 
         block_locations_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
-        let bincoded_block_locations_size =
-            bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
+        let bincoded_block_locations_size = bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
 
-        let compressed_block_locations =
-            zstd::bulk::compress(&bincoded_block_locations_size, -3).unwrap();
-        bincode::encode_into_std_write(&compressed_block_locations, &mut out_buf, bincode_config)
-            .unwrap();
+        let compressed_block_locations = zstd::bulk::compress(&bincoded_block_locations_size, -3).unwrap();
+        bincode::encode_into_std_write(&compressed_block_locations, &mut out_buf, bincode_config).unwrap();
 
         self.block_locations = Some(block_locations);
 
         let end = out_buf.seek(SeekFrom::Current(0)).unwrap();
         out_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config)
-            .unwrap();
+        bincode::encode_into_std_write(self.compression_type, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(block_locations_pos, &mut out_buf, bincode_config).unwrap();
         bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
 
@@ -191,14 +190,11 @@ impl U64BlockStore {
         let mut store = U64BlockStore::default();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
-        (
-            store.compression_type,
-            store.block_index_pos,
-            store.block_size,
-        ) = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-            Ok(x) => x,
-            Err(e) => return Err(format!("Error decoding block store: {}", e)),
-        };
+        (store.compression_type, store.block_index_pos, store.block_size) =
+            match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
+                Ok(x) => x,
+                Err(e) => return Err(format!("Error decoding block store: {}", e)),
+            };
 
         store.location = starting_pos;
 
@@ -214,11 +210,10 @@ impl U64BlockStore {
             Err(e) => return Err(format!("Error decoding block locations: {}", e)),
         };
 
-        let block_locations: Vec<u32> =
-            match bincode::decode_from_slice(&block_locations, bincode_config) {
-                Ok(x) => x.0,
-                Err(e) => return Err(format!("Error decoding block locations: {}", e)),
-            };
+        let block_locations: Vec<u32> = match bincode::decode_from_slice(&block_locations, bincode_config) {
+            Ok(x) => x.0,
+            Err(e) => return Err(format!("Error decoding block locations: {}", e)),
+        };
 
         store.block_locations = Some(block_locations);
 
@@ -229,9 +224,7 @@ impl U64BlockStore {
     where
         R: Read + Seek,
     {
-        let mut data = Vec::with_capacity(
-            self.block_size as usize * self.block_locations.as_ref().unwrap().len(),
-        );
+        let mut data = Vec::with_capacity(self.block_size as usize * self.block_locations.as_ref().unwrap().len());
 
         for i in 0..self.block_locations.as_ref().unwrap().len() {
             data.extend(self.get_block_uncached(in_buf, i as u32));
@@ -268,8 +261,7 @@ impl U64BlockStore {
         in_buf
             .seek(SeekFrom::Start(self.location + block_location as u64))
             .unwrap();
-        let compressed_block: Vec<u8> =
-            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        let compressed_block: Vec<u8> = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
         let decompressed_block = decompressor
             .decompress(&compressed_block, 16 * self.block_size as usize)
@@ -288,15 +280,15 @@ impl U64BlockStore {
             self.data.as_ref().unwrap()[x]
         } else {
             // Get the remainder
-            let (block, position_in_block) =
-                (x / self.block_size as usize, x % self.block_size as usize);
+            let (block, position_in_block) = (x / self.block_size as usize, x % self.block_size as usize);
             self.get_block(in_buf, block as u32)[position_in_block]
         }
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use std::io::Cursor;
 }

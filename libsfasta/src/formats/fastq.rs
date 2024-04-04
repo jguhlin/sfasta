@@ -4,7 +4,8 @@ use std::io::BufRead;
 
 use crate::datatypes::Sequence;
 
-pub struct Fastq<'fastq, R: BufRead> {
+pub struct Fastq<'fastq, R: BufRead>
+{
     reader: &'fastq mut R,
     buffer: Vec<u8>,
     seqbuffer: Vec<u8>,
@@ -15,8 +16,10 @@ pub struct Fastq<'fastq, R: BufRead> {
 }
 
 #[allow(dead_code)]
-impl<'fastq, R: BufRead> Fastq<'fastq, R> {
-    pub fn from_buffer(in_buf: &'fastq mut R) -> Fastq<'fastq, R> {
+impl<'fastq, R: BufRead> Fastq<'fastq, R>
+{
+    pub fn from_buffer(in_buf: &'fastq mut R) -> Fastq<'fastq, R>
+    {
         Fastq {
             reader: in_buf,
             buffer: Vec::with_capacity(1024),
@@ -28,31 +31,34 @@ impl<'fastq, R: BufRead> Fastq<'fastq, R> {
         }
     }
 
-    pub fn into_reader(self) -> &'fastq mut R {
+    pub fn into_reader(self) -> &'fastq mut R
+    {
         self.reader
     }
 }
 
 // TODO: This does extra moving by using a generic buffer
 // Place the "MATCH" before the while let.... (prob don't need while let anymore...)
-impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
+impl<'a, R: BufRead> Iterator for Fastq<'a, R>
+{
     type Item = Result<Sequence, &'static str>;
 
-    fn next(&mut self) -> Option<Result<Sequence, &'static str>> {
+    fn next(&mut self) -> Option<Result<Sequence, &'static str>>
+    {
         if let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
             if bytes_read == 0 {
                 if self.seqlen > 0 {
-                    /*let seq = Sequence {
-                        sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
-                        id: Some(self.seqid.take().unwrap()),
-                        header: self.header.take(),
-                        scores: Some(self.scores_buffer[..self.seqlen].to_vec()),
-                        offset: 0,
-                    };
-                    self.buffer.clear();
-                    self.seqlen = 0;
-                    return Some(Ok(seq)); */
-                    //return Some(Err("File has ended but sequence still in buffer..."));
+                    // let seq = Sequence {
+                    // sequence: Some(self.seqbuffer[..self.seqlen].to_vec()),
+                    // id: Some(self.seqid.take().unwrap()),
+                    // header: self.header.take(),
+                    // scores: Some(self.scores_buffer[..self.seqlen].to_vec()),
+                    // offset: 0,
+                    // };
+                    // self.buffer.clear();
+                    // self.seqlen = 0;
+                    // return Some(Ok(seq));
+                    // return Some(Err("File has ended but sequence still in buffer..."));
                     panic!("File has ended but sequence still in buffer!");
                 } else {
                     return None;
@@ -143,12 +149,14 @@ impl<'a, R: BufRead> Iterator for Fastq<'a, R> {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use std::io::Cursor;
 
     #[test]
-    fn test_fastq() {
+    fn test_fastq()
+    {
         let fastq_data = b"@seq1
 ACGT
 +

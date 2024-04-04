@@ -6,20 +6,17 @@ use sorted_vec::SortedVec;
 // Meant for a write-many, write-once to disk, read-only-and-many database
 
 #[derive(Debug)]
-pub struct FractalTreeBuild<K, V>
-where
-    K: PartialOrd + PartialEq + Ord + Eq + Clone,
+pub struct FractalTreeBuild
 {
-    pub root: Node<K, V>,
+    pub root: Node,
     pub order: usize,
     pub buffer_size: usize,
 }
 
-impl<K, V> FractalTreeBuild<K, V>
-where
-    K: PartialOrd + PartialEq + Ord + Eq + Clone,
+impl FractalTreeBuild
 {
-    pub fn new(order: usize, buffer_size: usize) -> Self {
+    pub fn new(order: usize, buffer_size: usize) -> Self
+    {
         let mut root = Node::leaf(order, buffer_size);
         root.is_root = true;
         FractalTreeBuild {
@@ -29,15 +26,14 @@ where
         }
     }
 
-    pub fn insert(&mut self, key: K, value: V) {
+    pub fn insert(&mut self, key: u64, value: u32)
+    {
         if self.root.insert(self.buffer_size, key, value) {
             self.flush(false);
         }
     }
 
     pub fn flush(&mut self, all: bool)
-    where
-        K: PartialOrd + PartialEq + Ord + Eq + Clone,
     {
         assert!(self.root.keys.is_sorted());
         self.root.flush(self.order, self.buffer_size, all);
@@ -59,22 +55,18 @@ where
     }
 
     pub fn flush_all(&mut self)
-    where
-        K: PartialOrd + PartialEq + Ord + Eq + Clone,
     {
         self.flush(true);
     }
 
-    pub fn search(&self, key: K) -> Option<&V>
-    where
-        K: PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy,
-        V: std::fmt::Debug + Copy,
+    pub fn search(&self, key: u64) -> Option<u32>
     {
         self.root.search(key)
     }
 
     // Gets the depth by following the first child, iteratively, until it's a leaf
-    pub fn depth(&self) -> usize {
+    pub fn depth(&self) -> usize
+    {
         let mut depth = 0;
         let mut node = &self.root;
         while !node.is_leaf {
@@ -84,7 +76,8 @@ where
         depth
     }
 
-    pub fn count_all_nodes(&self) -> usize {
+    pub fn count_all_nodes(&self) -> usize
+    {
         let mut count = 0;
         let mut stack = vec![&self.root];
         while let Some(node) = stack.pop() {
@@ -101,32 +94,27 @@ where
 
 // Must use
 #[must_use]
-pub enum InsertionAction<K, V>
-where
-    K: PartialOrd + PartialEq + Ord + Eq + Clone,
+pub enum InsertionAction
 {
     Success,
-    NodeSplit(K, Box<Node<K, V>>),
+    NodeSplit(u64, Box<Node>),
 }
 
 #[derive(Debug)]
-pub struct Node<K, V>
-where
-    K: PartialOrd + PartialEq + Ord + Eq + Clone,
+pub struct Node
 {
     pub is_root: bool,
     pub is_leaf: bool,
-    pub keys: SortedVec<K>,
-    pub children: Option<Vec<Box<Node<K, V>>>>,
-    pub values: Option<Vec<V>>,
-    pub buffer: Vec<(K, V)>,
+    pub keys: SortedVec<u64>,
+    pub children: Option<Vec<Box<Node>>>,
+    pub values: Option<Vec<u32>>,
+    pub buffer: Vec<(u64, u32)>,
 }
 
-impl<K, V> Node<K, V>
-where
-    K: PartialOrd + PartialEq + Ord + Eq + Clone,
+impl Node
 {
-    pub fn internal(order: usize, buffer_size: usize) -> Self {
+    pub fn internal(order: usize, buffer_size: usize) -> Self
+    {
         Node {
             is_root: false,
             is_leaf: false,
@@ -137,7 +125,8 @@ where
         }
     }
 
-    pub fn leaf(order: usize, buffer_size: usize) -> Self {
+    pub fn leaf(order: usize, buffer_size: usize) -> Self
+    {
         Node {
             is_root: false,
             is_leaf: true,
@@ -148,9 +137,7 @@ where
         }
     }
 
-    pub fn search(&self, key: K) -> Option<&V>
-    where
-        K: PartialOrd,
+    pub fn search(&self, key: u64) -> Option<u32>
     {
         #[cfg(debug_assertions)]
         assert!(self.buffer.is_empty());
@@ -164,7 +151,7 @@ where
             };
             #[cfg(debug_assertions)]
             assert!(i < self.values.as_ref().unwrap().len());
-            Some(&self.values.as_ref().unwrap()[i])
+            Some(self.values.as_ref().unwrap()[i])
         } else {
             let i = match i {
                 Ok(i) => i.saturating_add(1),
@@ -175,15 +162,14 @@ where
         }
     }
 
-    pub fn insert(&mut self, buffer_size: usize, key: K, value: V) -> bool
-    where
-        K: PartialOrd + PartialEq + Ord + Eq + Clone,
+    pub fn insert(&mut self, buffer_size: usize, key: u64, value: u32) -> bool
     {
         self.buffer.push((key, value));
         self.buffer.len() >= buffer_size
     }
 
-    pub fn flush(&mut self, order: usize, buffer_size: usize, all: bool) {
+    pub fn flush(&mut self, order: usize, buffer_size: usize, all: bool)
+    {
         // This flushes the buffer down the tree, or if a leaf node, into the tree
 
         if self.is_leaf {
@@ -211,8 +197,7 @@ where
         if !self.is_leaf {
             for child_i in 0..self.children.as_ref().unwrap().len() {
                 while self.children.as_mut().unwrap()[child_i].needs_split(order) {
-                    let (new_key, new_node) =
-                        self.children.as_mut().unwrap()[child_i].split(order, buffer_size);
+                    let (new_key, new_node) = self.children.as_mut().unwrap()[child_i].split(order, buffer_size);
                     let i = self.keys.insert(new_key) + 1;
                     if i >= self.children.as_ref().unwrap().len() {
                         self.children.as_mut().unwrap().push(new_node);
@@ -234,9 +219,7 @@ where
         }
     }
 
-    pub fn split(&mut self, order: usize, buffer_size: usize) -> (K, Box<Node<K, V>>)
-    where
-        K: PartialOrd + PartialEq + Ord + Eq + Clone,
+    pub fn split(&mut self, order: usize, buffer_size: usize) -> (u64, Box<Node>)
     {
         #[cfg(debug_assertions)]
         assert!(self.keys.is_sorted());
@@ -252,7 +235,7 @@ where
             None
         };
 
-        let children: Option<Vec<Box<Node<K, V>>>> = if self.children.is_some() {
+        let children: Option<Vec<Box<Node>>> = if self.children.is_some() {
             let children = self.children.as_mut().unwrap().split_off(mid + 1);
             Some(children)
         } else {
@@ -272,9 +255,8 @@ where
             buffer: Vec::with_capacity(self.buffer.capacity()),
             keys,
             children,
-            values,
-            // next: None, // TODO
-            // next: self.next.take(),
+            values, /* next: None, // TODO
+                     * next: self.next.take(), */
         });
 
         let new_key = if self.is_leaf {
@@ -286,14 +268,15 @@ where
         (new_key, new_node)
     }
 
-    pub fn needs_split(&self, order: usize) -> bool {
+    pub fn needs_split(&self, order: usize) -> bool
+    {
         self.keys.len() >= (order * 2)
     }
 }
 
-
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use bincode::config;
     use human_size::SpecificSize;
@@ -301,7 +284,8 @@ mod tests {
     use xxhash_rust::xxh3::xxh3_64;
 
     #[test]
-    fn split() {
+    fn split()
+    {
         let mut node = super::Node {
             is_root: false,
             is_leaf: true,
@@ -323,9 +307,7 @@ mod tests {
             SortedVec::from_sorted(vec![6, 7, 8, 9, 10, 11])
         });
         assert_eq!(new_node.values, Some(vec![6, 7, 8, 9, 10, 11]));
-        assert_eq!(node.keys, unsafe {
-            SortedVec::from_sorted(vec![1, 2, 3, 4, 5])
-        });
+        assert_eq!(node.keys, unsafe { SortedVec::from_sorted(vec![1, 2, 3, 4, 5]) });
         assert_eq!(node.values, Some(vec![1, 2, 3, 4, 5]));
 
         let mut node = super::Node {
@@ -339,10 +321,7 @@ mod tests {
 
         let (new_key, new_node) = node.split(2, 2);
         assert!(new_key == 14);
-        assert_eq!(
-            new_node.keys,
-            SortedVec::from_unsorted((14..28).collect::<Vec<_>>())
-        );
+        assert_eq!(new_node.keys, SortedVec::from_unsorted((14..28).collect::<Vec<_>>()));
         assert_eq!(new_node.values, Some((14..28).collect::<Vec<_>>()));
         assert_eq!(node.keys.to_vec(), (0..14).collect::<Vec<_>>());
         assert_eq!(node.values, Some((0..14).collect::<Vec<_>>()));
@@ -356,7 +335,8 @@ mod tests {
     }
 
     #[test]
-    fn basic_tree() {
+    fn basic_tree()
+    {
         let mut tree = super::FractalTreeBuild::new(6, 3);
         tree.insert(0, 0);
 
@@ -365,29 +345,31 @@ mod tests {
         values.shuffle(&mut rng);
 
         for i in values.iter() {
-            tree.insert(*i, *i);
+            tree.insert(*i, *i as u32);
         }
 
         assert!(!tree.root.is_leaf);
     }
 
     #[test]
-    fn simple_insertions() {
+    fn simple_insertions()
+    {
         let mut tree = super::FractalTreeBuild::new(6, 3);
-        tree.insert(1, "one");
-        tree.insert(2, "two");
-        tree.insert(3, "three");
-        tree.insert(4, "four");
-        tree.insert(5, "five");
-        tree.insert(6, "six");
-        tree.insert(7, "seven");
-        tree.insert(8, "eight");
-        tree.insert(9, "nine");
-        tree.insert(10, "ten");
+        tree.insert(1, 1);
+        tree.insert(2, 2);
+        tree.insert(3, 3);
+        tree.insert(4, 4);
+        tree.insert(5, 5);
+        tree.insert(6, 6);
+        tree.insert(7, 7);
+        tree.insert(8, 8);
+        tree.insert(9, 9);
+        tree.insert(10, 10);
     }
 
     #[test]
-    fn tree_structure() {
+    fn tree_structure()
+    {
         let mut tree = super::FractalTreeBuild::new(8, 3);
 
         let mut rng = thread_rng();
@@ -395,7 +377,7 @@ mod tests {
         values.shuffle(&mut rng);
 
         for i in values.iter() {
-            tree.insert(*i, *i);
+            tree.insert(*i, *i as u32);
         }
 
         // Iterate through the tree, all leaves should have keys.len() == vales.len()
@@ -436,7 +418,8 @@ mod tests {
     }
 
     #[test]
-    fn search() {
+    fn search()
+    {
         let mut rng = thread_rng();
         let mut values_1024 = (0..1024_u64).collect::<Vec<u64>>();
         values_1024.shuffle(&mut rng);
@@ -447,25 +430,25 @@ mod tests {
         let mut tree = super::FractalTreeBuild::new(8, 8);
 
         for i in values_1024.iter() {
-            tree.insert(*i, *i);
+            tree.insert(*i, *i as u32);
         }
 
         tree.flush_all();
 
         for i in values_1024.iter() {
-            assert_eq!(tree.search(*i), Some(i));
+            assert_eq!(tree.search(*i), Some(*i as u32));
         }
 
         let mut tree = super::FractalTreeBuild::new(16, 32);
 
         for i in values_8192.iter() {
-            tree.insert(*i, *i);
+            tree.insert(*i, *i as u32);
         }
 
         tree.flush_all();
 
         for i in values_8192.iter() {
-            assert_eq!(tree.search(*i), Some(i));
+            assert_eq!(tree.search(*i), Some(*i as u32));
         }
 
         // Find value does not exist
@@ -473,13 +456,13 @@ mod tests {
 
         let mut tree = super::FractalTreeBuild::new(64, 32);
         for i in 0..(1024 * 1024) {
-            tree.insert(i as u64, i as u64);
+            tree.insert(i as u64, i as u32);
         }
 
         tree.flush_all();
 
         for i in 0..(1024 * 1024) {
-            assert!(tree.search(i as u64) == Some(&i), "i: {}", i);
+            assert!(tree.search(i as u64) == Some(i as u32), "i: {}", i);
         }
 
         // Things that should not be found
@@ -489,13 +472,13 @@ mod tests {
         // New tree
         let mut tree = super::FractalTreeBuild::new(8, 4);
         for i in 1024..2048_u64 {
-            tree.insert(i, i);
+            tree.insert(i, i as u32);
         }
 
         tree.flush_all();
 
         for i in 1024..2048_u64 {
-            assert_eq!(tree.search(i), Some(&i));
+            assert_eq!(tree.search(i), Some(i as u32));
         }
 
         // Things that should not be found
@@ -508,7 +491,8 @@ mod tests {
     }
 
     #[test]
-    fn search_noderead() {
+    fn search_noderead()
+    {
         let mut rng = thread_rng();
         let mut values_1024 = (0..1024_u64).collect::<Vec<u64>>();
         values_1024.shuffle(&mut rng);
@@ -519,7 +503,7 @@ mod tests {
         let mut tree = super::FractalTreeBuild::new(32, 8);
 
         for i in values_1024.iter() {
-            tree.insert(*i, *i);
+            tree.insert(*i, *i as u32);
         }
 
         tree.flush_all();
@@ -527,28 +511,29 @@ mod tests {
         let tree = FractalTreeRead::from(tree);
 
         for i in values_1024.iter() {
-            assert_eq!(tree.search(i), Some(*i));
+            assert_eq!(tree.search(*i), Some(*i as u32));
         }
     }
 
     #[ignore]
     #[test]
-    fn size_of_super_large() {
+    fn size_of_super_large()
+    {
         let values128m = (0..128_369_206_u64)
             .map(|x| xxh3_64(&x.to_le_bytes()))
             .collect::<Vec<u64>>();
 
-        let mut tree: FractalTreeBuild<_, _> = FractalTreeBuild::new(128, 256);
+        let mut tree: FractalTreeBuild = FractalTreeBuild::new(128, 256);
         for i in values128m.iter() {
-            tree.insert(*i, *i);
+            tree.insert(*i, *i as u32);
         }
         tree.flush_all();
 
         let depth = tree.depth();
         let node_count = tree.count_all_nodes();
 
-        let tree: FractalTreeRead<_, _> = tree.into();
-        let tree: FractalTreeDisk<_, _> = tree.into();
+        let tree: FractalTreeRead = tree.into();
+        let tree: FractalTreeDisk = tree.into();
 
         let config = config::standard();
 
@@ -559,15 +544,41 @@ mod tests {
         // let encoded: Vec<u8> = bincode::encode_to_vec(&tree, config).unwrap();
         // println!("Size of 128m tree: {}", encoded.len());
 
-        /*
-        let size2: SpecificSize<human_size::Gigabyte> =
-            format!("{} B", encoded.len()).parse().unwrap();
-
-        println!("Size of 128m tree: {}", size2);
-
-        println!("Depth of 128m tree: {}", depth);
-        println!("Node count of 128m tree: {}", node_count); */
+        // let size2: SpecificSize<human_size::Gigabyte> =
+        // format!("{} B", encoded.len()).parse().unwrap();
+        //
+        // println!("Size of 128m tree: {}", size2);
+        //
+        // println!("Depth of 128m tree: {}", depth);
+        // println!("Node count of 128m tree: {}", node_count);
 
         panic!();
+    }
+
+    #[test]
+    fn tree_build_and_find() {
+        use std::io::{Seek, SeekFrom};
+
+        let mut rng = thread_rng();
+
+        let mut tree = FractalTreeBuild::new(128, 256);
+
+        // Generate 1024 * 1024 random key value pairs
+
+        for _ in 0..1024 * 1024 {
+            let key = rng.gen::<u64>();
+            let value = rng.gen::<u32>();
+
+            tree.insert(key, value);
+        }
+
+        // Guaranteed insert to try and find later
+        tree.insert(1, 1);
+        tree.flush_all();
+
+        let result = tree.search(1);
+
+        assert!(result.is_some());
+        assert_eq!(result.unwrap(), 1);
     }
 }

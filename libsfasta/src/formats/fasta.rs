@@ -5,7 +5,8 @@ use std::io::BufRead;
 
 use crate::datatypes::Sequence;
 
-pub struct Fasta<'fasta, R> {
+pub struct Fasta<'fasta, R>
+{
     reader: &'fasta mut R,
     buffer: Vec<u8>,
     seqbuffer: Vec<u8>,
@@ -16,8 +17,10 @@ pub struct Fasta<'fasta, R> {
     moving_average_pos: usize,
 }
 
-impl<'fasta, R: BufRead> Fasta<'fasta, R> {
-    pub fn from_buffer(in_buf: &mut R) -> Fasta<R> {
+impl<'fasta, R: BufRead> Fasta<'fasta, R>
+{
+    pub fn from_buffer(in_buf: &mut R) -> Fasta<R>
+    {
         Fasta {
             reader: in_buf,
             buffer: Vec::with_capacity(1024),
@@ -31,10 +34,12 @@ impl<'fasta, R: BufRead> Fasta<'fasta, R> {
     }
 }
 
-impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
+impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R>
+{
     type Item = Result<Sequence, &'static str>;
 
-    fn next(&mut self) -> Option<Result<Sequence, &'static str>> {
+    fn next(&mut self) -> Option<Result<Sequence, &'static str>>
+    {
         while let Ok(bytes_read) = self.reader.read_until(b'\n', &mut self.buffer) {
             if bytes_read == 0 {
                 // File is finished
@@ -83,17 +88,13 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
 
                         if self.seqlen > 0 {
                             if id.is_none() {
-                                return Some(Result::Err(
-                                    "No sequence found - Sequence > 0 but no ID",
-                                ));
+                                return Some(Result::Err("No sequence found - Sequence > 0 but no ID"));
                             }
 
                             // Use the last seqlen as the new buffer's size
                             self.moving_average[self.moving_average_pos] = self.seqlen as u64;
                             self.moving_average_pos = (self.moving_average_pos + 1) % 8;
-                            let mut seqbuf = Vec::with_capacity(
-                                (self.moving_average.iter().sum::<u64>() / 8) as usize,
-                            );
+                            let mut seqbuf = Vec::with_capacity((self.moving_average.iter().sum::<u64>() / 8) as usize);
                             std::mem::swap(&mut self.seqbuffer, &mut seqbuf);
                             seqbuf.truncate(self.seqlen);
 
@@ -137,7 +138,8 @@ impl<'fasta, R: BufRead> Iterator for Fasta<'fasta, R> {
 }
 
 // TODO: This needs a refresh
-pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<usize>) {
+pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<usize>)
+{
     let mut entries: usize = 0;
     let mut ids: Vec<String> = Vec::with_capacity(2 * 1024 * 1024);
     let mut lengths: Vec<usize> = Vec::with_capacity(2 * 1024 * 1024);
@@ -168,7 +170,8 @@ pub fn summarize_fasta(fasta_buf: &mut dyn BufRead) -> (usize, Vec<String>, Vec<
     (entries, ids, lengths)
 }
 
-pub fn count_fasta_entries(fasta_buf: &mut dyn BufRead) -> usize {
+pub fn count_fasta_entries(fasta_buf: &mut dyn BufRead) -> usize
+{
     let mut entries: usize = 0;
 
     let mut lines = fasta_buf.byte_lines();
@@ -183,15 +186,15 @@ pub fn count_fasta_entries(fasta_buf: &mut dyn BufRead) -> usize {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use std::io::BufReader;
 
     #[test]
-    pub fn test_weird_windows_error() {
-        let mut buffer = BufReader::new(
-            std::fs::File::open("test_data/test_sequence_conversion.fasta").unwrap(),
-        );
+    pub fn test_weird_windows_error()
+    {
+        let mut buffer = BufReader::new(std::fs::File::open("test_data/test_sequence_conversion.fasta").unwrap());
         let mut fasta = Fasta::from_buffer(&mut buffer);
         fasta.next();
         fasta.next();
@@ -204,15 +207,22 @@ mod tests {
 
         let sequence_as_str = std::str::from_utf8(&sequence).unwrap();
 
-        assert!(&sequence_as_str[0..100] == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT");
-        assert!(&sequence_as_str[48000..48100] == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT");
+        assert!(
+      &sequence_as_str[0..100]
+        == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT"
+    );
+        assert!(
+      &sequence_as_str[48000..48100]
+        == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT"
+    );
 
         assert_eq!(sequence.len(), 48598);
         assert_eq!(&sequence[last_ten..], b"ATGTACAGCG");
     }
 
     #[test]
-    pub fn test_fasta_parse() {
+    pub fn test_fasta_parse()
+    {
         let fakefasta =
             b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n>Third  \nACTGCA\nACTGCA\nNNNNN".to_vec();
         let fakefasta_ = fakefasta.as_slice();
@@ -226,7 +236,8 @@ mod tests {
     }
 
     #[test]
-    pub fn test_fasta_parse_rest_of_the_header() {
+    pub fn test_fasta_parse_rest_of_the_header()
+    {
         let fakefasta =
             b">Hello I have more information in the rest of the FASTA header\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
@@ -234,15 +245,13 @@ mod tests {
         let mut fasta = Fasta::from_buffer(&mut inner);
         let s = fasta.next().unwrap().unwrap();
         println!("{:#?}", s.header);
-        assert!(
-            s.header == Some("I have more information in the rest of the FASTA header".to_string())
-        );
+        assert!(s.header == Some("I have more information in the rest of the FASTA header".to_string()));
     }
 
     #[test]
-    pub fn test_summarize_fasta() {
-        let fakefasta =
-            b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
+    pub fn test_summarize_fasta()
+    {
+        let fakefasta = b">Hello\nACTGCATCACTGACCTA\n>Second\nACTTGCAACTTGGGACACAACATGTA\n".to_vec();
         let fakefasta_ = fakefasta.as_slice();
         let mut buf = BufReader::new(fakefasta_);
         let j = summarize_fasta(&mut buf);

@@ -3,7 +3,8 @@ use crate::*;
 use libcompression::*;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct Parameters {
+pub struct Parameters
+{
     pub block_size: u32,
     pub compression_type: CompressionType,
     pub compression_dict: Option<Vec<u8>>,
@@ -12,8 +13,10 @@ pub struct Parameters {
     pub seqlocs_chunk_size: u32,
 }
 
-impl Default for Parameters {
-    fn default() -> Self {
+impl Default for Parameters
+{
+    fn default() -> Self
+    {
         Parameters {
             block_size: 4 * 1024 * 1024, // 4 Mb
             compression_type: CompressionType::ZSTD,
@@ -26,11 +29,13 @@ impl Default for Parameters {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
 
     #[test]
-    pub fn bincode_size_struct() {
+    pub fn bincode_size_struct()
+    {
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
         let mut params = Parameters::default();

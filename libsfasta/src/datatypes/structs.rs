@@ -1,5 +1,4 @@
-use std::any::Any;
-use std::io::prelude::*;
+use std::{any::Any, io::prelude::*};
 
 use libcompression::*;
 
@@ -17,13 +16,15 @@ pub trait T: Any {}
 impl T for dyn WriteAndSeek {}
 
 #[derive(PartialEq, Eq)]
-pub enum SeqMode {
+pub enum SeqMode
+{
     Linear,
     Random,
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub struct Header {
+pub struct Header
+{
     pub id: Option<String>,
     pub comment: Option<String>,
     pub citation: Option<String>,
@@ -31,7 +32,8 @@ pub struct Header {
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
-pub struct Sequence {
+pub struct Sequence
+{
     pub sequence: Option<Vec<u8>>,
     pub scores: Option<Vec<u8>>,
     pub header: Option<String>,
@@ -40,15 +42,10 @@ pub struct Sequence {
     pub offset: usize,
 }
 
-impl Sequence {
-    pub fn into_parts(
-        self,
-    ) -> (
-        Option<String>,
-        Option<String>,
-        Option<Vec<u8>>,
-        Option<Vec<u8>>,
-    ) {
+impl Sequence
+{
+    pub fn into_parts(self) -> (Option<String>, Option<String>, Option<Vec<u8>>, Option<Vec<u8>>)
+    {
         {
             (self.id, self.header, self.sequence, self.scores)
         }
@@ -59,7 +56,8 @@ impl Sequence {
         id: Option<String>,
         header: Option<String>,
         scores: Option<Vec<u8>>,
-    ) -> Sequence {
+    ) -> Sequence
+    {
         Sequence {
             sequence,
             header,
@@ -69,25 +67,31 @@ impl Sequence {
         }
     }
 
-    pub fn len(&self) -> usize {
+    pub fn len(&self) -> usize
+    {
         self.sequence.as_ref().unwrap().len()
     }
 
-    pub fn make_uppercase(&mut self) {
+    pub fn make_uppercase(&mut self)
+    {
         self.sequence.as_mut().unwrap().make_ascii_uppercase();
     }
 
-    pub fn make_lowercase(&mut self) {
+    pub fn make_lowercase(&mut self)
+    {
         self.sequence.as_mut().unwrap().make_ascii_lowercase();
     }
 
-    pub fn is_empty(&self) -> bool {
+    pub fn is_empty(&self) -> bool
+    {
         self.sequence.as_ref().unwrap().is_empty()
     }
 }
 
-impl From<Vec<u8>> for Sequence {
-    fn from(seq: Vec<u8>) -> Sequence {
+impl From<Vec<u8>> for Sequence
+{
+    fn from(seq: Vec<u8>) -> Sequence
+    {
         Sequence {
             sequence: Some(seq),
             header: None,

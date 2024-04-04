@@ -27,7 +27,8 @@ use rayon::prelude::*;
 // Goal is to fit as many commands into a u32 as possible
 
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum Ml32bit {
+pub enum Ml32bit
+{
     Pass,            // Not a command. When reached, ignore the rest of the u32
     SkipAheadu4(u8), // Stored as a u8, but must fit into a u4
     SkipAheadu8(u8),
@@ -42,9 +43,11 @@ pub enum Ml32bit {
     Stop, // Complete stop
 }
 
-impl Ml32bit {
+impl Ml32bit
+{
     #[inline]
-    pub fn bitsize(&self) -> usize {
+    pub fn bitsize(&self) -> usize
+    {
         match self {
             Ml32bit::SkipAheadu4(_) => 8,
             Ml32bit::SkipAheadu8(_) => 12,
@@ -61,7 +64,8 @@ impl Ml32bit {
         }
     }
 
-    pub const fn important_bits(&self) -> &'static str {
+    pub const fn important_bits(&self) -> &'static str
+    {
         match self {
             Ml32bit::SkipAheadu4(_) => "1000____",
             Ml32bit::SkipAheadu8(_) => "0100________",
@@ -80,7 +84,8 @@ impl Ml32bit {
 }
 
 #[allow(non_snake_case)]
-pub const fn Ml32bitPossibilities() -> [Ml32bit; 12] {
+pub const fn Ml32bitPossibilities() -> [Ml32bit; 12]
+{
     [
         Ml32bit::Pass,
         Ml32bit::SkipAheadu4(0),
@@ -99,7 +104,8 @@ pub const fn Ml32bitPossibilities() -> [Ml32bit; 12] {
 
 // TODO: Could we match all combinations by using a const fn to generate a lookup table?
 // And would it be faster?
-pub fn _parse_ml32bit(ml: u32) -> Vec<Ml32bit> {
+pub fn _parse_ml32bit(ml: u32) -> Vec<Ml32bit>
+{
     let ml = ml.view_bits::<Lsb0>();
 
     let mut commands = Vec::new();
@@ -175,7 +181,8 @@ pub fn _parse_ml32bit(ml: u32) -> Vec<Ml32bit> {
 
 /// Must pass in a sequence that contains some masking (lower-case letters)
 /// Handles the masking language. If all uppercase, should be handled before this part...
-pub fn get_masking_ranges_previous(seq: &[u8]) -> Vec<(usize, usize)> {
+pub fn get_masking_ranges_previous(seq: &[u8]) -> Vec<(usize, usize)>
+{
     let mut i = 0;
     let mut start = 0;
     let mut end;
@@ -208,7 +215,8 @@ pub fn get_masking_ranges_previous(seq: &[u8]) -> Vec<(usize, usize)> {
 
 /// Must pass in a sequence that contains some masking (lower-case letters)
 /// Handles the masking language. If all uppercase, should be handled before this part...
-pub fn get_masking_ranges(seq: &[u8]) -> Vec<(usize, usize)> {
+pub fn get_masking_ranges(seq: &[u8]) -> Vec<(usize, usize)>
+{
     assert!(!seq.is_empty());
     let mut ranges = Vec::new();
     let mut is_masked = seq[0].is_ascii_lowercase();
@@ -239,7 +247,8 @@ pub fn get_masking_ranges(seq: &[u8]) -> Vec<(usize, usize)> {
     ranges
 }
 
-pub fn pad_commands_to_u32(commands: &[Ml32bit]) -> Vec<Ml32bit> {
+pub fn pad_commands_to_u32(commands: &[Ml32bit]) -> Vec<Ml32bit>
+{
     let mut padded_commands = Vec::new();
     let mut bitsize: usize = 0;
     for command in commands {
@@ -262,7 +271,8 @@ pub fn pad_commands_to_u32(commands: &[Ml32bit]) -> Vec<Ml32bit> {
     padded_commands
 }
 
-pub fn convert_ranges_to_ml32bit(ranges: &[(usize, usize)]) -> Vec<Ml32bit> {
+pub fn convert_ranges_to_ml32bit(ranges: &[(usize, usize)]) -> Vec<Ml32bit>
+{
     // let mut ml = Vec::new();
 
     let mut commands: Vec<Ml32bit> = Vec::new();
@@ -322,7 +332,8 @@ pub fn convert_ranges_to_ml32bit(ranges: &[(usize, usize)]) -> Vec<Ml32bit> {
 }
 
 #[inline]
-pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
+pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32>
+{
     let mut u32s = Vec::with_capacity(commands.len());
     let mut i = 0;
     let mut cur_u32 = 0u32;
@@ -418,7 +429,8 @@ pub fn convert_commands_to_u32(commands: &[Ml32bit]) -> Vec<u32> {
 // Faster, but at a cost of file size
 #[allow(dead_code)]
 #[inline]
-pub fn convert_commands_to_u32_uncompressed(commands: &[Ml32bit]) -> Vec<u32> {
+pub fn convert_commands_to_u32_uncompressed(commands: &[Ml32bit]) -> Vec<u32>
+{
     let mut u32s = Vec::with_capacity(commands.len());
     let mut cur_u32 = 0u32;
 
@@ -481,18 +493,21 @@ pub fn convert_commands_to_u32_uncompressed(commands: &[Ml32bit]) -> Vec<u32> {
 
 // From: https://play.rust-lang.org/?version=beta&mode=release&edition=2018&gist=2ff849086024a0a01b958060c3434570
 #[allow(dead_code)]
-struct BitPattern {
+struct BitPattern
+{
     expected: u32,
     mask: u32,
 }
 
 #[allow(dead_code)]
-impl BitPattern {
+impl BitPattern
+{
     /// Accepts a bit pattern as a string literal.
     /// - '0' matches a 0 bit
     /// - '1' matches a 1 bit
     /// - any other char means "ignore this bit"
-    const fn new(s: &str) -> Self {
+    const fn new(s: &str) -> Self
+    {
         let mut expected = 0;
         let mut mask = !0;
 
@@ -516,13 +531,16 @@ impl BitPattern {
 
         Self { expected, mask }
     }
-    const fn matches(&self, val: u32) -> bool {
+
+    const fn matches(&self, val: u32) -> bool
+    {
         (val & self.mask) == self.expected
     }
 }
 
 // Probably the worst way to get a speedup....
-pub fn convert_u32_to_commands2(u32s: &[u32]) -> Vec<Ml32bit> {
+pub fn convert_u32_to_commands2(u32s: &[u32]) -> Vec<Ml32bit>
+{
     u32s.par_iter()
         .map(|cur_u32| {
             let cur_u32_bits = cur_u32.view_bits::<Lsb0>();
@@ -602,7 +620,8 @@ pub fn convert_u32_to_commands2(u32s: &[u32]) -> Vec<Ml32bit> {
         .collect()
 }
 
-pub fn convert_u32_to_commands(u32s: &[u32]) -> Vec<Ml32bit> {
+pub fn convert_u32_to_commands(u32s: &[u32]) -> Vec<Ml32bit>
+{
     let mut commands = Vec::new();
     let mut i;
 
@@ -678,7 +697,8 @@ pub fn convert_u32_to_commands(u32s: &[u32]) -> Vec<Ml32bit> {
     commands
 }
 
-pub fn mask_sequence(commands: &[Ml32bit], seq: &mut [u8]) {
+pub fn mask_sequence(commands: &[Ml32bit], seq: &mut [u8])
+{
     let mut i = 0;
 
     for command in commands {
@@ -725,12 +745,14 @@ pub fn mask_sequence(commands: &[Ml32bit], seq: &mut [u8]) {
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use crate::utils::*;
 
     #[test]
-    fn test_parse_masking() {
+    fn test_parse_masking()
+    {
         let test_seqs = vec![
             "ATCGGGGCAACTACTACGATCAcccccccccaccatgcacatcatctacAAAActcgacaAcatcgacgactacgaa",
             "aaaaaaaaaaaaTACTACGATCAcccccccccaccatgcacatcatctacAAAActcgacaAcatcgacgactACGA",

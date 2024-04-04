@@ -1,22 +1,27 @@
 //! A block store for storing sequences. This includes nucleotide, aminos, and scores.
-//!
 
-// TODO: Since this doesn't add any special functionality, should this just be replaced with BytesBlockStore? Maybe an alias?
+// TODO: Since this doesn't add any special functionality, should this just be replaced with BytesBlockStore? Maybe an
+// alias?
 
-use std::io::{Read, Seek, Write};
-use std::sync::Arc;
+use std::{
+    io::{Read, Seek, Write},
+    sync::Arc,
+};
 
 use simdutf8::basic::from_utf8;
 
 use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
 use libcompression::*;
 
-pub struct SequenceBlockStoreBuilder {
+pub struct SequenceBlockStoreBuilder
+{
     inner: BytesBlockStoreBuilder,
 }
 
-impl Default for SequenceBlockStoreBuilder {
-    fn default() -> Self {
+impl Default for SequenceBlockStoreBuilder
+{
+    fn default() -> Self
+    {
         let compression_config = CompressionConfig::new()
             .with_compression_type(CompressionType::ZSTD)
             .with_compression_level(3);
@@ -29,8 +34,10 @@ impl Default for SequenceBlockStoreBuilder {
     }
 }
 
-impl SequenceBlockStoreBuilder {
-    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self {
+impl SequenceBlockStoreBuilder
+{
+    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self
+    {
         self.inner = self.inner.with_compression_worker(compression_worker);
         self
     }
@@ -42,31 +49,35 @@ impl SequenceBlockStoreBuilder {
         self.inner.write_header(pos, &mut out_buf);
     }
 
-    pub fn write_block_locations(&mut self) {
+    pub fn write_block_locations(&mut self)
+    {
         self.inner.write_block_locations();
     }
 
-    pub fn with_block_size(mut self, block_size: usize) -> Self {
+    pub fn with_block_size(mut self, block_size: usize) -> Self
+    {
         self.inner = self.inner.with_block_size(block_size);
         self
     }
 
-    pub fn add(&mut self, input: &[u8]) -> Vec<Loc> {
-        self.inner
-            .add(input)
-            .expect("Failed to add string to block store")
+    pub fn add(&mut self, input: &[u8]) -> Vec<Loc>
+    {
+        self.inner.add(input).expect("Failed to add string to block store")
     }
 
-    pub fn finalize(&mut self) {
+    pub fn finalize(&mut self)
+    {
         self.inner.finalize();
     }
 }
 
-pub struct SequenceBlockStore {
+pub struct SequenceBlockStore
+{
     inner: BytesBlockStore,
 }
 
-impl SequenceBlockStore {
+impl SequenceBlockStore
+{
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek,
@@ -114,22 +125,23 @@ impl SequenceBlockStore {
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 
-    pub fn get_loaded(&self, loc: &[Loc]) -> String {
+    pub fn get_loaded(&self, loc: &[Loc]) -> String
+    {
         let string_as_bytes = self.inner.get_loaded(loc);
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use std::io::Cursor;
 
     #[test]
-    fn test_add_id() {
-        let mut store = SequenceBlockStoreBuilder {
-            ..Default::default()
-        };
+    fn test_add_id()
+    {
+        let mut store = SequenceBlockStoreBuilder { ..Default::default() };
 
         let test_ids = vec![
             "Medtr5g026775.t1",

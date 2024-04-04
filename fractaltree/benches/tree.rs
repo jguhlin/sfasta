@@ -7,12 +7,11 @@ use libfractaltree::*;
 
 // Early tests had bumpalo increasing performance, but that is no longer the case...
 
-pub fn bench_large_tree(c: &mut Criterion) {
+pub fn bench_large_tree(c: &mut Criterion)
+{
     let mut rng = thread_rng();
 
-    let mut values1024 = (0..1024_u64)
-        .map(|x| xxh3_64(&x.to_le_bytes()))
-        .collect::<Vec<u64>>();
+    let mut values1024 = (0..1024_u64).map(|x| xxh3_64(&x.to_le_bytes())).collect::<Vec<u64>>();
     values1024.shuffle(&mut rng);
     let values1024 = black_box(values1024);
 
@@ -93,12 +92,11 @@ pub fn bench_large_tree(c: &mut Criterion) {
     group.finish();
 }
 
-pub fn bench_search(c: &mut Criterion) {
+pub fn bench_search(c: &mut Criterion)
+{
     let mut rng = thread_rng();
 
-    let mut values1024 = (0..1024_u64)
-        .map(|x| xxh3_64(&x.to_le_bytes()))
-        .collect::<Vec<u64>>();
+    let mut values1024 = (0..1024_u64).map(|x| xxh3_64(&x.to_le_bytes())).collect::<Vec<u64>>();
     values1024.shuffle(&mut rng);
     let values1024 = black_box(values1024);
 
@@ -117,11 +115,7 @@ pub fn bench_search(c: &mut Criterion) {
     let mut group = c.benchmark_group("Search Tree Comparison");
     group.sample_size(500);
     group.measurement_time(std::time::Duration::from_secs(120));
-    for order in [
-        32, 64, 96, 128, 196, 256, 428, 512, 768, 1024, 2048, 4096, 8192,
-    ]
-    .iter()
-    {
+    for order in [32, 64, 96, 128, 196, 256, 428, 512, 768, 1024, 2048, 4096, 8192].iter() {
         let mut tree = FractalTreeBuild::new(*order, 128);
         for i in values128m.iter() {
             tree.insert(*i, *i);

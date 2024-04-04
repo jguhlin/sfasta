@@ -15,17 +15,8 @@ pub use read::*;
 
 use bincode::{Decode, Encode};
 
-pub trait Key = 'static
-    + PartialOrd
-    + PartialEq
-    + Ord
-    + Eq
-    + std::fmt::Debug
-    + Clone
-    + Copy
-    + Default
-    + Encode
-    + Decode;
+pub trait Key =
+    'static + PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default + Encode + Decode;
 
 pub trait Value = 'static + std::fmt::Debug + Copy + Encode + Decode;
 

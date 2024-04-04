@@ -4,5 +4,4 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 use rand::Rng;
 
-use std::io::Cursor;
-use std::sync::Arc;
+use std::{io::Cursor, sync::Arc};

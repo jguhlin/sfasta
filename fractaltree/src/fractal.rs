@@ -6,14 +6,13 @@
 // Todo:
 // - Storable on disk
 // - Able to load only part of the tree from disk
-// - Specialized impl for <u64, u32> as that's what we use in the sfasta format,
-//   then allow simd accel? Using wide or pulp?
+// - Specialized impl for <u64, u32> as that's what we use in the sfasta format, then allow simd accel? Using wide or
+//   pulp?
 
 // ----------------------------------------------
 // This is where I'm at right now:
 //   - Get the on disk tree working efficiently
-//   - Then the SeqLocs stuff working (load up needed seqloc data, but for the most part
-//     keep it on disk)
+//   - Then the SeqLocs stuff working (load up needed seqloc data, but for the most part keep it on disk)
 //   - Have option to load all seqlocs into memory for random access based on index though!
 // ----------------------------------------------
 
