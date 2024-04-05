@@ -10,11 +10,11 @@ use mimalloc::MiMalloc;
 use rand::seq;
 use rand_core::block;
 
-// When not windows, use mimalloc
+/* // When not windows, use mimalloc
 #[cfg(not(windows))]
 #[global_allocator]
 #[cfg(not(windows))]
-static GLOBAL: MiMalloc = MiMalloc;
+static GLOBAL: MiMalloc = MiMalloc; */
 
 // static MEM: &str = "Mimalloc";
 
