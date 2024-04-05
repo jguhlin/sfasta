@@ -227,7 +227,7 @@ impl NodeDisk
     {
         let config = bincode::config::standard().with_variable_int_encoding().with_limit::<{1024 * 1024}>();
 
-        in_buf.seek(SeekFrom::Start(self.state.unwrap() as u64)).unwrap();
+        in_buf.seek(SeekFrom::Start(start + self.state.unwrap() as u64)).unwrap();
         let node: NodeDisk = bincode::decode_from_std_read(in_buf, config).unwrap();
         *self = node;
     }
