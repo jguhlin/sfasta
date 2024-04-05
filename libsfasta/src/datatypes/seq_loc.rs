@@ -370,13 +370,7 @@ impl SeqLocsStoreBuilder
 
         for (seqloc, location) in out_data.into_iter() {
             let pos = out_buf.stream_position().expect("Unable to work with seek API");
-
-            // Bincoding takes the longest
-            let data = bincode::encode_to_vec(&seqloc, crate::BINCODE_CONFIG).expect("Unable to encode SeqLoc");
-            // bincode::encode_into_std_write(seqloc, &mut out_buf, crate::BINCODE_CONFIG)
-               //.expect("Unable to write SeqLoc to file");
-
-            out_buf.write_all(&data).expect("Unable to write SeqLoc to file");
+            out_buf.write_all(&seqloc).expect("Unable to write SeqLoc to file");
             location.store(pos - self.location, std::sync::atomic::Ordering::Relaxed);
         }
 
