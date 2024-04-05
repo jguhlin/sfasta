@@ -361,21 +361,21 @@ impl SeqLocsStoreBuilder
         std::mem::swap(&mut self.data, &mut data);
 
         for (seqloc, location) in data.into_iter() {
-            let start_time = std::time::Instant::now();
             let pos = out_buf.stream_position().expect("Unable to work with seek API");
-            let end_time = std::time::Instant::now();
-            log::debug!("Time to get position: {:?}", end_time - start_time);
 
             let start_time = std::time::Instant::now();
-            bincode::encode_into_std_write(seqloc, &mut out_buf, crate::BINCODE_CONFIG)
-                .expect("Unable to write SeqLoc to file");
+            let data = bincode::encode_to_vec(&seqloc, crate::BINCODE_CONFIG).expect("Unable to encode SeqLoc");
+            // bincode::encode_into_std_write(seqloc, &mut out_buf, crate::BINCODE_CONFIG)
+               //.expect("Unable to write SeqLoc to file");
             let end_time = std::time::Instant::now();
             log::debug!("Time to bincode + write SeqLoc: {:?}", end_time - start_time);
 
             let start_time = std::time::Instant::now();
-            location.store(pos - self.location, std::sync::atomic::Ordering::Relaxed);
+            out_buf.write_all(&data).expect("Unable to write SeqLoc to file");
             let end_time = std::time::Instant::now();
-            log::debug!("Time to store location: {:?}", end_time - start_time);
+            log::debug!("Time to write SeqLoc: {:?}", end_time - start_time);
+
+            location.store(pos - self.location, std::sync::atomic::Ordering::Relaxed);
         }
 
         self.location
