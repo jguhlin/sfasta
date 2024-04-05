@@ -20,7 +20,7 @@
 // Just search through them all (or if prefetched, access direct...)
 
 use std::{
-    io::{Read, Seek, SeekFrom, Write},
+    io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write},
     sync::{atomic::AtomicU64, Arc},
 };
 
