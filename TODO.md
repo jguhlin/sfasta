@@ -3,10 +3,11 @@
 * Output block should have an "is_raw" flag to avoid double bincoding
 - Double bincoding is both a serious problem (esp. switching between variable and fixed int encoding) and necessary for compressed blocks
 - Block locs should be fractaltree as well u32, u64 so that we don't have to decompress all of them!
-- Reenable mimalloc
 
 ## SFA 
-* sfa - Switch to needletail instead of custom made solution 
+- sfa - Switch to needletail instead of custom made solution 
+- Reenable mimalloc
+- Optimize sfa builds (lto, num build threads, etc...)
 
 # Long Term
 
