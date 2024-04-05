@@ -1,11 +1,11 @@
 #[cfg(nightly)]
 #[feature(write_all_vectored)]
 // If not windows, compile and use mimalloc
-#[cfg(not(windows))]
-extern crate mimalloc;
+// #[cfg(not(windows))]
+// extern crate mimalloc;
 
-#[cfg(not(windows))]
-use mimalloc::MiMalloc;
+// #[cfg(not(windows))]
+// use mimalloc::MiMalloc;
 
 use rand::seq;
 use rand_core::block;
