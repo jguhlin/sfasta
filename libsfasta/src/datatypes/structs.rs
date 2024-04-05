@@ -3,8 +3,8 @@ use std::{any::Any, io::prelude::*};
 use libcompression::*;
 
 // SuperTrait -- needed for pyO3
-pub trait ReadAndSeek: Read + Seek {}
-impl<T: Read + Seek> ReadAndSeek for T {}
+pub trait ReadAndSeek: Read + Seek + BufRead {}
+impl<T: Read + Seek + BufRead> ReadAndSeek for T {}
 
 pub trait ReadAndSeekAndSend: Read + Seek {}
 impl<T: Read + Seek> ReadAndSeekAndSend for T {}

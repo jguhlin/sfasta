@@ -12,6 +12,7 @@ pub struct DirectoryOnDisk
     pub scores_loc: u64,
     pub masking_loc: u64,
     pub headers_loc: u64,
+    pub sequences_loc: u64,
 }
 
 impl From<Directory> for DirectoryOnDisk
@@ -44,6 +45,10 @@ impl From<Directory> for DirectoryOnDisk
                 None => 0,
             },
             headers_loc: match dir.headers_loc {
+                Some(loc) => loc.get(),
+                None => 0,
+            },
+            sequences_loc: match dir.sequences_loc {
                 Some(loc) => loc.get(),
                 None => 0,
             },
@@ -120,7 +125,9 @@ pub struct Directory
     pub scores_loc: Option<NonZeroU64>,
     pub masking_loc: Option<NonZeroU64>,
     pub headers_loc: Option<NonZeroU64>,
+    pub sequences_loc: Option<NonZeroU64>,
     // TODO: Add pangenome stuff
+    // TODO: Add signals stuff
 }
 
 impl From<DirectoryOnDisk> for Directory
@@ -135,6 +142,7 @@ impl From<DirectoryOnDisk> for Directory
             scores_loc: NonZeroU64::new(dir.scores_loc),
             masking_loc: NonZeroU64::new(dir.masking_loc),
             headers_loc: NonZeroU64::new(dir.headers_loc),
+            sequences_loc: NonZeroU64::new(dir.sequences_loc),
         }
     }
 }
@@ -238,6 +246,7 @@ mod tests
             scores_loc: None,
             masking_loc: None,
             headers_loc: None,
+            sequences_loc: None,
         };
 
         let bincode_config = bincode::config::standard().with_fixed_int_encoding();

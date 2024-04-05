@@ -6,13 +6,18 @@ use std::{
     },
 };
 
-use binout::{Serializer, VByte};
-use bitvec::store;
 use crossbeam::utils::Backoff;
-use rayon::str::Bytes;
 
 use crate::datatypes::Loc;
 use libcompression::*;
+
+// Implement some custom errors to return
+#[derive(Debug)]
+pub enum BlockStoreError
+{
+    Empty,
+    Other(&'static str),
+}
 
 /// This underlies most storage. It is a block store that stores bytes of any type and compresses them
 /// Typically not used directly, but used by sequence_block_store and string_block_store
@@ -21,10 +26,10 @@ use libcompression::*;
 pub struct BytesBlockStoreBuilder
 {
     /// Locations of the blocks in the file
-    block_locations: Vec<Arc<AtomicU64>>,
+    pub block_locations: Vec<Arc<AtomicU64>>,
 
-    /// Locations of the block index (Where the serialized block_locations is stored)
-    block_locations_pos: Arc<AtomicU64>,
+    /// Locations of the block index (Where the serialized block_locations are stored)
+    pub block_locations_pos: Arc<AtomicU64>,
 
     /// Maximum block size
     block_size: usize,
@@ -198,7 +203,7 @@ impl BytesBlockStoreBuilder
     where
         W: Write + Seek,
     {
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
         out_buf.seek(SeekFrom::Start(pos)).unwrap();
 
@@ -220,29 +225,25 @@ impl BytesBlockStoreBuilder
     /// Writes the locations of each block. This is used for finding the start of each block.
     ///
     /// Splits the block locations into chunks of 1024 to create an index of block locations. TODO
-    pub fn write_block_locations(&mut self) -> Result<(), String>
+    pub fn write_block_locations(&mut self) -> Result<(), BlockStoreError>
     {
         if !self.finalized {
             self.finalize();
         }
 
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config = bincode::config::standard().with_variable_int_encoding();
 
         assert!(self.compression_worker.is_some());
         self.check_complete();
 
         // No blocks, no data, exit out of this function.
         if self.block_locations.is_empty() {
-            return Err("No blocks to write".to_string());
+            return Err(BlockStoreError::Empty);
         }
 
         let block_locations: Vec<u64> = self.block_locations.iter().map(|x| x.load(Ordering::Relaxed)).collect();
 
-        let mut output: Vec<u8> = Vec::with_capacity(VByte::array_size(&block_locations[..]));
-        VByte::write_array(&mut output, &block_locations[..]).unwrap();
-
-        // TODO: Necessary to vbyte it then bincode it?
-        let bincoded = bincode::encode_to_vec(&output, bincode_config).unwrap();
+        let bincoded = bincode::encode_to_vec(&block_locations, bincode_config).unwrap();
 
         // Kind of a hack, but compression worker has access to the output buffer
         let compression_config = Arc::new(CompressionConfig {
@@ -289,13 +290,14 @@ impl BytesBlockStoreBuilder
 }
 
 /// This struct is for reading (and once finalized, writing)
+#[derive(Debug)]
 pub struct BytesBlockStore
 {
     /// Locations of the blocks in the file
-    block_locations: Vec<u64>,
+    pub block_locations: Vec<u64>,
 
     /// Locations of the block index (Where the serialized block_locations is stored)
-    block_locations_pos: u64,
+    pub block_locations_pos: u64,
 
     /// Maximum block size
     block_size: usize,
@@ -327,21 +329,27 @@ impl BytesBlockStore
     where
         R: Read + Seek,
     {
-        let bincode_config = bincode::config::standard()
+        let bincode_config_fixed = bincode::config::standard()
             .with_fixed_int_encoding()
             .with_limit::<{ 256 * 1024 * 1024 }>(); // 256 MB is max limit TODO: Enforce elsewhere too
 
         let block_locations = &self.block_locations;
 
+        let block_location = block_locations[block as usize];
+
+        in_buf.seek(SeekFrom::Start(block_location)).unwrap();
+        let compressed_block: Vec<u8> = bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed).unwrap();
+        log::debug!(
+            "Got block at {} compressed size {}",
+            block_location,
+            compressed_block.len()
+        );
+        log::debug!("Block size is: {}", self.block_size);
+
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
 
-        let block_location = block_locations[block as usize];
-        in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-        let compressed_block: Vec<u8> = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
-
         let out = decompressor.decompress(&compressed_block, self.block_size).unwrap();
-
         out
     }
 
@@ -413,8 +421,8 @@ impl BytesBlockStore
         R: Read + Seek,
     {
         let bincode_config = bincode::config::standard()
-            .with_fixed_int_encoding()
-            .with_limit::<1024>();
+            .with_variable_int_encoding()
+            .with_limit::<8192>();
 
         in_buf.seek(SeekFrom::Start(starting_pos)).unwrap();
         let (compression_config, block_locations_pos, block_size) =
@@ -423,19 +431,20 @@ impl BytesBlockStore
                 Err(e) => return Err(format!("Error decoding block store: {e}")),
             };
 
+        assert!(block_locations_pos > 0);
+
+        let bincode_config_fixed = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 128 * 1024 * 1024 }>();
+
         in_buf.seek(SeekFrom::Start(block_locations_pos)).unwrap();
 
-        let block_locations = if block_locations_pos > 0 {
-            let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-
-            let compressed: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
-                Ok(x) => x,
-                Err(e) => return Err(format!("Error decoding block locations: {e}")),
-            };
-            VByte::read_array(&mut &compressed[..]).unwrap().to_vec()
-        } else {
-            Vec::new()
+        let block_locations: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed) {
+            Ok(x) => x,
+            Err(e) => return Err(format!("Error decoding block locations: {e}")),
         };
+
+        let (block_locations, _) = bincode::decode_from_slice(&block_locations, crate::BINCODE_CONFIG).unwrap();
 
         Ok(BytesBlockStore {
             block_locations,

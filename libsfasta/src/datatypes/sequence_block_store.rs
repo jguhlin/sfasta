@@ -5,12 +5,12 @@
 
 use std::{
     io::{Read, Seek, Write},
-    sync::Arc,
+    sync::{atomic::Ordering, Arc},
 };
 
 use simdutf8::basic::from_utf8;
 
-use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
+use crate::datatypes::{BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc};
 use libcompression::*;
 
 pub struct SequenceBlockStoreBuilder
@@ -49,9 +49,16 @@ impl SequenceBlockStoreBuilder
         self.inner.write_header(pos, &mut out_buf);
     }
 
-    pub fn write_block_locations(&mut self)
+    pub fn write_block_locations(&mut self) -> Result<(), BlockStoreError>
     {
-        self.inner.write_block_locations();
+        let result = self.inner.write_block_locations();
+
+        log::debug!(
+            "--- WRITE SequenceBlockStore Block Locations: {:?}",
+            self.inner.block_locations
+        );
+
+        result
     }
 
     pub fn with_block_size(mut self, block_size: usize) -> Self
@@ -87,6 +94,11 @@ impl SequenceBlockStore
             Err(e) => return Err(e),
         };
 
+        log::debug!(
+            "--- READ SequenceBlockStore Block Locations: {:?}",
+            inner.block_locations
+        );
+
         let store = SequenceBlockStore { inner };
         Ok(store)
     }
@@ -104,6 +116,8 @@ impl SequenceBlockStore
     where
         R: Read + Seek,
     {
+        log::debug!("Getting block {}", block);
+        log::debug!("Inner Block Locs: {:?}", self.inner.block_locations);
         self.inner.get_block(in_buf, block)
     }
 

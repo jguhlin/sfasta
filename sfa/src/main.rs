@@ -1,7 +1,13 @@
 #[cfg(nightly)]
 #[feature(write_all_vectored)]
+// If not windows, compile and use mimalloc
+#[cfg(not(windows))]
 extern crate mimalloc;
+
+#[cfg(not(windows))]
 use mimalloc::MiMalloc;
+
+use rand::seq;
 use rand_core::block;
 
 // When not windows, use mimalloc
@@ -27,7 +33,7 @@ use std::{
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 
-use libsfasta::{compression::CompressionType, prelude::*};
+use libsfasta::prelude::*;
 
 // const GIT_VERSION: &str = git_version!();
 
@@ -325,6 +331,7 @@ fn faidx(input: &str, ids: &Vec<String>)
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+    let in_buf = BufReader::new(in_buf);
 
     let mut sfasta = SfastaParser::open_from_buffer(in_buf, false).unwrap();
 
@@ -337,16 +344,16 @@ fn faidx(input: &str, ids: &Vec<String>)
             .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
             .unwrap();
 
-        if result.headers.is_some() {
-            let header = sfasta
-                .get_header(&result.headers.as_ref().unwrap())
-                .expect("Unable to fetch header");
+        if result.has_headers() {
+            let header = sfasta.get_header(result.get_headers()).expect("Unable to fetch header");
             writeln!(stdout, ">{} {}", i, header);
         } else {
             writeln!(stdout, ">{}", i);
         }
 
-        let sequence = sfasta.get_sequence(&result).expect("Unable to fetch sequence");
+        let sequence = sfasta
+            .get_sequence(result.get_sequence(), result.get_masking())
+            .expect("Unable to fetch sequence");
 
         // 60 matches samtools faidx output
         print_sequence(&mut stdout, &sequence, 60);
@@ -375,16 +382,16 @@ fn view(input: &str)
     let seqlocs = sfasta.get_seqlocs().unwrap().unwrap().to_vec();
 
     for seqloc in seqlocs {
-        let id = sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
+        let id = sfasta.get_id(seqloc.get_ids()).unwrap();
 
         stdout.write_all(&common[..1]).unwrap();
         stdout.write_all(id.as_bytes()).unwrap();
 
-        if seqloc.headers.is_some() {
+        if seqloc.has_headers() {
             stdout
                 .write_all(
                     sfasta
-                        .get_header(seqloc.headers.as_ref().unwrap())
+                        .get_header(seqloc.get_headers())
                         .expect("Unable to fetch header")
                         .as_bytes(),
                 )
@@ -393,7 +400,9 @@ fn view(input: &str)
 
         stdout.write_all(b"\n").unwrap();
 
-        let sequence = sfasta.get_sequence(&seqloc).expect("Unable to fetch sequence");
+        let sequence = sfasta
+            .get_sequence(seqloc.get_sequence(), seqloc.get_masking())
+            .expect("Unable to fetch sequence");
 
         #[cfg(nightly)]
         {
@@ -429,6 +438,7 @@ fn list(input: &str)
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+    let in_buf = BufReader::new(in_buf);
     let mut sfasta = SfastaParser::open_from_buffer(in_buf, false).unwrap();
 
     if sfasta.seqlocs.is_none() {
@@ -441,7 +451,7 @@ fn list(input: &str)
             Ok(None) => panic!("No SeqLoc found"),
             Err(_) => panic!("Unable to fetch seqloc"),
         };
-        let id = &sfasta.get_id(seqloc.ids.as_ref().unwrap()).unwrap();
+        let id = &sfasta.get_id(seqloc.get_ids()).unwrap();
         println!("{}", id);
     }
 }

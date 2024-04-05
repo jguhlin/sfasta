@@ -5,7 +5,7 @@ use std::{
 
 use simdutf8::basic::from_utf8;
 
-use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
+use crate::datatypes::{BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc};
 use libcompression::*;
 
 pub struct StringBlockStoreBuilder
@@ -21,7 +21,7 @@ impl Default for StringBlockStoreBuilder
             inner: BytesBlockStoreBuilder::default()
                 .with_block_size(512 * 1024)
                 .with_compression(CompressionConfig {
-                    compression_type: CompressionType::LZ4,
+                    compression_type: CompressionType::ZSTD,
                     compression_level: 3,
                     compression_dict: None,
                 }),
@@ -44,9 +44,9 @@ impl StringBlockStoreBuilder
         self.inner.write_header(pos, &mut out_buf);
     }
 
-    pub fn write_block_locations(&mut self)
+    pub fn write_block_locations(&mut self) -> Result<(), BlockStoreError>
     {
-        self.inner.write_block_locations();
+        self.inner.write_block_locations()
     }
 
     pub fn block_len(&self) -> usize

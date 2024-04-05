@@ -6,7 +6,7 @@ use std::{
     sync::Arc,
 };
 
-use crate::datatypes::{BytesBlockStore, BytesBlockStoreBuilder, Loc};
+use crate::datatypes::{BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc};
 use libcompression::*;
 
 use pulp::Arch;
@@ -35,9 +35,9 @@ impl MaskingStoreBuilder
         self.inner.write_header(pos, &mut out_buf);
     }
 
-    pub fn write_block_locations(&mut self)
+    pub fn write_block_locations(&mut self) -> Result<(), BlockStoreError>
     {
-        self.inner.write_block_locations();
+        self.inner.write_block_locations()
     }
 
     pub fn with_block_size(mut self, block_size: usize) -> Self

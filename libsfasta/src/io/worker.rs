@@ -104,7 +104,13 @@ where
             // Get current location
             let current_location = output.stream_position().unwrap();
 
-            output.write_all(&data).unwrap();
+            #[cfg(test)]
+            println!("Block of size {} at location {}", data.len(), current_location);
+
+            let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+            bincode::encode_into_std_write(&data, &mut *output, bincode_config).unwrap();
+
+            // output.write_all(&data).unwrap();
             location.store(current_location, Ordering::Relaxed);
         } else {
             backoff.snooze();

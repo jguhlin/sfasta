@@ -4,7 +4,7 @@
 //! to iterate over contained sequences.
 
 use std::{
-    io::{Read, Seek, SeekFrom},
+    io::{BufRead, Read, Seek, SeekFrom},
     sync::RwLock,
 };
 
@@ -61,7 +61,7 @@ impl<'sfa> Sfasta<'sfa>
     /// Use for after cloning(primarily for multiple threads), give the object a new read buffer
     pub fn with_buffer<R>(mut self, buf: R) -> Self
     where
-        R: 'sfa + Read + Seek + Send + Sync,
+        R: 'sfa + Read + Seek + Send + Sync + BufRead,
     {
         self.buf = Some(RwLock::new(Box::new(buf)));
         self
@@ -256,6 +256,8 @@ impl<'sfa> Sfasta<'sfa>
 
     // TODO: Should return Result<Option<Sequence>, &str>
     // TODO: Should actually be what get_sequence_by_seqloc is!
+    /// Gets the sequence specified with seqloc, and applies masking specified with maskingloc..
+    /// To have no masking just pass a blank slice.
     pub fn get_sequence(&mut self, seqloc: &[Loc], maskingloc: &[Loc]) -> Result<Vec<u8>, &'static str>
     {
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
@@ -424,16 +426,19 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     /// This is more expensive than getting it from the seqlocs
-    pub fn index_len(&self) -> usize
+    pub fn index_len(&self) -> Result<usize, &'static str>
     {
         if self.index.is_none() {
-            #[cfg(test)]
-            println!("Index is none");
-
-            return 0;
+            return Err("Index does not exist");
         }
 
         self.index.as_ref().unwrap().len()
+    }
+
+    pub fn index_load(&mut self) -> Result<(), &'static str>
+    {
+        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        self.index.as_mut().unwrap().load_tree(buf)
     }
 }
 
@@ -462,6 +467,7 @@ impl<'sfa> SfastaParser<'sfa>
 
         let in_buf =
             std::fs::File::open(&path).unwrap_or_else(|_| panic!("Unable to open file: {}", path.as_ref().display()));
+        let in_buf = std::io::BufReader::new(in_buf);
         SfastaParser::open_from_buffer(in_buf, false)
     }
 
@@ -469,7 +475,7 @@ impl<'sfa> SfastaParser<'sfa>
     // Prefetch should probably be another name...
     pub fn open_from_buffer<R>(mut in_buf: R, prefetch: bool) -> Result<Sfasta<'sfa>, String>
     where
-        R: 'sfa + Read + Seek + Send + Sync,
+        R: 'sfa + Read + Seek + Send + Sync + BufRead,
     {
         let bincode_config_fixed = crate::BINCODE_CONFIG
             .with_fixed_int_encoding()
@@ -543,21 +549,13 @@ impl<'sfa> SfastaParser<'sfa>
         // Next are the sequence blocks, which aren't important right now...
         // The index is much more important to us...
 
-        let bincode_config_variable = crate::BINCODE_CONFIG
-            .with_variable_int_encoding()
-            .with_limit::<{ 2 * 1024 * 1024 }>();
-
         log::info!("Loading Index");
         if sfasta.directory.index_loc.is_some() {
-            in_buf
-                .seek(SeekFrom::Start(sfasta.directory.index_loc.unwrap().get()))
-                .expect("Unable to work with seek API");
-            let tree: FractalTreeDisk = bincode::decode_from_std_read(&mut in_buf, bincode_config_variable).unwrap();
+            let tree = FractalTreeDisk::from_buffer(&mut in_buf, sfasta.directory.index_loc.unwrap().get()).unwrap();
+            // let tree: FractalTreeDisk = bincode::decode_from_std_read(&mut in_buf, bincode_config_variable).unwrap();
             sfasta.index = Some(tree);
         } else {
-            return Result::Err(
-                "No index found in SFASTA file - Support for no index is not yet implemented.".to_string(),
-            );
+            sfasta.index = None;
         }
 
         log::info!("SeqLocs");
@@ -580,21 +578,10 @@ impl<'sfa> SfastaParser<'sfa>
 
         log::info!("Parsing Blocks");
 
-        // if sfasta.directory.block_index_loc.is_none() {
-        // return Result::Err("No block index found in SFASTA file - Support for no block index is not yet
-        // implemented.".to_string()); }
-
-        // in_buf
-        //.seek(SeekFrom::Start(
-        // sfasta.directory.block_index_loc.unwrap().get(),
-        //))
-        //    .expect("Unable to work with seek API");
-
-        // let block_index_loc = in_buf.stream_position().unwrap();
-
         log::info!("Creating Sequence Blocks");
 
-        let sequenceblocks = SequenceBlockStore::from_buffer(&mut in_buf, sfasta.directory.masking_loc.unwrap().get());
+        let sequenceblocks =
+            SequenceBlockStore::from_buffer(&mut in_buf, sfasta.directory.sequences_loc.unwrap().get());
 
         if sequenceblocks.is_err() {
             return Result::Err(format!(
@@ -870,7 +857,8 @@ mod tests
     #[test]
     pub fn test_sfasta_find_and_retrieve_sequence()
     {
-        let mut out_buf = Box::new(Cursor::new(Vec::new()));
+        let _ = env_logger::builder().is_test(true).try_init();
+        let out_buf = Box::new(Cursor::new(Vec::new()));
 
         let mut in_buf =
             BufReader::new(File::open("test_data/test_convert.fasta").expect("Unable to open testing file"));
@@ -880,9 +868,6 @@ mod tests
             .with_block_size(8 * 1024)
             .with_index();
 
-        #[cfg(miri)]
-        let mut converter = converter.with_compression_type(CompressionType::NONE);
-
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
@@ -890,9 +875,10 @@ mod tests
         };
 
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
+        sfasta.index_load().expect("Unable to load index");
         sfasta.index_len();
 
-        assert_eq!(sfasta.index_len(), 3001);
+        assert_eq!(sfasta.index_len(), Ok(3001));
 
         let output = sfasta.find("does-not-exist");
         assert!(output == Ok(None));
@@ -914,6 +900,7 @@ mod tests
     #[test]
     pub fn test_parse_multiple_blocks()
     {
+        let _ = env_logger::builder().is_test(true).try_init();
         let out_buf = Box::new(Cursor::new(Vec::new()));
 
         let mut in_buf = BufReader::new(
@@ -930,7 +917,8 @@ mod tests
 
         // TODO: Test this with prefecth both true and false...
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
-        assert!(sfasta.index_len() == 10);
+        sfasta.index_load().expect("Unable to load index");
+        assert!(sfasta.index_len() == Ok(10));
 
         let output = &sfasta.find("test").unwrap().unwrap();
         println!("'test' seqloc: {output:#?}");
@@ -948,8 +936,6 @@ mod tests
         let sequence = std::str::from_utf8(&sequence).unwrap();
 
         let sequence = sequence.trim();
-
-        // println!("{:#?}", sequence);
 
         println!("'test3' Sequence length: {}", sequence.len());
         let last_ten = sequence.len() - 10;
@@ -989,8 +975,9 @@ mod tests
         };
 
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
+        sfasta.index_load().expect("Unable to load index");
         println!("Index len: {:#?}", sfasta.index_len());
-        assert!(sfasta.index_len() == 10);
+        assert!(sfasta.index_len() == Ok(10));
 
         let _output = &sfasta.find("test3").unwrap().unwrap();
 

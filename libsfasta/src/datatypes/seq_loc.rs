@@ -24,21 +24,21 @@ use std::{
     sync::{atomic::AtomicU64, Arc},
 };
 
-use bincode::{BorrowDecode, Decode, Encode};
-use stream_vbyte::{decode::decode, encode::encode, scalar::Scalar};
+use bincode::{Decode, Encode};
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each type
 // Then the Locs are stored in a Vec<Loc>
 // So masking Locs are found as locs[sequence..sequence+masking]
 // Compressed version is simply Vec<u8> of all the Locs
+// TODO: Base mods?
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct SeqLoc
 {
     pub sequence: u16,
     pub masking: u16,
     pub scores: u16,
-    pub signal: u16, // FUTURE: Add Nanopore signals (or others)
+    pub signal: u16, // FUTURE: Add Nanopore signals (and/or others)
     pub headers: u16,
     pub ids: u16,
     pub locs: Vec<Loc>,
@@ -143,6 +143,36 @@ impl SeqLoc
         self.locs.extend(locs);
     }
 
+    pub fn has_headers(&self) -> bool
+    {
+        self.headers > 0
+    }
+
+    pub fn has_ids(&self) -> bool
+    {
+        self.ids > 0
+    }
+
+    pub fn has_masking(&self) -> bool
+    {
+        self.masking > 0
+    }
+
+    pub fn has_scores(&self) -> bool
+    {
+        self.scores > 0
+    }
+
+    pub fn has_signal(&self) -> bool
+    {
+        self.signal > 0
+    }
+
+    pub fn has_sequence(&self) -> bool
+    {
+        self.sequence > 0
+    }
+
     #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize
     {
@@ -176,7 +206,7 @@ impl SeqLoc
     {
         let mut new_locs = Vec::new();
 
-        let locs = &self.locs;
+        let locs = self.get_sequence();
 
         let splits = SeqLoc::seq_location_splits(&locs);
 
@@ -349,6 +379,7 @@ pub struct Loc
     pub len: u32,
 }
 
+// TODO: Bytemuck around here somewhere...
 impl From<&[u32]> for Loc
 {
     fn from(loc: &[u32]) -> Self
@@ -498,13 +529,10 @@ mod tests
     #[test]
     fn test_seqloc_slice()
     {
-        let mut seqlocs = SeqLocsStoreBuilder::default();
         let mut seqloc = SeqLoc::new();
 
-        let mut dummy_buffer = std::io::Cursor::new(vec![0; 1024]);
-
         seqloc.sequence = 5;
-        seqloc.locs.extend(vec![
+        seqloc.add_sequence_locs(vec![
             Loc::new(0, 0, 10),
             Loc::new(1, 0, 10),
             Loc::new(2, 0, 10),
@@ -526,10 +554,11 @@ mod tests
         assert_eq!(slice, vec![Loc::new(1, 5, 5), Loc::new(2, 0, 10), Loc::new(3, 0, 5)]);
         let slice = seqloc.seq_slice(10, 5..9);
         assert_eq!(slice, vec![Loc::new(0, 5, 4)]);
-        let block_size = 262144;
-        seqloc.sequence += 2;
 
-        seqloc.locs.extend(vec![
+        let mut seqloc = SeqLoc::new();
+        let block_size = 262144;
+
+        seqloc.add_sequence_locs(vec![
             Loc::new(3097440, 261735, 262144 - 261735),
             Loc::new(3097441, 0, 1274),
         ]);
@@ -543,11 +572,11 @@ mod tests
         //     We want 104567 to 104840 -- how?
 
         let slice = seqloc.seq_slice(block_size, 0..20);
+        println!("{:?}", seqloc);
         assert_eq!(slice, vec![Loc::new(3097440, 261735, 20)]);
 
-        seqloc.sequence += 2;
-
-        seqloc.locs.extend(vec![
+        let mut seqloc = SeqLoc::new();
+        seqloc.add_sequence_locs(vec![
             Loc::new(1652696, 260695, 262144 - 260695),
             Loc::new(1652697, 0, 28424),
         ]);

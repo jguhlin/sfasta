@@ -1,9 +1,7 @@
-use super::*;
-use std::io::{Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 
 use bincode::{BorrowDecode, Decode, Encode};
 use binout::{Serializer, VByte};
-use libcompression::*;
 use pulp::Arch;
 
 // Tried to make it generic, didn't work
@@ -40,7 +38,15 @@ impl Default for FractalTreeDisk
 
 impl FractalTreeDisk
 {
-    pub fn len(&self) -> usize
+    pub fn load_tree<R>(&mut self, in_buf: &mut R) -> Result<(), &'static str>
+    where
+        R: Read + Seek + BufRead,
+    {
+        self.root.load_all(in_buf, self.start);
+        Ok(())
+    }
+
+    pub fn len(&self) -> Result<usize, &'static str>
     {
         self.root.len()
     }
@@ -60,7 +66,6 @@ impl FractalTreeDisk
         let start_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
 
         self.root.store(&mut out_buf, start_pos);
-
         self.start = start_pos;
 
         let tree_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
@@ -69,6 +74,17 @@ impl FractalTreeDisk
         bincode::encode_into_std_write(&*self, &mut out_buf, bincode_config).unwrap();
 
         Ok(tree_location)
+    }
+
+    pub fn from_buffer<R>(mut in_buf: R, pos: u64) -> Result<Self, &'static str>
+    where
+        R: Read + Seek + BufRead,
+    {
+        in_buf.seek(SeekFrom::Start(pos)).unwrap();
+        let bincode_config = bincode::config::standard().with_variable_int_encoding();
+
+        let tree: FractalTreeDisk = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        Ok(tree)
     }
 }
 
@@ -216,6 +232,29 @@ impl NodeDisk
         *self = node;
     }
 
+    pub fn load_all<R>(&mut self, in_buf: &mut R, start: u64)
+    where
+        R: Read + Seek,
+    {
+        let config = bincode::config::standard().with_variable_int_encoding();
+
+        if self.state.is_some() {
+            in_buf
+                .seek(SeekFrom::Start(self.state.unwrap() as u64 + start))
+                .unwrap();
+            let node: NodeDisk = bincode::decode_from_std_read(in_buf, config).unwrap();
+            *self = node;
+        }
+
+        if !self.is_leaf {
+            for child in self.children.as_mut().unwrap() {
+                child.load_all(in_buf, start);
+            }
+        }
+
+        self.state = None;
+    }
+
     pub fn store<W>(&mut self, out_buf: &mut W, start: u64)
     where
         W: Write + Seek,
@@ -278,18 +317,21 @@ impl NodeDisk
         }
     }
 
-    pub fn len(&self) -> usize
+    pub fn len(&self) -> Result<usize, &'static str>
     {
         if self.is_leaf {
-            self.keys.len()
+            Ok(self.keys.len())
         } else {
             let mut len = 0;
-
-            for i in 0..self.children.as_ref().unwrap().len() {
-                len += self.children.as_ref().unwrap()[i].len();
+            if self.children.is_none() {
+                return Err("Children not loaded");
             }
 
-            len
+            for i in 0..self.children.as_ref().unwrap().len() {
+                len += self.children.as_ref().unwrap()[i].len()?;
+            }
+
+            Ok(len)
         }
     }
 }
@@ -298,9 +340,9 @@ impl NodeDisk
 mod tests
 {
     use super::*;
-    use human_size::{Gigabyte, SpecificSize};
+    use crate::*;
+    use human_size::SpecificSize;
     use rand::prelude::*;
-    use xxhash_rust::xxh3::xxh3_64;
 
     #[test]
     fn node_storage()

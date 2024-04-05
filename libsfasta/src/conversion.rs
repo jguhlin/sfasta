@@ -314,10 +314,6 @@ impl Converter
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
-                fractaltree_pos = out_buffer_thread
-                    .stream_position()
-                    .expect("Unable to work with seek API");
-
                 let index = index_handle.unwrap().join().unwrap();
                 log::info!(
                     "Writing index to file. {}",
@@ -328,8 +324,9 @@ impl Converter
 
                 let start_time = std::time::Instant::now();
                 let mut index: FractalTreeDisk = index.into();
+                println!("Index: {:?}", index.len());
 
-                index
+                fractaltree_pos = index
                     .write_to_buffer(&mut *out_buffer_thread)
                     .expect("Unable to write index to file");
 
@@ -349,6 +346,7 @@ impl Converter
         sfasta.directory.headers_loc = headers_location;
         sfasta.directory.ids_loc = ids_location;
         sfasta.directory.masking_loc = masking_location;
+        sfasta.directory.sequences_loc = sequences_location;
 
         // Go to the beginning, and write the location of the index
 
@@ -448,7 +446,7 @@ impl Converter
         let mut masking_location = None;
         let mut sequences = None;
         let mut sequences_location = None;
-        let mut ids_to_locs = Arc::new(RwLock::new(Vec::new()));
+        let ids_to_locs = Arc::new(RwLock::new(Vec::new()));
 
         // Sequence queue for the generator
         let seq_queue: Arc<ArrayQueue<Work>> = std::sync::Arc::new(ArrayQueue::new(8192 * 2));
@@ -457,7 +455,7 @@ impl Converter
 
         // Pop to a new thread that pushes sequence into the sequence buffer...
         thread::scope(|s| {
-            let mut ids_to_locs = Arc::clone(&ids_to_locs);
+            let ids_to_locs = Arc::clone(&ids_to_locs);
             let fasta_thread = s.spawn(|_| {
                 let mut in_buf_reader = BufReader::new(in_buf);
 
@@ -574,10 +572,37 @@ impl Converter
                     }
                 }
 
-                headers.write_block_locations();
-                ids.write_block_locations();
-                masking.write_block_locations();
-                sequences.write_block_locations();
+                let headers = match headers.write_block_locations() {
+                    Ok(x) => Some(headers),
+                    Err(x) => match x {
+                        BlockStoreError::Empty => None,
+                        _ => panic!("Error writing headers: {:?}", x),
+                    },
+                };
+
+                let ids = match ids.write_block_locations() {
+                    Ok(x) => Some(ids),
+                    Err(x) => match x {
+                        BlockStoreError::Empty => None,
+                        _ => panic!("Error writing ids: {:?}", x),
+                    },
+                };
+
+                let masking = match masking.write_block_locations() {
+                    Ok(x) => Some(masking),
+                    Err(x) => match x {
+                        BlockStoreError::Empty => None,
+                        _ => panic!("Error writing masking: {:?}", x),
+                    },
+                };
+
+                let sequences = match sequences.write_block_locations() {
+                    Ok(x) => Some(sequences),
+                    Err(x) => match x {
+                        BlockStoreError::Empty => None,
+                        _ => panic!("Error writing sequences: {:?}", x),
+                    },
+                };
 
                 (seqlocs, headers, ids, ids_string, masking, sequences)
             });
@@ -596,37 +621,47 @@ impl Converter
             output_worker.shutdown();
 
             seq_locs = Some(j.0);
-            headers = Some(j.1);
-            ids = Some(j.2);
+            headers = j.1;
+            ids = j.2;
             ids_string = j.3;
-            masking = Some(j.4);
-            sequences = Some(j.5);
+            masking = j.4;
+            sequences = j.5;
 
             let mut out_buffer = out_fh.lock().unwrap();
 
-            // Rewrite the headers with the complete information now...
-            headers_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
-            headers
-                .as_mut()
-                .unwrap()
-                .write_header(headers_location.unwrap().get(), &mut *out_buffer);
+            // Write the headers with the complete information now...
 
-            ids_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
-            ids.as_mut()
-                .unwrap()
-                .write_header(ids_location.unwrap().get(), &mut *out_buffer);
+            if headers.is_some() {
+                let x = headers.as_mut().unwrap();
+                headers_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+                x.write_header(headers_location.unwrap().get(), &mut *out_buffer);
+            } else {
+                headers_location = None;
+            }
 
-            masking_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
-            masking
-                .as_mut()
-                .unwrap()
-                .write_header(masking_location.unwrap().get(), &mut *out_buffer);
+            if ids.is_some() {
+                let x = ids.as_mut().unwrap();
+                ids_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+                x.write_header(ids_location.unwrap().get(), &mut *out_buffer);
+            } else {
+                ids_location = None;
+            }
 
-            sequences_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
-            sequences
-                .as_mut()
-                .unwrap()
-                .write_header(sequences_location.unwrap().get(), &mut *out_buffer);
+            if masking.is_some() {
+                let x = masking.as_mut().unwrap();
+                masking_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+                x.write_header(masking_location.unwrap().get(), &mut *out_buffer);
+            } else {
+                masking_location = None;
+            }
+
+            if sequences.is_some() {
+                let x = sequences.as_mut().unwrap();
+                sequences_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+                x.write_header(sequences_location.unwrap().get(), &mut *out_buffer);
+            } else {
+                sequences_location = None;
+            }
 
             out_buffer.flush().expect("Unable to flush output buffer");
         })
@@ -662,7 +697,7 @@ impl Converter
 enum Work
 {
     FastaPayload(crate::datatypes::Sequence),
-    FastqPayload(crate::datatypes::Sequence),
+    FastqPayload(crate::datatypes::Sequence), // TODO
     Shutdown,
 }
 
@@ -670,7 +705,6 @@ enum Work
 mod tests
 {
     use super::*;
-    use crate::datatypes::*;
     use std::{fs::File, io::Cursor};
 
     fn init()

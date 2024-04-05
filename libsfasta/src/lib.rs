@@ -1,11 +1,5 @@
 // #![feature(byte_slice_trim_ascii)]
 
-extern crate bincode;
-extern crate crossbeam;
-extern crate rayon;
-#[macro_use]
-extern crate itertools;
-
 pub mod block_index;
 pub mod convenience;
 pub mod conversion;
