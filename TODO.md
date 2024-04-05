@@ -7,7 +7,8 @@
 ## SFA 
 - sfa - Switch to needletail instead of custom made solution 
 - Reenable mimalloc
-- Optimize sfa builds (lto, num build threads, etc...)
+- Optimize sfa builds (lto, num build threads, etc...) enable common compiler options
+- look into cargo dist
 
 # Long Term
 

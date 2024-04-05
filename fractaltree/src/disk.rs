@@ -221,11 +221,11 @@ impl NodeDisk
         }
     }
 
-    pub fn load<R>(&mut self, in_buf: &mut R)
+    pub fn load<R>(&mut self, in_buf: &mut R, start: u64)
     where
         R: Read + Seek,
     {
-        let config = bincode::config::standard().with_variable_int_encoding();
+        let config = bincode::config::standard().with_variable_int_encoding().with_limit::<{1024 * 1024}>();
 
         in_buf.seek(SeekFrom::Start(self.state.unwrap() as u64)).unwrap();
         let node: NodeDisk = bincode::decode_from_std_read(in_buf, config).unwrap();
@@ -236,7 +236,7 @@ impl NodeDisk
     where
         R: Read + Seek,
     {
-        let config = bincode::config::standard().with_variable_int_encoding();
+        let config = bincode::config::standard().with_variable_int_encoding().with_limit::<{1024 * 1024}>();
 
         if self.state.is_some() {
             in_buf
@@ -259,7 +259,7 @@ impl NodeDisk
     where
         W: Write + Seek,
     {
-        let config = bincode::config::standard().with_variable_int_encoding();
+        let config = bincode::config::standard().with_variable_int_encoding().with_limit::<{1024 * 1024}>();
 
         // Make sure all the children are stored first...
         if !self.is_leaf {
@@ -286,7 +286,7 @@ impl NodeDisk
         R: Read + Seek + Send + Sync,
     {
         if self.state.is_some() {
-            self.load(in_buf);
+            self.load(in_buf, start);
         }
 
         if self.is_leaf {
