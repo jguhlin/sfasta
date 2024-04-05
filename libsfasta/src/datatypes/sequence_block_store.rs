@@ -54,8 +54,8 @@ impl SequenceBlockStoreBuilder
         let result = self.inner.write_block_locations();
 
         log::debug!(
-            "--- WRITE SequenceBlockStore Block Locations: {:?}",
-            self.inner.block_locations
+            "--- WRITE SequenceBlockStore Block Locations: {}",
+            self.inner.block_locations.len()
         );
 
         result
@@ -95,8 +95,8 @@ impl SequenceBlockStore
         };
 
         log::debug!(
-            "--- READ SequenceBlockStore Block Locations: {:?}",
-            inner.block_locations
+            "--- READ SequenceBlockStore Block Locations: {}",
+            inner.block_locations.len()
         );
 
         let store = SequenceBlockStore { inner };
