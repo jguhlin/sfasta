@@ -25,6 +25,7 @@ use std::{
 };
 
 use bincode::{Decode, Encode};
+use rayon::prelude::*;
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each type
@@ -360,21 +361,22 @@ impl SeqLocsStoreBuilder
         let mut data = Vec::new();
         std::mem::swap(&mut self.data, &mut data);
 
-        for (seqloc, location) in data.into_iter() {
+        let mut out_data: Vec<(Vec<u8>, Arc<AtomicU64>)> = Vec::new();
+
+        // Bincode the data using rayon
+        data.into_par_iter().map(|(seqloc, location)| {
+            (bincode::encode_to_vec(&seqloc, crate::BINCODE_CONFIG).expect("Unable to encode SeqLoc"), location)
+        }).collect_into_vec(&mut out_data);
+
+        for (seqloc, location) in out_data.into_iter() {
             let pos = out_buf.stream_position().expect("Unable to work with seek API");
 
-            let start_time = std::time::Instant::now();
+            // Bincoding takes the longest
             let data = bincode::encode_to_vec(&seqloc, crate::BINCODE_CONFIG).expect("Unable to encode SeqLoc");
             // bincode::encode_into_std_write(seqloc, &mut out_buf, crate::BINCODE_CONFIG)
                //.expect("Unable to write SeqLoc to file");
-            let end_time = std::time::Instant::now();
-            log::debug!("Time to bincode + write SeqLoc: {:?}", end_time - start_time);
 
-            let start_time = std::time::Instant::now();
             out_buf.write_all(&data).expect("Unable to write SeqLoc to file");
-            let end_time = std::time::Instant::now();
-            log::debug!("Time to write SeqLoc: {:?}", end_time - start_time);
-
             location.store(pos - self.location, std::sync::atomic::Ordering::Relaxed);
         }
 
