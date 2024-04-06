@@ -120,10 +120,16 @@ impl SeqLoc
         &self.locs[self.headers_pos()..self.ids_pos()]
     }
 
+    // TODO: These have to be done "in order"
+    // and probably aren't right now...
+    // .... maybe a seqloc builder?
+
+    
+
     pub fn add_masking_locs(&mut self, locs: Vec<Loc>)
     {
         self.masking = locs.len() as u16;
-        self.locs.extend(locs);
+        self.locs.extend(locs);       
     }
 
     pub fn add_sequence_locs(&mut self, locs: Vec<Loc>)

@@ -1,4 +1,5 @@
 # Short Term
+- SeqLocs are not being inserted in the correct order...
 - Struct's should handle encoding / decoding, so if they require fixed int encoding it's always that way (rather than remembering it elsewhere)
 * Output block should have an "is_raw" flag to avoid double bincoding
 - Double bincoding is both a serious problem (esp. switching between variable and fixed int encoding) and necessary for compressed blocks
