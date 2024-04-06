@@ -628,4 +628,73 @@ mod tests
         let seqloc = SeqLoc::new();
         assert_eq!(seqloc.get_headers().len(), 0);
     }
+
+    #[test]
+    fn encode_decode_seqloc() {
+        let mut seqloc = SeqLoc::new();
+        seqloc.sequence = 5;
+        seqloc.add_locs(
+            &vec![
+                Loc::new(0, 0, 10),
+                Loc::new(1, 0, 10),
+                Loc::new(2, 0, 10),
+                Loc::new(3, 0, 10),
+                Loc::new(4, 0, 10),
+            ],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+        );
+
+        let mut buf = Vec::new();
+        let mut buf = BufWriter::new(&mut buf);
+
+        bincode::encode_into_std_write(&seqloc, &mut buf, crate::BINCODE_CONFIG).unwrap();
+
+        let buf = buf.into_inner().unwrap();
+        let mut buf = std::io::Cursor::new(buf);
+
+        let decoded = bincode::decode_from_std_read::<SeqLoc, _, _>(&mut buf, crate::BINCODE_CONFIG).unwrap();
+        assert_eq!(seqloc, decoded);
+    }
+
+    #[test]
+    pub fn encode_decode_seqlocstore() {
+        let mut seqloc = SeqLoc::new();
+        seqloc.add_locs(
+            &vec![
+                Loc::new(0, 0, 10),
+                Loc::new(1, 0, 10),
+                Loc::new(2, 0, 10),
+                Loc::new(3, 0, 10),
+                Loc::new(4, 0, 10),
+            ],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+        );
+
+        println!("{:?}", seqloc);
+
+        let mut store = SeqLocsStoreBuilder::new();
+        store.add_to_index(seqloc);
+
+        let buf = Vec::new();
+        let mut buf = std::io::Cursor::new(buf);
+        let mut buf = BufWriter::new(&mut buf);
+
+        store.write_to_buffer(&mut buf);
+
+        let mut buf = buf.into_inner().unwrap();
+
+        let mut store = SeqLocsStore::from_existing(0).unwrap();
+        let seqloc = store.get_seqloc(&mut buf, 1).unwrap().unwrap();
+        assert_eq!(seqloc.sequence, 5);
+    }
 }
