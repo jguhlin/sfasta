@@ -522,6 +522,8 @@ impl SeqLocsStore
     {
         let bincode_config = crate::BINCODE_CONFIG.with_limit::<{ 512 * 1024 }>(); // 512kbp
 
+        log::debug!("SeqLoc self.location: {}", self.location);
+
         in_buf.seek(SeekFrom::Start(self.location + loc as u64)).unwrap();
         let seqloc: Result<SeqLoc, _> = bincode::decode_from_std_read(in_buf, bincode_config);
         match seqloc {
