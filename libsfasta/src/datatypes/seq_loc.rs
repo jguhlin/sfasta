@@ -357,6 +357,9 @@ impl SeqLocsStoreBuilder
 
         self.location = out_buf.stream_position().unwrap();
 
+        // Write a dummy byte
+        out_buf.write_all(&[0]).expect("Unable to write dummy byte");
+
         let mut data = Vec::new();
         std::mem::swap(&mut self.data, &mut data);
 
@@ -370,7 +373,7 @@ impl SeqLocsStoreBuilder
                .expect("Unable to write SeqLoc to file");
 
             out_buf.write_all(&data).expect("Unable to write SeqLoc to file");
-            location.store(pos - self.location, std::sync::atomic::Ordering::Relaxed);
+            location.store(pos - self.location, std::sync::atomic::Ordering::Release);
         }
 
         self.location

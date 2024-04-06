@@ -290,6 +290,28 @@ impl Converter
                 out_buffer_thread.stream_position().unwrap()
             );
 
+            let index_handle = Some(s.spawn(|_| {
+                let backoff = Backoff::new();
+                for (id, loc) in ids_to_locs.into_iter() {
+                    log::debug!("Processing ID: {}", id);
+                    let id = xxh3_64(id.as_bytes());
+                    let mut val = loc.load(Ordering::Relaxed);
+                    while val == 0 {
+                        backoff.snooze();
+                        if backoff.is_completed() {
+                            // Snooze for 10ms
+                            std::thread::sleep(std::time::Duration::from_millis(10));
+                            backoff.reset();
+                            val = loc.load(Ordering::Relaxed);
+                        }
+                    }
+                    indexer.insert(id as u32, loc.load(Ordering::Relaxed) as u32);
+                }
+                indexer.flush_all();
+
+                indexer
+            }));
+
             let start_time = std::time::Instant::now();
             let start = out_buffer_thread.stream_position().unwrap();
 
@@ -304,29 +326,6 @@ impl Converter
 
             let end = out_buffer_thread.stream_position().unwrap();
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
-
-            let index_handle = Some(s.spawn(|_| {
-                let backoff = Backoff::new();
-                for (id, loc) in ids_to_locs.into_iter() {
-                    log::debug!("Processing ID: {}", id);
-                    let id = xxh3_64(id.as_bytes());
-                    let mut val = loc.load(Ordering::Relaxed);
-                    while val == 0 {
-                        backoff.snooze();
-                        if backoff.is_completed() {
-                            // Snooze for 10ms
-                            std::thread::sleep(std::time::Duration::from_millis(10));
-                            backoff.reset();
-                            val = loc.load(Ordering::Relaxed);
-                            log::debug!("Retrying ID: {} val: {}", id, val);
-                        }
-                    }
-                    indexer.insert(id as u32, loc.load(Ordering::Relaxed) as u32);
-                }
-                indexer.flush_all();
-
-                indexer
-            }));
 
             if self.index {
                 log::info!("Joining index");
