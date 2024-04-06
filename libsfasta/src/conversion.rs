@@ -543,30 +543,46 @@ impl Converter
                         Some(Work::FastaPayload(seq)) => {
                             let (seqid, seqheader, seq, _) = seq.into_parts();
 
-                            let mut seqloc = SeqLoc::new();
-
-                            let masked = masking.add_masking(&seq.as_ref().unwrap()[..]);
-                            if let Some(x) = masked {
-                                seqloc.add_masking_locs(x);
+                            let mut masking_locs = Vec::new();
+                            if let Some(x) = masking.add_masking(&seq.as_ref().unwrap()[..]) {
+                                masking_locs.extend(x);
                             }
 
                             // Capitalize sequence
+                            let mut sequence_locs = Vec::new();
                             if let Some(mut x) = seq {
                                 x.make_ascii_uppercase();
                                 let loc = sequences.add(&mut x[..]);
-                                seqloc.add_sequence_locs(loc);
+                                sequence_locs.extend(loc);
                             }
 
                             let myid = std::sync::Arc::new(seqid.unwrap());
                             ids_string.push(std::sync::Arc::clone(&myid));
                             let idloc = ids.add(&(*myid));
 
+                            let mut headers_loc = Vec::new();
                             if let Some(x) = seqheader {
                                 let x = headers.add(&x);
-                                seqloc.add_header_locs(x);
+                                headers_loc.extend(x);
+                                // seqloc.add_header_locs(x);
                             }
 
-                            seqloc.add_id_locs(idloc);
+                            // seqloc.add_id_locs(idloc);
+
+                            let mut seqloc = SeqLoc::new();
+
+                            // TODO: This has become kinda gross
+                            // Lots of vec's above, should be able to clean this up
+
+                            seqloc.add_locs(
+                                &sequence_locs,
+                                &masking_locs,
+                                &[],
+                                &[],
+                                &headers_loc,
+                                &idloc,
+                                &[]
+                            );
 
                             let loc = seqlocs.add_to_index(seqloc);
                             ids_to_locs.push((myid, loc));

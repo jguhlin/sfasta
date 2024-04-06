@@ -42,6 +42,7 @@ pub struct SeqLoc
     pub signal: u16, // FUTURE: Add Nanopore signals (and/or others)
     pub headers: u16,
     pub ids: u16,
+    pub mods: u16, // FUTURE: Add mods
     pub locs: Vec<Loc>,
 }
 
@@ -56,6 +57,7 @@ impl SeqLoc
             signal: 0,
             headers: 0,
             ids: 0,
+            mods: 0,
             locs: Vec::new(),
         }
     }
@@ -120,34 +122,32 @@ impl SeqLoc
         &self.locs[self.headers_pos()..self.ids_pos()]
     }
 
-    // TODO: These have to be done "in order"
-    // and probably aren't right now...
-    // .... maybe a seqloc builder?
-
-    
-
-    pub fn add_masking_locs(&mut self, locs: Vec<Loc>)
+    pub fn add_locs(
+        &mut self,
+        sequence: &[Loc],
+        masking: &[Loc],
+        scores: &[Loc],
+        signal: &[Loc],
+        headers: &[Loc],
+        ids: &[Loc],
+        mods: &[Loc],
+    )
     {
-        self.masking = locs.len() as u16;
-        self.locs.extend(locs);       
-    }
+        self.sequence = sequence.len() as u16;
+        self.masking = masking.len() as u16;
+        self.scores = scores.len() as u16;
+        self.signal = signal.len() as u16;
+        self.headers = headers.len() as u16;
+        self.ids = ids.len() as u16;
+        self.mods = mods.len() as u16;
 
-    pub fn add_sequence_locs(&mut self, locs: Vec<Loc>)
-    {
-        self.sequence = locs.len() as u16;
-        self.locs.extend(locs);
-    }
-
-    pub fn add_header_locs(&mut self, locs: Vec<Loc>)
-    {
-        self.headers = locs.len() as u16;
-        self.locs.extend(locs);
-    }
-
-    pub fn add_id_locs(&mut self, locs: Vec<Loc>)
-    {
-        self.ids = locs.len() as u16;
-        self.locs.extend(locs);
+        self.locs.extend_from_slice(sequence);
+        self.locs.extend_from_slice(masking);
+        self.locs.extend_from_slice(scores);
+        self.locs.extend_from_slice(signal);
+        self.locs.extend_from_slice(headers);
+        self.locs.extend_from_slice(ids);
+        self.locs.extend_from_slice(mods);
     }
 
     pub fn has_headers(&self) -> bool
@@ -270,10 +270,11 @@ impl Encode for SeqLoc
             signal,
             headers,
             ids,
+            mods,
             locs,
         } = self;
 
-        let values: [u16; 6] = [*sequence, *masking, *scores, *signal, *headers, *ids];
+        let values: [u16; 7] = [*sequence, *masking, *scores, *signal, *headers, *ids, *mods];
 
         // TODO: Is there a way to directly access the Vec<Loc> to get Vec<u32>'s?
         // Check out bytemuck (and reddit question I asked about it)
@@ -289,7 +290,7 @@ impl Decode for SeqLoc
 {
     fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> core::result::Result<Self, bincode::error::DecodeError>
     {
-        let values: [u16; 6] = bincode::Decode::decode(decoder)?;
+        let values: [u16; 7] = bincode::Decode::decode(decoder)?;
 
         let locs: Vec<u32> = bincode::Decode::decode(decoder)?;
         let locs = locs.chunks_exact(3).map(|chunk| Loc::from(chunk)).collect::<Vec<Loc>>();
@@ -301,6 +302,7 @@ impl Decode for SeqLoc
             signal: values[3],
             headers: values[4],
             ids: values[5],
+            mods: values[6],
             locs,
         })
     }
@@ -378,7 +380,7 @@ impl SeqLocsStoreBuilder
             // NOTE: Rayon did not improve. Maybe chunk them?
             let data = bincode::encode_to_vec(&seqloc, crate::BINCODE_CONFIG).expect("Unable to encode SeqLoc");
             bincode::encode_into_std_write(seqloc, &mut out_buf, crate::BINCODE_CONFIG)
-               .expect("Unable to write SeqLoc to file");
+                .expect("Unable to write SeqLoc to file");
 
             out_buf.write_all(&data).expect("Unable to write SeqLoc to file");
             location.store(pos - self.location, std::sync::atomic::Ordering::Release);
@@ -546,13 +548,21 @@ mod tests
         let mut seqloc = SeqLoc::new();
 
         seqloc.sequence = 5;
-        seqloc.add_sequence_locs(vec![
-            Loc::new(0, 0, 10),
-            Loc::new(1, 0, 10),
-            Loc::new(2, 0, 10),
-            Loc::new(3, 0, 10),
-            Loc::new(4, 0, 10),
-        ]);
+        seqloc.add_locs(
+            &vec![
+                Loc::new(0, 0, 10),
+                Loc::new(1, 0, 10),
+                Loc::new(2, 0, 10),
+                Loc::new(3, 0, 10),
+                Loc::new(4, 0, 10),
+            ],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+        );
 
         let slice = seqloc.seq_slice(10, 0..10);
         assert_eq!(slice, vec![Loc::new(0, 0, 10)]);
@@ -572,10 +582,10 @@ mod tests
         let mut seqloc = SeqLoc::new();
         let block_size = 262144;
 
-        seqloc.add_sequence_locs(vec![
+        seqloc.add_locs(&vec![
             Loc::new(3097440, 261735, 262144 - 261735),
             Loc::new(3097441, 0, 1274),
-        ]);
+        ], &[], &[], &[], &[], &[], &[]);
 
         //                                  x 261735 ----------> 262144  (262144 - 261735) = 409
         //     -------------------------------------------------
@@ -590,10 +600,10 @@ mod tests
         assert_eq!(slice, vec![Loc::new(3097440, 261735, 20)]);
 
         let mut seqloc = SeqLoc::new();
-        seqloc.add_sequence_locs(vec![
+        seqloc.add_locs(&vec![
             Loc::new(1652696, 260695, 262144 - 260695),
             Loc::new(1652697, 0, 28424),
-        ]);
+        ], &[], &[], &[], &[], &[], &[]);
 
         //                               x 260695 ----------> 262144  (262144 - 260695) = 1449
         //    -------------------------------------------------

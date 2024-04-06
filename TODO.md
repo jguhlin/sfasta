@@ -1,12 +1,13 @@
 # Short Term
-- SeqLocs are not being inserted in the correct order...
+## Urgent
+- Store SeqLocs in a fractal tree so bincoding / compression can be on "chunks" instead of single seqlocs?
+
+## Not as urgent
+- SeqLoc fields are not being inserted in the correct order...
 - Struct's should handle encoding / decoding, so if they require fixed int encoding it's always that way (rather than remembering it elsewhere)
 * Output block should have an "is_raw" flag to avoid double bincoding
 - Double bincoding is both a serious problem (esp. switching between variable and fixed int encoding) and necessary for compressed blocks
 - Block locs should be fractaltree as well u32, u64 so that we don't have to decompress all of them!
-
-## Ideas?
-- Store SeqLocs in a fractal tree so bincoding / compression can be on "chunks" instead of single seqlocs?
 
 ## Notes
 - Rayon does not speed up bincoding seqlocs...
