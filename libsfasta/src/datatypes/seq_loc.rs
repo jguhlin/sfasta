@@ -25,6 +25,7 @@ use std::{
 };
 
 use bincode::{Decode, Encode};
+use rand::seq;
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each type
@@ -522,14 +523,9 @@ impl SeqLocsStore
     {
         let bincode_config = crate::BINCODE_CONFIG.with_limit::<{ 512 * 1024 }>(); // 512kbp
 
-        log::debug!("SeqLoc self.location: {}", self.location);
-
         in_buf.seek(SeekFrom::Start(self.location + loc as u64)).unwrap();
-        let seqloc: Result<SeqLoc, _> = bincode::decode_from_std_read(in_buf, bincode_config);
-        match seqloc {
-            Ok(seqloc) => Ok(Some(SeqLoc::from(seqloc))),
-            Err(_) => Ok(None),
-        }
+        let seqloc: SeqLoc = bincode::decode_from_std_read(in_buf, bincode_config).unwrap();
+        Ok(Some(seqloc))
     }
 }
 
