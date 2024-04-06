@@ -1,6 +1,7 @@
 # Short Term
 ## Urgent
 - Store SeqLocs in a fractal tree so bincoding / compression can be on "chunks" instead of single seqlocs?
+- Need the dummy byte?
 
 ## Not as urgent
 - SeqLoc fields are not being inserted in the correct order...
