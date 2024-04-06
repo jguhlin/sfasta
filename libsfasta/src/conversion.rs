@@ -293,7 +293,6 @@ impl Converter
             let index_handle = Some(s.spawn(|_| {
                 let backoff = Backoff::new();
                 for (id, loc) in ids_to_locs.into_iter() {
-                    log::debug!("Processing ID: {}", id);
                     let id = xxh3_64(id.as_bytes());
                     let mut val = loc.load(Ordering::Relaxed);
                     while val == 0 {

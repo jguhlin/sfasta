@@ -358,6 +358,7 @@ impl SeqLocsStoreBuilder
         self.location = out_buf.stream_position().unwrap();
 
         // Write a dummy byte
+        // TODO: Eliminate this
         out_buf.write_all(&[0]).expect("Unable to write dummy byte");
 
         let mut data = Vec::new();
