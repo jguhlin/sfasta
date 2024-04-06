@@ -296,10 +296,13 @@ impl Converter
             let index_handle = Some(s.spawn(|_| {
                 let backoff = Backoff::new();
                 for (id, loc) in ids_to_locs.into_iter() {
+                    log::debug!("Processing ID: {}", id);
                     let id = xxh3_64(id.as_bytes());
                     while loc.load(Ordering::Relaxed) == 0 {
                         backoff.snooze();
                         if backoff.is_completed() {
+                            // Snooze for 10ms
+                            std::thread::sleep(std::time::Duration::from_millis(10));
                             backoff.reset();
                         }
                     }
