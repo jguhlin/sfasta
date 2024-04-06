@@ -266,6 +266,7 @@ impl<'sfa> Sfasta<'sfa>
 
         // Once stabilized, use write_all_vectored
         for l in seqloc.iter().map(|x| x) {
+            log::debug!("Opening loc: {:?}", l);
             let seqblock = self.sequenceblocks.as_mut().unwrap().get_block(&mut *buf, l.block);
             seq.extend_from_slice(&seqblock[l.start as usize..(l.start + l.len) as usize]);
         }
