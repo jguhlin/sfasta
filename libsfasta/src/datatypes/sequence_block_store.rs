@@ -117,7 +117,7 @@ impl SequenceBlockStore
         R: Read + Seek,
     {
         log::debug!("Getting block {}", block);
-        log::debug!("Inner Block Locs: {:?}", self.inner.block_locations);
+        log::debug!("Inner Block Locs: {:?}", self.inner.block_locations.len());
         self.inner.get_block(in_buf, block)
     }
 

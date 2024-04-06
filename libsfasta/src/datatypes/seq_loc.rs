@@ -25,7 +25,6 @@ use std::{
 };
 
 use bincode::{Decode, Encode};
-use rayon::prelude::*;
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each type
@@ -361,16 +360,16 @@ impl SeqLocsStoreBuilder
         let mut data = Vec::new();
         std::mem::swap(&mut self.data, &mut data);
 
-        let mut out_data: Vec<(Vec<u8>, Arc<AtomicU64>)> = Vec::new();
-
-        // Bincode the data using rayon
-        data.into_par_iter().map(|(seqloc, location)| {
-            (bincode::encode_to_vec(&seqloc, crate::BINCODE_CONFIG).expect("Unable to encode SeqLoc"), location)
-        }).collect_into_vec(&mut out_data);
-
-        for (seqloc, location) in out_data.into_iter() {
+        for (seqloc, location) in data.into_iter() {
             let pos = out_buf.stream_position().expect("Unable to work with seek API");
-            out_buf.write_all(&seqloc).expect("Unable to write SeqLoc to file");
+
+            // Bincoding takes the longest
+            // NOTE: Rayon did not improve. Maybe chunk them?
+            let data = bincode::encode_to_vec(&seqloc, crate::BINCODE_CONFIG).expect("Unable to encode SeqLoc");
+            bincode::encode_into_std_write(seqloc, &mut out_buf, crate::BINCODE_CONFIG)
+               .expect("Unable to write SeqLoc to file");
+
+            out_buf.write_all(&data).expect("Unable to write SeqLoc to file");
             location.store(pos - self.location, std::sync::atomic::Ordering::Relaxed);
         }
 

@@ -4,6 +4,13 @@
 - Double bincoding is both a serious problem (esp. switching between variable and fixed int encoding) and necessary for compressed blocks
 - Block locs should be fractaltree as well u32, u64 so that we don't have to decompress all of them!
 
+## Ideas?
+- Store SeqLocs in a fractal tree so bincoding / compression can be on "chunks" instead of single seqlocs?
+
+## Notes
+- Rayon does not speed up bincoding seqlocs...
+
+
 ## SFA 
 - sfa - Switch to needletail instead of custom made solution 
 - Reenable mimalloc

@@ -300,7 +300,6 @@ impl Converter
                     while loc.load(Ordering::Relaxed) == 0 {
                         backoff.snooze();
                         if backoff.is_completed() {
-                            std::thread::yield_now();
                             backoff.reset();
                         }
                     }
@@ -324,6 +323,7 @@ impl Converter
             debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
+                log::info!("Joining index");
                 let index = index_handle.unwrap().join().unwrap();
                 log::info!(
                     "Writing index to file. {}",
