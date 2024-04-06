@@ -293,6 +293,18 @@ impl Converter
             let start_time = std::time::Instant::now();
             let start = out_buffer_thread.stream_position().unwrap();
 
+            seqlocs_location = seqlocs.write_to_buffer(&mut *out_buffer_thread);
+            log::info!(
+                "Writing SeqLocs to file: COMPLETE. {}",
+                out_buffer_thread.stream_position().unwrap()
+            );
+
+            let end_time = std::time::Instant::now();
+            log::info!("SeqLocs write time: {:?}", end_time - start_time);
+
+            let end = out_buffer_thread.stream_position().unwrap();
+            debug_size.push(("seqlocs".to_string(), (end - start) as usize));
+
             let index_handle = Some(s.spawn(|_| {
                 let backoff = Backoff::new();
                 for (id, loc) in ids_to_locs.into_iter() {
@@ -315,18 +327,6 @@ impl Converter
 
                 indexer
             }));
-
-            seqlocs_location = seqlocs.write_to_buffer(&mut *out_buffer_thread);
-            log::info!(
-                "Writing SeqLocs to file: COMPLETE. {}",
-                out_buffer_thread.stream_position().unwrap()
-            );
-
-            let end_time = std::time::Instant::now();
-            log::info!("SeqLocs write time: {:?}", end_time - start_time);
-
-            let end = out_buffer_thread.stream_position().unwrap();
-            debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
                 log::info!("Joining index");
