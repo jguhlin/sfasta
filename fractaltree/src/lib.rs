@@ -5,13 +5,11 @@ pub mod build;
 pub mod conversion;
 pub mod disk;
 pub mod fractal;
-pub mod read;
 
 pub use build::*;
 pub use conversion::*;
 pub use disk::*;
 pub use fractal::*;
-pub use read::*;
 
 use bincode::{Decode, Encode};
 
@@ -35,7 +33,7 @@ mod test
             tree.insert(1, 1);
         }
         tree.flush_all();
-        let tree: FractalTreeDisk = tree.into();
+        let tree: FractalTreeDisk<u32, u32> = tree.into();
 
         assert!(tree.root.children.is_some());
         assert!(tree.root.children.as_ref().unwrap().len() > 0);

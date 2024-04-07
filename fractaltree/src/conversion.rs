@@ -1,34 +1,11 @@
 use super::*;
 
-// Conversion impl for FractalTree to FractalTreeRead
-impl From<FractalTreeBuild> for FractalTreeRead
+impl<K: Key, V: Value> From<FractalTreeBuild<K, V>> for FractalTreeDisk<K, V>
 {
-    fn from(mut tree: FractalTreeBuild) -> Self
+    fn from(mut tree: FractalTreeBuild<K, V>) -> Self
     {
         tree.flush_all();
-        FractalTreeRead { root: tree.root.into() }
-    }
-}
-
-// Conversion impl for FractalTree to FractalTreeRead
-impl From<FractalTreeRead> for FractalTreeDisk
-{
-    fn from(tree: FractalTreeRead) -> Self
-    {
-        FractalTreeDisk {
-            root: tree.root.into(),
-            start: 0,
-            ..Default::default()
-        }
-    }
-}
-
-impl From<FractalTreeBuild> for FractalTreeDisk
-{
-    fn from(mut tree: FractalTreeBuild) -> Self
-    {
-        tree.flush_all();
-        let root: NodeRead = tree.root.into();
+        let root: NodeBuild<K, V> = tree.root.into();
         FractalTreeDisk {
             root: root.into(),
             ..Default::default()
@@ -36,71 +13,22 @@ impl From<FractalTreeBuild> for FractalTreeDisk
     }
 }
 
-// Conversion for Box<Node> to Box<NodeRead>
-impl From<Box<Node>> for Box<NodeRead>
-{
-    fn from(node: Box<Node>) -> Self
-    {
-        Box::new((*node).into())
-    }
-}
 
-// Conversion for Node to NodeRead
-// Todo: conversion may benefit from bumpalo or arch?
-impl From<Node> for NodeRead
+
+impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
 {
-    fn from(node: Node) -> Self
+    fn from(node: NodeBuild<K, V>) -> Self
     {
-        let Node {
+        let NodeBuild {
             is_root,
             is_leaf,
             keys,
             children,
             values,
-            buffer: _,
+            buffer,
         } = node;
 
-        let children = if children.is_some() {
-            let children = children.unwrap();
-            let mut new_children = Vec::with_capacity(children.len());
-            for child in children {
-                new_children.push(child.into());
-            }
-            Some(new_children)
-        } else {
-            None
-        };
-
-        NodeRead {
-            is_root,
-            is_leaf,
-            keys,
-            children,
-            values,
-        }
-    }
-}
-
-// Conversion for Box<Node> to Box<NodeRead>
-impl From<Box<NodeRead>> for Box<NodeDisk>
-{
-    fn from(node: Box<NodeRead>) -> Self
-    {
-        Box::new((*node).into())
-    }
-}
-
-impl From<NodeRead> for NodeDisk
-{
-    fn from(node: NodeRead) -> Self
-    {
-        let NodeRead {
-            is_root,
-            is_leaf,
-            keys,
-            children,
-            values,
-        } = node;
+        assert!(buffer.is_empty());
 
         NodeDisk {
             is_root,
@@ -110,5 +38,11 @@ impl From<NodeRead> for NodeDisk
             children: children.map(|children| children.into_iter().map(|child| child.into()).collect()),
             values,
         }
+    }
+}
+
+impl<K: Key, V: Value> From<Box<build::NodeBuild<K, V>>> for Box<disk::NodeDisk<K, V>> {
+    fn from(node: Box<build::NodeBuild<K, V>>) -> Self {
+        Box::new((*node).into())
     }
 }
