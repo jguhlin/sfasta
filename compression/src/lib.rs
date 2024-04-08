@@ -9,6 +9,15 @@ use std::{
     time::Duration,
 };
 
+use std::cell::RefCell;
+
+thread_local! {
+    static ZSTD_COMPRESSOR: RefCell<zstd::bulk::Compressor<'static>> = RefCell::new(zstd_encoder(3, &None));
+    static ZSTD_DECOMPRESSOR: RefCell<zstd::bulk::Decompressor<'static>> = RefCell::new(zstd_decompressor(None));
+
+    // todo, all the others
+}
+
 use crossbeam::{queue::ArrayQueue, utils::Backoff};
 
 #[cfg(not(target_arch = "wasm32"))]
