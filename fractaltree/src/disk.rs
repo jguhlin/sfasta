@@ -29,8 +29,7 @@ impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V>
     {
         
         bincode::Encode::encode(&self.compression, encoder)?;
-        bincode::Encode::encode(&self.root, encoder)
-
+        bincode::Encode::encode(&self.root, encoder) // Root is not compressed
     }
 }
 

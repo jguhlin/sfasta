@@ -65,6 +65,32 @@ impl CompressionConfig
         self.compression_dict = compression_dict;
         self
     }
+
+    // TODO: store compressor and decompressor in thread_local storage for reuse
+    pub fn compress(&mut self, bytes: &[u8], out_buffer: &mut [u8]) -> Result<(), ()>
+    {
+        match self.compression_type {
+            #[cfg(not(target_arch = "wasm32"))]
+            CompressionType::ZSTD => {
+                let mut encoder = zstd_encoder(self.compression_level as i32, &self.compression_dict);
+                encoder
+                    .compress_to_buffer(bytes, out_buffer)
+                    .expect("Unable to compress with ZSTD");
+                Ok(())
+            }
+            #[cfg(target_arch = "wasm32")]
+            CompressionType::ZSTD => {
+                unimplemented!("ZSTD encoding is not supported on wasm32");
+            }
+            CompressionType::NONE => {
+                *out_buffer = bytes;
+                Ok(())
+            }
+            _ => {
+                panic!("Unsupported compression type: {:?}", self.compression_type);
+            }
+        }
+    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
