@@ -294,6 +294,7 @@ impl BytesBlockStoreBuilder
 pub struct BytesBlockStore
 {
     /// Locations of the blocks in the file
+    // todo: fractal tree for all blocks across all datatypes...
     pub block_locations: Vec<u64>,
 
     /// Locations of the block index (Where the serialized block_locations is stored)

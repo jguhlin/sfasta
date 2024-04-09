@@ -378,58 +378,59 @@ fn view(input: &str)
     let mut stdout = std::io::BufWriter::new(stdout);
     let common = b"> \n";
 
-    let seqlocs = sfasta.get_seqlocs().unwrap().unwrap().to_vec();
+    // let seqlocs = sfasta.get_seqlocs().unwrap().unwrap().to_vec();
 
-    for seqloc in seqlocs {
-        let id = sfasta.get_id(seqloc.get_ids()).unwrap();
-
-        stdout.write_all(&common[..1]).unwrap();
-        stdout.write_all(id.as_bytes()).unwrap();
-
-        if seqloc.has_headers() {
-            stdout
-                .write_all(
-                    sfasta
-                        .get_header(seqloc.get_headers())
-                        .expect("Unable to fetch header")
-                        .as_bytes(),
-                )
-                .unwrap();
-        }
-
-        stdout.write_all(b"\n").unwrap();
-
-        let sequence = sfasta
-            .get_sequence(seqloc.get_sequence(), seqloc.get_masking())
-            .expect("Unable to fetch sequence");
-
-        #[cfg(nightly)]
-        {
-            let newlines = (0..1).map(|_| std::io::IoSlice::new(b"\n")).cycle();
-            let x = sequence
-                .chunks(line_length)
-                .map(|x| std::io::IoSlice::new(x))
-                .zip(newlines)
-                .map(|x| [x.0, x.1])
-                .flatten()
-                .collect::<Vec<_>>();
-            stdout.write_all_vectored(&mut x).unwrap();
-        }
-
-        #[cfg(not(nightly))]
-        {
-            sequence.chunks(line_length).for_each(|x| {
-                stdout.write_all(x).unwrap();
-                stdout.write_all(b"\n").unwrap();
-            });
-        }
-
-        // 60 matches samtools faidx output
-        // But 80 is common elsewhere...
-
-        // print_sequence(&mut stdout, &sequence, 80);
-        // stdout.flush().expect("Unable to flush stdout buffer");
-    }
+    // for seqloc in seqlocs {
+    // let id = sfasta.get_id(seqloc.get_ids()).unwrap();
+    //
+    // stdout.write_all(&common[..1]).unwrap();
+    // stdout.write_all(id.as_bytes()).unwrap();
+    //
+    // if seqloc.has_headers() {
+    // stdout
+    // .write_all(
+    // sfasta
+    // .get_header(seqloc.get_headers())
+    // .expect("Unable to fetch header")
+    // .as_bytes(),
+    // )
+    // .unwrap();
+    // }
+    //
+    // stdout.write_all(b"\n").unwrap();
+    //
+    // let sequence = sfasta
+    // .get_sequence(seqloc.get_sequence(), seqloc.get_masking())
+    // .expect("Unable to fetch sequence");
+    //
+    // #[cfg(nightly)]
+    // {
+    // let newlines = (0..1).map(|_| std::io::IoSlice::new(b"\n")).cycle();
+    // let x = sequence
+    // .chunks(line_length)
+    // .map(|x| std::io::IoSlice::new(x))
+    // .zip(newlines)
+    // .map(|x| [x.0, x.1])
+    // .flatten()
+    // .collect::<Vec<_>>();
+    // stdout.write_all_vectored(&mut x).unwrap();
+    // }
+    //
+    // #[cfg(not(nightly))]
+    // {
+    // sequence.chunks(line_length).for_each(|x| {
+    // stdout.write_all(x).unwrap();
+    // stdout.write_all(b"\n").unwrap();
+    // });
+    // }
+    //
+    // 60 matches samtools faidx output
+    // But 80 is common elsewhere...
+    //
+    // print_sequence(&mut stdout, &sequence, 80);
+    // stdout.flush().expect("Unable to flush stdout buffer");
+    //
+    // }
 }
 
 fn list(input: &str)
@@ -486,40 +487,19 @@ fn convert(
         Ok(file) => file,
     };
 
-    let dict = if dict {
-        // Assume small block size for dictionary
-        let bs = (blocksize.unwrap_or(8) * 1024) as usize;
-        let accumulate_length = bs * dict_samples as usize;
-        let mut data = Vec::with_capacity(accumulate_length as usize);
-        let buf = generic_open_file(fasta_filename);
-        let mut buf = BufReader::new(buf.2);
-        let mut fasta = libsfasta::prelude::Fasta::from_buffer(&mut buf);
-        while data.len() < accumulate_length as usize {
-            if let Ok(record) = fasta.next().unwrap() {
-                if let Some(seq) = record.sequence {
-                    data.extend_from_slice(&seq);
-                }
-            } else {
-                break;
-            }
-        }
-
-        Some(libsfasta::utils::create_dict(&data, bs))
-    } else {
-        None
-    };
+    let dict = None; // todo
 
     let buf = generic_open_file_pb(pb, fasta_filename);
-    let buf = buf.2;
+    let mut buf = buf.1;
 
-    let (s, r) = crossbeam::channel::bounded(16);
+    let (s, r) = crossbeam::channel::bounded(64);
 
     let io_thread = std::thread::Builder::new()
         .name("IO_Thread".to_string())
-        .stack_size(2 * 1024 * 1024)
+        // .stack_size(12 * 1024 * 1024)
         .spawn(move || {
             let mut buf = BufReader::new(buf);
-            let mut buffer: [u8; 1024 * 1024] = [0; 1024 * 1024];
+            let mut buffer: [u8; 64 * 1024] = [0; 64 * 1024];
             while let Ok(bytes_read) = buf.read(&mut buffer) {
                 if bytes_read == 0 {
                     s.send(libsfasta::utils::ReaderData::EOF).unwrap();
@@ -573,16 +553,17 @@ fn convert(
         converter = converter.without_index();
     }
 
-    let mut buf = libsfasta::utils::CrossbeamReader::from_channel(r);
-    let mut out_fh = Box::new(std::io::BufWriter::new(output));
+    let mut in_buf = libsfasta::utils::CrossbeamReader::from_channel(r);
+    // let mut in_buf = BufReader::new(buf);
+    let out_fh = Box::new(std::io::BufWriter::new(output));
 
-    let mut out_fh = converter.convert(&mut buf, out_fh);
-    log::info!("Joining IO thread");
+    let _out_fh = converter.convert(&mut in_buf, out_fh);
+    // log::info!("Joining IO thread");
     io_thread.join().expect("Unable to join IO thread");
-    log::info!("IO thread joined");
+    // log::info!("IO thread joined");
 }
 
-pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, bool, Box<dyn Read + Send>)
+pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, indicatif::ProgressBarIter<File>)
 {
     let filesize = metadata(filename)
         .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
@@ -593,20 +574,20 @@ pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, bool, Bo
         Ok(file) => file,
     };
 
-    let mut compressed: bool = false;
+    // let mut compressed: bool = false;
     let file = pb.wrap_read(file);
 
-    let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
-        compressed = true;
-        Box::new(flate2::read::MultiGzDecoder::new(file))
-    } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai") {
-        compressed = true;
-        Box::new(snap::read::FrameDecoder::new(file))
-    } else {
-        Box::new(file)
-    };
+    // let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
+    // compressed = true;
+    // Box::new(flate2::read::MultiGzDecoder::new(file))
+    // } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai") {
+    // compressed = true;
+    // Box::new(snap::read::FrameDecoder::new(file))
+    // } else {
+    // Box::new(file)
+    // };
 
-    (filesize as usize, compressed, fasta)
+    (filesize as usize, file)
 }
 
 pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>)

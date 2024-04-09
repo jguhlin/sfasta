@@ -149,7 +149,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
             };
             #[cfg(debug_assertions)]
             assert!(i < self.values.as_ref().unwrap().len());
-            Some(self.values.as_ref().unwrap()[i])
+            Some(self.values.as_ref().unwrap()[i].clone())
         } else {
             let i = match i {
                 Ok(i) => i.saturating_add(1),
@@ -508,7 +508,6 @@ mod tests
 
         let mut tree = FractalTreeDisk::from(tree);
         let mut buf = std::io::Cursor::new(Vec::new());
-
 
         for i in values_1024.iter() {
             assert_eq!(tree.search(&mut buf, &i), Some(i));

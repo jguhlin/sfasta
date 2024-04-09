@@ -21,11 +21,15 @@
 
 use std::{
     io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write},
-    sync::{atomic::AtomicU64, Arc},
+    sync::{atomic::AtomicU32, Arc},
 };
 
 use bincode::{Decode, Encode};
+use flate2::Compression;
 use rand::seq;
+
+use libcompression::*;
+use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each type
@@ -314,11 +318,11 @@ impl Decode for SeqLoc
 // TODO: Can convert this to use ByteBlockStore?
 
 /// Handles access to SeqLocs
-#[derive(Clone)]
 pub struct SeqLocsStoreBuilder
 {
     pub location: u64,
-    pub data: Vec<(SeqLoc, Arc<AtomicU64>)>,
+    pub tree: FractalTreeBuild<u32, SeqLoc>,
+    count: usize,
 }
 
 impl Default for SeqLocsStoreBuilder
@@ -327,7 +331,8 @@ impl Default for SeqLocsStoreBuilder
     {
         SeqLocsStoreBuilder {
             location: 0,
-            data: Vec::new(),
+            tree: FractalTreeBuild::new(128, 256),
+            count: 0,
         }
     }
 }
@@ -341,11 +346,13 @@ impl SeqLocsStoreBuilder
     }
 
     /// Add a SeqLoc to the store
-    pub fn add_to_index(&mut self, seqloc: SeqLoc) -> Arc<AtomicU64>
+    pub fn add_to_index(&mut self, seqloc: SeqLoc) -> usize
     {
-        let location = Arc::new(AtomicU64::new(0));
-        self.data.push((seqloc, Arc::clone(&location)));
-        location
+        // let location = Arc::new(AtomicU32::new(0));
+        // self.data.push((seqloc, Arc::clone(&location)));
+        self.tree.insert(self.count as u32, seqloc);
+        self.count += 1;
+        self.count.saturating_sub(1)
     }
 
     /// Set the location u64 of the SeqLocs object
@@ -355,38 +362,20 @@ impl SeqLocsStoreBuilder
         self
     }
 
-    /// Write a SeqLocs object to a file (buffer)
-    pub fn write_to_buffer<W>(&mut self, mut out_buf: &mut W) -> u64
+    /// Write a SeqLocs object to a file (buffer), destroys the SeqLocs struct
+    pub fn write_to_buffer<W>(mut self, mut out_buf: &mut W) -> Result<u64, &'static str>
     where
         W: Write + Seek,
     {
-        if self.data.is_empty() {
-            panic!("Unable to write SeqLocs as there are none");
-        }
-
         self.location = out_buf.stream_position().unwrap();
 
-        // Write a dummy byte
-        // TODO: Eliminate this
-        out_buf.write_all(&[0]).expect("Unable to write dummy byte");
-
-        let mut data = Vec::new();
-        std::mem::swap(&mut self.data, &mut data);
-
-        for (seqloc, location) in data.into_iter() {
-            let pos = out_buf.stream_position().expect("Unable to work with seek API");
-
-            // Bincoding takes the longest
-            // NOTE: Rayon did not improve. Maybe chunk them?
-            let data = bincode::encode_to_vec(&seqloc, crate::BINCODE_CONFIG).expect("Unable to encode SeqLoc");
-            bincode::encode_into_std_write(seqloc, &mut out_buf, crate::BINCODE_CONFIG)
-                .expect("Unable to write SeqLoc to file");
-
-            out_buf.write_all(&data).expect("Unable to write SeqLoc to file");
-            location.store(pos - self.location, std::sync::atomic::Ordering::Release);
-        }
-
-        self.location
+        let mut tree: FractalTreeDisk<u32, SeqLoc> = self.tree.into();
+        tree.set_compression(CompressionConfig {
+            compression_type: CompressionType::ZSTD,
+            compression_level: -3,
+            compression_dict: None,
+        });
+        tree.write_to_buffer(&mut out_buf)
     }
 }
 
@@ -449,79 +438,59 @@ impl Loc
     }
 }
 
-#[derive(Clone)]
 pub struct SeqLocsStore
 {
-    location: u64,
-    data: Vec<SeqLoc>,
-    locations: Vec<u64>, // On-disk location of each seqloc, useful for finding the right one
-    // when they are all loaded into memory...
-    // Use binary search
     preloaded: bool,
+    location: u64,
+    tree: FractalTreeDisk<u32, SeqLoc>,
 }
 
 impl SeqLocsStore
 {
     /// Prefetch the SeqLocs index into memory. Speeds up successive access, but can be a hefty one-time cost for large
     /// files.
-    pub fn prefetch<R>(&mut self, mut in_buf: &mut R)
+    pub fn prefetch<R>(&mut self, in_buf: &mut R)
     where
-        R: Read + Seek,
+        R: Read + Seek + BufRead,
     {
-        self.get_all_seqlocs(&mut in_buf)
-            .expect("Unable to Prefetch All SeqLocs");
+        self.get_all_seqlocs(in_buf).expect("Unable to Prefetch All SeqLocs");
 
-        self.preloaded = true;
-
-        log::info!("Prefetched {} seqlocs", self.data.len());
+        log::info!("Prefetched {} seqlocs", self.tree.len().unwrap());
     }
 
-    pub fn len<R>(&mut self, mut in_buf: &mut R) -> usize
+    pub fn len<R>(&mut self, in_buf: &mut R) -> usize
     where
-        R: Read + Seek,
+        R: Read + Seek + BufRead,
     {
         if !self.preloaded {
-            self.get_all_seqlocs(&mut in_buf).expect("Unable to get all SeqLocs");
+            self.get_all_seqlocs(in_buf).expect("Unable to get all SeqLocs");
         }
 
-        self.data.len()
+        self.tree.len().unwrap()
     }
 
     /// Get SeqLoc object from a file (buffer)
-    pub fn from_existing(pos: u64) -> Result<Self, String>
+    pub fn from_existing<R>(pos: u64, in_buf: &mut R) -> Result<Self, String>
+    where
+        R: Read + Seek + BufRead,
     {
         let store = SeqLocsStore {
             location: pos,
-            data: Vec::new(),
-            locations: Vec::new(),
             preloaded: false,
+            tree: FractalTreeDisk::from_buffer(in_buf, pos)?,
         };
 
         Ok(store)
     }
 
     /// Load up all SeqLocs from a file
-    pub fn get_all_seqlocs<R>(&mut self, mut in_buf: &mut R) -> Result<&Vec<SeqLoc>, &'static str>
+    pub fn get_all_seqlocs<R>(&mut self, in_buf: &mut R) -> Result<(), &'static str>
     where
-        R: Read + Seek,
+        R: Read + Seek + BufRead,
     {
         log::info!("Prefetching SeqLocs");
 
-        let bincode_config = crate::BINCODE_CONFIG.with_limit::<{ 8 * 1024 * 1024 }>(); // 8Mbp
-
-        in_buf.seek(SeekFrom::Start(self.location)).unwrap();
-
-        // Basically keep going until we get an error, and assume that's the EOF
-        // or a different data type...
-        while let Ok(seqloc) = bincode::decode_from_std_read::<SeqLoc, _, _>(&mut in_buf, bincode_config) {
-            let seqloc = SeqLoc::from(seqloc);
-            let pos = in_buf.stream_position().unwrap();
-            self.locations.push(pos);
-            self.data.push(seqloc);
-        }
-
-        log::debug!("Finished");
-        return Ok(&self.data);
+        self.tree.load_tree(in_buf)
     }
 
     /// Get a particular SeqLoc from the store
@@ -582,10 +551,15 @@ mod tests
         let mut seqloc = SeqLoc::new();
         let block_size = 262144;
 
-        seqloc.add_locs(&vec![
-            Loc::new(3097440, 261735, 262144 - 261735),
-            Loc::new(3097441, 0, 1274),
-        ], &[], &[], &[], &[], &[], &[]);
+        seqloc.add_locs(
+            &vec![Loc::new(3097440, 261735, 262144 - 261735), Loc::new(3097441, 0, 1274)],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+        );
 
         //                                  x 261735 ----------> 262144  (262144 - 261735) = 409
         //     -------------------------------------------------
@@ -600,10 +574,15 @@ mod tests
         assert_eq!(slice, vec![Loc::new(3097440, 261735, 20)]);
 
         let mut seqloc = SeqLoc::new();
-        seqloc.add_locs(&vec![
-            Loc::new(1652696, 260695, 262144 - 260695),
-            Loc::new(1652697, 0, 28424),
-        ], &[], &[], &[], &[], &[], &[]);
+        seqloc.add_locs(
+            &vec![Loc::new(1652696, 260695, 262144 - 260695), Loc::new(1652697, 0, 28424)],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+        );
 
         //                               x 260695 ----------> 262144  (262144 - 260695) = 1449
         //    -------------------------------------------------
@@ -630,7 +609,8 @@ mod tests
     }
 
     #[test]
-    fn encode_decode_seqloc() {
+    fn encode_decode_seqloc()
+    {
         let mut seqloc = SeqLoc::new();
         seqloc.sequence = 5;
         seqloc.add_locs(
@@ -662,7 +642,8 @@ mod tests
     }
 
     #[test]
-    pub fn encode_decode_seqlocstore() {
+    pub fn encode_decode_seqlocstore()
+    {
         let mut seqloc = SeqLoc::new();
         seqloc.add_locs(
             &vec![
@@ -693,7 +674,7 @@ mod tests
 
         let mut buf = buf.into_inner().unwrap();
 
-        let mut store = SeqLocsStore::from_existing(0).unwrap();
+        let mut store = SeqLocsStore::from_existing(0, &mut buf).unwrap();
         let seqloc = store.get_seqloc(&mut buf, 1).unwrap().unwrap();
         assert_eq!(seqloc.sequence, 5);
     }

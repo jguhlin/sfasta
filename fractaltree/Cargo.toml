@@ -23,6 +23,7 @@ sorted-vec = "0.8.3"
 bincode = "2.0.0-rc.3"
 compression = { path = "../compression" }
 binout = "0.2.1"
+log = "0.4"
 
 [dev-dependencies]
 criterion = "0.5.1"

@@ -13,8 +13,6 @@ impl<K: Key, V: Value> From<FractalTreeBuild<K, V>> for FractalTreeDisk<K, V>
     }
 }
 
-
-
 impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
 {
     fn from(node: NodeBuild<K, V>) -> Self
@@ -41,8 +39,10 @@ impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> From<Box<build::NodeBuild<K, V>>> for Box<disk::NodeDisk<K, V>> {
-    fn from(node: Box<build::NodeBuild<K, V>>) -> Self {
+impl<K: Key, V: Value> From<Box<build::NodeBuild<K, V>>> for Box<disk::NodeDisk<K, V>>
+{
+    fn from(node: Box<build::NodeBuild<K, V>>) -> Self
+    {
         Box::new((*node).into())
     }
 }

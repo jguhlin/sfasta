@@ -9,7 +9,9 @@ use std::{
     time::Duration,
 };
 
-use std::cell::RefCell;
+pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
+
+use std::{cell::RefCell, rc::Rc};
 
 thread_local! {
     static ZSTD_COMPRESSOR: RefCell<zstd::bulk::Compressor<'static>> = RefCell::new(zstd_encoder(3, &None));
@@ -75,25 +77,42 @@ impl CompressionConfig
         self
     }
 
-    // TODO: store compressor and decompressor in thread_local storage for reuse
-    pub fn compress(&mut self, bytes: &[u8], out_buffer: &mut [u8]) -> Result<(), ()>
+    pub fn compress(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error>
     {
         match self.compression_type {
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
-                let mut encoder = zstd_encoder(self.compression_level as i32, &self.compression_dict);
-                encoder
-                    .compress_to_buffer(bytes, out_buffer)
-                    .expect("Unable to compress with ZSTD");
-                Ok(())
+                // Use thread local
+                ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| zstd_compressor.compress(bytes))
             }
             #[cfg(target_arch = "wasm32")]
             CompressionType::ZSTD => {
                 unimplemented!("ZSTD encoding is not supported on wasm32");
             }
             CompressionType::NONE => {
-                *out_buffer = bytes;
-                Ok(())
+                log::debug!("Compress called for none, which involes copying bytes. Prefer not to use it!");
+                Ok(bytes.to_vec())
+            }
+            _ => {
+                // Todo: implement others. This isn't just used for fractaltrees...
+                panic!("Unsupported compression type: {:?}", self.compression_type);
+            }
+        }
+    }
+
+    pub fn decompress(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error>
+    {
+        match self.compression_type {
+            #[cfg(not(target_arch = "wasm32"))]
+            CompressionType::ZSTD => ZSTD_DECOMPRESSOR
+                .with_borrow_mut(|zstd_decompressor| zstd_decompressor.decompress(bytes, MAX_DECOMPRESS_SIZE)),
+            #[cfg(target_arch = "wasm32")]
+            CompressionType::ZSTD => {
+                unimplemented!("ZSTD decoding is not supported on wasm32");
+            }
+            CompressionType::NONE => {
+                log::debug!("Decompress called for none, which involes copying bytes. Prefer not to use it!");
+                Ok(bytes.to_vec())
             }
             _ => {
                 panic!("Unsupported compression type: {:?}", self.compression_type);
@@ -159,6 +178,14 @@ pub fn zstd_encoder(compression_level: i32, dict: &Option<Arc<Vec<u8>>>) -> zstd
         .long_distance_matching(true)
         .expect("Unable to set long_distance_matching");
     encoder
+}
+
+pub fn change_compression_level(compression_level: i32, dict: &Option<Arc<Vec<u8>>>)
+{
+    ZSTD_COMPRESSOR.with(|zstd_compressor| {
+        let encoder = zstd_encoder(compression_level, dict);
+        *zstd_compressor.borrow_mut() = encoder;
+    });
 }
 
 #[cfg(not(target_arch = "wasm32"))]
@@ -281,6 +308,7 @@ impl CompressionWorker
         self.queue = Some(queue);
 
         for _ in 0..self.threads {
+            log::debug!("Spinning up compression thread {}/{}", self.handles.len(), self.threads);
             let queue = Arc::clone(self.queue.as_ref().unwrap());
             let shutdown = Arc::clone(&self.shutdown_flag);
             let output_queue = Arc::clone(self.writer.as_ref().unwrap());

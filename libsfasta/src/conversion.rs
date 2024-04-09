@@ -4,13 +4,14 @@
 
 // Easy, high-performance conversion functions
 use crossbeam::{queue::ArrayQueue, thread, utils::Backoff};
+use needletail::parse_fastx_reader;
 use xxhash_rust::xxh3::{self, xxh3_64};
 
 use std::{
     io::{BufReader, Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
     sync::{
-        atomic::{AtomicU64, Ordering},
+        atomic::{AtomicU32, Ordering},
         Arc, Mutex, RwLock,
     },
 };
@@ -215,7 +216,7 @@ impl Converter
     }
 
     /// Main conversion function for FASTA/Q files
-    pub fn convert<'convert, W, R>(self, mut in_buf: &mut R, mut out_fh: Box<W>) -> Box<W>
+    pub fn convert<'convert, W, R>(self, in_buf: &mut R, mut out_fh: Box<W>) -> Box<W>
     where
         W: WriteAndSeek + 'static + Send + Sync,
         R: Read + Send + 'convert,
@@ -263,7 +264,7 @@ impl Converter
         let out_buffer = Arc::new(Mutex::new(out_fh));
 
         let (ids, mut seqlocs, headers_location, ids_location, masking_location, sequences_location, ids_to_locs) =
-            self.process(&mut in_buf, Arc::clone(&out_buffer));
+            self.process(in_buf, Arc::clone(&out_buffer));
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
@@ -291,20 +292,9 @@ impl Converter
             );
 
             let index_handle = Some(s.spawn(|_| {
-                let backoff = Backoff::new();
                 for (id, loc) in ids_to_locs.into_iter() {
-                    let id = xxh3_64(id.as_bytes());
-                    let mut val = loc.load(Ordering::Relaxed);
-                    while val == 0 {
-                        backoff.snooze();
-                        if backoff.is_completed() {
-                            // Snooze for 10ms
-                            std::thread::sleep(std::time::Duration::from_millis(10));
-                            backoff.reset();
-                            val = loc.load(Ordering::Relaxed);
-                        }
-                    }
-                    indexer.insert(id as u32, loc.load(Ordering::Relaxed) as u32);
+                    let id = xxh3_64(&id);
+                    indexer.insert(id as u32, loc as u32);
                 }
                 indexer.flush_all();
 
@@ -314,7 +304,7 @@ impl Converter
             let start_time = std::time::Instant::now();
             let start = out_buffer_thread.stream_position().unwrap();
 
-            seqlocs_location = seqlocs.write_to_buffer(&mut *out_buffer_thread);
+            seqlocs_location = seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
             log::info!(
                 "Writing SeqLocs to file: COMPLETE. {}",
                 out_buffer_thread.stream_position().unwrap()
@@ -337,7 +327,12 @@ impl Converter
                 let start = out_buffer_thread.stream_position().unwrap();
 
                 let start_time = std::time::Instant::now();
-                let mut index: FractalTreeDisk = index.into();
+                let mut index: FractalTreeDisk<u32, u32> = index.into();
+                index.set_compression(CompressionConfig {
+                    compression_type: CompressionType::ZSTD,
+                    compression_level: -9,
+                    compression_dict: None,
+                });
                 println!("Index: {:?}", index.len());
 
                 fractaltree_pos = index
@@ -413,20 +408,20 @@ impl Converter
         in_buf: &mut R,
         out_fh: Arc<Mutex<Box<W>>>,
     ) -> (
-        Vec<std::sync::Arc<String>>,
+        Vec<std::sync::Arc<Vec<u8>>>,
         SeqLocsStoreBuilder,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
-        Vec<(std::sync::Arc<String>, Arc<AtomicU64>)>,
+        Vec<(std::sync::Arc<Vec<u8>>, usize)>, // todo: cow?
     )
     where
         W: WriteAndSeek + 'convert + Send + Sync + 'static,
         R: Read + Send + 'convert,
     {
         // TODO: Untested, been awhile... Only useful for very small blocks so hasn't been used lately...
-        if let Some(dict) = &self.dict {
+        if let Some(_dict) = &self.dict {
             todo!();
             // sb_config = sb_config.with_compression_dict(dict.clone());
         }
@@ -442,7 +437,7 @@ impl Converter
 
         // Start the compression workers
         let mut compression_workers = CompressionWorker::new()
-            .with_buffer_size(8192)
+            .with_buffer_size(1024)
             .with_threads(threads as u16)
             .with_output_queue(Arc::clone(&output_queue));
 
@@ -471,25 +466,25 @@ impl Converter
         thread::scope(|s| {
             let ids_to_locs = Arc::clone(&ids_to_locs);
             let fasta_thread = s.spawn(|_| {
-                let mut in_buf_reader = BufReader::new(in_buf);
+                // let mut in_buf_reader = BufReader::new(in_buf);
 
                 // TODO: Should be auto-detect and handle...
-                let fasta = Fasta::from_buffer(&mut in_buf_reader);
+                // let fasta = Fasta::from_buffer(&mut in_buf_reader);
+                let mut fastx = parse_fastx_reader(in_buf).expect("Unable to parse FASTA/Q file");
 
                 let backoff = Backoff::new();
 
-                for x in fasta {
+                while let Some(r) = fastx.next() {
                     backoff.reset();
-                    if x.is_err() {
-                        while seq_queue_in.push(Work::Shutdown).is_err() {
-                            backoff.snooze();
-                        }
+                    let record = r.expect("invalid record");
 
-                        log::error!("Error reading FASTA file: {:?}", x);
-                        panic!("Error reading FASTA file: {:?}", x);
-                    }
-
-                    let mut d = Work::FastaPayload(x.unwrap());
+                    let mut d = Work::FastaPayload(Sequence {
+                        sequence: Some(record.seq().to_vec()),
+                        header: Some(record.id().to_vec()),
+                        id: Some(record.id().to_vec()),
+                        scores: None,
+                        offset: 0,
+                    });
                     while let Err(z) = seq_queue_in.push(d) {
                         d = z;
                         backoff.snooze();
@@ -513,6 +508,7 @@ impl Converter
             // Idea: split into queue's for headers, IDs, sequence, etc....
             // Thread that handles the heavy lifting of the incoming Seq structs
             // TODO: Set compression stuff here...
+            // And batch this part...
             let compression_workers_thread = Arc::clone(&compression_workers);
             let reader_handle = s.spawn(move |_| {
                 let mut ids_to_locs = ids_to_locs.write().unwrap();
@@ -574,15 +570,7 @@ impl Converter
                             // TODO: This has become kinda gross
                             // Lots of vec's above, should be able to clean this up
 
-                            seqloc.add_locs(
-                                &sequence_locs,
-                                &masking_locs,
-                                &[],
-                                &[],
-                                &headers_loc,
-                                &idloc,
-                                &[]
-                            );
+                            seqloc.add_locs(&sequence_locs, &masking_locs, &[], &[], &headers_loc, &idloc, &[]);
 
                             let loc = seqlocs.add_to_index(seqloc);
                             ids_to_locs.push((myid, loc));

@@ -13,10 +13,9 @@ pub use fractal::*;
 
 use bincode::{Decode, Encode};
 
-pub trait Key =
-    'static + PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Copy + Default + Encode + Decode;
+pub trait Key = 'static + PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Default + Encode + Decode;
 
-pub trait Value = 'static + std::fmt::Debug + Copy + Encode + Decode;
+pub trait Value = 'static + std::fmt::Debug + Encode + Decode + Clone;
 
 // Impl can't be a trait because need for buffer for Disk version and no need for Read
 

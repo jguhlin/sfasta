@@ -65,11 +65,9 @@ impl StringBlockStoreBuilder
         self
     }
 
-    pub fn add(&mut self, input: &str) -> Vec<Loc>
+    pub fn add(&mut self, input: &[u8]) -> Vec<Loc>
     {
-        self.inner
-            .add(input.as_bytes())
-            .expect("Failed to add string to block store")
+        self.inner.add(input).expect("Failed to add string to block store")
     }
 }
 
@@ -155,7 +153,7 @@ mod tests
         let mut locs = Vec::new();
 
         for id in test_ids.iter() {
-            locs.push(store.add(id));
+            locs.push(store.add(id.as_bytes()));
         }
     }
 }

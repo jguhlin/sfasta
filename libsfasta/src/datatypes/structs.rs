@@ -36,15 +36,15 @@ pub struct Sequence
 {
     pub sequence: Option<Vec<u8>>,
     pub scores: Option<Vec<u8>>,
-    pub header: Option<String>,
-    pub id: Option<String>,
+    pub header: Option<Vec<u8>>,
+    pub id: Option<Vec<u8>>,
     /// Primarily used downstream, but when used for random access this is the offset from the start of the sequence
     pub offset: usize,
 }
 
 impl Sequence
 {
-    pub fn into_parts(self) -> (Option<String>, Option<String>, Option<Vec<u8>>, Option<Vec<u8>>)
+    pub fn into_parts(self) -> (Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>)
     {
         {
             (self.id, self.header, self.sequence, self.scores)
@@ -53,8 +53,8 @@ impl Sequence
 
     pub fn new(
         sequence: Option<Vec<u8>>,
-        id: Option<String>,
-        header: Option<String>,
+        id: Option<Vec<u8>>,
+        header: Option<Vec<u8>>,
         scores: Option<Vec<u8>>,
     ) -> Sequence
     {

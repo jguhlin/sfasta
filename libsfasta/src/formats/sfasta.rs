@@ -26,7 +26,7 @@ pub struct Sfasta<'sfa>
     pub parameters: Parameters,
     pub metadata: Metadata,
     pub index_directory: IndexDirectory,
-    pub index: Option<FractalTreeDisk>,
+    pub index: Option<FractalTreeDisk<u32, u32>>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlockStore>,
     pub seqlocs: Option<SeqLocsStore>,
@@ -125,13 +125,13 @@ impl<'sfa> Sfasta<'sfa>
         let matches = matches.unwrap();
 
         let id = if matches.ids > 0 {
-            Some(self.get_id(matches.get_ids()).unwrap())
+            Some(self.get_id(matches.get_ids()).unwrap().into_bytes()) // todo
         } else {
             None
         };
 
         let header = if matches.headers > 0 {
-            Some(self.get_header(matches.get_headers()).unwrap())
+            Some(self.get_header(matches.get_headers()).unwrap().into()) // todo
         } else {
             None
         };
@@ -178,13 +178,13 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_by_seqloc(&mut self, seqloc: &SeqLoc) -> Result<Option<Sequence>, &'static str>
     {
         let id = if seqloc.ids > 0 {
-            Some(self.get_id(seqloc.get_ids()).unwrap())
+            Some(self.get_id(seqloc.get_ids()).unwrap().into_bytes()) // todo
         } else {
             None
         };
 
         let header = if seqloc.headers > 0 {
-            Some(self.get_header(seqloc.get_headers()).unwrap())
+            Some(self.get_header(seqloc.get_headers()).unwrap().into()) // todo
         } else {
             None
         };
@@ -348,7 +348,7 @@ impl<'sfa> Sfasta<'sfa>
         let idx = self.index.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let key = xxh3_64(x.as_bytes());
-        let found = idx.search(&mut buf, key as u32);
+        let found = idx.search(&mut buf, &(key as u32));
         let seqlocs = self.seqlocs.as_mut().unwrap();
 
         if found.is_none() {
@@ -417,13 +417,13 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     /// Get all seqlocs
-    pub fn get_seqlocs(&mut self) -> Result<Option<&Vec<SeqLoc>>, &'static str>
+    pub fn get_seqlocs(&mut self) -> Result<(), &'static str>
     {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.seqlocs.as_mut().unwrap().prefetch(&mut buf);
 
         // TODO: Fail if index is not initialized yet (prefetch does it here, but still)
-        Ok(Some(self.seqlocs.as_mut().unwrap().get_all_seqlocs(&mut buf).unwrap()))
+        self.seqlocs.as_mut().unwrap().get_all_seqlocs(&mut buf)
     }
 
     /// This is more expensive than getting it from the seqlocs
@@ -566,7 +566,7 @@ impl<'sfa> SfastaParser<'sfa>
 
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
-            let mut seqlocs = match SeqLocsStore::from_existing(seqlocs_loc) {
+            let mut seqlocs = match SeqLocsStore::from_existing(seqlocs_loc, &mut in_buf) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA seqlocs: {y}")),
             };
@@ -801,7 +801,7 @@ impl<'sfa> Iterator for Sequences<'sfa>
             .expect(".");
 
         let id = if self.with_ids {
-            Some(self.sfasta.get_id(seqloc.get_ids()).unwrap())
+            Some(self.sfasta.get_id(seqloc.get_ids()).unwrap().into_bytes()) // todo
         } else {
             None
         };
@@ -809,7 +809,12 @@ impl<'sfa> Iterator for Sequences<'sfa>
         let header = seqloc.get_headers();
 
         let header = if header.len() > 0 {
-            Some(self.sfasta.get_header(header).expect("Unable to fetch header"))
+            Some(
+                self.sfasta
+                    .get_header(header)
+                    .expect("Unable to fetch header")
+                    .into_bytes(),
+            ) // todo
         } else {
             None
         };
@@ -835,6 +840,8 @@ impl<'sfa> Iterator for Sequences<'sfa>
             self.cur_idx += 1;
         }
 
+        // todo: shortcircuiting Sequence when reading files so leaving id and header as bytes
+        // but here we want to return it as a str
         Some(Sequence {
             id,
             sequence,
