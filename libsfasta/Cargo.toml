@@ -36,6 +36,7 @@ rayon = "1.10.0"
 itertools = "0.12.0"
 bitvec = "1.0.1"
 needletail = "0.5.1"
+bumpalo = "3.16"
 
 # getrandom = { version = "0.2.10", features = ["js"] }
 # bumpalo = "3.13.0"

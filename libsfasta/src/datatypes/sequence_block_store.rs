@@ -28,7 +28,7 @@ impl Default for SequenceBlockStoreBuilder
 
         SequenceBlockStoreBuilder {
             inner: BytesBlockStoreBuilder::default()
-                .with_block_size(512 * 1024)
+                .with_block_size(128 * 1024)
                 .with_compression(compression_config),
         }
     }

@@ -131,10 +131,10 @@ impl SeqLoc
         sequence: &[Loc],
         masking: &[Loc],
         scores: &[Loc],
-        signal: &[Loc],
-        headers: &[Loc],
         ids: &[Loc],
+        headers: &[Loc],
         mods: &[Loc],
+        signal: &[Loc],
     )
     {
         self.sequence = sequence.len() as u16;
@@ -314,8 +314,6 @@ impl Decode for SeqLoc
 
 // TODO! Need tests...
 // TODO: When data gets too large, pre-emptively compress it into memory (such as nt db, >200Gb).
-// TODO: Flatten seqlocs into a single vec, then use ordinals to find appropritate ones
-// TODO: Can convert this to use ByteBlockStore?
 
 /// Handles access to SeqLocs
 pub struct SeqLocsStoreBuilder

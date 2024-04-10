@@ -269,7 +269,7 @@ impl Default for CompressionWorker
         Self {
             threads: 1,
             handles: Vec::new(),
-            buffer_size: 8192,
+            buffer_size: 128,
             queue: None,
             shutdown_flag: Arc::new(AtomicBool::new(false)),
             writer: None,
@@ -308,7 +308,6 @@ impl CompressionWorker
         self.queue = Some(queue);
 
         for _ in 0..self.threads {
-            log::debug!("Spinning up compression thread {}/{}", self.handles.len(), self.threads);
             let queue = Arc::clone(self.queue.as_ref().unwrap());
             let shutdown = Arc::clone(&self.shutdown_flag);
             let output_queue = Arc::clone(self.writer.as_ref().unwrap());
@@ -317,17 +316,20 @@ impl CompressionWorker
         }
     }
 
+    #[inline]
     pub fn submit(&self, work: CompressorWork)
     {
         let backoff = Backoff::new();
 
         let mut entry = work;
         while let Err(x) = self.queue.as_ref().unwrap().push(entry) {
+            log::debug!("Compression Worker Buffer is Full");
             backoff.snooze();
             entry = x;
         }
     }
 
+    #[inline]
     pub fn compress(&self, input: Vec<u8>, compression_config: Arc<CompressionConfig>) -> Arc<AtomicU64>
     {
         let block = CompressionBlock::new(input, compression_config);
@@ -346,6 +348,7 @@ impl CompressionWorker
         }
     }
 
+    #[inline]
     pub fn get_queue(&self) -> Arc<ArrayQueue<CompressorWork>>
     {
         Arc::clone(self.queue.as_ref().unwrap())
@@ -370,45 +373,46 @@ fn compression_worker(
                 } else {
                     backoff.snooze();
                     if backoff.is_completed() {
-                        thread::park_timeout(Duration::from_millis(25));
+                        thread::park_timeout(Duration::from_millis(5));
                         backoff.reset();
                     }
                 }
             }
             Some(CompressorWork::Compress(work)) => {
                 // Tests fail otherwise for buffer too small
-                let min_size = std::cmp::max(work.input.len(), 8192);
-
-                let mut output = Vec::with_capacity(min_size);
-
-                match work.compression_config.compression_type {
+                let compressed = match work.compression_config.compression_type {
                     #[cfg(not(target_arch = "wasm32"))]
                     CompressionType::ZSTD => {
-                        let mut zstd_compressor = zstd_encoder(
-                            work.compression_config.compression_level as i32,
-                            &work.compression_config.compression_dict,
-                        );
-                        zstd_compressor
-                            .compress_to_buffer(work.input.as_slice(), &mut output)
-                            .unwrap();
+                        ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
+                            zstd_compressor
+                                .set_compression_level(work.compression_config.compression_level as i32)
+                                .unwrap();
+                            // todo dict
+                            zstd_compressor.compress(work.input.as_slice()).unwrap()
+                        })
                     }
                     #[cfg(target_arch = "wasm32")]
                     CompressionType::ZSTD => {
                         unimplemented!("ZSTD encoding is not supported on wasm32");
                     }
                     CompressionType::LZ4 => {
+                        let mut output = Vec::with_capacity(work.input.len());
                         let mut lz4_compressor = lz4_flex::frame::FrameEncoder::new(&mut output);
                         lz4_compressor.write_all(work.input.as_slice()).unwrap();
                         lz4_compressor.finish().unwrap();
+                        output
                     }
                     CompressionType::SNAPPY => {
+                        let mut output = Vec::with_capacity(work.input.len());
                         let mut compressor = snap::write::FrameEncoder::new(&mut output);
                         compressor
                             .write_all(work.input.as_slice())
                             .expect("Unable to compress with Snappy");
                         compressor.into_inner().unwrap();
+                        output
                     }
                     CompressionType::GZIP => {
+                        let mut output = Vec::with_capacity(work.input.len());
                         let mut compressor = flate2::write::GzEncoder::new(
                             &mut output,
                             flate2::Compression::new(work.compression_config.compression_level as u32),
@@ -417,23 +421,25 @@ fn compression_worker(
                             .write_all(work.input.as_slice())
                             .expect("Unable to compress with GZIP");
                         compressor.finish().unwrap();
+                        output
                     }
-                    CompressionType::NONE => {
-                        output = work.input;
-                    }
+                    CompressionType::NONE => work.input,
                     #[cfg(not(target_arch = "wasm32"))]
                     CompressionType::XZ => {
+                        let mut output = Vec::with_capacity(work.input.len());
                         let mut compressor =
                             XzEncoder::new(work.input.as_slice(), work.compression_config.compression_level as u32);
                         compressor.read_to_end(&mut output).expect("Unable to compress with XZ");
+                        output
                     }
                     #[cfg(target_arch = "wasm32")]
                     CompressionType::XZ => {
                         panic!("XZ compression is not supported on wasm32");
                     }
                     CompressionType::BROTLI => {
+                        let mut output = Vec::with_capacity(work.input.len());
                         let mut compressor = brotli::CompressorWriter::new(
-                            &mut *output,
+                            &mut output,
                             8192,
                             work.compression_config.compression_level as u32,
                             22,
@@ -442,6 +448,8 @@ fn compression_worker(
                             .write_all(work.input.as_slice())
                             .expect("Unable to compress with Brotli");
                         compressor.flush().expect("Unable to flush Brotli");
+                        drop(compressor);
+                        output
                     }
                     _ => panic!(
                         "Unsupported compression type: {:?}",
@@ -450,7 +458,7 @@ fn compression_worker(
                 };
 
                 let output_block = OutputBlock {
-                    data: output,
+                    data: compressed,
                     location: work.location,
                 };
 

@@ -1,11 +1,3 @@
-#[cfg(nightly)]
-#[feature(write_all_vectored)]
-// If not windows, compile and use mimalloc
-// #[cfg(not(windows))]
-// extern crate mimalloc;
-
-// #[cfg(not(windows))]
-// use mimalloc::MiMalloc;
 use rand::seq;
 use rand_core::block;
 
@@ -17,15 +9,19 @@ use rand_core::block;
 
 // static MEM: &str = "Mimalloc";
 
+// use mimalloc::MiMalloc;
+
+// #[global_allocator]
+// static GLOBAL: MiMalloc = MiMalloc;
+
 extern crate clap;
 extern crate indicatif;
 extern crate rand;
 extern crate rand_chacha;
 
 use std::{
-    fs,
-    fs::{metadata, File},
-    io::{BufReader, Read, Write},
+    fs::{self, metadata, File},
+    io::{BufRead, BufReader, Read, Write},
     path::Path,
 };
 
@@ -490,23 +486,24 @@ fn convert(
     let dict = None; // todo
 
     let buf = generic_open_file_pb(pb, fasta_filename);
-    let mut buf = buf.1;
+    let buf = buf.1;
 
-    let (s, r) = crossbeam::channel::bounded(64);
+    let (s, r) = crossbeam::channel::bounded(1024);
 
     let io_thread = std::thread::Builder::new()
         .name("IO_Thread".to_string())
-        // .stack_size(12 * 1024 * 1024)
         .spawn(move || {
             let mut buf = BufReader::new(buf);
-            let mut buffer: [u8; 64 * 1024] = [0; 64 * 1024];
-            while let Ok(bytes_read) = buf.read(&mut buffer) {
+            loop {
+                let current = buf.fill_buf().unwrap();
+                let bytes_read = current.len();
+
                 if bytes_read == 0 {
                     s.send(libsfasta::utils::ReaderData::EOF).unwrap();
                     break;
                 }
-                s.send(libsfasta::utils::ReaderData::Data(buffer[..bytes_read].to_vec()))
-                    .unwrap();
+                s.send(libsfasta::utils::ReaderData::Data(current.to_vec())).unwrap();
+                buf.consume(bytes_read);
             }
         })
         .unwrap();

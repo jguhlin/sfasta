@@ -1,9 +1,13 @@
+// TODO: https://docs.rs/bytes/latest/bytes/
+
 use std::{
     io::{Read, Seek, SeekFrom, Write},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
+    // Deque
+    collections::VecDeque,
 };
 
 use crossbeam::utils::Backoff;
@@ -35,7 +39,7 @@ pub struct BytesBlockStoreBuilder
     block_size: usize,
 
     /// Data, typically a temporary store
-    pub data: Option<Vec<u8>>, // Used for writing and reading...
+    pub data: Vec<u8>, // Used for writing and reading...
 
     /// Compression configuration
     pub compression_config: Arc<CompressionConfig>,
@@ -55,7 +59,7 @@ impl Default for BytesBlockStoreBuilder
             block_locations_pos: Arc::new(AtomicU64::new(0)),
             block_locations: Vec::new(),
             block_size: 512 * 1024,
-            data: None,
+            data: Vec::new(),
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
             finalized: false,
@@ -90,21 +94,29 @@ impl BytesBlockStoreBuilder
     fn compress_block(&mut self)
     {
         assert!(self.compression_worker.is_some());
-        assert!(self.data.is_some());
+        assert!(!self.data.is_empty());
 
-        let at = std::cmp::min(self.block_size, self.data.as_mut().unwrap().len());
+        let data = self.data.chunks_exact(self.block_size);
+        let remainder = data.remainder().to_vec();
+        let worker = self.compression_worker.as_ref().unwrap();
+        data.for_each(|block| {
+            let loc = worker.compress(block.to_vec(), Arc::clone(&self.compression_config));
+            self.block_locations.push(loc);
+        });
 
-        // Split off the vec, swap it out, and prep it to be compressed...
-        let mut block = self.data.as_mut().unwrap().split_off(at);
-        std::mem::swap(&mut block, self.data.as_mut().unwrap());
+        self.data.clear();
+        self.data.extend_from_slice(&remainder);
+    }
+
+    fn compress_final_block(&mut self)
+    {
+        assert!(self.compression_worker.is_some());
+        assert!(!self.data.is_empty());
+
+        self.compress_block();
 
         let worker = self.compression_worker.as_ref().unwrap();
-
-        // We submit to get compressed, and in return we get an Arc<AtomicU64> that points to the location of the
-        // compressed block
-        let loc = worker.compress(block, Arc::clone(&self.compression_config));
-
-        // Which we then add to block locations...
+        let loc = worker.compress(self.data.clone(), Arc::clone(&self.compression_config));
         self.block_locations.push(loc);
     }
 
@@ -144,40 +156,35 @@ impl BytesBlockStoreBuilder
 
     /// Add a sequence of bytes to the block store
     /// Returns a vector of Loc's that point to the location of the bytes in the block store (can span multiple blocks)
-    pub fn add<'b>(&'b mut self, input: &[u8]) -> Result<Vec<Loc>, &str>
+    pub fn add(&mut self, input: &[u8]) -> Result<Vec<Loc>, &str>
     {
         if self.finalized {
             panic!("Cannot add to finalized block store.");
         }
 
-        // Initialize the data vec if it doesn't exist
-        if self.data.is_none() {
-            self.data = Some(Vec::with_capacity(self.block_size));
-        }
-
         // If the data vec is too big, compress a chunk of it...
-        if self.data.as_ref().unwrap().len() > self.block_size {
+        if self.data.len() > self.block_size {
             self.compress_block();
         }
 
-        let data = self.data.as_mut().unwrap();
+        let data = &mut self.data;
 
         let mut start = data.len();
-        data.extend(input);
-        let end = data.len() - 1;
+        data.extend_from_slice(input);
+        let end = data.len().saturating_sub(1);
 
         let compressed_blocks_count = self.block_locations.len();
 
         let starting_block = (start / self.block_size) + compressed_blocks_count;
         let ending_block = (end / self.block_size) + compressed_blocks_count;
 
-        let mut locs = Vec::with_capacity(input.len() / self.block_size + 1);
+        let mut locs = Vec::with_capacity((input.len() / self.block_size).saturating_add(1));
 
         // Process at block boundaries...
         for block in starting_block..=ending_block {
             let block_start = start % self.block_size;
             let block_end = if block == ending_block {
-                (end % self.block_size) + 1
+                (end % self.block_size).saturating_add(1)
             } else {
                 self.block_size
             };
@@ -270,18 +277,12 @@ impl BytesBlockStoreBuilder
     {
         assert!(self.compression_worker.is_some());
 
-        if self.data.is_none() {
+        if self.data.is_empty() {
             return;
         }
 
-        let mut block: Option<Vec<u8>> = None;
-        std::mem::swap(&mut self.data, &mut block);
-
-        if block.is_some() && block.as_ref().unwrap().len() > 0 {
-            let worker = self.compression_worker.as_ref().unwrap();
-            let loc = worker.compress(block.unwrap(), Arc::clone(&self.compression_config));
-            self.block_locations.push(loc);
-        }
+        self.compress_block();
+        self.compress_final_block();
 
         self.check_complete();
 
