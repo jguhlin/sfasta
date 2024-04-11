@@ -1,13 +1,13 @@
 // TODO: https://docs.rs/bytes/latest/bytes/
 
 use std::{
+    // Deque
+    collections::VecDeque,
     io::{Read, Seek, SeekFrom, Write},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
-    // Deque
-    collections::VecDeque,
 };
 
 use crossbeam::utils::Backoff;
@@ -435,13 +435,13 @@ impl BytesBlockStore
 
         assert!(block_locations_pos > 0);
 
-        let bincode_config_fixed = bincode::config::standard()
-            .with_fixed_int_encoding()
+        let bincode_config = bincode::config::standard()
+            .with_variable_int_encoding()
             .with_limit::<{ 128 * 1024 * 1024 }>();
 
         in_buf.seek(SeekFrom::Start(block_locations_pos)).unwrap();
 
-        let block_locations: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed) {
+        let block_locations: Vec<u8> = match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
             Ok(x) => x,
             Err(e) => return Err(format!("Error decoding block locations: {e}")),
         };

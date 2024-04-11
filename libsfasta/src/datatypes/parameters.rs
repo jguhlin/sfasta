@@ -9,8 +9,6 @@ pub struct Parameters
     pub compression_type: CompressionType,
     pub compression_dict: Option<Vec<u8>>,
     pub index_compression_type: CompressionType,
-    pub index_chunk_size: u32,
-    pub seqlocs_chunk_size: u32,
 }
 
 impl Default for Parameters
@@ -18,12 +16,10 @@ impl Default for Parameters
     fn default() -> Self
     {
         Parameters {
-            block_size: 4 * 1024 * 1024, // 4 Mb
+            block_size: 512 * 1024, // 512k
             compression_type: CompressionType::ZSTD,
             compression_dict: None,
             index_compression_type: CompressionType::ZSTD,
-            index_chunk_size: 64 * 1024,   // 64k
-            seqlocs_chunk_size: 64 * 1024, // 64k
         }
     }
 }

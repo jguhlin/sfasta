@@ -96,7 +96,7 @@ enum Commands
         #[clap(long)]
         nocompression: bool,
         /// Block size for sequence blocks * 1024
-        /// 2Mb (2048) is the default
+        /// 512 (512kbp) is the default
         #[clap(short, long)]
         blocksize: Option<u64>,
         #[clap(short, long)]
@@ -337,7 +337,7 @@ fn faidx(input: &str, ids: &Vec<String>)
         let result = sfasta
             .find(i)
             .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
-            .unwrap();
+            .unwrap().clone();
 
         if result.has_headers() {
             let header = sfasta.get_header(result.get_headers()).expect("Unable to fetch header");
@@ -446,7 +446,7 @@ fn list(input: &str)
             Ok(Some(x)) => x,
             Ok(None) => panic!("No SeqLoc found"),
             Err(_) => panic!("Unable to fetch seqloc"),
-        };
+        }.clone();
         let id = &sfasta.get_id(seqloc.get_ids()).unwrap();
         println!("{}", id);
     }
@@ -488,25 +488,25 @@ fn convert(
     let buf = generic_open_file_pb(pb, fasta_filename);
     let buf = buf.1;
 
-    let (s, r) = crossbeam::channel::bounded(1024);
+    // let (s, r) = crossbeam::channel::bounded(1024);
 
-    let io_thread = std::thread::Builder::new()
-        .name("IO_Thread".to_string())
-        .spawn(move || {
-            let mut buf = BufReader::new(buf);
-            loop {
-                let current = buf.fill_buf().unwrap();
-                let bytes_read = current.len();
-
-                if bytes_read == 0 {
-                    s.send(libsfasta::utils::ReaderData::EOF).unwrap();
-                    break;
-                }
-                s.send(libsfasta::utils::ReaderData::Data(current.to_vec())).unwrap();
-                buf.consume(bytes_read);
-            }
-        })
-        .unwrap();
+    // let io_thread = std::thread::Builder::new()
+    // .name("IO_Thread".to_string())
+    // .spawn(move || {
+    // let mut buf = BufReader::new(buf);
+    // loop {
+    // let current = buf.fill_buf().unwrap();
+    // let bytes_read = current.len();
+    //
+    // if bytes_read == 0 {
+    // s.send(libsfasta::utils::ReaderData::EOF).unwrap();
+    // break;
+    // }
+    // s.send(libsfasta::utils::ReaderData::Data(current.to_vec())).unwrap();
+    // buf.consume(bytes_read);
+    // }
+    // })
+    // .unwrap();
 
     // TODO: Handle all of the compression options...
     // TODO: Warn if more than one compression option specified
@@ -550,13 +550,13 @@ fn convert(
         converter = converter.without_index();
     }
 
-    let mut in_buf = libsfasta::utils::CrossbeamReader::from_channel(r);
-    // let mut in_buf = BufReader::new(buf);
+    // let mut in_buf = libsfasta::utils::CrossbeamReader::from_channel(r);
+    let mut in_buf = BufReader::new(buf);
     let out_fh = Box::new(std::io::BufWriter::new(output));
 
     let _out_fh = converter.convert(&mut in_buf, out_fh);
     // log::info!("Joining IO thread");
-    io_thread.join().expect("Unable to join IO thread");
+    // io_thread.join().expect("Unable to join IO thread");
     // log::info!("IO thread joined");
 }
 

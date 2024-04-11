@@ -171,12 +171,13 @@ pub fn zstd_encoder(compression_level: i32, dict: &Option<Arc<Vec<u8>>>) -> zstd
     encoder
         .include_magicbytes(false)
         .expect("Unable to set ZSTD MagicBytes");
-    encoder
-        .include_contentsize(false)
-        .expect("Unable to set ZSTD Content Size Flag");
+    // encoder
+        //.include_contentsize(false)
+        //.expect("Unable to set ZSTD Content Size Flag");
     encoder
         .long_distance_matching(true)
         .expect("Unable to set long_distance_matching");
+    encoder.window_log(31);
     encoder
 }
 
@@ -201,6 +202,9 @@ pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd::bulk::Decompressor<'a
     zstd_decompressor
         .include_magicbytes(false)
         .expect("Failed to set magicbytes");
+
+    zstd_decompressor.window_log_max(31);
+
     zstd_decompressor
 }
 
@@ -257,7 +261,7 @@ pub struct CompressionWorker
     pub buffer_size: usize,
     handles: Vec<JoinHandle<()>>,
     queue: Option<Arc<ArrayQueue<CompressorWork>>>, // Input
-    writer: Option<Arc<ArrayQueue<OutputBlock>>>,   // Output
+    writer: Option<Arc<flume::Sender<OutputBlock>>>,   // Output
 
     shutdown_flag: Arc<AtomicBool>,
 }
@@ -296,7 +300,7 @@ impl CompressionWorker
         self
     }
 
-    pub fn with_output_queue(mut self, writer: Arc<ArrayQueue<OutputBlock>>) -> Self
+    pub fn with_output_queue(mut self, writer: Arc<flume::Sender<OutputBlock>>) -> Self
     {
         self.writer = Some(writer);
         self
@@ -323,7 +327,7 @@ impl CompressionWorker
 
         let mut entry = work;
         while let Err(x) = self.queue.as_ref().unwrap().push(entry) {
-            log::debug!("Compression Worker Buffer is Full");
+            // log::debug!("Compression Worker Buffer is Full: {}", self.queue.as_ref().unwrap().len());
             backoff.snooze();
             entry = x;
         }
@@ -353,12 +357,18 @@ impl CompressionWorker
     {
         Arc::clone(self.queue.as_ref().unwrap())
     }
+
+    #[inline]
+    pub fn len(&self) -> usize
+    {
+        self.queue.as_ref().unwrap().len()
+    }
 }
 
 fn compression_worker(
     queue: Arc<ArrayQueue<CompressorWork>>,
     shutdown: Arc<AtomicBool>,
-    output_queue: Arc<ArrayQueue<OutputBlock>>,
+    output_queue: Arc<flume::Sender<OutputBlock>>,
 )
 {
     let mut result;
@@ -462,8 +472,21 @@ fn compression_worker(
                     location: work.location,
                 };
 
-                output_queue.push(output_block).unwrap();
+                let mut x = output_queue.try_send(output_block);
+                while let Err(y) = x {
+                    log::debug!("Output queue is full");
+                    backoff.snooze();
+                    match y {
+                        flume::TrySendError::Full(y) => {
+                            x = output_queue.try_send(y);
+                        }
+                        flume::TrySendError::Disconnected(_) => {
+                            panic!("Output queue disconnected");
+                        }
+                    }
+                }
             }
+            
             Some(CompressorWork::Decompress(work)) => {
                 todo!();
             }

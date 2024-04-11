@@ -4,6 +4,7 @@
 
 // Easy, high-performance conversion functions
 use crossbeam::{queue::ArrayQueue, thread, utils::Backoff};
+use lz4_flex::block;
 use needletail::parse_fastx_reader;
 use xxhash_rust::xxh3::{self, xxh3_64};
 
@@ -34,8 +35,7 @@ pub struct Converter
     masking: bool,
     index: bool,
     threads: usize,
-    pub block_size: usize,
-    seqlocs_chunk_size: usize,
+    pub block_size: u64,
     quality_scores: bool,
     compression_type: CompressionType,
     compression_level: Option<i8>,
@@ -58,8 +58,7 @@ impl Default for Converter
     {
         Converter {
             threads: 8,
-            block_size: 4 * 1024 * 1024,    // 4Mb
-            seqlocs_chunk_size: 256 * 1024, // 256k
+            block_size: 512 * 1024,    // 4Mb
             index: true,
             masking: false,
             quality_scores: false,
@@ -141,20 +140,7 @@ impl Converter
             "Block size must be less than u32::MAX (~4Gb)"
         );
 
-        self.block_size = block_size;
-        self
-    }
-
-    /// Set the chunk size for the sequence locations
-    pub fn with_seqlocs_chunk_size(mut self, chunk_size: usize) -> Self
-    {
-        assert!(
-            chunk_size < u32::MAX as usize,
-            "Chunk size must be less than u32::MAX (~4Gb)"
-        );
-
-        self.seqlocs_chunk_size = chunk_size;
-
+        self.block_size = block_size as u64;
         self
     }
 
@@ -227,7 +213,7 @@ impl Converter
         // Track how much space each individual element takes up
         let mut debug_size: Vec<(String, usize)> = Vec::new();
 
-        assert!(self.block_size < u32::MAX as usize);
+        assert!(self.block_size < u32::MAX as u64);
 
         let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
 
@@ -240,7 +226,6 @@ impl Converter
 
         sfasta.parameters.compression_type = self.compression_type;
         sfasta.parameters.compression_dict = self.dict.clone();
-        sfasta.parameters.seqlocs_chunk_size = self.seqlocs_chunk_size as u32;
         sfasta.parameters.block_size = self.block_size as u32;
 
         // Set dummy values for the directory
@@ -264,7 +249,7 @@ impl Converter
         let out_buffer = Arc::new(Mutex::new(out_fh));
 
         let (seqlocs, headers_location, ids_location, masking_location, sequences_location, ids_to_locs) =
-            self.process(in_buf, Arc::clone(&out_buffer));
+            self.process(in_buf, Arc::clone(&out_buffer), self.block_size);
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
 
@@ -407,6 +392,7 @@ impl Converter
         &self,
         in_buf: &mut R,
         out_fh: Arc<Mutex<Box<W>>>,
+        block_size: u64,
     ) -> (
         SeqLocsStoreBuilder,
         Option<NonZeroU64>,
@@ -430,7 +416,7 @@ impl Converter
         let output_buffer = Arc::clone(&out_fh);
 
         // Start the output I/O...
-        let mut output_worker = crate::io::worker::Worker::new(output_buffer).with_buffer_size(128);
+        let mut output_worker = crate::io::worker::Worker::new(output_buffer).with_buffer_size(1024);
         output_worker.start();
         let output_queue = output_worker.get_queue();
 
@@ -444,361 +430,226 @@ impl Converter
         let compression_workers = Arc::new(compression_workers);
 
         // Some defaults
-        let mut headers_location = None;
-        let mut ids_location = None;
-        let ids_string = Arc::new(RwLock::new(Vec::new()));
-        let mut masking_location = None;
-        let mut sequences_location = None;
-        let ids_to_locs_o = Arc::new(RwLock::new(Vec::new()));
+        let headers_location;
+        let ids_location;
+        let masking_location;
+        let sequences_location;
 
-        // Sequence queue for the generator
-        let seq_queue = crossbeam::channel::bounded(1024);
-        let seq_queue_in = Arc::new(&seq_queue.0);
-        let seq_queue_out = Arc::new(&seq_queue.1);
+        let mut ids_string = Vec::new();
+        let mut ids_to_locs = Vec::new();
 
-        // Pop to a new thread that pushes sequence into the sequence buffer...
-        thread::scope(|s| {
-            let fasta_thread = s.spawn(|_| {
-                // let mut in_buf_reader = BufReader::new(in_buf);
+        // TODO: Multithread this part -- maybe, now with compression logic into a threadpool maybe not...
+        // Idea: split into queue's for headers, IDs, sequence, etc....
+        // Thread that handles the heavy lifting of the incoming Seq structs
+        // TODO: Set compression stuff here...
+        // And batch this part...
 
-                // TODO: Should be auto-detect and handle...
-                // let fasta = Fasta::from_buffer(&mut in_buf_reader);
-                let mut fastx = parse_fastx_reader(in_buf).expect("Unable to parse FASTA/Q file");
+        let compression_workers_thread = Arc::clone(&compression_workers);
 
-                let backoff = Backoff::new();
+        let mut headers = StringBlockStoreBuilder::default()
+            .with_block_size(block_size as usize)
+            .with_compression_worker(Arc::clone(&compression_workers_thread));
+        let mut seqlocs = SeqLocsStoreBuilder::default();
+        let mut ids = StringBlockStoreBuilder::default()
+            .with_block_size(block_size as usize)
+            .with_compression_worker(Arc::clone(&compression_workers_thread));
+        let mut masking = MaskingStoreBuilder::default()
+            .with_compression_worker(Arc::clone(&compression_workers_thread))
+            .with_block_size(block_size as usize);
+        let mut sequences = SequenceBlockStoreBuilder::default()
+            .with_block_size(block_size as usize)
+            .with_compression_worker(Arc::clone(&compression_workers_thread));
 
-                while let Some(r) = fastx.next() {
-                    let record = r.expect("Invalid FASTA record");
+        let mut masking_times = Vec::new();
+        let mut seq_add_times = Vec::new();
+        let mut headers_time = Vec::new();
+        let mut ids_time = Vec::new();
+        let mut seqloc_time = Vec::new();
+        let mut seqlocs_time = Vec::new();
 
-                    let mut d = Work::FastaPayload((record.id().to_vec(), record.seq().to_vec()));
-                    while let Err(z) = seq_queue_in.try_send(d) {
+        let mut reader = parse_fastx_reader(in_buf).unwrap();
 
-                        match z {
-                            crossbeam::channel::TrySendError::Full(x) => {
-                                d = x;
-                            }
-                            crossbeam::channel::TrySendError::Disconnected(_) => {
-                                panic!("Fastx Disconnected");
-                            }
-                        }
+        while let Some(x) = reader.next() {
+            match x {
+                Ok(x) => {
+                    let mut seq = x.seq();
+                    let mut id = x.id().split(|x| *x == b' ');
+                    // Split at first space
+                    let seqid = id.next().unwrap();
+                    let seqheader = id.next();
 
-                        backoff.snooze();
-
-                        if backoff.is_completed() {
-                            std::thread::sleep(std::time::Duration::from_millis(60));
-                            backoff.reset();
-                        }
+                    let start_time = std::time::Instant::now();
+                    let mut masking_locs = Vec::new();
+                    if let Some(x) = masking.add_masking(&seq) {
+                        masking_locs.extend(x);
                     }
-                }
+                    let end_time = std::time::Instant::now();
+                    masking_times.push(end_time - start_time);
 
-                log::info!("FASTA reading complete...");
-                while seq_queue_in.try_send(Work::Shutdown).is_err() {
-                    backoff.snooze();
-                    // todo handle better so it never gets stuck
-                }
-            });
+                    // Capitalize and add to sequences
+                    let start_time = std::time::Instant::now();
+                    let mut sequence_locs = Vec::new();
+                    seq.to_mut().make_ascii_uppercase();
+                    let loc = sequences.add(&mut seq);
+                    sequence_locs.extend(loc);
 
-            let fasta_thread_clone = fasta_thread.thread().clone();
+                    let end_time = std::time::Instant::now();
+                    seq_add_times.push(end_time - start_time);
 
-            // TODO: Multithread this part -- maybe, now with compression logic into a threadpool maybe not...
-            // Idea: split into queue's for headers, IDs, sequence, etc....
-            // Thread that handles the heavy lifting of the incoming Seq structs
-            // TODO: Set compression stuff here...
-            // And batch this part...
+                    let start_time = std::time::Instant::now();
+                    let myid = std::sync::Arc::new(seqid.to_vec());
+                    let idloc = ids.add(&(*myid));
+                    let end_time = std::time::Instant::now();
+                    ids_time.push(end_time - start_time);
 
-            // 4 threads for this kind of stuff
-            let compression_workers_thread = Arc::clone(&compression_workers);
-
-            let headers_o = Arc::new(RwLock::new(
-                StringBlockStoreBuilder::default()
-                    .with_block_size(32 * 1024)
-                    .with_compression_worker(Arc::clone(&compression_workers_thread)),
-            ));
-            let seqlocs_o = Arc::new(RwLock::new(SeqLocsStoreBuilder::default()));
-            let ids_o = Arc::new(RwLock::new(
-                StringBlockStoreBuilder::default()
-                    .with_block_size(32 * 1024)
-                    .with_compression_worker(Arc::clone(&compression_workers_thread)),
-            ));
-            // let mut ids_string = Vec::new();
-            let masking_o = Arc::new(RwLock::new(
-                MaskingStoreBuilder::default()
-                    .with_compression_worker(Arc::clone(&compression_workers_thread))
-                    .with_block_size(512 * 1024),
-            ));
-            let sequences_o = Arc::new(RwLock::new(
-                SequenceBlockStoreBuilder::default()
-                    .with_block_size(512 * 1024)
-                    .with_compression_worker(Arc::clone(&compression_workers_thread)),
-            ));
-
-            let shutdown_o = Arc::new(AtomicBool::new(false));
-
-            let mut handles = Vec::new();
-
-            for _ in 0..2 {
-                let masking = Arc::clone(&masking_o);
-                let sequences = Arc::clone(&sequences_o);
-                let seqlocs = Arc::clone(&seqlocs_o);
-                let ids = Arc::clone(&ids_o);
-                let headers = Arc::clone(&headers_o);
-                let shutdown = Arc::clone(&shutdown_o);
-                let seq_queue_out = Arc::clone(&seq_queue_out);
-                let ids_string = Arc::clone(&ids_string);
-                let fasta_thread_clone = fasta_thread_clone.clone();
-                let ids_to_locs = Arc::clone(&ids_to_locs_o);
-
-                let reader_handle = s.spawn(move |_| {
-                    // For each Sequence in the fasta file, make it upper case (masking is stored separately)
-                    // Add the sequence to the SequenceBlocks, get the SeqLocs and store them in Location
-                    // struct And store that in seq_locs Vec...
-
-                    let mut masking_times = Vec::new();
-                    let mut seq_add_times = Vec::new();
-                    let mut headers_time = Vec::new();
-                    let mut ids_time = Vec::new();
-                    let mut seqloc_time = Vec::new();
-                    let mut seqlocs_time = Vec::new();
-
-                    let backoff = Backoff::new();
-                    // Turn the below into a closure
-
-                    let mut add = |x: (Vec<u8>, Vec<u8>)| {
-                        let mut seq = x.0;
-                        let mut id = x.1.split(|x| *x == b' ');
-                        // Split at first space
-                        let seqid = id.next().unwrap();
-                        let seqheader = id.next();
-
-                        let start_time = std::time::Instant::now();
-                        let mut masking_locs = Vec::new();
-                        let mut masking = masking.write().unwrap();
-                        if let Some(x) = masking.add_masking(&seq) {
-                            masking_locs.extend(x);
-                        }
-                        drop(masking);
-                        let end_time = std::time::Instant::now();
-                        masking_times.push(end_time - start_time);
-
-                        // Capitalize and add to sequences
-                        let start_time = std::time::Instant::now();
-                        let mut sequence_locs = Vec::new();
-                        let mut sequences = sequences.write().unwrap();
-                        seq.make_ascii_uppercase();
-                        let loc = sequences.add(&mut seq);
-                        sequence_locs.extend(loc);
-
-                        let end_time = std::time::Instant::now();
-                        seq_add_times.push(end_time - start_time);
-
-                        let start_time = std::time::Instant::now();
-                        let myid = std::sync::Arc::new(seqid.to_vec());
-                        let mut ids = ids.write().unwrap();
-                        let idloc = ids.add(&(*myid));
-                        drop(ids);
-                        let end_time = std::time::Instant::now();
-                        ids_time.push(end_time - start_time);
-
-                        let start_time = std::time::Instant::now();
-                        let mut headers_loc = Vec::new();
-                        if let Some(x) = seqheader {
-                            let mut headers = headers.write().unwrap();
-                            let x = headers.add(&x);
-                            headers_loc.extend(x);
-                        }
-                        let end_time = std::time::Instant::now();
-                        headers_time.push(end_time - start_time);
-
-                        let mut seqloc = SeqLoc::new();
-
-                        // TODO: This has become kinda gross
-                        // Lots of vec's above, should be able to clean this up
-
-                        let start_time = std::time::Instant::now();
-                        seqloc.add_locs(&sequence_locs, &masking_locs, &[], &idloc, &headers_loc, &[], &[]);
-                        let end_time = std::time::Instant::now();
-                        seqloc_time.push(end_time - start_time);
-
-                        let start_time = std::time::Instant::now();
-                        let mut seqlocs = seqlocs.write().unwrap();
-                        let mut ids_to_locs = ids_to_locs.write().unwrap();
-                        let mut ids_string = ids_string.write().unwrap();
-
-                        let loc = seqlocs.add_to_index(seqloc);
-                        ids_string.push(Arc::clone(&myid));
-                        ids_to_locs.push((myid, loc));
-                        drop(ids_string);
-                        drop(ids_to_locs);
-                        drop(seqlocs);
-                        let end_time = std::time::Instant::now();
-                        seqlocs_time.push(end_time - start_time);
-                    };
-
-                    'outer: loop {
-                        backoff.reset(); // Reset the backoff
-                        match seq_queue_out.try_recv() {
-                            Ok(Work::FastaPayload(seq)) => {
-                                add(seq);
-                            }
-
-                            Ok(Work::FastqPayload(_)) => {
-                                panic!("Received FASTQ payload in FASTA thread")
-                            }
-                            Ok(Work::Shutdown) => {
-                                shutdown.store(true, Ordering::SeqCst);
-                                break 'outer;
-                            }
-                            Err(x) => {
-                                if let crossbeam::channel::TryRecvError::Disconnected = x {
-                                    panic!("Disconnected");
-                                }
-
-                                if shutdown.load(Ordering::SeqCst) {
-                                    break 'outer;
-                                }
-
-                                fasta_thread_clone.unpark();
-                                backoff.snooze();
-                                if backoff.is_completed() {
-                                    log::debug!("FASTA queue empty");
-                                    backoff.reset();
-                                    std::thread::park();
-                                }
-                            }
-                        }
+                    let start_time = std::time::Instant::now();
+                    let mut headers_loc = Vec::new();
+                    if let Some(x) = seqheader {
+                        let x = headers.add(&x);
+                        headers_loc.extend(x);
                     }
+                    let end_time = std::time::Instant::now();
+                    headers_time.push(end_time - start_time);
 
-                    // Get mean,
-                    let mean = |x: &Vec<std::time::Duration>| {
-                        let sum: std::time::Duration = x.iter().sum();
-                        sum / x.len() as u32
-                    };
+                    let mut seqloc = SeqLoc::new();
 
-                    log::info!("Masking times: {:?}", mean(&masking_times));
-                    log::info!("Seq add times: {:?}", mean(&seq_add_times));
-                    log::info!("Headers times: {:?}", mean(&headers_time));
-                    log::info!("IDs times: {:?}", mean(&ids_time));
-                    log::info!("SeqLoc times: {:?}", mean(&seqloc_time));
-                    log::info!("SeqLocs times: {:?}", mean(&seqlocs_time));
-                });
+                    // TODO: This has become kinda gross
+                    // Lots of vec's above, should be able to clean this up
 
-                handles.push(reader_handle);
-            }
+                    let start_time = std::time::Instant::now();
+                    seqloc.add_locs(&sequence_locs, &masking_locs, &[], &idloc, &headers_loc, &[], &[]);
+                    let end_time = std::time::Instant::now();
+                    seqloc_time.push(end_time - start_time);
 
-            let backoff = Backoff::new();
-            while !shutdown_o.load(Ordering::SeqCst) {
-                backoff.snooze();
-                if backoff.is_completed() {
-                    backoff.reset();
-                    std::thread::sleep(std::time::Duration::from_millis(60));
+                    let start_time = std::time::Instant::now();
+
+                    let loc = seqlocs.add_to_index(seqloc);
+                    ids_string.push(Arc::clone(&myid));
+                    ids_to_locs.push((myid, loc));
+                    let end_time = std::time::Instant::now();
+                    seqlocs_time.push(end_time - start_time);
+                }
+                Err(x) => {
+                    log::error!("Error parsing sequence: {:?}", x);
                 }
             }
+        }
 
-            for handle in handles {
-                handle.thread().unpark();
-                handle.join().expect("Unable to join thread");
+        // Print out the mean and range of the times...
+        let mean = |x: &Vec<std::time::Duration>| {
+            let sum: std::time::Duration = x.iter().sum();
+            sum / x.len() as u32
+        };
+
+        let range = |x: &Vec<std::time::Duration>| {
+            let min = x.iter().min().unwrap();
+            let max = x.iter().max().unwrap();
+            (*min, *max)
+        };
+
+        log::info!("Masking mean: {:?} range: {:?}", mean(&masking_times), range(&masking_times));
+        log::info!("Seq add mean: {:?} range: {:?}", mean(&seq_add_times), range(&seq_add_times));
+        log::info!("Headers mean: {:?} range: {:?}", mean(&headers_time), range(&headers_time));
+        log::info!("IDs mean: {:?} range: {:?}", mean(&ids_time), range(&ids_time));
+        log::info!("SeqLoc mean: {:?} range: {:?}", mean(&seqloc_time), range(&seqloc_time));
+        log::info!("SeqLocs mean: {:?} range: {:?}", mean(&seqlocs_time), range(&seqlocs_time));
+
+        let backoff = Backoff::new();
+        while compression_workers.len() > 0 {
+            backoff.snooze();
+            if backoff.is_completed() {
+                std::thread::sleep(std::time::Duration::from_millis(10));
+                backoff.reset();
             }
+        }
 
-            let mut headers = Arc::into_inner(headers_o).unwrap().into_inner().unwrap();
+        let mut headers = match headers.write_block_locations() {
+            Ok(x) => Some(headers),
+            Err(x) => match x {
+                BlockStoreError::Empty => None,
+                _ => panic!("Error writing headers: {:?}", x),
+            },
+        };
 
-            let mut headers = match headers.write_block_locations() {
-                Ok(x) => Some(headers),
-                Err(x) => match x {
-                    BlockStoreError::Empty => None,
-                    _ => panic!("Error writing headers: {:?}", x),
-                },
-            };
+        let mut ids = match ids.write_block_locations() {
+            Ok(x) => Some(ids),
+            Err(x) => match x {
+                BlockStoreError::Empty => None,
+                _ => panic!("Error writing ids: {:?}", x),
+            },
+        };
 
-            let mut ids = Arc::into_inner(ids_o).unwrap().into_inner().unwrap();
+        let mut masking = match masking.write_block_locations() {
+            Ok(x) => Some(masking),
+            Err(x) => match x {
+                BlockStoreError::Empty => None,
+                _ => panic!("Error writing masking: {:?}", x),
+            },
+        };
 
-            let mut ids = match ids.write_block_locations() {
-                Ok(x) => Some(ids),
-                Err(x) => match x {
-                    BlockStoreError::Empty => None,
-                    _ => panic!("Error writing ids: {:?}", x),
-                },
-            };
+        let mut sequences = match sequences.write_block_locations() {
+            Ok(x) => Some(sequences),
+            Err(x) => match x {
+                BlockStoreError::Empty => None,
+                _ => panic!("Error writing sequences: {:?}", x),
+            },
+        };
 
-            let mut masking = Arc::into_inner(masking_o).unwrap().into_inner().unwrap();
-            let mut masking = match masking.write_block_locations() {
-                Ok(x) => Some(masking),
-                Err(x) => match x {
-                    BlockStoreError::Empty => None,
-                    _ => panic!("Error writing masking: {:?}", x),
-                },
-            };
+        // fasta_thread.join().expect("Unable to join thread");
 
-            let mut sequences = Arc::into_inner(sequences_o).unwrap().into_inner().unwrap();
-            let mut sequences = match sequences.write_block_locations() {
-                Ok(x) => Some(sequences),
-                Err(x) => match x {
-                    BlockStoreError::Empty => None,
-                    _ => panic!("Error writing sequences: {:?}", x),
-                },
-            };
+        let backoff = Backoff::new();
+        while output_queue.len() > 0 {
+            backoff.snooze();
+        }
 
-            fasta_thread.join().expect("Unable to join thread");
+        output_worker.shutdown();
 
-            let seq_locs = Arc::into_inner(seqlocs_o).unwrap().into_inner().unwrap();
+        let mut out_buffer = out_fh.lock().unwrap();
 
-            let backoff = Backoff::new();
-            while output_queue.len() > 0 {
-                backoff.snooze();
-            }
+        // Write the headers with the complete information now...
 
-            output_worker.shutdown();
+        if headers.is_some() {
+            let x = headers.as_mut().unwrap();
+            headers_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            x.write_header(headers_location.unwrap().get(), &mut *out_buffer);
+        } else {
+            headers_location = None;
+        }
 
-            let mut out_buffer = out_fh.lock().unwrap();
+        if ids.is_some() {
+            let x = ids.as_mut().unwrap();
+            ids_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            x.write_header(ids_location.unwrap().get(), &mut *out_buffer);
+        } else {
+            ids_location = None;
+        }
 
-            // Write the headers with the complete information now...
+        if masking.is_some() {
+            let x = masking.as_mut().unwrap();
+            masking_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            x.write_header(masking_location.unwrap().get(), &mut *out_buffer);
+        } else {
+            masking_location = None;
+        }
 
-            if headers.is_some() {
-                let x = headers.as_mut().unwrap();
-                headers_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
-                x.write_header(headers_location.unwrap().get(), &mut *out_buffer);
-            } else {
-                headers_location = None;
-            }
+        if sequences.is_some() {
+            let x = sequences.as_mut().unwrap();
+            sequences_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            x.write_header(sequences_location.unwrap().get(), &mut *out_buffer);
+        } else {
+            sequences_location = None;
+        }
 
-            if ids.is_some() {
-                let x = ids.as_mut().unwrap();
-                ids_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
-                x.write_header(ids_location.unwrap().get(), &mut *out_buffer);
-            } else {
-                ids_location = None;
-            }
+        out_buffer.flush().expect("Unable to flush output buffer");
 
-            if masking.is_some() {
-                let x = masking.as_mut().unwrap();
-                masking_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
-                x.write_header(masking_location.unwrap().get(), &mut *out_buffer);
-            } else {
-                masking_location = None;
-            }
-
-            if sequences.is_some() {
-                let x = sequences.as_mut().unwrap();
-                sequences_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
-                x.write_header(sequences_location.unwrap().get(), &mut *out_buffer);
-            } else {
-                sequences_location = None;
-            }
-
-            out_buffer.flush().expect("Unable to flush output buffer");
-
-            let ids_to_locs = Arc::try_unwrap(ids_to_locs_o).expect("Unable to get ids_to_locs");
-            let ids_to_locs = ids_to_locs.into_inner().expect("Unable to get ids_to_locs");
-
-            (
-                seq_locs,
-                headers_location,
-                ids_location,
-                masking_location,
-                sequences_location,
-                ids_to_locs,
-            )
-        })
-        .unwrap()
+        (
+            seqlocs,
+            headers_location,
+            ids_location,
+            masking_location,
+            sequences_location,
+            ids_to_locs,
+        )
     }
 }
 

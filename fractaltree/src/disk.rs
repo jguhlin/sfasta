@@ -7,8 +7,8 @@ use pulp::Arch;
 use crate::*;
 use libcompression::*;
 
-// Tried to make it generic, didn't work
-// Maybe try again later...
+// todo: compress nodes before writing to disk (use compression config)
+// and add multithreading
 
 /// This is the on-disk version of the FractalTree
 ///

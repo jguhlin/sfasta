@@ -14,12 +14,13 @@ use std::{
 };
 
 use crossbeam::{queue::ArrayQueue, utils::Backoff};
+use flume::{Sender, Receiver};
 
 use libcompression::*;
 
 pub struct Worker<W: Write + Seek + Send + Seek + 'static>
 {
-    queue: Option<Arc<ArrayQueue<OutputBlock>>>,
+    queue: Option<Arc<Sender<OutputBlock>>>,
     shutdown_flag: Arc<AtomicBool>,
     buffer_size: usize,
 
@@ -56,13 +57,16 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
     /// Starts the worker thread, and returns the JoinHandle.
     pub fn start(&mut self) -> JoinHandle<()>
     {
-        let queue = Arc::new(ArrayQueue::new(self.buffer_size));
-        self.queue = Some(Arc::clone(&queue));
+        let (tx, rx) = flume::bounded(self.buffer_size);
+        let queue = Arc::new(tx);
+        self.queue = Some(queue);
+        // let queue = Arc::new(ArrayQueue::new(self.buffer_size));
+        // self.queue = Some(Arc::clone(&queue));
 
         let shutdown = Arc::clone(&self.shutdown_flag);
 
         let output_buffer = Arc::clone(&self.output_buffer);
-        thread::spawn(|| worker(queue, shutdown, output_buffer))
+        thread::spawn(|| worker(rx, shutdown, output_buffer))
     }
 
     /// Manually shutdown the worker
@@ -76,48 +80,52 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
         self.queue.as_ref().unwrap().len()
     }
 
-    pub fn get_queue(&self) -> Arc<ArrayQueue<OutputBlock>>
+    pub fn get_queue(&self) -> Arc<Sender<OutputBlock>>
     {
         Arc::clone(self.queue.as_ref().unwrap())
     }
 }
 
-fn worker<W>(queue: Arc<ArrayQueue<OutputBlock>>, shutdown_flag: Arc<AtomicBool>, output_buffer: Arc<Mutex<W>>)
+fn worker<W>(queue: Receiver<OutputBlock>, shutdown_flag: Arc<AtomicBool>, output_buffer: Arc<Mutex<W>>)
 where
     W: Write + Seek + Send + Sync + Seek,
 {
     let backoff = Backoff::new();
+    let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
     // Hold the mutex for the entire duration
     let output = Arc::clone(&output_buffer);
     let mut output = output.lock().unwrap();
 
+    let mut output_lens = Vec::new();
+    let mut output_locs: Vec<Arc<AtomicU64>> = Vec::new();
+    let mut output_buffer = Vec::new();
+
     loop {
+
+        if !output_buffer.is_empty() {
+            // Get current location
+            let current_location = output.stream_position().unwrap();
+            output_lens.iter_mut().for_each(|x| *x += current_location);
+            bincode::encode_into_std_write(&output_buffer, &mut *output, bincode_config).unwrap();
+            output_lens.iter().zip(output_locs.iter()).for_each(|(len, loc)| {
+                loc.store(*len, Ordering::Relaxed);
+            });
+
+            output_buffer.clear();
+            output_lens.clear();
+            output_locs.clear();
+        }
+
         if shutdown_flag.load(Ordering::Relaxed) {
             break;
         }
 
-        if let Some(block) = queue.pop() {
-            let location = block.location;
-            let data = block.data;
-
-            // Get current location
-            let current_location = output.stream_position().unwrap();
-
-            #[cfg(test)]
-            println!("Block of size {} at location {}", data.len(), current_location);
-
-            let bincode_config = bincode::config::standard().with_fixed_int_encoding();
-            bincode::encode_into_std_write(&data, &mut *output, bincode_config).unwrap();
-
-            // output.write_all(&data).unwrap();
-            location.store(current_location, Ordering::Relaxed);
-        } else {
-            backoff.snooze();
-            if backoff.is_completed() {
-                thread::sleep(Duration::from_millis(5));
-                backoff.reset();
-            }
-        }
+        let iter = queue.drain();
+        iter.for_each(|block| {
+            output_locs.push(block.location);
+            output_lens.push(block.data.len() as u64);
+            output_buffer.push(block.data);
+        });
     }
 }

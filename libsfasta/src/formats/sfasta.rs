@@ -122,7 +122,7 @@ impl<'sfa> Sfasta<'sfa>
             return Ok(None);
         }
 
-        let matches = matches.unwrap();
+        let matches = matches.unwrap().clone();
 
         let id = if matches.ids > 0 {
             Some(self.get_id(matches.get_ids()).unwrap().into_bytes()) // todo
@@ -168,7 +168,7 @@ impl<'sfa> Sfasta<'sfa>
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),
             Err(e) => return Err(e),
-        };
+        }.clone();
 
         assert!(seqloc.sequence > 0);
 
@@ -341,7 +341,7 @@ impl<'sfa> Sfasta<'sfa>
         Ok(seq)
     }
 
-    pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str>
+    pub fn find(&mut self, x: &str) -> Result<Option<&SeqLoc>, &str>
     {
         assert!(self.index.is_some(), "Sfasta index not present");
 
@@ -407,7 +407,7 @@ impl<'sfa> Sfasta<'sfa>
     // }
 
     /// Get the ith seqloc in the file
-    pub fn get_seqloc(&mut self, i: usize) -> Result<Option<SeqLoc>, &'static str>
+    pub fn get_seqloc(&mut self, i: usize) -> Result<Option<&SeqLoc>, &'static str>
     {
         // assert!(i < self.len(), "Index out of bounds");
         assert!(i < std::u32::MAX as usize, "Index out of bounds");
@@ -579,7 +579,7 @@ impl<'sfa> SfastaParser<'sfa>
 
         log::info!("Parsing Blocks");
 
-        log::info!("Creating Sequence Blocks");
+        log::info!("Creating Sequence Blocks, loc: {}", sfasta.directory.sequences_loc.unwrap().get());
 
         let sequenceblocks =
             SequenceBlockStore::from_buffer(&mut in_buf, sfasta.directory.sequences_loc.unwrap().get());
@@ -592,6 +592,8 @@ impl<'sfa> SfastaParser<'sfa>
         }
 
         sfasta.sequenceblocks = Some(sequenceblocks.unwrap());
+
+        log::info!("Sequence Blocks Created");
 
         if prefetch {
             todo!("Prefetching block locs is not yet implemented");
@@ -798,7 +800,7 @@ impl<'sfa> Iterator for Sequences<'sfa>
             .sfasta
             .get_seqloc(self.cur_idx)
             .expect("Unable to get sequence location")
-            .expect(".");
+            .expect(".").clone();
 
         let id = if self.with_ids {
             Some(self.sfasta.get_id(seqloc.get_ids()).unwrap().into_bytes()) // todo
@@ -896,7 +898,7 @@ mod tests
             .expect("Unable to find-0")
             .expect("Unable to find-1");
 
-        let output = &sfasta.find("needle_last").unwrap().unwrap();
+        let output = &sfasta.find("needle_last").unwrap().unwrap().clone();
 
         let sequence = sfasta
             .get_sequence(output.get_sequence(), output.get_masking())
@@ -928,14 +930,14 @@ mod tests
         sfasta.index_load().expect("Unable to load index");
         assert!(sfasta.index_len() == Ok(10));
 
-        let output = &sfasta.find("test").unwrap().unwrap();
+        let output = &sfasta.find("test").unwrap().unwrap().clone();
         println!("'test' seqloc: {output:#?}");
         let sequence = sfasta
             .get_sequence(output.get_sequence(), output.get_masking())
             .unwrap();
         println!("'test' Sequence length: {}", sequence.len());
 
-        let output = &sfasta.find("test3").unwrap().unwrap();
+        let output = &sfasta.find("test3").unwrap().unwrap().clone();
         println!("'test3' seqloc: {output:#?}");
 
         let sequence = sfasta

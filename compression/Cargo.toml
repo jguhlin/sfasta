@@ -22,6 +22,7 @@ brotli = "4.0.0"
 lz4_flex = "0.11.3"
 stream-vbyte = "0.4.1"
 log = "0.4"
+flume = "0.11.0"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Comment flate2 out for testing wasm build
