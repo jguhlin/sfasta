@@ -1,6 +1,3 @@
-use rand::seq;
-use rand_core::block;
-
 // // When not windows, use mimalloc
 // #[cfg(not(windows))]
 // #[global_allocator]
@@ -9,10 +6,10 @@ use rand_core::block;
 
 // static MEM: &str = "Mimalloc";
 
-// use mimalloc::MiMalloc;
+use mimalloc::MiMalloc;
 
-// #[global_allocator]
-// static GLOBAL: MiMalloc = MiMalloc;
+#[global_allocator]
+static GLOBAL: MiMalloc = MiMalloc;
 
 extern crate clap;
 extern crate indicatif;
@@ -312,8 +309,6 @@ fn main()
 
 fn print_sequence(stdout: &mut std::io::StdoutLock, seq: &[u8], line_length: usize)
 {
-    // let mut i = 0;
-
     seq.chunks(line_length).for_each(|x| {
         stdout.write_all(x).expect("Unable to write to stdout");
         stdout.write_all(b"\n").expect("Unable to write to stdout");
@@ -337,20 +332,21 @@ fn faidx(input: &str, ids: &Vec<String>)
         let result = sfasta
             .find(i)
             .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
-            .unwrap().clone();
+            .unwrap()
+            .clone();
 
+        write!(stdout, ">{}", i);
         if result.has_headers() {
             let header = sfasta.get_header(result.get_headers()).expect("Unable to fetch header");
-            writeln!(stdout, ">{} {}", i, header);
-        } else {
-            writeln!(stdout, ">{}", i);
+            write!(stdout, " {}", header);
         }
+
+        write!(stdout, "\n");
 
         let sequence = sfasta
             .get_sequence(result.get_sequence(), result.get_masking())
             .expect("Unable to fetch sequence");
 
-        // 60 matches samtools faidx output
         print_sequence(&mut stdout, &sequence, 60);
         stdout.flush();
     }
@@ -446,7 +442,8 @@ fn list(input: &str)
             Ok(Some(x)) => x,
             Ok(None) => panic!("No SeqLoc found"),
             Err(_) => panic!("Unable to fetch seqloc"),
-        }.clone();
+        }
+        .clone();
         let id = &sfasta.get_id(seqloc.get_ids()).unwrap();
         println!("{}", id);
     }

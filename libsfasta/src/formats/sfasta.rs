@@ -168,7 +168,8 @@ impl<'sfa> Sfasta<'sfa>
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),
             Err(e) => return Err(e),
-        }.clone();
+        }
+        .clone();
 
         assert!(seqloc.sequence > 0);
 
@@ -265,11 +266,10 @@ impl<'sfa> Sfasta<'sfa>
         let mut seq: Vec<u8> = Vec::new();
 
         // Once stabilized, use write_all_vectored
-        for l in seqloc.iter().map(|x| x) {
-            log::debug!("Opening loc: {:?}", l);
+        seqloc.iter().for_each(|l| {
             let seqblock = self.sequenceblocks.as_mut().unwrap().get_block(&mut *buf, l.block);
             seq.extend_from_slice(&seqblock[l.start as usize..(l.start + l.len) as usize]);
-        }
+        });
 
         if !maskingloc.is_empty() && self.masking.is_some() {
             let masking = self.masking.as_mut().unwrap();
@@ -281,7 +281,7 @@ impl<'sfa> Sfasta<'sfa>
 
     pub fn get_sequence_nocache(&mut self, seqloc: &SeqLoc) -> Result<Vec<u8>, &'static str>
     {
-        let mut seq: Vec<u8> = Vec::with_capacity(1024);
+        let mut seq: Vec<u8> = Vec::new();
 
         assert!(seqloc.sequence > 0);
 
@@ -579,7 +579,10 @@ impl<'sfa> SfastaParser<'sfa>
 
         log::info!("Parsing Blocks");
 
-        log::info!("Creating Sequence Blocks, loc: {}", sfasta.directory.sequences_loc.unwrap().get());
+        log::info!(
+            "Creating Sequence Blocks, loc: {}",
+            sfasta.directory.sequences_loc.unwrap().get()
+        );
 
         let sequenceblocks =
             SequenceBlockStore::from_buffer(&mut in_buf, sfasta.directory.sequences_loc.unwrap().get());
@@ -614,10 +617,6 @@ impl<'sfa> SfastaParser<'sfa>
                     Err(y) => return Result::Err(format!("Error reading SFASTA headers - StringBlockStore: {y}")),
                 };
 
-            if prefetch {
-                headers.prefetch(&mut in_buf);
-            }
-
             sfasta.headers = Some(headers);
         }
 
@@ -627,9 +626,6 @@ impl<'sfa> SfastaParser<'sfa>
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA ids: {y}")),
             };
-            if prefetch {
-                ids.prefetch(&mut in_buf);
-            }
             sfasta.ids = Some(ids);
         }
 
@@ -800,7 +796,8 @@ impl<'sfa> Iterator for Sequences<'sfa>
             .sfasta
             .get_seqloc(self.cur_idx)
             .expect("Unable to get sequence location")
-            .expect(".").clone();
+            .expect(".")
+            .clone();
 
         let id = if self.with_ids {
             Some(self.sfasta.get_id(seqloc.get_ids()).unwrap().into_bytes()) // todo

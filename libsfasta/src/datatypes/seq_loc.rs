@@ -22,6 +22,7 @@
 use std::{
     io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write},
     sync::{atomic::AtomicU32, Arc},
+    ops::Range,
 };
 
 use bincode::{Decode, Encode};
@@ -66,64 +67,69 @@ impl SeqLoc
         }
     }
 
-    #[inline(always)]
-    fn masking_pos(&self) -> usize
+    pub fn sequence_pos(&self) -> Range<usize>
     {
-        self.sequence as usize
+        0..self.sequence as usize
+    }
+    
+    pub fn masking_pos(&self) -> Range<usize>
+    {
+        self.sequence as usize..(self.sequence + self.masking) as usize
     }
 
-    #[inline(always)]
-    fn scores_pos(&self) -> usize
+    pub fn scores_pos(&self) -> Range<usize>
     {
-        (self.sequence + self.masking) as usize
+        (self.sequence + self.masking) as usize..(self.sequence + self.masking + self.scores) as usize
     }
 
-    #[inline(always)]
-    fn signal_pos(&self) -> usize
+    pub fn signal_pos(&self) -> Range<usize>
     {
-        (self.sequence + self.masking + self.scores) as usize
+        (self.sequence + self.masking + self.scores) as usize..(self.sequence + self.masking + self.scores + self.signal) as usize
     }
 
-    #[inline(always)]
-    fn headers_pos(&self) -> usize
+    pub fn headers_pos(&self) -> Range<usize>
     {
-        (self.sequence + self.masking + self.scores + self.signal) as usize
+        (self.sequence + self.masking + self.scores + self.signal) as usize..(self.sequence + self.masking + self.scores + self.signal + self.headers) as usize
     }
 
-    #[inline(always)]
-    fn ids_pos(&self) -> usize
+    pub fn ids_pos(&self) -> Range<usize>
     {
-        (self.sequence + self.masking + self.scores + self.signal + self.headers) as usize
+        (self.sequence + self.masking + self.scores + self.signal + self.headers) as usize..(self.sequence + self.masking + self.scores + self.signal + self.headers + self.ids) as usize
+    }
+
+    pub fn mods_pos(&self) -> Range<usize>
+    {
+        (self.sequence + self.masking + self.scores + self.signal + self.headers + self.ids) as usize..(self.sequence + self.masking + self.scores + self.signal + self.headers + self.ids + self.mods) as usize
     }
 
     pub fn get_sequence(&self) -> &[Loc]
     {
-        &self.locs[0..self.sequence as usize]
+        &self.locs[self.sequence_pos()]
     }
 
     pub fn get_masking(&self) -> &[Loc]
     {
-        &self.locs[self.sequence as usize..self.masking_pos()]
+        &self.locs[self.masking_pos()]
     }
 
     pub fn get_scores(&self) -> &[Loc]
     {
-        &self.locs[self.masking_pos()..self.scores_pos()]
+        &self.locs[self.scores_pos()]
     }
 
     pub fn get_signal(&self) -> &[Loc]
     {
-        &self.locs[self.scores_pos()..self.signal_pos()]
+        &self.locs[self.signal_pos()]
     }
 
     pub fn get_headers(&self) -> &[Loc]
     {
-        &self.locs[self.signal_pos()..self.headers_pos()]
+        &self.locs[self.headers_pos()]
     }
 
     pub fn get_ids(&self) -> &[Loc]
     {
-        &self.locs[self.headers_pos()..self.ids_pos()]
+        &self.locs[self.ids_pos()]
     }
 
     pub fn add_locs(

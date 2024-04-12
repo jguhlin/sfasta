@@ -4,7 +4,7 @@
 // alias?
 
 use std::{
-    io::{Read, Seek, Write},
+    io::{BufRead, Read, Seek, Write},
     sync::{atomic::Ordering, Arc},
 };
 
@@ -49,16 +49,11 @@ impl SequenceBlockStoreBuilder
         self.inner.write_header(pos, &mut out_buf);
     }
 
-    pub fn write_block_locations(&mut self) -> Result<(), BlockStoreError>
+    pub fn write_block_locations<W>(&mut self, mut out_buf: W) -> Result<(), BlockStoreError>
+    where
+        W: Write + Seek,
     {
-        let result = self.inner.write_block_locations();
-
-        log::debug!(
-            "--- WRITE SequenceBlockStore Block Locations: {}",
-            self.inner.block_locations.len()
-        );
-
-        result
+        self.inner.write_block_locations(&mut out_buf)
     }
 
     pub fn with_block_size(mut self, block_size: usize) -> Self
@@ -87,34 +82,21 @@ impl SequenceBlockStore
 {
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
-        R: Read + Seek,
+        R: Read + Seek + Send + Sync + BufRead,
     {
         let inner = match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
             Ok(inner) => inner,
             Err(e) => return Err(e),
         };
 
-        log::debug!(
-            "--- READ SequenceBlockStore Block Locations: {}",
-            inner.block_locations.len()
-        );
-
         let store = SequenceBlockStore { inner };
         Ok(store)
-    }
-
-    pub fn prefetch<R>(&mut self, in_buf: &mut R)
-    where
-        R: Read + Seek,
-    {
-        log::info!("Prefetching string block store");
-        self.inner.prefetch(in_buf)
     }
 
     // TODO: Needed?
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
     where
-        R: Read + Seek,
+        R: Read + Seek + Send + Sync,
     {
         log::debug!("Getting block {}", block);
         log::debug!("Inner Block Locs: {:?}", self.inner.block_locations.len());
@@ -124,7 +106,7 @@ impl SequenceBlockStore
     // TODO: Needed?
     pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<u8>
     where
-        R: Read + Seek,
+        R: Read + Seek + Send + Sync,
     {
         self.inner.get_block_uncached(&mut in_buf, block)
     }
@@ -132,7 +114,7 @@ impl SequenceBlockStore
     // TODO: Should be fallible...
     pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
     where
-        R: Read + Seek,
+        R: Read + Seek + Send + Sync,
     {
         let string_as_bytes = self.inner.get(in_buf, loc);
 

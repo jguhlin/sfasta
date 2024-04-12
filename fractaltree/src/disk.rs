@@ -3,12 +3,14 @@ use std::io::{BufRead, Read, Seek, SeekFrom, Write};
 use bincode::{BorrowDecode, Decode, Encode};
 use binout::{Serializer, VByte};
 use pulp::Arch;
+use rayon::prelude::*;
 
 use crate::*;
 use libcompression::*;
 
 // todo: compress nodes before writing to disk (use compression config)
 // and add multithreading
+// todo: speed would come here from batch inserts!
 
 /// This is the on-disk version of the FractalTree
 ///
@@ -67,7 +69,7 @@ impl<K: Key, V: Value> Default for FractalTreeDisk<K, V>
         FractalTreeDisk {
             root: NodeDisk {
                 is_root: true,
-                state: None,
+                state: NodeState::InMemory,
                 is_leaf: true,
                 keys: Vec::new(),
                 children: None,
@@ -120,8 +122,6 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         let bincode_config = bincode::config::standard().with_variable_int_encoding();
         bincode::encode_into_std_write(&*self, &mut out_buf, bincode_config).unwrap();
 
-        log::debug!("Start Pos: {}", self.start);
-
         Ok(tree_location)
     }
 
@@ -134,11 +134,58 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
 
         let tree: FractalTreeDisk<K, V> = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
-        log::debug!("Start Pos: {}", tree.start);
-        log::debug!("Root Children Count: {:?}", tree.root.children.as_ref().unwrap().len());
-        log::debug!("Root Keys: {:?}", tree.root.keys);
-
         Ok(tree)
+    }
+}
+
+#[derive(Debug)]
+pub enum NodeState
+{
+    InMemory,
+    Compressed(Vec<u8>),
+    OnDisk(u32),
+}
+
+impl NodeState
+{
+    pub fn as_ref(&self) -> Option<u32>
+    {
+        match self {
+            NodeState::OnDisk(x) => Some(*x),
+            _ => None,
+        }
+    }
+
+    pub fn on_disk(&self) -> bool
+    {
+        match self {
+            NodeState::OnDisk(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn compressed(&self) -> bool
+    {
+        match self {
+            NodeState::Compressed(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn in_memory(&self) -> bool
+    {
+        match self {
+            NodeState::InMemory => true,
+            _ => false,
+        }
+    }
+
+    pub fn loc(&self) -> u32
+    {
+        match self {
+            NodeState::OnDisk(x) => *x,
+            _ => panic!("Node not on disk"),
+        }
     }
 }
 
@@ -147,7 +194,7 @@ pub struct NodeDisk<K, V>
 {
     pub is_root: bool,
     pub is_leaf: bool,
-    pub state: Option<u32>, // None means in memory, Some(u32) is the location on the disk
+    pub state: NodeState,
     pub keys: Vec<K>,
     pub children: Option<Vec<Box<NodeDisk<K, V>>>>,
     pub values: Option<Vec<V>>,
@@ -205,7 +252,7 @@ impl<K: Key, V: Value> Decode for NodeDisk<K, V>
         Ok(NodeDisk {
             is_root: false,
             is_leaf,
-            state: None,
+            state: NodeState::InMemory,
             keys: keys.to_vec(),
             children,
             values,
@@ -242,7 +289,7 @@ impl<K: Key, V: Value> BorrowDecode<'_> for NodeDisk<K, V>
         Ok(NodeDisk {
             is_root: false,
             is_leaf,
-            state: None,
+            state: NodeState::InMemory,
             keys: keys.to_vec(),
             children,
             values,
@@ -257,7 +304,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         NodeDisk {
             is_root: false,
             is_leaf: false,
-            state: Some(loc),
+            state: NodeState::OnDisk(loc),
             keys: Vec::new(),
             children: None,
             values: None,
@@ -268,10 +315,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
     where
         R: Read + Seek,
     {
-        log::debug!("Start {} State {:?}", start, self.state);
-        in_buf
-            .seek(SeekFrom::Start(start + self.state.unwrap() as u64))
-            .unwrap();
+        in_buf.seek(SeekFrom::Start(start + self.state.loc() as u64)).unwrap();
 
         *self = if compression.is_some() {
             let config = bincode::config::standard()
@@ -298,10 +342,8 @@ impl<K: Key, V: Value> NodeDisk<K, V>
             .with_variable_int_encoding()
             .with_limit::<{ 1024 * 1024 }>();
 
-        if self.state.is_some() {
-            in_buf
-                .seek(SeekFrom::Start(self.state.unwrap() as u64 + start))
-                .unwrap();
+        if self.state.on_disk() {
+            in_buf.seek(SeekFrom::Start(self.state.loc() as u64 + start)).unwrap();
             let node: NodeDisk<K, V> = bincode::decode_from_std_read(in_buf, config).unwrap();
             *self = node;
         }
@@ -312,7 +354,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
             }
         }
 
-        self.state = None;
+        self.state = NodeState::InMemory;
     }
 
     pub fn store<W>(&mut self, out_buf: &mut W, compression: &Option<CompressionConfig>, start: u64)
@@ -322,7 +364,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         // Make sure all the children are stored first...
         if !self.is_leaf {
             for child in self.children.as_mut().unwrap() {
-                if !child.state.is_some() {
+                if !child.state.on_disk() {
                     child.store(out_buf, compression, start);
                 }
             }
@@ -340,7 +382,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 let compressed = compression.as_ref().unwrap().compress(&uncompressed).unwrap();
                 bincode::encode_into_std_write(&compressed, out_buf, config).unwrap();
 
-                self.state = Some(cur_pos as u32 - start as u32);
+                self.state = NodeState::OnDisk(cur_pos as u32 - start as u32);
                 self.children = None;
                 self.values = None;
             } else {
@@ -349,7 +391,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                     .with_limit::<{ 1024 * 1024 }>();
                 bincode::encode_into_std_write(&*self, out_buf, config).unwrap();
 
-                self.state = Some(cur_pos as u32 - start as u32);
+                self.state = NodeState::OnDisk(cur_pos as u32 - start as u32);
                 self.children = None;
                 self.values = None;
             }
@@ -366,7 +408,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
     where
         R: Read + Seek + Send + Sync,
     {
-        if self.state.is_some() {
+        if self.state.on_disk() {
             self.load(in_buf, compression, start);
         }
 
@@ -394,7 +436,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         if self.is_leaf {
             true
         } else {
-            self.children.as_ref().unwrap().iter().all(|x| !x.state.is_some())
+            self.children.as_ref().unwrap().iter().all(|x| x.state.on_disk())
         }
     }
 
@@ -439,7 +481,7 @@ mod tests
         let mut node = NodeDisk {
             is_root: true,
             is_leaf: true,
-            state: None,
+            state: NodeState::InMemory,
             keys,
             children: None,
             values: Some(values),
@@ -518,6 +560,26 @@ mod tests
         let result = tree.search(&mut buf, &(u32::MAX / 2));
         assert!(result.is_some());
         assert!(*result.unwrap() == u32::MAX / 2);
+
+        let mut tree: FractalTreeBuild<u32, u64> = FractalTreeBuild::new(128, 256);
+        for i in 0..1024 * 1024 {
+            tree.insert(i, i as u64);
+        }
+
+        let mut tree: FractalTreeDisk<u32, u64> = tree.into();
+        tree.set_compression(libcompression::CompressionConfig::default());
+        let mut buffer = std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
+        // Push some dummy bytes at the front
+        buffer.write(&[0; 1024]).unwrap();
+
+        let tree_loc = tree.write_to_buffer(&mut buffer).unwrap();
+        let raw_vec = buffer.into_inner().unwrap().into_inner();
+        let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
+
+        let mut tree: FractalTreeDisk<u32, u64> = FractalTreeDisk::from_buffer(&mut buf, tree_loc).unwrap();
+
+        let result = tree.search(&mut buf, &1);
+        assert!(result.is_some());
     }
 
     #[ignore]

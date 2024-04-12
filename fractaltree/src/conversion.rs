@@ -31,7 +31,7 @@ impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
         NodeDisk {
             is_root,
             is_leaf,
-            state: None,
+            state: NodeState::InMemory,
             keys: keys.into_vec(),
             children: children.map(|children| children.into_iter().map(|child| child.into()).collect()),
             values,

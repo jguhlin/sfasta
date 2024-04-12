@@ -172,12 +172,12 @@ pub fn zstd_encoder(compression_level: i32, dict: &Option<Arc<Vec<u8>>>) -> zstd
         .include_magicbytes(false)
         .expect("Unable to set ZSTD MagicBytes");
     // encoder
-        //.include_contentsize(false)
-        //.expect("Unable to set ZSTD Content Size Flag");
+    //.include_contentsize(false)
+    //.expect("Unable to set ZSTD Content Size Flag");
     encoder
         .long_distance_matching(true)
         .expect("Unable to set long_distance_matching");
-    encoder.window_log(31);
+    // encoder.window_log(31);
     encoder
 }
 
@@ -203,7 +203,7 @@ pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd::bulk::Decompressor<'a
         .include_magicbytes(false)
         .expect("Failed to set magicbytes");
 
-    zstd_decompressor.window_log_max(31);
+    // zstd_decompressor.window_log_max(31);
 
     zstd_decompressor
 }
@@ -260,8 +260,8 @@ pub struct CompressionWorker
     pub threads: u16,
     pub buffer_size: usize,
     handles: Vec<JoinHandle<()>>,
-    queue: Option<Arc<ArrayQueue<CompressorWork>>>, // Input
-    writer: Option<Arc<flume::Sender<OutputBlock>>>,   // Output
+    queue: Option<Arc<ArrayQueue<CompressorWork>>>,  // Input
+    writer: Option<Arc<flume::Sender<OutputBlock>>>, // Output
 
     shutdown_flag: Arc<AtomicBool>,
 }
@@ -383,7 +383,7 @@ fn compression_worker(
                 } else {
                     backoff.snooze();
                     if backoff.is_completed() {
-                        thread::park_timeout(Duration::from_millis(5));
+                        thread::park_timeout(Duration::from_millis(1));
                         backoff.reset();
                     }
                 }
@@ -486,7 +486,7 @@ fn compression_worker(
                     }
                 }
             }
-            
+
             Some(CompressorWork::Decompress(work)) => {
                 todo!();
             }

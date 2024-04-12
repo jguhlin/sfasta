@@ -58,7 +58,7 @@ impl Default for Converter
     {
         Converter {
             threads: 8,
-            block_size: 512 * 1024,    // 4Mb
+            block_size: 512 * 1024, // 4Mb
             index: true,
             masking: false,
             quality_scores: false,
@@ -323,6 +323,7 @@ impl Converter
                 fractaltree_pos = index
                     .write_to_buffer(&mut *out_buffer_thread)
                     .expect("Unable to write index to file");
+                log::debug!("Index pos: {}", fractaltree_pos);
 
                 let end_time = std::time::Instant::now();
                 log::info!("Index write time: {:?}", end_time - start_time);
@@ -479,10 +480,8 @@ impl Converter
                     let seqheader = id.next();
 
                     let start_time = std::time::Instant::now();
-                    let mut masking_locs = Vec::new();
-                    if let Some(x) = masking.add_masking(&seq) {
-                        masking_locs.extend(x);
-                    }
+                    let masking_locs = masking.add_masking(&seq);
+
                     let end_time = std::time::Instant::now();
                     masking_times.push(end_time - start_time);
 
@@ -547,23 +546,53 @@ impl Converter
             (*min, *max)
         };
 
-        log::info!("Masking mean: {:?} range: {:?}", mean(&masking_times), range(&masking_times));
-        log::info!("Seq add mean: {:?} range: {:?}", mean(&seq_add_times), range(&seq_add_times));
-        log::info!("Headers mean: {:?} range: {:?}", mean(&headers_time), range(&headers_time));
+        log::info!(
+            "Masking mean: {:?} range: {:?}",
+            mean(&masking_times),
+            range(&masking_times)
+        );
+        log::info!(
+            "Seq add mean: {:?} range: {:?}",
+            mean(&seq_add_times),
+            range(&seq_add_times)
+        );
+        log::info!(
+            "Headers mean: {:?} range: {:?}",
+            mean(&headers_time),
+            range(&headers_time)
+        );
         log::info!("IDs mean: {:?} range: {:?}", mean(&ids_time), range(&ids_time));
         log::info!("SeqLoc mean: {:?} range: {:?}", mean(&seqloc_time), range(&seqloc_time));
-        log::info!("SeqLocs mean: {:?} range: {:?}", mean(&seqlocs_time), range(&seqlocs_time));
+        log::info!(
+            "SeqLocs mean: {:?} range: {:?}",
+            mean(&seqlocs_time),
+            range(&seqlocs_time)
+        );
+
+        headers.finalize();
+        ids.finalize();
+        masking.finalize();
+        sequences.finalize();
 
         let backoff = Backoff::new();
-        while compression_workers.len() > 0 {
+        while compression_workers.len() > 0 || output_worker.len() > 0 {
             backoff.snooze();
             if backoff.is_completed() {
-                std::thread::sleep(std::time::Duration::from_millis(10));
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                log::debug!(
+                    "Compression Length: {} Output Worker Length: {}",
+                    compression_workers.len(),
+                    output_worker.len()
+                );
                 backoff.reset();
             }
         }
 
-        let mut headers = match headers.write_block_locations() {
+        output_worker.shutdown();
+
+        let mut out_buffer = out_fh.lock().unwrap();
+
+        let mut headers = match headers.write_block_locations(&mut *out_buffer) {
             Ok(x) => Some(headers),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
@@ -571,7 +600,7 @@ impl Converter
             },
         };
 
-        let mut ids = match ids.write_block_locations() {
+        let mut ids = match ids.write_block_locations(&mut *out_buffer) {
             Ok(x) => Some(ids),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
@@ -579,7 +608,7 @@ impl Converter
             },
         };
 
-        let mut masking = match masking.write_block_locations() {
+        let mut masking = match masking.write_block_locations(&mut *out_buffer) {
             Ok(x) => Some(masking),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
@@ -587,7 +616,7 @@ impl Converter
             },
         };
 
-        let mut sequences = match sequences.write_block_locations() {
+        let mut sequences = match sequences.write_block_locations(&mut *out_buffer) {
             Ok(x) => Some(sequences),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
@@ -595,19 +624,7 @@ impl Converter
             },
         };
 
-        // fasta_thread.join().expect("Unable to join thread");
-
-        let backoff = Backoff::new();
-        while output_queue.len() > 0 {
-            backoff.snooze();
-        }
-
-        output_worker.shutdown();
-
-        let mut out_buffer = out_fh.lock().unwrap();
-
-        // Write the headers with the complete information now...
-
+        // Write the headers for each store...
         if headers.is_some() {
             let x = headers.as_mut().unwrap();
             headers_location = NonZeroU64::new(out_buffer.stream_position().unwrap());

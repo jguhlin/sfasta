@@ -7,7 +7,6 @@ pub mod datastructures;
 pub mod datatypes;
 mod formats;
 pub mod io;
-pub mod masking;
 pub mod utils;
 
 pub mod prelude;

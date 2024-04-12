@@ -2,7 +2,7 @@
 // Compressed, this saves < 1Mbp on a 2.3Gbp uncompressed FASTA file... and triple the length in time for masking.
 // TODO: Try stream vbytes for this...
 use std::{
-    io::{Read, Seek, Write},
+    io::{BufRead, Read, Seek, Write},
     sync::Arc,
 };
 
@@ -35,9 +35,11 @@ impl MaskingStoreBuilder
         self.inner.write_header(pos, &mut out_buf);
     }
 
-    pub fn write_block_locations(&mut self) -> Result<(), BlockStoreError>
+    pub fn write_block_locations<W>(&mut self, mut out_buf: W) -> Result<(), BlockStoreError>
+    where
+        W: Write + Seek,
     {
-        self.inner.write_block_locations()
+        self.inner.write_block_locations(&mut out_buf)
     }
 
     pub fn with_block_size(mut self, block_size: usize) -> Self
@@ -52,7 +54,7 @@ impl MaskingStoreBuilder
         self
     }
 
-    pub fn add_masking(&mut self, seq: &[u8]) -> Option<Vec<Loc>>
+    pub fn add_masking(&mut self, seq: &[u8]) -> Vec<Loc>
     {
         // If none are lowercase, nope out here... Written in a way that allows for easy vectorization for SIMD
         let arch = Arch::new();
@@ -66,13 +68,13 @@ impl MaskingStoreBuilder
             }
             true
         }) {
-            return None;
+            return Vec::new();
         }
 
         // No benefit to using pulp here... (even with for loop)
         let masked: Vec<u8> = seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
 
-        Some(self.inner.add(&masked).expect("Failed to add masking to block store"))
+        self.inner.add(&masked).expect("Failed to add masking to block store")
     }
 
     pub fn finalize(&mut self)
@@ -90,23 +92,16 @@ impl Masking
 {
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
-        R: Read + Seek,
+        R: Read + Seek + Send + Sync + BufRead,
     {
         let inner = BytesBlockStore::from_buffer(&mut in_buf, starting_pos)?;
         Ok(Masking { inner })
     }
 
-    pub fn prefetch<R>(&mut self, in_buf: &mut R)
-    where
-        R: Read + Seek,
-    {
-        self.inner.prefetch(in_buf)
-    }
-
     /// Masks the sequence in place
     pub fn mask_sequence<R>(&mut self, in_buf: &mut R, loc: &[Loc], seq: &mut [u8])
     where
-        R: Read + Seek,
+        R: Read + Seek + Send + Sync,
     {
         let arch = Arch::new();
 
@@ -169,7 +164,7 @@ mod tests
 
         let seq = test_seqs[0].as_bytes();
         println!("Len: {:#?}", seq.len());
-        let loc = masking.add_masking(seq).unwrap();
+        let loc = masking.add_masking(seq);
         println!("{loc:#?}");
 
         for _ in 0..1000 {
@@ -180,11 +175,11 @@ mod tests
         }
 
         let seq = test_seqs[0].as_bytes();
-        let loc2 = masking.add_masking(seq).unwrap();
+        let loc2 = masking.add_masking(seq);
         println!("{loc2:#?}");
 
         let seq = test_seqs[3].as_bytes();
-        let loc3 = masking.add_masking(seq).unwrap();
+        let loc3 = masking.add_masking(seq);
 
         println!("{loc3:#?}");
 

@@ -39,7 +39,7 @@ flate2 = {version = "1.0.28", features = ["zlib-ng"], default-features = false}
 snap = "1.1.1"
 brotli = "4.0.0"
 lz4_flex = "0.11.3"
-# mimalloc = { version = "0.1.39", default-features = false, optional = true}
+mimalloc = { version = "0.1.39", default-features = false, optional = true}
 
 # [target.'cfg(not(target_env = "msvc"))'.dependencies]
 # tikv-jemallocator = { version = "0.5.4", optional = true}
@@ -55,7 +55,7 @@ features = [ "suggestions", "derive", "cargo", "color", "wrap_help"]
 
 [features]
 # default = ["lz4", "zstd", "xz", "zlib", "snap", "brotli", "bitpacking"]
-default = []
+default = ["mimalloc"]
 #default = ["mimalloc"]
 #mimalloc = ["dep:mimalloc"]
 #jemalloc = ["dep:tikv-jemallocator"]

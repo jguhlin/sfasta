@@ -14,13 +14,14 @@ use std::{
 };
 
 use crossbeam::{queue::ArrayQueue, utils::Backoff};
-use flume::{Sender, Receiver};
+use flume::{Receiver, Sender};
 
 use libcompression::*;
 
 pub struct Worker<W: Write + Seek + Send + Seek + 'static>
 {
     queue: Option<Arc<Sender<OutputBlock>>>,
+    receiver_queue: Option<Receiver<OutputBlock>>,
     shutdown_flag: Arc<AtomicBool>,
     buffer_size: usize,
 
@@ -42,6 +43,7 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
     {
         Self {
             queue: None,
+            receiver_queue: None,
             output_buffer,
             buffer_size: 1024,
             shutdown_flag: Arc::new(AtomicBool::new(false)),
@@ -60,6 +62,7 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
         let (tx, rx) = flume::bounded(self.buffer_size);
         let queue = Arc::new(tx);
         self.queue = Some(queue);
+        self.receiver_queue = Some(rx.clone());
         // let queue = Arc::new(ArrayQueue::new(self.buffer_size));
         // self.queue = Some(Arc::clone(&queue));
 
@@ -77,7 +80,7 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
 
     pub fn len(&self) -> usize
     {
-        self.queue.as_ref().unwrap().len()
+        self.receiver_queue.as_ref().unwrap().len()
     }
 
     pub fn get_queue(&self) -> Arc<Sender<OutputBlock>>
@@ -90,42 +93,36 @@ fn worker<W>(queue: Receiver<OutputBlock>, shutdown_flag: Arc<AtomicBool>, outpu
 where
     W: Write + Seek + Send + Sync + Seek,
 {
-    let backoff = Backoff::new();
     let bincode_config = bincode::config::standard().with_fixed_int_encoding();
 
     // Hold the mutex for the entire duration
     let output = Arc::clone(&output_buffer);
     let mut output = output.lock().unwrap();
 
-    let mut output_lens = Vec::new();
     let mut output_locs: Vec<Arc<AtomicU64>> = Vec::new();
     let mut output_buffer = Vec::new();
 
     loop {
+        let iter = queue.drain();
+        iter.for_each(|block| {
+            output_locs.push(block.location);
+            output_buffer.push(block.data);
+        });
 
         if !output_buffer.is_empty() {
             // Get current location
-            let current_location = output.stream_position().unwrap();
-            output_lens.iter_mut().for_each(|x| *x += current_location);
-            bincode::encode_into_std_write(&output_buffer, &mut *output, bincode_config).unwrap();
-            output_lens.iter().zip(output_locs.iter()).for_each(|(len, loc)| {
-                loc.store(*len, Ordering::Relaxed);
+            output_buffer.iter().enumerate().for_each(|(i, x)| {
+                let loc = &output_locs[i];
+                loc.store(output.stream_position().unwrap(), Ordering::Relaxed);
+                bincode::encode_into_std_write(&x, &mut *output, bincode_config).unwrap();
             });
 
             output_buffer.clear();
-            output_lens.clear();
             output_locs.clear();
         }
 
         if shutdown_flag.load(Ordering::Relaxed) {
             break;
         }
-
-        let iter = queue.drain();
-        iter.for_each(|block| {
-            output_locs.push(block.location);
-            output_lens.push(block.data.len() as u64);
-            output_buffer.push(block.data);
-        });
     }
 }
