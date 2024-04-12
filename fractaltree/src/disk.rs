@@ -378,6 +378,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                     .with_fixed_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
 
+                delta_encode_monotonic(&mut self.keys);
                 let uncompressed: Vec<u8> = bincode::encode_to_vec(&*self, config).unwrap();
                 let compressed = compression.as_ref().unwrap().compress(&uncompressed).unwrap();
                 bincode::encode_into_std_write(&compressed, out_buf, config).unwrap();
@@ -386,6 +387,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 self.children = None;
                 self.values = None;
             } else {
+                delta_encode_monotonic(&mut self.keys);
                 let config = bincode::config::standard()
                     .with_variable_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
@@ -458,6 +460,36 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         }
     }
 }
+
+// it works! trying this now
+// todo try pulp
+// todo try wide crate?
+// or vers vers-vecs Elias-Fano
+pub fn delta_encode_monotonic<T>(values: &mut [T]) 
+    where T: Default + num::traits::Unsigned + Copy
+{
+    let arch = Arch::new();
+
+    arch.dispatch(|| {
+        let mut prev: T = Default::default();
+        for i in 0..values.len() {
+            let tmp = values[i];
+            values[i] = values[i] - prev;
+            prev = tmp;
+        }
+    });
+}
+
+pub fn delta_decode_monotonic<T>(values: &mut [T]) 
+    where T: Default + num::traits::Unsigned + Copy
+{
+    let mut prev: T = Default::default();
+    for i in 0..values.len() {
+        values[i] = values[i] + prev;
+        prev = values[i];
+    }
+}
+
 
 #[cfg(test)]
 mod tests

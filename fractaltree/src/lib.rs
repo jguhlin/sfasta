@@ -13,7 +13,7 @@ pub use fractal::*;
 
 use bincode::{Decode, Encode};
 
-pub trait Key = 'static + PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Default + Encode + Decode;
+pub trait Key = 'static + PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Default + Encode + Decode + Default + num::traits::Unsigned + Copy;
 
 pub trait Value = 'static + std::fmt::Debug + Encode + Decode + Clone;
 

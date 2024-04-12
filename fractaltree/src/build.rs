@@ -284,7 +284,7 @@ mod tests
     #[test]
     fn split()
     {
-        let mut node = super::NodeBuild {
+        let mut node: NodeBuild<u32, u32> = super::NodeBuild {
             is_root: false,
             is_leaf: true,
             keys: unsafe { SortedVec::from_sorted(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) },
@@ -308,7 +308,7 @@ mod tests
         assert_eq!(node.keys, unsafe { SortedVec::from_sorted(vec![1, 2, 3, 4, 5]) });
         assert_eq!(node.values, Some(vec![1, 2, 3, 4, 5]));
 
-        let mut node = super::NodeBuild {
+        let mut node: NodeBuild<u32, u32> = super::NodeBuild {
             is_root: false,
             is_leaf: true,
             keys: SortedVec::from_unsorted((0..28).collect()),
@@ -352,7 +352,7 @@ mod tests
     #[test]
     fn simple_insertions()
     {
-        let mut tree = super::FractalTreeBuild::new(6, 3);
+        let mut tree: FractalTreeBuild<u32, u32> = super::FractalTreeBuild::new(6, 3);
         tree.insert(1, 1);
         tree.insert(2, 2);
         tree.insert(3, 3);
