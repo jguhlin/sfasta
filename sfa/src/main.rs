@@ -330,10 +330,15 @@ fn faidx(input: &str, ids: &Vec<String>)
 
     for i in ids {
         let result = sfasta
-            .find(i)
-            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
-            .unwrap()
-            .clone();
+            .find(i);
+
+	log::debug!("{:?}", result);
+	let result = result.expect("unable to find");
+	let result = result.expect("unable to find");
+	let result = result.clone();
+//            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
+//            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
+//            .clone();
 
         write!(stdout, ">{}", i);
         if result.has_headers() {

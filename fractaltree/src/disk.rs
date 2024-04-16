@@ -8,6 +8,8 @@ use rayon::prelude::*;
 use crate::*;
 use libcompression::*;
 
+// todo: monotonic works well, but is disabled until tested with decode
+//
 // todo: compress nodes before writing to disk (use compression config)
 // and add multithreading
 // todo: speed would come here from batch inserts!
@@ -378,7 +380,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                     .with_fixed_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
 
-                delta_encode_monotonic(&mut self.keys);
+                // delta_encode_monotonic(&mut self.keys);
                 let uncompressed: Vec<u8> = bincode::encode_to_vec(&*self, config).unwrap();
                 let compressed = compression.as_ref().unwrap().compress(&uncompressed).unwrap();
                 bincode::encode_into_std_write(&compressed, out_buf, config).unwrap();
@@ -387,7 +389,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 self.children = None;
                 self.values = None;
             } else {
-                delta_encode_monotonic(&mut self.keys);
+                // delta_encode_monotonic(&mut self.keys);
                 let config = bincode::config::standard()
                     .with_variable_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();

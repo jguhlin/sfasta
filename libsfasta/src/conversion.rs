@@ -450,13 +450,17 @@ impl Converter
         let mut headers = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
+
         let mut seqlocs = SeqLocsStoreBuilder::default();
+
         let mut ids = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
+
         let mut masking = MaskingStoreBuilder::default()
             .with_compression_worker(Arc::clone(&compression_workers_thread))
             .with_block_size(block_size as usize);
+
         let mut sequences = SequenceBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
