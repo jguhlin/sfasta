@@ -62,29 +62,28 @@ impl DirectoryOnDisk
 {
     pub fn sanity_check(&self, buffer_length: u64) -> Result<(), String>
     {
-
-        let values: [u64; 8] = [            self.index_loc,
+        let values: [u64; 8] = [
+            self.index_loc,
             self.ids_loc,
             self.block_index_loc,
             self.seqlocs_loc,
             self.scores_loc,
             self.masking_loc,
             self.headers_loc,
-            0
+            0,
         ];
 
         let arch = Arch::new();
         arch.dispatch(|| {
-        if values.iter().any(|&x| x > buffer_length) {
-            Err(format!(
-                "Some location is outside of buffer: {:?} > {}",
-                values, buffer_length
-            ))
-        } else {
+            if values.iter().any(|&x| x > buffer_length) {
+                Err(format!(
+                    "Some location is outside of buffer: {:?} > {}",
+                    values, buffer_length
+                ))
+            } else {
                 Ok(())
-        }
-    })
-
+            }
+        })
     }
 }
 

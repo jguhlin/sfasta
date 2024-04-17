@@ -502,11 +502,11 @@ impl SeqLocsStore
     }
 
     /// Get a particular SeqLoc from the store
-    pub fn get_seqloc<R>(&mut self, in_buf: &mut R, loc: u32) -> Result<Option<&SeqLoc>, &'static str>
+    pub fn get_seqloc<R>(&mut self, in_buf: &mut R, loc: u32) -> Result<Option<SeqLoc>, &'static str>
     where
         R: Read + Seek + Send + Sync,
     {
-        Ok(self.tree.search(in_buf, &loc))
+        Ok(self.tree.search(in_buf, &loc).clone())
         // let bincode_config = crate::BINCODE_CONFIG.with_limit::<{ 512 * 1024 }>(); // 512kbp
 
         // in_buf.seek(SeekFrom::Start(self.location + loc as u64)).unwrap();

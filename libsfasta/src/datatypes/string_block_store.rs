@@ -102,11 +102,11 @@ impl StringBlockStore
     }
 
     // TODO: Needed?
-    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<u8>
+    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32, buffer: &mut [u8])
     where
         R: Read + Seek + Send + Sync,
     {
-        self.inner.get_block_uncached(&mut in_buf, block)
+        self.inner.get_block_uncached(&mut in_buf, block, buffer)
     }
 
     // TODO: Should be fallible...
@@ -115,7 +115,6 @@ impl StringBlockStore
         R: Read + Seek + Send + Sync,
     {
         let string_as_bytes = self.inner.get(in_buf, loc);
-
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 

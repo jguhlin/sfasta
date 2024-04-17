@@ -510,7 +510,7 @@ mod tests
         let mut buf = std::io::Cursor::new(Vec::new());
 
         for i in values_1024.iter() {
-            assert_eq!(tree.search(&mut buf, &i), Some(i));
+            assert_eq!(tree.search(&mut buf, &i), Some(*i));
         }
     }
 

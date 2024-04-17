@@ -80,6 +80,11 @@ pub struct SequenceBlockStore
 
 impl SequenceBlockStore
 {
+    pub fn block_size(&self) -> usize
+    {
+        self.inner.block_size
+    }
+
     pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
     where
         R: Read + Seek + Send + Sync + BufRead,
@@ -104,11 +109,11 @@ impl SequenceBlockStore
     }
 
     // TODO: Needed?
-    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<u8>
+    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32, buffer: &mut [u8])
     where
         R: Read + Seek + Send + Sync,
     {
-        self.inner.get_block_uncached(&mut in_buf, block)
+        self.inner.get_block_uncached(&mut in_buf, block, buffer)
     }
 
     // TODO: Should be fallible...

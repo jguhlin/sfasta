@@ -35,7 +35,7 @@ pub struct BytesBlockStoreBuilder
     pub block_locations_pos: u64,
 
     /// Maximum block size
-    block_size: usize,
+    pub block_size: usize,
 
     /// Data, typically a temporary store
     pub data: Vec<u8>, // Used for writing and reading...
@@ -293,7 +293,7 @@ pub struct BytesBlockStore
     pub block_locations_pos: u64,
 
     /// Maximum block size
-    block_size: usize,
+    pub block_size: usize,
 
     pub compression_config: CompressionConfig,
 
@@ -313,12 +313,16 @@ impl BytesBlockStore
         if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
             return self.cache.as_ref().unwrap().1.clone();
         } else {
-            self.cache = Some((block, self.get_block_uncached(in_buf, block)));
+            let mut cache = self.cache.take().unwrap();
+            cache.0 = block;
+
+            self.get_block_uncached(in_buf, block, &mut cache.1);
+            self.cache = Some(cache);
             return self.cache.as_ref().unwrap().1.clone();
         }
     }
 
-    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32) -> Vec<u8>
+    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32, buffer: &mut [u8])
     where
         R: Read + Seek + Send + Sync,
     {
@@ -326,23 +330,14 @@ impl BytesBlockStore
             .with_fixed_int_encoding()
             .with_limit::<{ 256 * 1024 * 1024 }>(); // 256 MB is max limit TODO: Enforce elsewhere too
 
-        let block_location = *self.block_locations.search(in_buf, &block).unwrap();
+        let block_location = self.block_locations.search(in_buf, &block).unwrap();
 
-        log::debug!("Block Location: {}", block_location);
         in_buf.seek(SeekFrom::Start(block_location)).unwrap();
         let compressed_block: Vec<u8> = bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed).unwrap();
-        log::debug!(
-            "Got block at {} compressed size {}",
-            block_location,
-            compressed_block.len()
-        );
-        log::debug!("Block size is: {}", self.block_size);
 
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
-
-        let out = decompressor.decompress(&compressed_block, self.block_size).unwrap();
-        out
+        decompressor.decompress_to_buffer(&compressed_block, buffer).unwrap();
     }
 
     pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> Vec<u8>
@@ -353,10 +348,10 @@ impl BytesBlockStore
 
         // Calculate length from Loc
         // TODO: This underestimates, so we need to test it.
-        let len = loc.iter().fold(0, |acc, x| acc + x.len as usize);
-        log::debug!("BytesBlockStore Get: Calculated Length: {}", len);
+        // let len = loc.iter().fold(0, |acc, x| acc + x.len as usize);
 
-        let mut result = Vec::with_capacity(len + 8192);
+        // let mut result = Vec::with_capacity(len + 8192);
+        let mut result = Vec::new();
 
         if self.data.is_some() {
             let loc0 = &loc[0];
@@ -365,10 +360,10 @@ impl BytesBlockStore
             let start = loc0.block as usize * block_size as usize + loc0.start as usize;
             let end = loc1.block as usize * block_size as usize + loc1.start as usize + loc1.len as usize;
 
-            #[cfg(test)]
-            assert!(start + len <= block_size as usize);
+            // #[cfg(test)]
+            // assert!(start + len <= block_size as usize);
 
-            result.extend(&self.data.as_ref().unwrap()[start..end]);
+            result.extend_from_slice(&self.data.as_ref().unwrap()[start..end]);
         } else {
             for l in loc.iter().map(|x| x) {
                 let block = self.get_block(in_buf, l.block);
@@ -378,11 +373,9 @@ impl BytesBlockStore
 
                 let end = l.start as usize + l.len as usize;
 
-                result.extend(&block[l.start as usize..end]);
+                result.extend_from_slice(&block[l.start as usize..end]);
             }
         }
-
-        log::debug!("BytesBlockStore Get: Result Length: {}", result.len());
 
         result
     }

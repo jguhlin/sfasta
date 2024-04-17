@@ -106,7 +106,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         self.compression = Some(compression);
     }
 
-    pub fn search<R>(&mut self, in_buf: &mut R, key: &K) -> Option<&V>
+    pub fn search<R>(&mut self, in_buf: &mut R, key: &K) -> Option<V>
     where
         R: Read + Seek + Send + Sync,
     {
@@ -413,7 +413,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         compression: &Option<CompressionConfig>,
         start: u64,
         key: &K,
-    ) -> Option<&V>
+    ) -> Option<V>
     where
         R: Read + Seek + Send + Sync,
     {
@@ -428,7 +428,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 Err(_) => return None,
             };
 
-            Some(&self.values.as_ref().unwrap()[i])
+            Some(self.values.as_ref().unwrap()[i].clone())
         } else {
             let i = self.keys.binary_search(&key);
             let i = match i {
@@ -595,15 +595,15 @@ mod tests
 
         let result = tree.search(&mut buf, &1);
         assert!(result.is_some());
-        assert!(*result.unwrap() == 1);
+        assert!(result.unwrap() == 1);
 
         let result = tree.search(&mut buf, &(u32::MAX - 1));
         assert!(result.is_some());
-        assert!(*result.unwrap() == u32::MAX - 1);
+        assert!(result.unwrap() == u32::MAX - 1);
 
         let result = tree.search(&mut buf, &(u32::MAX / 2));
         assert!(result.is_some());
-        assert!(*result.unwrap() == u32::MAX / 2);
+        assert!(result.unwrap() == u32::MAX / 2);
 
         let mut tree: FractalTreeBuild<u32, u64> = FractalTreeBuild::new(128, 256);
         for i in 0..1024 * 1024 {
@@ -675,15 +675,15 @@ mod tests
 
         let result = tree.search(&mut buf, &1);
         assert!(result.is_some());
-        assert!(*result.unwrap() == 1);
+        assert!(result.unwrap() == 1);
 
         let result = tree.search(&mut buf, &(u32::MAX - 1));
         assert!(result.is_some());
-        assert!(*result.unwrap() == u32::MAX - 1);
+        assert!(result.unwrap() == u32::MAX - 1);
 
         let result = tree.search(&mut buf, &(u32::MAX / 2));
         assert!(result.is_some());
-        assert!(*result.unwrap() == u32::MAX / 2);
+        assert!(result.unwrap() == u32::MAX / 2);
 
         panic!();
     }

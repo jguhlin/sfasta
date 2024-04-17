@@ -329,23 +329,20 @@ fn faidx(input: &str, ids: &Vec<String>)
     let mut stdout = stdout.lock();
 
     for i in ids {
-        let result = sfasta.find(i);
+        let result = match sfasta.find(i) {
+            Ok(Some(x)) => x,
+            Ok(None) => panic!("No SeqLoc found"),
+            Err(_) => panic!("Unable to fetch seqloc"),
+        };
 
-        log::debug!("{:?}", result);
-        let result = result.expect("unable to find");
-        let result = result.expect("unable to find");
-        let result = result.clone();
-        //            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
-        //            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
-        //            .clone();
+        let headers = result.get_headers();
+        let header = if result.has_headers() {
+            format!(" {}", sfasta.get_header(&headers).expect("Unable to fetch header"))
+        } else {
+            "".to_string()
+        };
 
-        write!(stdout, ">{}", i);
-        if result.has_headers() {
-            let header = sfasta.get_header(result.get_headers()).expect("Unable to fetch header");
-            write!(stdout, " {}", header);
-        }
-
-        write!(stdout, "\n");
+        write!(stdout, ">{}{}\n", i, header).expect("Unable to write to stdout");
 
         let sequence = sfasta
             .get_sequence(result.get_sequence(), result.get_masking())
