@@ -24,7 +24,7 @@ impl Default for SequenceBlockStoreBuilder
     {
         let compression_config = CompressionConfig::new()
             .with_compression_type(CompressionType::ZSTD)
-            .with_compression_level(3);
+            .with_compression_level(22);
 
         SequenceBlockStoreBuilder {
             inner: BytesBlockStoreBuilder::default()

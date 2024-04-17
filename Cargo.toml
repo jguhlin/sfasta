@@ -11,7 +11,7 @@ members = [
 # opt-level = 3
 lto = "fat"
 # codegen-units  = 1
-# debug = 1
+debug = 1
 
 
 [profile.dev]
