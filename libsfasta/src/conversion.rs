@@ -215,7 +215,7 @@ impl Converter
 
         assert!(self.block_size < u32::MAX as u64);
 
-        let mut sfasta = Sfasta::default().block_size(self.block_size as u32);
+        let mut sfasta = Sfasta::default().conversion().block_size(self.block_size as u32);
 
         // Store masks as series of 0s and 1s... Vec<bool>
         // Compression seems to take care of the size. bitvec! and vec! seem to have similar
@@ -223,7 +223,6 @@ impl Converter
         if self.masking {
             sfasta = sfasta.with_masking();
         }
-        sfasta.parameters = Some(Parameters::default());
 
         sfasta.parameters.as_mut().unwrap().compression_type = self.compression_type;
         sfasta.parameters.as_mut().unwrap().compression_dict = self.dict.clone();

@@ -56,6 +56,13 @@ impl<'sfa> Default for Sfasta<'sfa>
 
 impl<'sfa> Sfasta<'sfa>
 {
+
+    pub fn conversion(mut self) -> Self {
+        self.parameters = Some(Parameters::default());
+        self.metadata = Some(Metadata::default());
+        self
+    }
+
     /// Use for after cloning(primarily for multiple threads), give the object a new read buffer
     pub fn with_buffer<R>(mut self, buf: R) -> Self
     where
