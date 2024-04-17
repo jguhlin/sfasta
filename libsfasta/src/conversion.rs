@@ -305,8 +305,8 @@ impl Converter
 
                 let mut index: FractalTreeDisk<u32, u32> = index.into();
                 index.set_compression(CompressionConfig {
-                    compression_type: CompressionType::LZ4,
-                    compression_level: 3,
+                    compression_type: CompressionType::ZSTD,
+                    compression_level: -9,
                     compression_dict: None,
                 });
 
