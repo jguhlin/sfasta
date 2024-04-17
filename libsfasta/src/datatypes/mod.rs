@@ -1,6 +1,5 @@
 pub mod bytes_block_store;
 pub mod directory;
-pub mod index_directory;
 pub mod masking;
 pub mod metadata;
 pub mod parameters;
@@ -11,7 +10,6 @@ pub mod structs;
 
 pub use bytes_block_store::*;
 pub use directory::*;
-pub use index_directory::*;
 pub use masking::*;
 pub use metadata::*;
 pub use parameters::*;

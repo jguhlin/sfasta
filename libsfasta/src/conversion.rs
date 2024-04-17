@@ -223,10 +223,11 @@ impl Converter
         if self.masking {
             sfasta = sfasta.with_masking();
         }
+        sfasta.parameters = Some(Parameters::default());
 
-        sfasta.parameters.compression_type = self.compression_type;
-        sfasta.parameters.compression_dict = self.dict.clone();
-        sfasta.parameters.block_size = self.block_size as u32;
+        sfasta.parameters.as_mut().unwrap().compression_type = self.compression_type;
+        sfasta.parameters.as_mut().unwrap().compression_dict = self.dict.clone();
+        sfasta.parameters.as_mut().unwrap().block_size = self.block_size as u32;
 
         // Set dummy values for the directory
         sfasta.directory.dummy();

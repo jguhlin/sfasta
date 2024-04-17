@@ -25,7 +25,6 @@ pub struct Sfasta<'sfa>
     pub directory: Directory,
     pub parameters: Option<Parameters>,
     pub metadata: Option<Metadata>,
-    pub index_directory: IndexDirectory,
     pub index: Option<FractalTreeDisk<u32, u32>>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<SequenceBlockStore>,
@@ -42,9 +41,8 @@ impl<'sfa> Default for Sfasta<'sfa>
         Sfasta {
             version: 1,
             directory: Directory::default(),
-            parameters: Parameters::default(),
-            metadata: Metadata::default(),
-            index_directory: IndexDirectory::default().with_blocks().with_ids(),
+            parameters: None,
+            metadata: None,
             index: None,
             buf: None,
             sequenceblocks: None,
@@ -88,19 +86,18 @@ impl<'sfa> Sfasta<'sfa>
 
     pub fn block_size(mut self, block_size: u32) -> Self
     {
-        self.parameters.block_size = block_size;
+        self.parameters.as_mut().unwrap().block_size = block_size;
         self
     }
 
-    pub const fn get_block_size(&self) -> u32
+    pub fn get_block_size(&self) -> u32
     {
-        self.parameters.block_size
+        self.parameters.as_ref().unwrap().block_size
     }
 
-    // TODO: Does nothing right now...
     pub fn compression_type(mut self, compression: CompressionType) -> Self
     {
-        self.parameters.compression_type = compression;
+        self.parameters.as_mut().unwrap().compression_type = compression;
         self
     }
 
