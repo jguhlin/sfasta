@@ -315,7 +315,7 @@ impl BytesBlockStore
         } else {
             let mut cache = match self.cache.take() {
                 Some(x) => x,
-                None => (block, Vec::new()),
+                None => (block, vec![0; self.block_size]),
             };
             cache.0 = block;
 
