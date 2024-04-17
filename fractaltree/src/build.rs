@@ -227,24 +227,32 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         let mid = self.keys.len() / 2;
 
         let values = if self.values.is_some() {
-            let values = self.values.as_mut().unwrap().split_off(mid);
+            let mut values = self.values.as_mut().unwrap().split_off(mid);
+            self.values.as_mut().unwrap().reserve(values.len());
+            values.reserve(values.len());
             Some(values)
         } else {
             None
         };
 
         let children: Option<Vec<Box<NodeBuild<K, V>>>> = if self.children.is_some() {
-            let children = self.children.as_mut().unwrap().split_off(mid + 1);
+            let mut children = self.children.as_mut().unwrap().split_off(mid + 1);
+            self.children.as_mut().unwrap().reserve(children.len());
+            children.reserve(children.len());
             Some(children)
         } else {
             None
         };
 
-        #[cfg(debug_assertions)]
-        assert!(mid < self.keys.len());
+        debug_assert!(mid < self.keys.len());
+
         let keys = self.keys.split_at(mid);
-        let orig_keys = unsafe { SortedVec::from_sorted(keys.0.to_vec()) };
-        let keys = unsafe { SortedVec::from_sorted(keys.1.to_vec()) };
+        let mut orig_keys = unsafe { SortedVec::from_sorted(keys.0.to_vec()) };
+        let mut keys = unsafe { SortedVec::from_sorted(keys.1.to_vec()) };
+
+        orig_keys.reserve(keys.len());
+        keys.reserve(keys.len());
+
         self.keys = orig_keys;
 
         let mut new_node = Box::new(NodeBuild {

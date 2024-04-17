@@ -268,7 +268,7 @@ impl Converter
 
         // Build the index in another thread...
         thread::scope(|s| {
-            let mut indexer = libfractaltree::FractalTreeBuild::new(128, 256);
+            let mut indexer = libfractaltree::FractalTreeBuild::new(1024, 2048);
 
             // Use the main thread to write the sequence locations...
             log::info!(

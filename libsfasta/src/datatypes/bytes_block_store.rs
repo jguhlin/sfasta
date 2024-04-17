@@ -281,7 +281,7 @@ impl BytesBlockStoreBuilder
             return Err(BlockStoreError::Empty);
         }
 
-        let mut block_locations_tree: FractalTreeBuild<u32, u64> = FractalTreeBuild::new(256, 256);
+        let mut block_locations_tree: FractalTreeBuild<u32, u64> = FractalTreeBuild::new(1024, 2048);
 
         let block_locations: Vec<u64> = self.block_locations.iter().map(|x| x.load(Ordering::Relaxed)).collect();
         assert!(block_locations.len() < u32::MAX as usize);
