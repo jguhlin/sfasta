@@ -1,13 +1,12 @@
 // TODO: https://docs.rs/bytes/latest/bytes/
 
 use std::{
-    io::{BufRead, Read, Seek, SeekFrom, Write, Cursor},
+    io::{BufRead, Read, Seek, SeekFrom, Write},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
 };
-use std::mem::MaybeUninit;
 
 use crossbeam::utils::Backoff;
 
@@ -102,22 +101,11 @@ impl BytesBlockStoreBuilder
         let worker = self.compression_worker.as_ref().unwrap();
         let loc = worker.compress(data, Arc::clone(&self.compression_config));
         self.block_locations.push(loc);
-
-        // let data = self.data.chunks_exact(self.block_size);
-        // let remainder = data.remainder().to_vec();
-        // let worker = self.compression_worker.as_ref().unwrap();
-        // data.for_each(|block| {
-            // let loc = worker.compress(block.to_vec(), Arc::clone(&self.compression_config));
-            // self.block_locations.push(loc);
-        // });
-
-        // self.data = remainder;
     }
 
     fn compress_final_block(&mut self)
     {
         assert!(self.compression_worker.is_some());
-        // assert!(!self.data.is_empty());
 
         self.compress_block();
 
