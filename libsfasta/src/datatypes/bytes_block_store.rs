@@ -313,7 +313,10 @@ impl BytesBlockStore
         if self.cache.is_some() && self.cache.as_ref().unwrap().0 == block {
             return self.cache.as_ref().unwrap().1.clone();
         } else {
-            let mut cache = self.cache.take().unwrap();
+            let mut cache = match self.cache.take() {
+                Some(x) => x,
+                None => (block, Vec::new()),
+            };
             cache.0 = block;
 
             self.get_block_uncached(in_buf, block, &mut cache.1);
