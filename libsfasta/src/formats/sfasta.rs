@@ -442,7 +442,7 @@ impl<'sfa> Sfasta<'sfa>
 
     pub fn index_load(&mut self) -> Result<(), &'static str>
     {
-        let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
+        let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.index.as_mut().unwrap().load_tree(buf)
     }
 }
@@ -829,6 +829,8 @@ mod tests
         let _ = env_logger::builder().is_test(true).try_init();
         let out_buf = Box::new(Cursor::new(Vec::new()));
 
+        println!("1...");
+
         let mut in_buf =
             BufReader::new(File::open("test_data/test_convert.fasta").expect("Unable to open testing file"));
 
@@ -839,15 +841,22 @@ mod tests
 
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
+        println!("2...");
+
         if let Err(x) = out_buf.seek(SeekFrom::Start(0)) {
             panic!("Unable to seek to start of file, {x:#?}")
         };
 
+        println!("3...");
+
         let mut sfasta = SfastaParser::open_from_buffer(out_buf, false).unwrap();
+        println!("4...");
         sfasta.index_load().expect("Unable to load index");
-        sfasta.index_len();
+        println!("5...");
 
         assert_eq!(sfasta.index_len(), Ok(3001));
+
+        println!("Got here");
 
         let output = sfasta.find("does-not-exist");
         assert!(output == Ok(None));

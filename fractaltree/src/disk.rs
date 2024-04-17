@@ -258,7 +258,7 @@ impl<K: Key, V: Value> Decode for NodeDisk<K, V>
             is_root: false,
             is_leaf,
             state: NodeState::InMemory,
-            keys: keys.to_vec(),
+            keys,
             children,
             values,
         })

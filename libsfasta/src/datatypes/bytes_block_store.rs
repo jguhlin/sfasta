@@ -7,6 +7,7 @@ use std::{
         Arc,
     },
 };
+use std::mem::MaybeUninit;
 
 use crossbeam::utils::Backoff;
 
@@ -38,7 +39,7 @@ pub struct BytesBlockStoreBuilder
     pub block_size: usize,
 
     /// Data, typically a temporary store
-    pub data: Cursor<Vec<u8>>, // Used for writing and reading...
+    pub data: Vec<u8>, // Used for writing and reading...
 
     /// Compression configuration
     pub compression_config: Arc<CompressionConfig>,
@@ -58,7 +59,7 @@ impl Default for BytesBlockStoreBuilder
             block_locations_pos: 0,
             block_locations: Vec::new(),
             block_size: 8 * 1024,
-            data: Cursor::new(vec![0; 8 * 1024]),
+            data: Vec::new(),
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
             finalized: false,
@@ -68,11 +69,12 @@ impl Default for BytesBlockStoreBuilder
 
 impl BytesBlockStoreBuilder
 {
+
     /// Configuration. Set the block size
     pub fn with_block_size(mut self, block_size: usize) -> Self
     {
         self.block_size = block_size;
-        self.data = Cursor::new(vec![0; block_size]);
+        self.data = Vec::with_capacity(self.block_size);
         self
     }
 
@@ -95,10 +97,10 @@ impl BytesBlockStoreBuilder
     {
         debug_assert!(self.compression_worker.is_some());
 
-        let mut data = Cursor::new(vec![0; self.block_size]);
+        let mut data = Vec::with_capacity(self.block_size);
         std::mem::swap(&mut self.data, &mut data);
         let worker = self.compression_worker.as_ref().unwrap();
-        let loc = worker.compress(data.into_inner(), Arc::clone(&self.compression_config));
+        let loc = worker.compress(data, Arc::clone(&self.compression_config));
         self.block_locations.push(loc);
 
         // let data = self.data.chunks_exact(self.block_size);
@@ -119,11 +121,12 @@ impl BytesBlockStoreBuilder
 
         self.compress_block();
 
-        let mut data = Cursor::new(Vec::new());
+        // Final block, so can be empty vec
+        let mut data = Vec::new();
         std::mem::swap(&mut self.data, &mut data);
 
         let worker = self.compression_worker.as_ref().unwrap();
-        let loc = worker.compress(data.into_inner(), Arc::clone(&self.compression_config));
+        let loc = worker.compress(data, Arc::clone(&self.compression_config));
         self.block_locations.push(loc);
     }
 
@@ -169,49 +172,48 @@ impl BytesBlockStoreBuilder
             panic!("Cannot add to finalized block store.");
         }
        
-        let compressed_blocks_count = self.block_locations.len();
-        let starting_block = compressed_blocks_count;
-        let mut ending_block = compressed_blocks_count;
-        let mut start = self.data.position();
+        let mut current_block = self.block_locations.len();
+        let mut locs = Vec::with_capacity(8);
 
         let mut written = 0;
+        let mut start_position = self.data.len();
+
         while written < input.len() {
-            let result = self.data.write(&input[written..]);
-            match result {
-                Ok(v) => written += v,
-                Err(_) => return Err("Failed to write to data"),
-            };
+            // How many bytes can we write to the current block?
+            let remaining = self.block_size - self.data.len();
 
-            if self.data.position() == self.block_size as u64 {
-                self.compress_block();
-                ending_block += 1;
-            }
-        }
+            // If we can write the entire input, do so
+            if input.len() - written <= remaining as usize {
+                self.data.extend_from_slice(&input[written..]);
+                written += input[written..].len();
 
-        let end = self.data.position().saturating_sub(1);
+                // len is how many bytes are copied from the slice
+                let len = (self.data.len() - start_position) as u32;
 
-        let mut locs = Vec::with_capacity((input.len() / self.block_size).saturating_add(1));
-
-        // Process at block boundaries...
-        for block in starting_block..=ending_block {
-            let block_start = start % self.block_size as u64;
-            let block_end = if block == ending_block {
-                (end % self.block_size as u64).saturating_add(1)
+                locs.push(Loc {
+                    block: current_block as u32,
+                    start: start_position as u32,
+                    len,
+                });
             } else {
-                self.block_size as u64
-            };
-            start = block_end;
+                self.data.extend_from_slice(&input[written..(written + remaining as usize)]);
+                written += remaining as usize;
+                // len is how many bytes are copied from the slice
+                let len = (self.data.len() - start_position) as u32;
 
-            let len = match block_end.checked_sub(block_start) {
-                Some(v) => v,
-                None => return Err("Block end < block start"),
-            };
+                locs.push(Loc {
+                    block: current_block as u32,
+                    start: start_position as u32,
+                    len,
+                });
+            }
 
-            locs.push(Loc {
-                block: block as u32,
-                start: block_start as u32,
-                len: len as u32,
-            });
+            debug_assert!(self.data.len() <= self.block_size);
+            if self.data.len() == self.block_size {
+                self.compress_block();
+                current_block += 1;
+                start_position = self.data.len();
+            }
         }
 
         Ok(locs)
@@ -318,7 +320,7 @@ impl BytesBlockStoreBuilder
     {
         assert!(self.compression_worker.is_some());
 
-        if self.data.position() == 0 {
+        if self.data.len() == 0 {
             return;
         }
 
@@ -365,7 +367,7 @@ impl BytesBlockStore
         } else {
             let mut cache = match self.cache.take() {
                 Some(x) => x,
-                None => (block, vec![0; self.block_size]),
+                None => (block, Vec::with_capacity(self.block_size)),
             };
             cache.0 = block;
 
@@ -490,20 +492,6 @@ impl BytesBlockStore
 mod tests
 {
     use super::*;
-
-    #[test]
-    fn test_block_boundaries()
-    {
-        let repeated_data: Vec<u8> = vec![0; 1000];
-
-        let mut store = BytesBlockStoreBuilder {
-            block_size: 64,
-            ..Default::default()
-        };
-
-        let locs = store.add(&repeated_data).unwrap();
-        println!("{:?}", locs);
-    }
 
     #[test]
     fn test_add_id()

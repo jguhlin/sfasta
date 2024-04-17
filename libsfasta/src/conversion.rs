@@ -190,11 +190,11 @@ impl Converter
         bincode::encode_into_std_write(dir, &mut out_fh, bincode_config).expect("Unable to write directory to file");
 
         // Write the parameters
-        bincode::encode_into_std_write(&sfasta.parameters, &mut out_fh, bincode_config)
+        bincode::encode_into_std_write(&sfasta.parameters.as_ref().unwrap(), &mut out_fh, bincode_config)
             .expect("Unable to write Parameters to file");
 
         // Write the metadata
-        bincode::encode_into_std_write(&sfasta.metadata, &mut out_fh, bincode_config)
+        bincode::encode_into_std_write(sfasta.metadata.as_ref().unwrap(), &mut out_fh, bincode_config)
             .expect("Unable to write Metadata to file");
 
         // Return the directory location
