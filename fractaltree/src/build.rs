@@ -33,7 +33,6 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
 
     pub fn flush(&mut self, all: bool)
     {
-        assert!(self.root.keys.is_sorted());
         self.root.flush(self.order, self.buffer_size, all);
 
         while self.root.needs_split(self.order) {
@@ -137,8 +136,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
 
     pub fn search(&self, key: &K) -> Option<V>
     {
-        #[cfg(debug_assertions)]
-        assert!(self.buffer.is_empty());
+        debug_assert!(self.buffer.is_empty());
 
         let i = self.keys.binary_search(&key);
 
@@ -147,8 +145,8 @@ impl<K: Key, V: Value> NodeBuild<K, V>
                 Ok(i) => i,
                 Err(_) => return None, // This is the leaf, if it's not found here it won't be found
             };
-            #[cfg(debug_assertions)]
-            assert!(i < self.values.as_ref().unwrap().len());
+
+            debug_assert!(i < self.values.as_ref().unwrap().len());
             Some(self.values.as_ref().unwrap()[i].clone())
         } else {
             let i = match i {
@@ -219,8 +217,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
 
     pub fn split(&mut self, order: usize, buffer_size: usize) -> (K, Box<NodeBuild<K, V>>)
     {
-        #[cfg(debug_assertions)]
-        assert!(self.keys.is_sorted());
+        debug_assert!(self.keys.is_sorted());
 
         self.flush(order, buffer_size, true);
 

@@ -11,11 +11,10 @@ use rayon::prelude::*;
 use crate::*;
 use libcompression::*;
 
-// todo: monotonic works well, but is disabled until tested with decode
-//
-// todo: compress nodes before writing to disk (use compression config)
-// and add multithreading
+// todo: load_all use decompression
+// todo: in bytes block store and seqlocs make this into a different thread (not a here todo, but elsewhere)
 // todo: speed would come here from batch inserts!
+// todo: test out simd search instead of binary search (use pulp arch)
 
 /// This is the on-disk version of the FractalTree
 ///
