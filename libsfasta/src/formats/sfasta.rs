@@ -23,8 +23,8 @@ pub struct Sfasta<'sfa>
     pub version: u64, /* I'm going to regret this, but 18,446,744,073,709,551,615 versions should be enough for
                        * anybody. */
     pub directory: Directory,
-    pub parameters: Parameters,
-    pub metadata: Metadata,
+    pub parameters: Option<Parameters>,
+    pub metadata: Option<Metadata>,
     pub index_directory: IndexDirectory,
     pub index: Option<FractalTreeDisk<u32, u32>>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
@@ -533,26 +533,9 @@ impl<'sfa> SfastaParser<'sfa>
 
         sfasta.directory = dir.into();
 
-        log::info!("Parsing Parameters");
-
-        sfasta.parameters = match bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed) {
-            Ok(x) => x,
-            Err(y) => return Result::Err(format!("Error reading SFASTA parameters: {y}")),
-        };
-
-        log::info!("Parsing Metadata");
-        sfasta.metadata = match bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed) {
-            Ok(x) => x,
-            Err(y) => return Result::Err(format!("Error reading SFASTA metadata: {y}")),
-        };
-
-        // Next are the sequence blocks, which aren't important right now...
-        // The index is much more important to us...
-
         log::info!("Loading Index");
         if sfasta.directory.index_loc.is_some() {
             let tree = FractalTreeDisk::from_buffer(&mut in_buf, sfasta.directory.index_loc.unwrap().get()).unwrap();
-            // let tree: FractalTreeDisk = bincode::decode_from_std_read(&mut in_buf, bincode_config_variable).unwrap();
             sfasta.index = Some(tree);
         } else {
             sfasta.index = None;
@@ -565,23 +548,12 @@ impl<'sfa> SfastaParser<'sfa>
 
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
-            let mut seqlocs = match SeqLocsStore::from_existing(seqlocs_loc, &mut in_buf) {
+            let seqlocs = match SeqLocsStore::from_existing(seqlocs_loc, &mut in_buf) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA seqlocs: {y}")),
             };
-
-            if prefetch {
-                seqlocs.prefetch(&mut in_buf);
-            }
             sfasta.seqlocs = Some(seqlocs);
         }
-
-        log::info!("Parsing Blocks");
-
-        log::info!(
-            "Creating Sequence Blocks, loc: {}",
-            sfasta.directory.sequences_loc.unwrap().get()
-        );
 
         let sequenceblocks =
             SequenceBlockStore::from_buffer(&mut in_buf, sfasta.directory.sequences_loc.unwrap().get());
@@ -595,22 +567,9 @@ impl<'sfa> SfastaParser<'sfa>
 
         sfasta.sequenceblocks = Some(sequenceblocks.unwrap());
 
-        log::info!("Sequence Blocks Created");
-
-        if prefetch {
-            todo!("Prefetching block locs is not yet implemented");
-            println!("Prefetching block locs");
-            //            sfasta
-            //              .sequenceblocks
-            //            .as_mut()
-            //          .unwrap()
-            // .prefetch_block_locs(&mut in_buf) // TODO: Important to speed things back up
-            // .expect("Unable to prefetch block locs");
-        }
-
         log::info!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {
-            let mut headers =
+            let headers =
                 match StringBlockStore::from_buffer(&mut in_buf, sfasta.directory.headers_loc.unwrap().get()) {
                     Ok(x) => x,
                     Err(y) => return Result::Err(format!("Error reading SFASTA headers - StringBlockStore: {y}")),
@@ -621,7 +580,7 @@ impl<'sfa> SfastaParser<'sfa>
 
         log::info!("Opening IDs");
         if sfasta.directory.ids_loc.is_some() {
-            let mut ids = match StringBlockStore::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get()) {
+            let ids = match StringBlockStore::from_buffer(&mut in_buf, sfasta.directory.ids_loc.unwrap().get()) {
                 Ok(x) => x,
                 Err(y) => return Result::Err(format!("Error reading SFASTA ids: {y}")),
             };
@@ -639,7 +598,7 @@ impl<'sfa> SfastaParser<'sfa>
         log::info!("Storing buf");
         sfasta.buf = Some(RwLock::new(Box::new(in_buf)));
 
-        log::info!("Done!");
+        log::info!("File open complete");
         Ok(sfasta)
     }
 }
