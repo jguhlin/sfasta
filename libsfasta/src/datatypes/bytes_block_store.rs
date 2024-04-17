@@ -425,8 +425,6 @@ impl BytesBlockStore
 
         assert!(block_locations_pos > 0);
 
-        log::debug!("Block Locations Pos: {}", block_locations_pos);
-
         let block_locations: FractalTreeDisk<u32, u64> =
             FractalTreeDisk::from_buffer(&mut in_buf, block_locations_pos).unwrap();
 

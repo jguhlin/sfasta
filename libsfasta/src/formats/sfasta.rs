@@ -15,7 +15,7 @@ use rand::prelude::*;
 use rand_chacha::ChaCha20Rng;
 use xxhash_rust::xxh3::xxh3_64;
 
-use crate::{datatypes::*, *};
+use crate::datatypes::*;
 
 /// Main Sfasta struct
 pub struct Sfasta<'sfa>
@@ -56,7 +56,6 @@ impl<'sfa> Default for Sfasta<'sfa>
 
 impl<'sfa> Sfasta<'sfa>
 {
-
     pub fn conversion(mut self) -> Self {
         self.parameters = Some(Parameters::default());
         self.metadata = Some(Metadata::default());

@@ -1,12 +1,12 @@
 use std::ops::{AddAssign, SubAssign};
 
-use criterion::{Throughput, black_box, criterion_group, criterion_main, BenchmarkId, Criterion};
+use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 use bitpacking::{BitPacker, BitPacker4x, BitPacker8x};
+use pco::standalone::{simple_decompress, simpler_compress};
 use pulp::Arch;
 use rand::prelude::*;
 use xxhash_rust::xxh3::xxh3_64;
-use pco::standalone::{simple_decompress, simpler_compress};
 
 use libfractaltree::*;
 
@@ -90,7 +90,9 @@ pub fn bench_delta_decode(c: &mut Criterion)
     pulp_delta_encode(&mut values1024);
 
     let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Decode");
-    group.throughput(Throughput::Bytes(values1024.len() as u64 * std::mem::size_of::<u32>() as u64));
+    group.throughput(Throughput::Bytes(
+        values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
+    ));
 
     group.bench_with_input(BenchmarkId::new("Pulp Arch Decode", 1024), &values1024, |b, values| {
         b.iter(|| {
@@ -131,17 +133,23 @@ pub fn bench_delta_encode(c: &mut Criterion)
     let values1024: Vec<u32> = (0..1024_u32).collect();
 
     let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Encode");
-    group.throughput(Throughput::Bytes(values1024.len() as u64 * std::mem::size_of::<u32>() as u64));
+    group.throughput(Throughput::Bytes(
+        values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
+    ));
 
-    group.bench_with_input(BenchmarkId::new("PCO Simpler Compress", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            match simpler_compress(&mut values, 8) {
-                Ok(_) => values,
-                Err(_) => panic!("Failed to compress"),
-            }
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("PCO Simpler Compress", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                match simpler_compress(&mut values, 8) {
+                    Ok(_) => values,
+                    Err(_) => panic!("Failed to compress"),
+                }
+            })
+        },
+    );
 
     group.bench_with_input(BenchmarkId::new("Pulp Arch Encode", 1024), &values1024, |b, values| {
         b.iter(|| {
