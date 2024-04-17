@@ -6,10 +6,10 @@
 
 // static MEM: &str = "Mimalloc";
 
-use mimalloc::MiMalloc;
-
-#[global_allocator]
-static GLOBAL: MiMalloc = MiMalloc;
+// use mimalloc::MiMalloc;
+//
+// #[global_allocator]
+// static GLOBAL: MiMalloc = MiMalloc;
 
 extern crate clap;
 extern crate indicatif;
@@ -329,16 +329,15 @@ fn faidx(input: &str, ids: &Vec<String>)
     let mut stdout = stdout.lock();
 
     for i in ids {
-        let result = sfasta
-            .find(i);
+        let result = sfasta.find(i);
 
-	log::debug!("{:?}", result);
-	let result = result.expect("unable to find");
-	let result = result.expect("unable to find");
-	let result = result.clone();
-//            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
-//            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
-//            .clone();
+        log::debug!("{:?}", result);
+        let result = result.expect("unable to find");
+        let result = result.expect("unable to find");
+        let result = result.clone();
+        //            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
+        //            .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
+        //            .clone();
 
         write!(stdout, ">{}", i);
         if result.has_headers() {

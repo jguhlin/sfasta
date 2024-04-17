@@ -1,4 +1,7 @@
-use std::io::{BufRead, Read, Seek, SeekFrom, Write};
+use std::{
+    io::{BufRead, Read, Seek, SeekFrom, Write},
+    ops::SubAssign,
+};
 
 use bincode::{BorrowDecode, Decode, Encode};
 use binout::{Serializer, VByte};
@@ -321,7 +324,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
 
         *self = if compression.is_some() {
             let config = bincode::config::standard()
-                .with_fixed_int_encoding()
+                .with_variable_int_encoding()
                 .with_limit::<{ 1024 * 1024 }>();
 
             let compressed: Vec<u8> = bincode::decode_from_std_read(in_buf, config).unwrap();
@@ -333,6 +336,8 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 .with_limit::<{ 1024 * 1024 }>();
             bincode::decode_from_std_read(in_buf, config).unwrap()
         };
+
+        delta_decode(&mut self.keys);
     }
 
     // todo: This doesn't work, need to account for compression better
@@ -377,10 +382,10 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         if !self.is_root {
             if compression.is_some() {
                 let config = bincode::config::standard()
-                    .with_fixed_int_encoding()
+                    .with_variable_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
 
-                // delta_encode_monotonic(&mut self.keys);
+                delta_encode(&mut self.keys);
                 let uncompressed: Vec<u8> = bincode::encode_to_vec(&*self, config).unwrap();
                 let compressed = compression.as_ref().unwrap().compress(&uncompressed).unwrap();
                 bincode::encode_into_std_write(&compressed, out_buf, config).unwrap();
@@ -389,7 +394,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 self.children = None;
                 self.values = None;
             } else {
-                // delta_encode_monotonic(&mut self.keys);
+                delta_encode(&mut self.keys);
                 let config = bincode::config::standard()
                     .with_variable_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
@@ -467,31 +472,36 @@ impl<K: Key, V: Value> NodeDisk<K, V>
 // todo try pulp
 // todo try wide crate?
 // or vers vers-vecs Elias-Fano
-pub fn delta_encode_monotonic<T>(values: &mut [T]) 
-    where T: Default + num::traits::Unsigned + Copy
+pub fn delta_encode<T>(values: &mut [T])
+where
+    T: Default + num::traits::Unsigned + Copy + SubAssign,
 {
     let arch = Arch::new();
 
     arch.dispatch(|| {
         let mut prev: T = Default::default();
-        for i in 0..values.len() {
-            let tmp = values[i];
-            values[i] = values[i] - prev;
+        for i in values {
+            let tmp = *i;
+            *i -= prev;
             prev = tmp;
         }
     });
 }
 
-pub fn delta_decode_monotonic<T>(values: &mut [T]) 
-    where T: Default + num::traits::Unsigned + Copy
+pub fn delta_decode<T>(values: &mut [T])
+where
+    T: Default + num::traits::Unsigned + Copy + AddAssign,
 {
-    let mut prev: T = Default::default();
-    for i in 0..values.len() {
-        values[i] = values[i] + prev;
-        prev = values[i];
-    }
-}
+    let arch = Arch::new();
 
+    arch.dispatch(|| {
+        let mut prev: T = Default::default();
+        for i in values {
+            *i += prev;
+            prev = *i;
+        }
+    });
+}
 
 #[cfg(test)]
 mod tests

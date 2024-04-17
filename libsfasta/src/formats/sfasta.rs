@@ -451,7 +451,6 @@ pub struct SfastaParser<'sfa>
 impl<'sfa> SfastaParser<'sfa>
 {
     /// Convenience function to open a file and parse it.
-    /// Does not prefetch indices automatically
     ///
     /// ```no_run
     /// # use libsfasta::prelude::*;
@@ -482,7 +481,7 @@ impl<'sfa> SfastaParser<'sfa>
             .with_fixed_int_encoding()
             .with_limit::<{ 2 * 1024 * 1024 }>();
 
-        // Confirm buffer is a reasonable size. 64 is random but maybe acceptable size...
+        // Confirm buffer is a reasonable size. 128 is random but maybe acceptable size...
         let buffer_length = in_buf.seek(SeekFrom::End(0)).unwrap();
         if buffer_length < 128 {
             return Result::Err(format!("File is too small to be a valid SFASTA"));
@@ -496,7 +495,7 @@ impl<'sfa> SfastaParser<'sfa>
             Err(x) => return Result::Err(format!("Invalid file. {x}")),
         };
 
-        log::info!("Sfasta marker: {:?}", sfasta_marker);
+        log::info!("Sfasta marker present");
 
         if sfasta_marker != "sfasta".as_bytes() {
             return Result::Err(format!("Invalid SFASTA Format. File is missing sfasta magic bytes."));

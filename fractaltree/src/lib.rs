@@ -6,6 +6,8 @@ pub mod conversion;
 pub mod disk;
 pub mod fractal;
 
+use std::ops::{AddAssign, SubAssign};
+
 pub use build::*;
 pub use conversion::*;
 pub use disk::*;
@@ -13,7 +15,21 @@ pub use fractal::*;
 
 use bincode::{Decode, Encode};
 
-pub trait Key = 'static + PartialOrd + PartialEq + Ord + Eq + std::fmt::Debug + Clone + Default + Encode + Decode + Default + num::traits::Unsigned + Copy;
+pub trait Key = 'static
+    + PartialOrd
+    + PartialEq
+    + Ord
+    + Eq
+    + std::fmt::Debug
+    + Clone
+    + Default
+    + Encode
+    + Decode
+    + Default
+    + num::traits::Unsigned
+    + Copy
+    + SubAssign
+    + AddAssign;
 
 pub trait Value = 'static + std::fmt::Debug + Encode + Decode + Clone;
 

@@ -2,6 +2,8 @@ use crate::*;
 
 use std::num::NonZeroU64;
 
+use pulp::Arch;
+
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
 pub struct DirectoryOnDisk
 {
@@ -60,56 +62,29 @@ impl DirectoryOnDisk
 {
     pub fn sanity_check(&self, buffer_length: u64) -> Result<(), String>
     {
-        if self.index_loc > buffer_length {
-            return Err(format!(
-                "Index location is outside of buffer: {} > {}",
-                self.index_loc, buffer_length
-            ));
-        }
 
-        if self.ids_loc > buffer_length {
-            return Err(format!(
-                "Ids location is outside of buffer: {} > {}",
-                self.ids_loc, buffer_length
-            ));
-        }
+        let values: [u64; 8] = [            self.index_loc,
+            self.ids_loc,
+            self.block_index_loc,
+            self.seqlocs_loc,
+            self.scores_loc,
+            self.masking_loc,
+            self.headers_loc,
+            0
+        ];
 
-        if self.block_index_loc > buffer_length {
-            return Err(format!(
-                "Block index location is outside of buffer: {} > {}",
-                self.block_index_loc, buffer_length
-            ));
+        let arch = Arch::new();
+        arch.dispatch(|| {
+        if values.iter().any(|&x| x > buffer_length) {
+            Err(format!(
+                "Some location is outside of buffer: {:?} > {}",
+                values, buffer_length
+            ))
+        } else {
+                Ok(())
         }
+    })
 
-        if self.seqlocs_loc > buffer_length {
-            return Err(format!(
-                "Seqlocs location is outside of buffer: {} > {}",
-                self.seqlocs_loc, buffer_length
-            ));
-        }
-
-        if self.scores_loc > buffer_length {
-            return Err(format!(
-                "Scores location is outside of buffer: {} > {}",
-                self.scores_loc, buffer_length
-            ));
-        }
-
-        if self.masking_loc > buffer_length {
-            return Err(format!(
-                "Masking location is outside of buffer: {} > {}",
-                self.masking_loc, buffer_length
-            ));
-        }
-
-        if self.headers_loc > buffer_length {
-            return Err(format!(
-                "Headers location is outside of buffer: {} > {}",
-                self.headers_loc, buffer_length
-            ));
-        }
-
-        Ok(())
     }
 }
 
