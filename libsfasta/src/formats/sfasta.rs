@@ -269,7 +269,6 @@ impl<'sfa> Sfasta<'sfa>
 
         let mut seq: Vec<u8> = Vec::new();
 
-        // Once stabilized, use write_all_vectored
         seqloc.iter().for_each(|l| {
             let seqblock = self.sequenceblocks.as_mut().unwrap().get_block(&mut *buf, l.block);
             seq.extend_from_slice(&seqblock[l.start as usize..(l.start + l.len) as usize]);

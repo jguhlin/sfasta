@@ -307,12 +307,18 @@ fn main()
     // }
 }
 
+#[inline]
 fn print_sequence(stdout: &mut std::io::StdoutLock, seq: &[u8], line_length: usize)
 {
-    seq.chunks(line_length).for_each(|x| {
+    let iter = seq.chunks_exact(line_length);
+    let seq = iter.remainder();
+    iter.for_each(|x| {
         stdout.write_all(x).expect("Unable to write to stdout");
         stdout.write_all(b"\n").expect("Unable to write to stdout");
     });
+    
+    stdout.write_all(seq).expect("Unable to write to stdout");
+    stdout.write_all(b"\n").expect("Unable to write to stdout");
 }
 
 // TODO: Subsequence support
