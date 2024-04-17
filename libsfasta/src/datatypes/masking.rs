@@ -123,6 +123,7 @@ mod tests
         io::Cursor,
         sync::{Arc, Mutex},
     };
+    use rand::Rng;
 
     #[test]
     fn test_masking_basics()

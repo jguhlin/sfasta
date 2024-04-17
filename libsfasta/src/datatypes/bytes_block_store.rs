@@ -1,7 +1,7 @@
 // TODO: https://docs.rs/bytes/latest/bytes/
 
 use std::{
-    io::{BufRead, Read, Seek, SeekFrom, Write},
+    io::{BufRead, Read, Seek, SeekFrom, Write, Cursor},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
@@ -38,7 +38,7 @@ pub struct BytesBlockStoreBuilder
     pub block_size: usize,
 
     /// Data, typically a temporary store
-    pub data: Vec<u8>, // Used for writing and reading...
+    pub data: Cursor<Vec<u8>>, // Used for writing and reading...
 
     /// Compression configuration
     pub compression_config: Arc<CompressionConfig>,
@@ -57,8 +57,8 @@ impl Default for BytesBlockStoreBuilder
         BytesBlockStoreBuilder {
             block_locations_pos: 0,
             block_locations: Vec::new(),
-            block_size: 512 * 1024,
-            data: Vec::new(),
+            block_size: 8 * 1024,
+            data: Cursor::new(vec![0; 8 * 1024]),
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
             finalized: false,
@@ -72,6 +72,7 @@ impl BytesBlockStoreBuilder
     pub fn with_block_size(mut self, block_size: usize) -> Self
     {
         self.block_size = block_size;
+        self.data = Cursor::new(vec![0; block_size]);
         self
     }
 
@@ -92,30 +93,37 @@ impl BytesBlockStoreBuilder
     /// Compress the current block
     fn compress_block(&mut self)
     {
-        assert!(self.compression_worker.is_some());
-        assert!(!self.data.is_empty());
+        debug_assert!(self.compression_worker.is_some());
 
-        let data = self.data.chunks_exact(self.block_size);
-        let remainder = data.remainder().to_vec();
+        let mut data = Cursor::new(vec![0; self.block_size]);
+        std::mem::swap(&mut self.data, &mut data);
         let worker = self.compression_worker.as_ref().unwrap();
-        data.for_each(|block| {
-            let loc = worker.compress(block.to_vec(), Arc::clone(&self.compression_config));
-            self.block_locations.push(loc);
-        });
+        let loc = worker.compress(data.into_inner(), Arc::clone(&self.compression_config));
+        self.block_locations.push(loc);
 
-        self.data.clear();
-        self.data.extend_from_slice(&remainder);
+        // let data = self.data.chunks_exact(self.block_size);
+        // let remainder = data.remainder().to_vec();
+        // let worker = self.compression_worker.as_ref().unwrap();
+        // data.for_each(|block| {
+            // let loc = worker.compress(block.to_vec(), Arc::clone(&self.compression_config));
+            // self.block_locations.push(loc);
+        // });
+
+        // self.data = remainder;
     }
 
     fn compress_final_block(&mut self)
     {
         assert!(self.compression_worker.is_some());
-        assert!(!self.data.is_empty());
+        // assert!(!self.data.is_empty());
 
         self.compress_block();
 
+        let mut data = Cursor::new(Vec::new());
+        std::mem::swap(&mut self.data, &mut data);
+
         let worker = self.compression_worker.as_ref().unwrap();
-        let loc = worker.compress(self.data.clone(), Arc::clone(&self.compression_config));
+        let loc = worker.compress(data.into_inner(), Arc::clone(&self.compression_config));
         self.block_locations.push(loc);
     }
 
@@ -160,14 +168,55 @@ impl BytesBlockStoreBuilder
         if self.finalized {
             panic!("Cannot add to finalized block store.");
         }
+       
+        let compressed_blocks_count = self.block_locations.len();
+        let starting_block = compressed_blocks_count;
+        let mut ending_block = compressed_blocks_count;
+        let mut start = self.data.position();
 
-        // If the data vec is too big, compress a chunk of it...
-        if self.data.len() > self.block_size {
-            self.compress_block();
+        let mut written = 0;
+        while written < input.len() {
+            let result = self.data.write(&input[written..]);
+            match result {
+                Ok(v) => written += v,
+                Err(_) => return Err("Failed to write to data"),
+            };
+
+            if self.data.position() == self.block_size as u64 {
+                self.compress_block();
+                ending_block += 1;
+            }
         }
 
-        let data = &mut self.data;
+        let end = self.data.position().saturating_sub(1);
 
+        let mut locs = Vec::with_capacity((input.len() / self.block_size).saturating_add(1));
+
+        // Process at block boundaries...
+        for block in starting_block..=ending_block {
+            let block_start = start % self.block_size as u64;
+            let block_end = if block == ending_block {
+                (end % self.block_size as u64).saturating_add(1)
+            } else {
+                self.block_size as u64
+            };
+            start = block_end;
+
+            let len = match block_end.checked_sub(block_start) {
+                Some(v) => v,
+                None => return Err("Block end < block start"),
+            };
+
+            locs.push(Loc {
+                block: block as u32,
+                start: block_start as u32,
+                len: len as u32,
+            });
+        }
+
+        Ok(locs)
+
+        /*
         let mut start = data.len();
         data.extend_from_slice(input);
         let end = data.len().saturating_sub(1);
@@ -202,6 +251,7 @@ impl BytesBlockStoreBuilder
         }
 
         Ok(locs)
+        */
     }
 
     /// Write out the header for BytesBlockStore
@@ -268,7 +318,7 @@ impl BytesBlockStoreBuilder
     {
         assert!(self.compression_worker.is_some());
 
-        if self.data.is_empty() {
+        if self.data.position() == 0 {
             return;
         }
 
