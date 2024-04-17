@@ -63,8 +63,6 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
         let queue = Arc::new(tx);
         self.queue = Some(queue);
         self.receiver_queue = Some(rx.clone());
-        // let queue = Arc::new(ArrayQueue::new(self.buffer_size));
-        // self.queue = Some(Arc::clone(&queue));
 
         let shutdown = Arc::clone(&self.shutdown_flag);
 
