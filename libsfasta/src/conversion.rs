@@ -2,6 +2,7 @@
 //!
 //! Conversion functions for FASTA and FASTQ files. Multithreaded by default.
 
+use bumpalo::collections::vec;
 // Easy, high-performance conversion functions
 use crossbeam::{queue::ArrayQueue, thread, utils::Backoff};
 use lz4_flex::block;
@@ -207,9 +208,6 @@ impl Converter
         W: WriteAndSeek + 'static + Send + Sync,
         R: Read + Send + 'convert,
     {
-        // Keep track of how long the conversion takes
-        let conversion_start_time = std::time::Instant::now();
-
         // Track how much space each individual element takes up
         let mut debug_size: Vec<(String, usize)> = Vec::new();
 
@@ -286,20 +284,14 @@ impl Converter
                 indexer
             }));
 
-            let start_time = std::time::Instant::now();
-            let start = out_buffer_thread.stream_position().unwrap();
-
             seqlocs_location = seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
             log::info!(
                 "Writing SeqLocs to file: COMPLETE. {}",
                 out_buffer_thread.stream_position().unwrap()
             );
 
-            let end_time = std::time::Instant::now();
-            log::info!("SeqLocs write time: {:?}", end_time - start_time);
 
             let end = out_buffer_thread.stream_position().unwrap();
-            debug_size.push(("seqlocs".to_string(), (end - start) as usize));
 
             if self.index {
                 log::info!("Joining index");
@@ -311,22 +303,17 @@ impl Converter
 
                 let start = out_buffer_thread.stream_position().unwrap();
 
-                let start_time = std::time::Instant::now();
                 let mut index: FractalTreeDisk<u32, u32> = index.into();
                 index.set_compression(CompressionConfig {
                     compression_type: CompressionType::ZSTD,
                     compression_level: -9,
                     compression_dict: None,
                 });
-                println!("Index: {:?}", index.len());
 
                 fractaltree_pos = index
                     .write_to_buffer(&mut *out_buffer_thread)
                     .expect("Unable to write index to file");
                 log::debug!("Index pos: {}", fractaltree_pos);
-
-                let end_time = std::time::Instant::now();
-                log::info!("Index write time: {:?}", end_time - start_time);
 
                 let end = out_buffer_thread.stream_position().unwrap();
                 debug_size.push(("index".to_string(), (end - start) as usize));
@@ -357,8 +344,6 @@ impl Converter
 
         let start = out_buffer_lock.stream_position().unwrap();
 
-        let start_time = std::time::Instant::now();
-
         let bincode_config_fixed = crate::BINCODE_CONFIG.with_fixed_int_encoding();
 
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
@@ -368,16 +353,9 @@ impl Converter
         let end = out_buffer_lock.stream_position().unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
 
-        let end_time = std::time::Instant::now();
-
-        log::info!("Directory write time: {:?}", end_time - start_time);
-
         log::info!("DEBUG: {:?}", debug_size);
 
         out_buffer_lock.flush().expect("Unable to flush output file");
-
-        let conversion_end_time = std::time::Instant::now();
-        log::info!("Conversion time: {:?}", conversion_end_time - conversion_start_time);
 
         drop(out_buffer_lock);
 
@@ -465,13 +443,6 @@ impl Converter
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
-        let mut masking_times = Vec::new();
-        let mut seq_add_times = Vec::new();
-        let mut headers_time = Vec::new();
-        let mut ids_time = Vec::new();
-        let mut seqloc_time = Vec::new();
-        let mut seqlocs_time = Vec::new();
-
         let mut reader = parse_fastx_reader(in_buf).unwrap();
 
         while let Some(x) = reader.next() {
@@ -483,95 +454,39 @@ impl Converter
                     let seqid = id.next().unwrap();
                     let seqheader = id.next();
 
-                    let start_time = std::time::Instant::now();
                     let masking_locs = masking.add_masking(&seq);
 
-                    let end_time = std::time::Instant::now();
-                    masking_times.push(end_time - start_time);
-
                     // Capitalize and add to sequences
-                    let start_time = std::time::Instant::now();
-                    let mut sequence_locs = Vec::new();
                     seq.to_mut().make_ascii_uppercase();
                     let loc = sequences.add(&mut seq);
-                    sequence_locs.extend(loc);
+                    let sequence_locs = loc;
 
-                    let end_time = std::time::Instant::now();
-                    seq_add_times.push(end_time - start_time);
-
-                    let start_time = std::time::Instant::now();
                     let myid = std::sync::Arc::new(seqid.to_vec());
                     let idloc = ids.add(&(*myid));
-                    let end_time = std::time::Instant::now();
-                    ids_time.push(end_time - start_time);
 
-                    let start_time = std::time::Instant::now();
-                    let mut headers_loc = Vec::new();
-                    if let Some(x) = seqheader {
-                        let x = headers.add(&x);
-                        headers_loc.extend(x);
-                    }
-                    let end_time = std::time::Instant::now();
-                    headers_time.push(end_time - start_time);
+                    let headers_loc =
+                        if let Some(x) = seqheader {
+                            headers.add(&x)
+                        } else {
+                            vec![]
+                        };
 
                     let mut seqloc = SeqLoc::new();
 
                     // TODO: This has become kinda gross
                     // Lots of vec's above, should be able to clean this up
 
-                    let start_time = std::time::Instant::now();
                     seqloc.add_locs(&sequence_locs, &masking_locs, &[], &idloc, &headers_loc, &[], &[]);
-                    let end_time = std::time::Instant::now();
-                    seqloc_time.push(end_time - start_time);
-
-                    let start_time = std::time::Instant::now();
 
                     let loc = seqlocs.add_to_index(seqloc);
                     ids_string.push(Arc::clone(&myid));
                     ids_to_locs.push((myid, loc));
-                    let end_time = std::time::Instant::now();
-                    seqlocs_time.push(end_time - start_time);
                 }
                 Err(x) => {
                     log::error!("Error parsing sequence: {:?}", x);
                 }
             }
         }
-
-        // Print out the mean and range of the times...
-        let mean = |x: &Vec<std::time::Duration>| {
-            let sum: std::time::Duration = x.iter().sum();
-            sum / x.len() as u32
-        };
-
-        let range = |x: &Vec<std::time::Duration>| {
-            let min = x.iter().min().unwrap();
-            let max = x.iter().max().unwrap();
-            (*min, *max)
-        };
-
-        log::info!(
-            "Masking mean: {:?} range: {:?}",
-            mean(&masking_times),
-            range(&masking_times)
-        );
-        log::info!(
-            "Seq add mean: {:?} range: {:?}",
-            mean(&seq_add_times),
-            range(&seq_add_times)
-        );
-        log::info!(
-            "Headers mean: {:?} range: {:?}",
-            mean(&headers_time),
-            range(&headers_time)
-        );
-        log::info!("IDs mean: {:?} range: {:?}", mean(&ids_time), range(&ids_time));
-        log::info!("SeqLoc mean: {:?} range: {:?}", mean(&seqloc_time), range(&seqloc_time));
-        log::info!(
-            "SeqLocs mean: {:?} range: {:?}",
-            mean(&seqlocs_time),
-            range(&seqlocs_time)
-        );
 
         headers.finalize();
         ids.finalize();

@@ -220,7 +220,7 @@ impl<K: Key, V: Value> Encode for NodeDisk<K, V>
                 .as_ref()
                 .unwrap()
                 .iter()
-                .map(|x| x.state.as_ref().unwrap().to_owned())
+                .map(|x| x.state.as_ref().unwrap())
                 .collect::<Vec<u32>>();
 
             bincode::Encode::encode(&locs, encoder)?;
