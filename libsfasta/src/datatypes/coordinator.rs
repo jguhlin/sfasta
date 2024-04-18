@@ -3,6 +3,8 @@ use super::*;
 use strum_macros::{EnumCount, EnumIter, FromRepr};
 use flume::prelude::*;
 
+use std::sync::{Arc, AtomicBool, Mutex};
+
 #[derive(EnumIter, FromRepr, Debug, PartialEq, Eq, PartialOrd, Ord, EnumCount)]
 pub enum DataTypes {
     Ids,
@@ -15,18 +17,39 @@ pub enum DataTypes {
     Modifications, // todo
 }
 
+/// This is the placeholder type sent out to the worker threads
+/// AtomicBool to mark completion status
+/// Mutex<Vec<Loc>> to store the data
+/// 
+/// When all are complete, the data is sent to the final queue (SeqLocsStore)
+pub(crate) type LocMutex = (Arc<AtomicBool>, Arc<Mutex<Vec<Loc>>>);
+
+/// This is the placeholder type sent back to the submitted
+/// 
+/// AtomicBool marks completion status
+/// Mutex<Vec<u64>> stores the entry in the SeqLocStore
+/// (This is typically used for the ID index)
+pub(crate) type SeqLocEntryMutex = (Arc<AtomicBool>, Arc<Mutex<Vec<u64>>>); 
+
 pub struct Coordinator {
     // Coordinator receives Id, Header, Sequence, Scores, (& todo Signal, Modifications)
     // Masking is generated from Sequence
-    receiver: Reader<(Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)>,
-    ids_queue: Sender<Vec<u8>>,
-    headers_queue: Sender<Vec<u8>>,
-    sequence_queue: Sender<Vec<u8>>,
-    scores_queue: Sender<Vec<u8>>,
-    masking_queue: Sender<Vec<u8>>,
+    receiver: Reader<(LocMutex, Vec<u8>, Vec<u8>, Vec<u8>, Vec<u8>)>,
+
+    // Queues to the other worker threads
+    ids_queue: Sender<(LocMutex, Vec<u8>)>,
+    headers_queue: Sender<(LocMutex, Vec<u8>)>,
+    sequence_queue: Sender<(LocMutex, Vec<u8>)>,
+    scores_queue: Sender<(LocMutex, Vec<u8>)>,
+    masking_queue: Sender<(LocMutex, Vec<u8>)>,
+
+    // Final queue
     seqlocs_queue: Sender<(Vec<Loc>, Vec<Loc>, Vec<Loc>, Vec<Loc>, Vec<Loc>, Vec<Loc>, Vec<Loc>)>,
 
-    
+    // Place to hold while we wait for all LocMutex to complete
+    // These are in order (Ids, Headers, Sequence, Scores, Masking)
+    queue: Vec<(LocMutex, LocMutex, LocMutex, LocMutex, LocMutex)>, // todo other fields
+
 }
 
 impl Coordinator {
