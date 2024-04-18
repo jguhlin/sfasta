@@ -1,3 +1,4 @@
+pub mod coordinator;
 pub mod bytes_block_store;
 pub mod directory;
 pub mod masking;
@@ -8,6 +9,7 @@ pub mod sequence_block_store;
 pub mod string_block_store;
 pub mod structs;
 
+pub use coordinator::*;
 pub use bytes_block_store::*;
 pub use directory::*;
 pub use masking::*;

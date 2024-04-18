@@ -33,7 +33,7 @@ bincode = { version = "2.0.0-rc.3" } #, features = ["serde"] }
 bytelines = { version = "2.5", default-features = false }
 simdutf8 = {version = "0.1.4", features = ["aarch64_neon"] }
 itertools = "0.12.1"
-needletail = "0.5.1"
+needletail = {version = "0.5.1", default-features = false, features = ["flate2"] }
 bumpalo = "3.16"
 flume = "0.11.0"
 
@@ -48,6 +48,8 @@ snap = "1.1.1"
 brotli = "5.0.0"
 lz4_flex = "0.11.3"
 bytes = "1.6.0"
+strum = "0.26.2"
+strum_macros = "0.26.2"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
@@ -58,8 +60,8 @@ flate2 = { version = "1.0.28", features = ["rust_backend"], default-features = t
 # Comment flate2 out for testing wasm build
 flate2 = {version = "1.0.28", features = ["zlib-ng"], default-features = false}
 zstd = { version="0.13", default-features = false, features=["arrays", "zdict_builder", "experimental"] }
-pulp = "0.18.9"
-syncmers = "0.1.5"
+pulp = "0.18.10"
+# syncmers = "0.1.5"
 
 [dev-dependencies]
 criterion = "0.5.1"

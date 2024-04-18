@@ -27,7 +27,7 @@ thread_local! {
 use crossbeam::{queue::ArrayQueue, utils::Backoff};
 
 #[cfg(not(target_arch = "wasm32"))]
-use xz::read::{XzDecoder, XzEncoder};
+use liblzma::read::{XzDecoder, XzEncoder};
 
 #[derive(Debug, Clone)]
 pub struct OutputBlock
