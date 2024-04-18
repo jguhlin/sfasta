@@ -16,6 +16,10 @@ path = "src/lib.rs"
 name = "tree"
 harness = false
 
+[[bench]]
+name ="integer_compression"
+harness = false
+
 [dependencies]
 pulp = "0.18.8"
 bumpalo = {version = "3.15.4", features = ["boxed", "collections"]}
@@ -35,3 +39,4 @@ human-size = "0.4.3"
 bitpacking = "0.9.2"
 wide = "0.7.16"
 pco = "0.2.3"
+stream-vbyte = "0.4.1"
