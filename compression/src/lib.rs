@@ -9,6 +9,10 @@ use std::{
     time::Duration,
 };
 
+pub mod dict;
+
+pub use dict::*;
+
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
 use std::{cell::RefCell, rc::Rc};
@@ -209,13 +213,13 @@ pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd::bulk::Decompressor<'a
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd::bulk::Decompressor<'a>
+pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd_dict::bulk::Decompressor<'a>
 {
     unimplemented!("ZSTD decoding is not supported on wasm32");
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn zstd_encoder(compression_level: i32) -> zstd::bulk::Compressor<'static>
+pub fn zstd_encoder(compression_level: i32) -> zstd_dict::bulk::Compressor<'static>
 {
     unimplemented!("ZSTD encoding is not supported on wasm32");
 }
