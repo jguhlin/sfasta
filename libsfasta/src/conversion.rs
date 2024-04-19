@@ -438,7 +438,7 @@ impl Converter
             .with_compression_worker(Arc::clone(&compression_workers_thread))
             .with_block_size(block_size as usize);
 
-        let mut sequences = SequenceBlockStoreBuilder::default()
+        let mut sequences = BytesBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
@@ -474,7 +474,15 @@ impl Converter
                     // TODO: This has become kinda gross
                     // Lots of vec's above, should be able to clean this up
 
-                    seqloc.add_locs(&sequence_locs, &masking_locs, &[], &idloc, &headers_loc, &[], &[]);
+                    seqloc.add_locs(
+                        &sequence_locs.unwrap(),
+                        &masking_locs,
+                        &[],
+                        &idloc,
+                        &headers_loc,
+                        &[],
+                        &[],
+                    );
 
                     let loc = seqlocs.add_to_index(seqloc);
                     ids_string.push(Arc::clone(&myid));

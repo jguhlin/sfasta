@@ -66,7 +66,7 @@ pub struct Coordinator
     // Temporary ownership of the stores
     ids: Option<StringBlockStore>,
     headers: Option<StringBlockStore>,
-    sequence: Option<SequenceBlockStore>,
+    sequence: Option<BytesBlockStore>,
     scores: Option<StringBlockStore>,
     masking: Option<MaskingStoreBuilder>,
 
@@ -120,7 +120,7 @@ impl Coordinator
         self
     }
 
-    pub fn with_sequence_store(mut self, sequence: SequenceBlockStore) -> Self
+    pub fn with_sequence_store(mut self, sequence: BytesBlockStore) -> Self
     {
         self.sequence = Some(sequence);
         self

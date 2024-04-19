@@ -1,21 +1,12 @@
-pub mod bytes_block_store;
 pub mod coordinator;
-pub mod directory;
-pub mod masking;
-pub mod metadata;
-pub mod parameters;
 pub mod seq_loc;
-pub mod sequence_block_store;
-pub mod string_block_store;
 pub mod structs;
+pub mod simple;
+pub mod stores;
 
-pub use bytes_block_store::*;
-pub use coordinator::*;
-pub use directory::*;
-pub use masking::*;
-pub use metadata::*;
-pub use parameters::*;
-pub use seq_loc::*;
-pub use sequence_block_store::*;
-pub use string_block_store::*;
+pub use simple::*;
 pub use structs::*;
+pub use seq_loc::*;
+pub use stores::*;
+
+pub use coordinator::*;

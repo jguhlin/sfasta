@@ -8,6 +8,7 @@ use std::{
     sync::RwLock,
 };
 
+use bytes::Bytes;
 use libcompression::*;
 use libfractaltree::FractalTreeDisk;
 
@@ -27,7 +28,7 @@ pub struct Sfasta<'sfa>
     pub metadata: Option<Metadata>,
     pub index: Option<FractalTreeDisk<u32, u32>>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
-    pub sequenceblocks: Option<SequenceBlockStore>,
+    pub sequenceblocks: Option<BytesBlockStore>,
     pub seqlocs: Option<SeqLocsStore>,
     pub headers: Option<StringBlockStore>,
     pub ids: Option<StringBlockStore>,
@@ -559,8 +560,7 @@ impl<'sfa> SfastaParser<'sfa>
             sfasta.seqlocs = Some(seqlocs);
         }
 
-        let sequenceblocks =
-            SequenceBlockStore::from_buffer(&mut in_buf, sfasta.directory.sequences_loc.unwrap().get());
+        let sequenceblocks = BytesBlockStore::from_buffer(&mut in_buf, sfasta.directory.sequences_loc.unwrap().get());
 
         if sequenceblocks.is_err() {
             return Result::Err(format!(

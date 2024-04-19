@@ -9,10 +9,12 @@ use std::{
 };
 
 use crossbeam::utils::Backoff;
+use flume::{Sender, Receiver};
 
 use crate::datatypes::Loc;
 use libcompression::*;
 use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
+use super::{Queue, LocMutex};
 
 // Implement some custom errors to return
 #[derive(Debug)]
@@ -44,11 +46,20 @@ pub struct BytesBlockStoreBuilder
     pub compression_config: Arc<CompressionConfig>,
 
     /// Compression worker. Enables multithreading for compression.
-    compression_worker: Option<Arc<CompressionWorker>>,
+    pub compression_worker: Option<Arc<CompressionWorker>>,
 
     /// Whether the block store is finalized
-    finalized: bool,
+    pub finalized: bool,
+
+    // Worker thread handle
+    worker: Option<std::thread::JoinHandle<()>>,
+
+    // Queue
+    queue_sender: Option<Sender<(LocMutex, Vec<u8>)>>,
 }
+
+unsafe impl Send for BytesBlockStoreBuilder {}
+unsafe impl Sync for BytesBlockStoreBuilder {}
 
 impl Default for BytesBlockStoreBuilder
 {
@@ -62,12 +73,30 @@ impl Default for BytesBlockStoreBuilder
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
             finalized: false,
+            worker: None,
+            queue_sender: None,
         }
     }
 }
 
 impl BytesBlockStoreBuilder
 {
+
+    pub fn start_thread(&mut self) {
+        let queues =  flume::bounded(64);
+        self.queue_sender = Some(queues.0);
+        let receiver = queues.1;
+
+        let join_handle = std::thread::spawn(move || {
+            loop {
+                let (loc, data) = receiver.recv().unwrap();
+                let loc = loc.1.lock().unwrap();
+                
+            }
+        });
+
+    }
+
     /// Configuration. Set the block size
     pub fn with_block_size(mut self, block_size: usize) -> Self
     {
@@ -123,6 +152,11 @@ impl BytesBlockStoreBuilder
         self.block_locations.len()
     }
 
+    pub fn block_size(&self) -> usize
+    {
+        self.block_size
+    }
+
     /// Check that all block locations are not 0
     pub fn check_complete(&self)
     {
@@ -153,7 +187,7 @@ impl BytesBlockStoreBuilder
 
     /// Add a sequence of bytes to the block store
     /// Returns a vector of Loc's that point to the location of the bytes in the block store (can span multiple blocks)
-    pub fn add(&mut self, input: &[u8]) -> Result<Vec<Loc>, &str>
+    pub fn add(&mut self, input: &[u8]) -> Result<LocMutex, &str>
     {
         if self.finalized {
             panic!("Cannot add to finalized block store.");
@@ -470,6 +504,11 @@ impl BytesBlockStore
             cache: None,
             compression_config,
         })
+    }
+
+    pub fn block_size(&self) -> usize
+    {
+        self.block_size
     }
 }
 
