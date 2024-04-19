@@ -602,7 +602,7 @@ impl Converter
 enum Work
 {
     FastaPayload((Vec<u8>, Vec<u8>)),
-    FastqPayload(crate::datatypes::Sequence), // TODO
+    FastqPayload((Vec<u8>, Vec<u8>)), // TODO
     Shutdown,
 }
 
