@@ -290,7 +290,6 @@ impl Converter
                 out_buffer_thread.stream_position().unwrap()
             );
 
-
             let end = out_buffer_thread.stream_position().unwrap();
 
             if self.index {
@@ -464,12 +463,11 @@ impl Converter
                     let myid = std::sync::Arc::new(seqid.to_vec());
                     let idloc = ids.add(&(*myid));
 
-                    let headers_loc =
-                        if let Some(x) = seqheader {
-                            headers.add(&x)
-                        } else {
-                            vec![]
-                        };
+                    let headers_loc = if let Some(x) = seqheader {
+                        headers.add(&x)
+                    } else {
+                        vec![]
+                    };
 
                     let mut seqloc = SeqLoc::new();
 

@@ -68,7 +68,6 @@ impl Default for BytesBlockStoreBuilder
 
 impl BytesBlockStoreBuilder
 {
-
     /// Configuration. Set the block size
     pub fn with_block_size(mut self, block_size: usize) -> Self
     {
@@ -159,7 +158,7 @@ impl BytesBlockStoreBuilder
         if self.finalized {
             panic!("Cannot add to finalized block store.");
         }
-       
+
         let mut current_block = self.block_locations.len();
         let mut locs = Vec::with_capacity(8);
 
@@ -184,7 +183,8 @@ impl BytesBlockStoreBuilder
                     len,
                 });
             } else {
-                self.data.extend_from_slice(&input[written..(written + remaining as usize)]);
+                self.data
+                    .extend_from_slice(&input[written..(written + remaining as usize)]);
                 written += remaining as usize;
                 // len is how many bytes are copied from the slice
                 let len = (self.data.len() - start_position) as u32;
@@ -206,42 +206,40 @@ impl BytesBlockStoreBuilder
 
         Ok(locs)
 
-        /*
-        let mut start = data.len();
-        data.extend_from_slice(input);
-        let end = data.len().saturating_sub(1);
-
-        let compressed_blocks_count = self.block_locations.len();
-
-        let starting_block = (start / self.block_size) + compressed_blocks_count;
-        let ending_block = (end / self.block_size) + compressed_blocks_count;
-
-        let mut locs = Vec::with_capacity((input.len() / self.block_size).saturating_add(1));
-
+        // let mut start = data.len();
+        // data.extend_from_slice(input);
+        // let end = data.len().saturating_sub(1);
+        //
+        // let compressed_blocks_count = self.block_locations.len();
+        //
+        // let starting_block = (start / self.block_size) + compressed_blocks_count;
+        // let ending_block = (end / self.block_size) + compressed_blocks_count;
+        //
+        // let mut locs = Vec::with_capacity((input.len() / self.block_size).saturating_add(1));
+        //
         // Process at block boundaries...
-        for block in starting_block..=ending_block {
-            let block_start = start % self.block_size;
-            let block_end = if block == ending_block {
-                (end % self.block_size).saturating_add(1)
-            } else {
-                self.block_size
-            };
-            start = block_end;
-
-            let len = match block_end.checked_sub(block_start) {
-                Some(v) => v,
-                None => return Err("Block end < block start"),
-            };
-
-            locs.push(Loc {
-                block: block as u32,
-                start: block_start as u32,
-                len: len as u32,
-            });
-        }
-
-        Ok(locs)
-        */
+        // for block in starting_block..=ending_block {
+        // let block_start = start % self.block_size;
+        // let block_end = if block == ending_block {
+        // (end % self.block_size).saturating_add(1)
+        // } else {
+        // self.block_size
+        // };
+        // start = block_end;
+        //
+        // let len = match block_end.checked_sub(block_start) {
+        // Some(v) => v,
+        // None => return Err("Block end < block start"),
+        // };
+        //
+        // locs.push(Loc {
+        // block: block as u32,
+        // start: block_start as u32,
+        // len: len as u32,
+        // });
+        // }
+        //
+        // Ok(locs)
     }
 
     /// Write out the header for BytesBlockStore

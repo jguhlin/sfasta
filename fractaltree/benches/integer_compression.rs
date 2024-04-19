@@ -3,15 +3,15 @@ use std::ops::{AddAssign, SubAssign};
 use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
 
 use bitpacking::{BitPacker, BitPacker4x, BitPacker8x};
-use pco::standalone::{simple_decompress, simple_compress};
+use pco::standalone::{simple_compress, simple_decompress};
 use pulp::Arch;
 use rand::prelude::*;
 use xxhash_rust::xxh3::xxh3_64;
 
 use stream_vbyte::{
+    decode::{cursor::DecodeCursor, decode},
     encode::encode,
-    decode::{decode, cursor::DecodeCursor},
-    scalar::Scalar
+    scalar::Scalar,
 };
 
 use libfractaltree::*;
@@ -95,12 +95,15 @@ where
 pub fn bench_delta_decode(c: &mut Criterion)
 {
     let mut values1024: Vec<u32> = (0..1024_u32).collect();
-    let pco_config = pco::ChunkConfig::default().with_compression_level(8).with_delta_encoding_order(Some(1));
+    let pco_config = pco::ChunkConfig::default()
+        .with_compression_level(8)
+        .with_delta_encoding_order(Some(1));
     let compressed = simple_compress(&values1024, &pco_config).unwrap();
 
     pulp_delta_encode(&mut values1024);
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Decode - Inclusive Range 0..1024");
+    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+        c.benchmark_group("Delta Decode - Inclusive Range 0..1024");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -137,11 +140,12 @@ pub fn bench_delta_decode(c: &mut Criterion)
 
     group.finish();
 
-    let mut values1024: Vec<u32> = (0..1024*1024_u32).collect();
+    let mut values1024: Vec<u32> = (0..1024 * 1024_u32).collect();
     let compressed = simple_compress(&values1024, &pco_config).unwrap();
     pulp_delta_encode(&mut values1024);
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Decode - Inclusive Range 0..(1024*1024)");
+    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+        c.benchmark_group("Delta Decode - Inclusive Range 0..(1024*1024)");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -178,12 +182,13 @@ pub fn bench_delta_decode(c: &mut Criterion)
 
     group.finish();
 
-    let mut values1024: Vec<u32> = (0..1024*1024_u32).map(|x| xxh3_64(&x.to_le_bytes()) as u32).collect();
+    let mut values1024: Vec<u32> = (0..1024 * 1024_u32).map(|x| xxh3_64(&x.to_le_bytes()) as u32).collect();
     values1024.sort_unstable();
     let compressed = simple_compress(&values1024, &pco_config).unwrap();
     pulp_delta_encode(&mut values1024);
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Decode - Xxh3 as u32 1024*1024 Elements");
+    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+        c.benchmark_group("Delta Decode - Xxh3 as u32 1024*1024 Elements");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -227,11 +232,11 @@ pub fn bench_delta_encode(c: &mut Criterion)
 {
     let values1024: Vec<u32> = (0..1024_u32).collect();
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Encode - Inclusive Range - 1024 elements");
+    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+        c.benchmark_group("Delta Encode - Inclusive Range - 1024 elements");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
-
 
     group.bench_with_input(
         BenchmarkId::new("Stream VByte Crate", 1024),
@@ -251,27 +256,21 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(
-        BenchmarkId::new("Plain Bincode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                bincode::encode_to_vec(&values, config).unwrap()
-            })
-        },
-    );
+    group.bench_with_input(BenchmarkId::new("Plain Bincode", 1024), &values1024, |b, values| {
+        b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
+    });
 
-    let pco_config = pco::ChunkConfig::default().with_compression_level(8).with_delta_encoding_order(Some(1));
+    let pco_config = pco::ChunkConfig::default()
+        .with_compression_level(8)
+        .with_delta_encoding_order(Some(1));
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simpler Compress", 1024),
         &values1024,
         |b, values| {
-            b.iter(|| {
-                match simple_compress(&values, &pco_config) {
-                    Ok(_) => values,
-                    Err(_) => panic!("Failed to compress"),
-                }
+            b.iter(|| match simple_compress(&values, &pco_config) {
+                Ok(_) => values,
+                Err(_) => panic!("Failed to compress"),
             })
         },
     );
@@ -318,9 +317,10 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     group.finish();
 
-    let values1024: Vec<u32> = (0..1024*1024_u32).collect();
+    let values1024: Vec<u32> = (0..1024 * 1024_u32).collect();
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Encode - Inclusive Range - 1024*1024 elements");
+    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+        c.benchmark_group("Delta Encode - Inclusive Range - 1024*1024 elements");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -343,25 +343,17 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(
-        BenchmarkId::new("Plain Bincode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                bincode::encode_to_vec(&values, config).unwrap()
-            })
-        },
-    );
+    group.bench_with_input(BenchmarkId::new("Plain Bincode", 1024), &values1024, |b, values| {
+        b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
+    });
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simpler Compress", 1024),
         &values1024,
         |b, values| {
-            b.iter(|| {
-                match simple_compress(&values, &pco_config) {
-                    Ok(_) => values,
-                    Err(_) => panic!("Failed to compress"),
-                }
+            b.iter(|| match simple_compress(&values, &pco_config) {
+                Ok(_) => values,
+                Err(_) => panic!("Failed to compress"),
             })
         },
     );
@@ -405,13 +397,14 @@ pub fn bench_delta_encode(c: &mut Criterion)
             })
         },
     );
-    
+
     group.finish();
 
     let mut values1024: Vec<u32> = (0..1024_u32).map(|x| xxh3_64(&x.to_le_bytes()) as u32).collect();
     values1024.sort_unstable();
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Encode - Xxh3 Hash (Closer to random) - 1024 elements");
+    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+        c.benchmark_group("Delta Encode - Xxh3 Hash (Closer to random) - 1024 elements");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -434,25 +427,17 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(
-        BenchmarkId::new("Plain Bincode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                bincode::encode_to_vec(&values, config).unwrap()
-            })
-        },
-    );
+    group.bench_with_input(BenchmarkId::new("Plain Bincode", 1024), &values1024, |b, values| {
+        b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
+    });
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simpler Compress", 1024),
         &values1024,
         |b, values| {
-            b.iter(|| {
-                match simple_compress(&values, &pco_config) {
-                    Ok(_) => values,
-                    Err(_) => panic!("Failed to compress"),
-                }
+            b.iter(|| match simple_compress(&values, &pco_config) {
+                Ok(_) => values,
+                Err(_) => panic!("Failed to compress"),
             })
         },
     );
@@ -501,10 +486,11 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     group.finish();
 
-    let mut values1024: Vec<u32> = (0..1024*1024_u32).map(|x| xxh3_64(&x.to_le_bytes()) as u32).collect();
+    let mut values1024: Vec<u32> = (0..1024 * 1024_u32).map(|x| xxh3_64(&x.to_le_bytes()) as u32).collect();
     values1024.sort_unstable();
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> = c.benchmark_group("Delta Encode - Xxh3 Hash (Closer to random) - 1024*1024 elements");
+    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
+        c.benchmark_group("Delta Encode - Xxh3 Hash (Closer to random) - 1024*1024 elements");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -527,25 +513,17 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(
-        BenchmarkId::new("Plain Bincode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                bincode::encode_to_vec(&values, config).unwrap()
-            })
-        },
-    );
+    group.bench_with_input(BenchmarkId::new("Plain Bincode", 1024), &values1024, |b, values| {
+        b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
+    });
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simpler Compress", 1024),
         &values1024,
         |b, values| {
-            b.iter(|| {
-                match simple_compress(&values, &pco_config) {
-                    Ok(_) => values,
-                    Err(_) => panic!("Failed to compress"),
-                }
+            b.iter(|| match simple_compress(&values, &pco_config) {
+                Ok(_) => values,
+                Err(_) => panic!("Failed to compress"),
             })
         },
     );
@@ -592,7 +570,6 @@ pub fn bench_delta_encode(c: &mut Criterion)
         },
     );
 }
-
 
 criterion_group!(name = integercompression;
     config = Criterion::default().measurement_time(std::time::Duration::from_secs(20));
