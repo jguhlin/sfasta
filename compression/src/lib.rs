@@ -370,11 +370,11 @@ impl CompressionWorker
 
         let mut entry = work;
         while let Err(x) = self.queue.as_ref().unwrap().push(entry) {
-            log::debug!(
-                "Compression Worker Buffer is Full: {}",
-                self.queue.as_ref().unwrap().len()
-            );
             backoff.snooze();
+            if backoff.is_completed() {
+                thread::park_timeout(Duration::from_millis(10));
+                backoff.reset();
+            }
             entry = x;
         }
     }
