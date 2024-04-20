@@ -523,6 +523,7 @@ impl Converter
         while let Some(x) = reader.next() {
             match x {
                 Ok(x) => {
+                    log::debug!("new seq");
                     let seq = x.seq();
                     let mut id = x.id().split(|x| *x == b' ');
                     // Split at first space
@@ -553,6 +554,8 @@ impl Converter
                     } else {
                         None
                     };
+
+                    log::debug!("Adding to SeqLocsThreadBuilder");
 
                     let loc = seqlocs
                         .add(
