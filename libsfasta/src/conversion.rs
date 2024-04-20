@@ -584,7 +584,15 @@ impl Converter
         let mut ids = ids.join().unwrap();
         let mut masking = masking.join().unwrap();
         let mut sequences = sequences.join().unwrap();
-        le t mut scores = scores.join().unwrap(); */
+        let mut scores = scores.join().unwrap(); */
+
+        // Wait for all the workers to finish...
+        headers.finalize();
+        ids.finalize();
+        masking.finalize();
+        sequences.finalize();
+        scores.finalize();
+
 
         let backoff = Backoff::new();
         while compression_workers.len() > 0 || output_worker.len() > 0 {
