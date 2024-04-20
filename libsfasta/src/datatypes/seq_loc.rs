@@ -328,7 +328,7 @@ impl Encode for SeqLoc
         } = self;
 
         let values: [u16; 7] =
-            [*sequence, *masking, *scores, *signal, *headers, *ids, *mods];
+            [*ids, *sequence, *masking, *scores, *signal, *headers, *mods];
 
         // TODO: Is there a way to directly access the Vec<Loc> to get
         // Vec<u32>'s? Check out bytemuck (and reddit question I asked
@@ -360,12 +360,12 @@ impl Decode for SeqLoc
             .collect::<Vec<Loc>>();
 
         Ok(SeqLoc {
-            sequence: values[0],
-            masking: values[1],
-            scores: values[2],
-            signal: values[3],
-            headers: values[4],
-            ids: values[5],
+            ids: values[0],
+            sequence: values[1],
+            masking: values[2],
+            scores: values[3],
+            signal: values[4],
+            headers: values[5],
             mods: values[6],
             locs,
         })
