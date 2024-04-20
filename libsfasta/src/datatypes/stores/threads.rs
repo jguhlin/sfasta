@@ -12,27 +12,29 @@ use std::{
 
 pub trait Builder<T>
 where
-    T: Send + Sync,
+    T: Send + Sync + Sized,
 {
     fn add(&mut self, input: T) -> Result<Vec<Loc>, &str>;
     fn finalize(&mut self);
 }
 
-pub struct ThreadBuilder<T>
+pub struct ThreadBuilder<T, Z>
 where
-    T: Send + Sync,
+    T: Send + Sync + Sized,
+    Z: Send + Sync + Sized + Builder<T> + 'static,
 {
-    builder: Arc<Mutex<dyn Builder<T> + Send + Sync>>,
+    builder: Arc<Mutex<Z>>,
     shutdown: Arc<AtomicBool>,
     pub sender: Sender<(LocMutex, T)>,
     worker: Option<JoinHandle<()>>,
 }
 
-impl<T> ThreadBuilder<T>
+impl<T, Z> ThreadBuilder<T, Z>
 where
-    T: Send + Sync + 'static,
+    T: Send + Sync + 'static + Sized,
+    Z: Send + Sync + Sized + Builder<T>,
 {
-    pub fn new(builder: impl Builder<T> + Send + Sync + 'static) -> Self
+    pub fn new(builder: Z) -> Self
     {
         let builder = Arc::new(Mutex::new(builder));
 
@@ -53,8 +55,6 @@ where
             // Safe to hold the lock the entire time, this is a dedicated thread
             let mut builder = builder.lock().unwrap();
 
-            println!("Thread spawned");
-
             let backoff = Backoff::new();
 
             loop {
@@ -68,7 +68,6 @@ where
 
                 if receiver.is_empty() {
                     if shutdown_flag.load(Ordering::SeqCst) {
-                        println!("Shutting down");
                         builder.finalize();
                         return;
                     } else if receiver.is_empty() {
@@ -90,13 +89,18 @@ where
         }
     }
 
-    pub fn join(self) -> Result<(), std::boxed::Box<(dyn std::any::Any + Send + 'static)>>
+    // Return original builder
+    pub fn join(self) -> Result<Z, std::boxed::Box<(dyn std::any::Any + Send + 'static)>>
     {
         {
             self.shutdown.store(true, Ordering::SeqCst);
         }
 
-        self.worker.unwrap().join()
+        self.worker.unwrap().join()?;
+
+        let builder: Z = Arc::into_inner(self.builder).unwrap().into_inner().unwrap();
+
+        Ok(builder)
     }
 
     pub fn add(&self, data: T) -> Result<LocMutex, flume::SendError<(LocMutex, T)>>

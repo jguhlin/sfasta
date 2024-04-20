@@ -252,7 +252,7 @@ impl Converter
 
         let out_buffer = Arc::new(Mutex::new(out_fh));
 
-        let (seqlocs, headers_location, ids_location, masking_location, sequences_location, ids_to_locs) =
+        let (seqlocs, headers_location, ids_location, masking_location, sequences_location, scores_location, ids_to_locs) =
             self.process(in_buf, Arc::clone(&out_buffer), self.block_size);
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
@@ -296,8 +296,6 @@ impl Converter
                 out_buffer_thread.stream_position().unwrap()
             );
 
-            let end = out_buffer_thread.stream_position().unwrap();
-
             if self.index {
                 log::info!("Joining index");
                 let index = index_handle.unwrap().join().unwrap();
@@ -334,6 +332,7 @@ impl Converter
         sfasta.directory.ids_loc = ids_location;
         sfasta.directory.masking_loc = masking_location;
         sfasta.directory.sequences_loc = sequences_location;
+        sfasta.directory.scores_loc = scores_location;
 
         // Go to the beginning, and write the location of the index
 
@@ -383,6 +382,7 @@ impl Converter
         Option<NonZeroU64>,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
+        Option<NonZeroU64>,
         Vec<(std::sync::Arc<Vec<u8>>, usize)>, // todo: cow?
     )
     where
@@ -418,6 +418,7 @@ impl Converter
         let ids_location;
         let masking_location;
         let sequences_location;
+        let scores_location;
 
         let mut ids_string = Vec::new();
         let mut ids_to_locs = Vec::new();
@@ -432,35 +433,35 @@ impl Converter
 
         let mut seqlocs = SeqLocsStoreBuilder::default();
 
-        let mut headers = StringBlockStoreBuilder::default()
+        let headers = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
-        let mut headers = ThreadBuilder::new(headers);
+        let headers = ThreadBuilder::new(headers);
 
-        let mut ids = StringBlockStoreBuilder::default()
+        let ids = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
-        let mut ids = ThreadBuilder::new(ids);
+        let ids = ThreadBuilder::new(ids);
 
-        let mut masking = MaskingStoreBuilder::default()
+        let masking = MaskingStoreBuilder::default()
             .with_compression_worker(Arc::clone(&compression_workers_thread))
             .with_block_size(block_size as usize);
 
-        let mut masking = ThreadBuilder::new(masking);
+        let masking = ThreadBuilder::new(masking);
 
-        let mut sequences = BytesBlockStoreBuilder::default()
+        let sequences = BytesBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
-        let mut sequences = ThreadBuilder::new(sequences);
+        let sequences = ThreadBuilder::new(sequences);
 
-        let mut scores = BytesBlockStoreBuilder::default()
+        let scores = BytesBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
-        let mut scores = ThreadBuilder::new(scores);
+        let scores = ThreadBuilder::new(scores);
 
         let mut reader = parse_fastx_reader(in_buf).unwrap();
 
@@ -481,15 +482,16 @@ impl Converter
                         None
                     };
 
-                    let masking_locs = masking.add(seq.to_vec());
+                    let masking_locs = masking.add(seq.to_vec()).unwrap();
 
                     // Capitalize and add to sequences
-                    seq.to_mut().make_ascii_uppercase();
-                    let loc = sequences.add(seq.to_vec());
-                    let sequence_locs = loc;
+                    let mut seq = seq.to_vec();
+                    seq.make_ascii_uppercase();
+                    let loc = sequences.add(seq);
+                    let sequence_locs = loc.unwrap();
 
                     let myid = std::sync::Arc::new(seqid.to_vec());
-                    let idloc = ids.add(*myid).unwrap();
+                    let id_locs = ids.add(myid.to_vec()).unwrap();
 
                     let headers_loc = if let Some(x) = seqheader {
                         Some(headers.add(x.to_vec()).unwrap())
@@ -499,15 +501,81 @@ impl Converter
 
                     let mut seqloc = SeqLoc::new();
 
-                    // TODO: This has become kinda gross
-                    // Lots of vec's above, should be able to clean this up
+                    // todo move this into a threadbuilder like struct for seqloc store
+
+                    // Have to wait on all of these:
+                    // masking_locs
+                    // sequence_locs
+                    // id_locs
+                    //
+                    // the next two can be is_none, so that's fine
+                    // headers_loc
+                    // score_locs
+
+                    loop {
+                        let guard = masking_locs.lock().unwrap();
+                        if guard.0 == true {
+                            break
+                        } else {
+                            std::thread::sleep(std::time::Duration::from_millis(9));
+                        }
+                    }
+
+                    loop {
+                        let guard = sequence_locs.lock().unwrap();
+                        if guard.0 == true {
+                            break
+                        } else {
+                            std::thread::sleep(std::time::Duration::from_millis(9));
+                        }
+                    }
+
+                    loop {
+                        let guard = id_locs.lock().unwrap();
+                        if guard.0 == true {
+                            break
+                        } else {
+                            std::thread::sleep(std::time::Duration::from_millis(9));
+                        }
+                    }
+
+                    let headers_locs = 
+                        if let Some(x) = headers_loc {
+                            loop {
+                                let guard = x.lock().unwrap();
+                                if guard.0 == true {
+                                    break
+                                } else {
+                                    std::thread::sleep(std::time::Duration::from_millis(9));
+                                }
+                            }
+                            Arc::into_inner(x).unwrap().into_inner().unwrap().1
+                        } else {
+                            vec![]
+                        };
+
+                    let score_locs = 
+                        if let Some(x) = score_locs {
+                            loop {
+                                let guard = x.lock().unwrap();
+                                if guard.0 == true {
+                                    break
+                                } else {
+                                    std::thread::sleep(std::time::Duration::from_millis(9));
+                                }
+                            }
+                            Arc::into_inner(x).unwrap().into_inner().unwrap().1
+                        } else {
+                            vec![]
+                        };
+
 
                     seqloc.add_locs(
-                        &sequence_locs.unwrap(),
-                        &masking_locs,
-                        &[],
-                        &idloc,
-                        &headers_loc,
+                        &sequence_locs.lock().unwrap().1,
+                        &masking_locs.lock().unwrap().1,
+                        &score_locs,
+                        &id_locs.lock().unwrap().1,
+                        &headers_locs,
                         &[],
                         &[],
                     );
@@ -522,10 +590,12 @@ impl Converter
             }
         }
 
-        headers.finalize();
-        ids.finalize();
-        masking.finalize();
-        sequences.finalize();
+        let mut headers = headers.join().unwrap();
+        let mut ids = ids.join().unwrap();
+        let mut masking = masking.join().unwrap();
+        let mut sequences = sequences.join().unwrap();
+        let mut scores = scores.join().unwrap();
+
 
         let backoff = Backoff::new();
         while compression_workers.len() > 0 || output_worker.len() > 0 {
@@ -577,6 +647,14 @@ impl Converter
             },
         };
 
+        let mut scores = match scores.write_block_locations(&mut *out_buffer) {
+            Ok(x) => Some(scores),
+            Err(x) => match x {
+                BlockStoreError::Empty => None,
+                _ => panic!("Error writing scores: {:?}", x),
+            },
+        };
+
         // Write the headers for each store...
         if headers.is_some() {
             let x = headers.as_mut().unwrap();
@@ -610,6 +688,14 @@ impl Converter
             sequences_location = None;
         }
 
+        if scores.is_some() {
+            let x = scores.as_mut().unwrap();
+            scores_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            x.write_header(scores_location.unwrap().get(), &mut *out_buffer);
+        } else {
+            scores_location = None;
+        }
+
         out_buffer.flush().expect("Unable to flush output buffer");
 
         (
@@ -618,6 +704,7 @@ impl Converter
             ids_location,
             masking_location,
             sequences_location,
+            scores_location,
             ids_to_locs,
         )
     }
