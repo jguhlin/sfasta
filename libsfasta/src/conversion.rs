@@ -513,40 +513,64 @@ impl Converter
                     // score_locs
 
                     loop {
-                        let guard = masking_locs.lock().unwrap();
-                        if guard.0 == true {
-                            break
-                        } else {
-                            std::thread::sleep(std::time::Duration::from_millis(9));
+                        match masking_locs.try_lock() {
+                            Ok(x) => {
+                                if x.0 == true {
+                                    break
+                                } else {
+                                    std::thread::sleep(std::time::Duration::from_millis(32));
+                                }
+                            }
+                            Err(_) => {
+                                std::thread::sleep(std::time::Duration::from_millis(32));
+                            }
                         }
                     }
 
                     loop {
-                        let guard = sequence_locs.lock().unwrap();
-                        if guard.0 == true {
-                            break
-                        } else {
-                            std::thread::sleep(std::time::Duration::from_millis(9));
+                        match sequence_locs.try_lock() {
+                            Ok(x) => {
+                                if x.0 == true {
+                                    break
+                                } else {
+                                    std::thread::sleep(std::time::Duration::from_millis(32));
+                                }
+                            }
+                            Err(_) => {
+                                std::thread::sleep(std::time::Duration::from_millis(32));
+                            }
                         }
                     }
 
                     loop {
-                        let guard = id_locs.lock().unwrap();
-                        if guard.0 == true {
-                            break
-                        } else {
-                            std::thread::sleep(std::time::Duration::from_millis(9));
+                        match id_locs.try_lock() {
+                            Ok(x) => {
+                                if x.0 == true {
+                                    break
+                                } else {
+                                    std::thread::sleep(std::time::Duration::from_millis(32));
+                                }
+                            }
+                            Err(_) => {
+                                std::thread::sleep(std::time::Duration::from_millis(32));
+                            }
                         }
                     }
 
                     let headers_locs = 
                         if let Some(x) = headers_loc {
                             loop {
-                                let guard = x.lock().unwrap();
-                                if guard.0 == true {
-                                    break
-                                } else {
-                                    std::thread::sleep(std::time::Duration::from_millis(9));
+                                match x.try_lock() {
+                                    Ok(x) => {
+                                        if x.0 == true {
+                                            break
+                                        } else {
+                                            std::thread::sleep(std::time::Duration::from_millis(32));
+                                        }
+                                    }
+                                    Err(_) => {
+                                        std::thread::sleep(std::time::Duration::from_millis(32));
+                                    }
                                 }
                             }
                             Arc::into_inner(x).unwrap().into_inner().unwrap().1
@@ -557,17 +581,23 @@ impl Converter
                     let score_locs = 
                         if let Some(x) = score_locs {
                             loop {
-                                let guard = x.lock().unwrap();
-                                if guard.0 == true {
-                                    break
-                                } else {
-                                    std::thread::sleep(std::time::Duration::from_millis(9));
+                                match x.try_lock() {
+                                    Ok(x) => {
+                                        if x.0 == true {
+                                            break
+                                        }
+                                    }
+                                    Err(_) => {
+                                        std::thread::sleep(std::time::Duration::from_millis(32));
+                                    }
                                 }
                             }
                             Arc::into_inner(x).unwrap().into_inner().unwrap().1
                         } else {
                             vec![]
                         };
+
+                    log::debug!("Adding to SeqLoc");
 
 
                     seqloc.add_locs(
@@ -589,6 +619,8 @@ impl Converter
                 }
             }
         }
+        
+        log::info!("Finished reading sequences");
 
         let mut headers = headers.join().unwrap();
         let mut ids = ids.join().unwrap();
