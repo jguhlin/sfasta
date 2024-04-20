@@ -36,7 +36,9 @@ pub struct Converter
     quality_scores: bool,
     compression_type: CompressionType,
     compression_level: Option<i8>,
-    dict: Option<Vec<u8>>,
+    dict: bool,
+    dict_samples: u64,
+    dict_size: u64,
 }
 
 /// Default settings for Converter
@@ -60,7 +62,9 @@ impl Default for Converter
             masking: false,
             quality_scores: false,
             compression_type: CompressionType::ZSTD,
-            dict: None,
+            dict: false,
+            dict_samples: 100,
+            dict_size: 110 * 1024,
             compression_level: None,
         }
     }
@@ -70,16 +74,18 @@ impl Converter
 {
     // Builder configuration functions...
     /// Specify a dictionary to use for compression. Untested.
-    pub fn with_dict(mut self, dict: Vec<u8>) -> Self
+    pub fn with_dict(mut self, dict_samples: u64, dict_size: u64) -> Self
     {
-        self.dict = Some(dict);
+        self.dict = true;
+        self.dict_samples = dict_samples;
+        self.dict_size = dict_size;
         self
     }
 
     /// Disable dictionary
     pub fn without_dict(mut self) -> Self
     {
-        self.dict = None;
+        self.dict = false;
         self
     }
 
@@ -243,8 +249,6 @@ impl Converter
 
         sfasta.parameters.as_mut().unwrap().compression_type =
             self.compression_type;
-        sfasta.parameters.as_mut().unwrap().compression_dict =
-            self.dict.clone();
         sfasta.parameters.as_mut().unwrap().block_size = self.block_size as u32;
 
         // Set dummy values for the directory
@@ -428,14 +432,6 @@ impl Converter
         W: WriteAndSeek + 'convert + Send + Sync + 'static,
         R: Read + Send + 'convert,
     {
-        // TODO: Untested, been awhile... Only useful for very small blocks so
-        // hasn't been used lately...
-        if let Some(_dict) = &self.dict {
-            todo!();
-            // sb_config =
-            // sb_config.with_compression_dict(dict.clone());
-        }
-
         let threads = self.threads;
 
         let output_buffer = Arc::clone(&out_fh);
@@ -506,6 +502,14 @@ impl Converter
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let scores = ThreadBuilder::new(scores);
+
+        if self.dict {
+            ids = ids.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
+            headers = headers.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
+            masking = masking.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
+            sequences = sequences.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
+            scores = scores.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
+        }
 
         let mut reader = parse_fastx_reader(in_buf).unwrap();
 

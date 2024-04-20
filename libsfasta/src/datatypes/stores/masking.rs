@@ -46,6 +46,21 @@ impl Default for MaskingStoreBuilder
 
 impl MaskingStoreBuilder
 {
+    pub fn with_dict(mut self) -> Self {
+        self.inner = self.inner.with_dict();
+        self
+    }
+
+    pub fn with_dict_size(mut self, dict_size: u64) -> Self {
+        self.inner = self.inner.with_dict_size(dict_size);
+        self
+    }
+
+    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self {
+        self.inner = self.inner.with_dict_samples(dict_samples);
+        self
+    }
+
     pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
     where
         W: Write + Seek,

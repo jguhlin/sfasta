@@ -87,16 +87,35 @@ impl Default for BytesBlockStoreBuilder
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
             finalized: false,
-            create_dict: true, // FOR NOW todo configurable from sfa
+            create_dict: false,
             dict_data: Vec::new(),
-            dict_size: 64 * 1024, // todo configurable from sfa
-            dict_samples: 128, // todo configurable from sfa
+            dict_size: 64 * 1024,
+            dict_samples: 128,
         }
     }
 }
 
 impl BytesBlockStoreBuilder
 {
+
+    pub fn with_dict(mut self) -> Self
+    {
+        self.create_dict = true;
+        self
+    }
+
+    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self
+    {
+        self.dict_samples = dict_samples;
+        self
+    }
+
+    pub fn with_dict_size(mut self, dict_size: u64) -> Self
+    {
+        self.dict_size = dict_size;
+        self
+    }
+
     /// Configuration. Set the block size
     pub fn with_block_size(mut self, block_size: usize) -> Self
     {

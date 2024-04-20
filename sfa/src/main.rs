@@ -103,8 +103,13 @@ enum Commands
         dict: bool,
         /// Number of sample blocks to take for dictionary training
         #[clap(long)]
-        #[clap(default_value_t = 1024)]
+        #[clap(default_value_t = 100)]
         dict_samples: u64,
+
+        /// Dict size in kb
+        #[clap(long)]
+        #[clap(default_value_t = 110)]
+        dict_size: u64,
     },
     Summarize
     {
@@ -159,6 +164,7 @@ fn main()
             level,
             dict,
             dict_samples,
+            dict_size,
         } => convert(
             input,
             *threads as usize,
@@ -174,6 +180,7 @@ fn main()
             *level,
             *dict,
             *dict_samples,
+            *dict_size,
         ),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
@@ -491,6 +498,7 @@ fn convert(
     level: Option<i8>,
     dict: bool,
     dict_samples: u64,
+    dict_size: u64,
 )
 {
     let metadata =
@@ -504,8 +512,6 @@ fn convert(
         Err(why) => panic!("couldn't create: {}", why),
         Ok(file) => file,
     };
-
-    let dict = None; // todo
 
     let buf = generic_open_file_pb(pb, fasta_filename);
     let buf = buf.1;
@@ -555,16 +561,16 @@ fn convert(
         .with_threads(threads)
         .with_compression_type(compression_type);
 
-    if let Some(dict) = dict {
-        converter = converter.with_dict(dict);
-    }
-
     if let Some(level) = level {
         converter = converter.with_compression_level(level);
     }
 
     if let Some(size) = blocksize {
         converter = converter.with_block_size(size as usize * 1024);
+    }
+
+    if dict {
+        converter = converter.with_dict(dict_samples, dict_size * 1024)
     }
 
     if noindex {

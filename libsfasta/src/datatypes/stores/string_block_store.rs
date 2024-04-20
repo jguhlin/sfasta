@@ -34,6 +34,7 @@ impl Default for StringBlockStoreBuilder
 
 impl Builder<Vec<u8>> for StringBlockStoreBuilder
 {
+
     fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
     {
         Ok(self
@@ -50,6 +51,21 @@ impl Builder<Vec<u8>> for StringBlockStoreBuilder
 
 impl StringBlockStoreBuilder
 {
+    pub fn with_dict(mut self) -> Self {
+        self.inner = self.inner.with_dict();
+        self
+    }
+
+    pub fn with_dict_size(mut self, dict_size: u64) -> Self {
+        self.inner = self.inner.with_dict_size(dict_size);
+        self
+    }
+
+    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self {
+        self.inner = self.inner.with_dict_samples(dict_samples);
+        self
+    }
+
     pub fn with_compression_worker(
         mut self,
         compression_worker: Arc<CompressionWorker>,
