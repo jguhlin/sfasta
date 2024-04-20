@@ -444,7 +444,7 @@ impl Converter
 
         // Start the compression workers
         let mut compression_workers = CompressionWorker::new()
-            .with_buffer_size(1024)
+            .with_buffer_size(1)
             .with_threads(threads as u16)
             .with_output_queue(Arc::clone(&output_queue));
 
