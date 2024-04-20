@@ -84,6 +84,8 @@ impl CompressionConfig
         self
     }
 
+    /// Only used by FractalTree's....
+    /// need todo fix that
     pub fn compress(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error>
     {
         match self.compression_type {
@@ -92,7 +94,7 @@ impl CompressionConfig
                 // Use thread local
                 ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
                     *zstd_compressor = zstd_encoder(
-                        9,
+                        6,
                         &None
                     );
                     zstd_compressor.compress(bytes)
