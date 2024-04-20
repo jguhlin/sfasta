@@ -479,7 +479,6 @@ fn compression_worker(
                                     &None,
                                 );
                             }
-                            // todo dict
                             zstd_compressor
                                 .compress(work.input.as_slice())
                                 .unwrap()
