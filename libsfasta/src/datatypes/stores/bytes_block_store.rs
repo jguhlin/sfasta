@@ -51,6 +51,11 @@ pub struct BytesBlockStoreBuilder
 
     /// Whether the block store is finalized
     pub finalized: bool,
+
+    create_dict: bool,
+    dict_data: Vec<Vec<u8>>,
+    dict_size: u64,
+    dict_samples: u64,
 }
 
 unsafe impl Send for BytesBlockStoreBuilder {}
@@ -82,6 +87,10 @@ impl Default for BytesBlockStoreBuilder
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
             finalized: false,
+            create_dict: true, // FOR NOW
+            dict_data: Vec::new(),
+            dict_size: 128 * 1024,
+            dict_samples: 128,
         }
     }
 }
@@ -120,14 +129,31 @@ impl BytesBlockStoreBuilder
 
         let mut data = Vec::with_capacity(self.block_size);
         std::mem::swap(&mut self.data, &mut data);
-        let worker = self.compression_worker.as_ref().unwrap();
-        let loc = worker.compress(data, Arc::clone(&self.compression_config));
-        self.block_locations.push(loc);
+
+        if self.create_dict {
+            self.dict_data.push(data.clone());
+            // Sum all the data for the dictionary
+            let sum: usize = self.dict_data.iter().map(|x| x.len()).sum();
+            
+            // Std dict size is 100kb, they recommend at least 100x samples to train
+            if sum >= (self.dict_samples * self.dict_size) as usize { 
+                // Create the dict with the data we have...
+                self.create_dict();                                
+            }
+        } else {
+            let worker = self.compression_worker.as_ref().unwrap();
+            let loc = worker.compress(data, Arc::clone(&self.compression_config));
+            self.block_locations.push(loc);
+        }
     }
 
     fn compress_final_block(&mut self)
     {
         assert!(self.compression_worker.is_some());
+
+        if self.create_dict {
+            self.create_dict();
+        }
 
         self.compress_block();
 
@@ -138,6 +164,33 @@ impl BytesBlockStoreBuilder
         let worker = self.compression_worker.as_ref().unwrap();
         let loc = worker.compress(data, Arc::clone(&self.compression_config));
         self.block_locations.push(loc);
+    }
+
+    pub fn create_dict(&mut self) {
+        let sum: usize = self.dict_data.iter().map(|x| x.len()).sum();
+        if sum >= (12 * self.dict_size) as usize {
+            let dict = zstd::dict::from_samples(&self.dict_data, self.dict_size as usize);
+            let dict = match dict {
+                Ok(v) => Some(v),
+                Err(e) => {
+                    log::error!("Error creating dictionary: {}", e);
+                    None
+                }
+            };
+            log::info!("Dict Size: {}", dict.as_ref().unwrap().len());
+            let mut cc = (*self.compression_config).clone();
+            cc.compression_dict = Some(Arc::new(dict.unwrap()));
+            self.compression_config = Arc::new(cc);
+        }
+
+        self.create_dict = false;
+
+        // Compress the data we have
+        for data in self.dict_data.iter() {
+            let worker = self.compression_worker.as_ref().unwrap();
+            let loc = worker.compress(data.clone(), Arc::clone(&self.compression_config));
+            self.block_locations.push(loc);
+        }
     }
 
     /// Get number of blocks
