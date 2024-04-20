@@ -179,10 +179,10 @@ impl SeqLocsThreadBuilder
                     buffer.push_back((loc_storage, id_loc, locs));
                 }
 
-                while !buffer.is_empty() && buffer[0].1.0.load(Ordering::SeqCst)
+                while !buffer.is_empty() && buffer[0].1.0.load(Ordering::SeqCst) && Arc::strong_count(&buffer[0].1) == 1
                     && buffer[0].2.iter().all(|x| {
                         x.is_none()
-                            || x.as_ref().unwrap().0.load(Ordering::SeqCst)
+                            || (x.as_ref().unwrap().0.load(Ordering::SeqCst) && Arc::strong_count(x.as_ref().unwrap()) == 1)
                     })
                 {
                     let (loc_storage, id_loc, locs) =
