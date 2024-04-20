@@ -179,7 +179,7 @@ impl SeqLocsThreadBuilder
                     buffer.push_back((loc_storage, id_loc, locs));
                 }
 
-                while buffer[0].1 .0.load(Ordering::SeqCst)
+                while !buffer.is_empty() && buffer[0].1.0.load(Ordering::SeqCst)
                     && buffer[0].2.iter().all(|x| {
                         x.is_none()
                             || x.as_ref().unwrap().0.load(Ordering::SeqCst)
