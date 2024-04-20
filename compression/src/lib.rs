@@ -457,6 +457,7 @@ fn compression_worker(
                                 .compression_dict
                                 .is_some()
                             {
+                                log::debug!("Compressing with dict");
                                 zstd_compressor
                                     .set_dictionary(
                                         work.compression_config
