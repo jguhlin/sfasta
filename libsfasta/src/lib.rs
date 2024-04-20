@@ -13,4 +13,5 @@ pub mod prelude;
 
 pub use crate::{datatypes::structs::*, io::*, utils::*};
 
-pub const BINCODE_CONFIG: bincode::config::Configuration = bincode::config::standard().with_variable_int_encoding();
+pub const BINCODE_CONFIG: bincode::config::Configuration =
+    bincode::config::standard().with_variable_int_encoding();

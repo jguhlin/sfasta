@@ -1,6 +1,7 @@
 //! # I/O Worker
 //!
-//! This holds the output buffer, must finish and destroy to have access to it again.
+//! This holds the output buffer, must finish and destroy to have
+//! access to it again.
 
 use std::{
     io::{Seek, Write},
@@ -87,8 +88,11 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
     }
 }
 
-fn worker<W>(queue: Receiver<OutputBlock>, shutdown_flag: Arc<AtomicBool>, output_buffer: Arc<Mutex<W>>)
-where
+fn worker<W>(
+    queue: Receiver<OutputBlock>,
+    shutdown_flag: Arc<AtomicBool>,
+    output_buffer: Arc<Mutex<W>>,
+) where
     W: Write + Seek + Send + Sync + Seek,
 {
     let bincode_config = bincode::config::standard().with_fixed_int_encoding();
@@ -112,7 +116,12 @@ where
             output_buffer.iter().enumerate().for_each(|(i, x)| {
                 let loc = &output_locs[i];
                 loc.store(output.stream_position().unwrap(), Ordering::Relaxed);
-                bincode::encode_into_std_write(&x, &mut *output, bincode_config).unwrap();
+                bincode::encode_into_std_write(
+                    &x,
+                    &mut *output,
+                    bincode_config,
+                )
+                .unwrap();
             });
 
             output_buffer.clear();

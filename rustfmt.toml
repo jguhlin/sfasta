@@ -1,4 +1,4 @@
-max_width = 120
+max_width = 80
 newline_style = "Unix"
 normalize_comments = true
 brace_style = "AlwaysNextLine"
@@ -6,7 +6,7 @@ reorder_imports = true
 reorder_impl_items = true
 reorder_modules = true
 tab_spaces = 4
-comment_width = 120
+comment_width = 70
 wrap_comments = true
 imports_indent = "Block"
 indent_style = "Block"

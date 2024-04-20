@@ -88,7 +88,8 @@ impl DirectoryOnDisk
 }
 
 // , bincode::Encode, bincode::Decode
-// Directory should not be encoded, DirectoryOnDisk should be (can use .into or .from to get there and back)
+// Directory should not be encoded, DirectoryOnDisk should be (can use
+// .into or .from to get there and back)
 #[derive(Debug, Clone, Default)]
 pub struct Directory
 {
@@ -169,8 +170,10 @@ impl Directory
 
 impl bincode::Encode for Directory
 {
-    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E)
-        -> core::result::Result<(), bincode::error::EncodeError>
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> core::result::Result<(), bincode::error::EncodeError>
     {
         let dir: DirectoryOnDisk = self.clone().into();
         bincode::Encode::encode(&dir, encoder)?;
@@ -180,7 +183,9 @@ impl bincode::Encode for Directory
 
 impl bincode::Decode for Directory
 {
-    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> core::result::Result<Self, bincode::error::DecodeError>
+    fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> core::result::Result<Self, bincode::error::DecodeError>
     {
         let dir: DirectoryOnDisk = bincode::Decode::decode(decoder)?;
         Ok(dir.into())
@@ -199,11 +204,15 @@ mod tests
         let y: u64 = std::u64::MAX;
         let z: u64 = std::u64::MAX - 1;
 
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config =
+            bincode::config::standard().with_fixed_int_encoding();
 
-        let encoded_x: Vec<u8> = bincode::encode_to_vec(x, bincode_config).unwrap();
-        let encoded_y: Vec<u8> = bincode::encode_to_vec(y, bincode_config).unwrap();
-        let encoded_z: Vec<u8> = bincode::encode_to_vec(z, bincode_config).unwrap();
+        let encoded_x: Vec<u8> =
+            bincode::encode_to_vec(x, bincode_config).unwrap();
+        let encoded_y: Vec<u8> =
+            bincode::encode_to_vec(y, bincode_config).unwrap();
+        let encoded_z: Vec<u8> =
+            bincode::encode_to_vec(z, bincode_config).unwrap();
 
         assert!(encoded_x.len() == encoded_y.len());
         assert!(encoded_x.len() == encoded_z.len());
@@ -223,20 +232,29 @@ mod tests
             sequences_loc: None,
         };
 
-        let bincode_config = bincode::config::standard().with_fixed_int_encoding();
+        let bincode_config =
+            bincode::config::standard().with_fixed_int_encoding();
 
         let dir: DirectoryOnDisk = directory.clone().into();
 
-        let encoded_0: Vec<u8> = bincode::encode_to_vec(dir, bincode_config).unwrap();
+        let encoded_0: Vec<u8> =
+            bincode::encode_to_vec(dir, bincode_config).unwrap();
 
         directory.index_loc = NonZeroU64::new(std::u64::MAX);
         let dir: DirectoryOnDisk = directory.clone().into();
-        let encoded_1: Vec<u8> = bincode::encode_to_vec(dir, bincode_config).unwrap();
+        let encoded_1: Vec<u8> =
+            bincode::encode_to_vec(dir, bincode_config).unwrap();
 
         directory.scores_loc = NonZeroU64::new(std::u64::MAX);
         let dir: DirectoryOnDisk = directory.into();
-        let encoded_2: Vec<u8> = bincode::encode_to_vec(dir, bincode_config).unwrap();
-        println!("{} {} {}", encoded_0.len(), encoded_1.len(), encoded_2.len());
+        let encoded_2: Vec<u8> =
+            bincode::encode_to_vec(dir, bincode_config).unwrap();
+        println!(
+            "{} {} {}",
+            encoded_0.len(),
+            encoded_1.len(),
+            encoded_2.len()
+        );
 
         assert!(encoded_0.len() == encoded_1.len());
         assert!(encoded_0.len() == encoded_2.len());

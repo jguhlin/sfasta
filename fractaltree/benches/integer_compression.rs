@@ -1,6 +1,9 @@
 use std::ops::{AddAssign, SubAssign};
 
-use criterion::{black_box, criterion_group, criterion_main, BenchmarkId, Criterion, Throughput};
+use criterion::{
+    black_box, criterion_group, criterion_main, BenchmarkId, Criterion,
+    Throughput,
+};
 
 use bitpacking::{BitPacker, BitPacker4x, BitPacker8x};
 use pco::standalone::{simple_compress, simple_decompress};
@@ -102,27 +105,37 @@ pub fn bench_delta_decode(c: &mut Criterion)
 
     pulp_delta_encode(&mut values1024);
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
-        c.benchmark_group("Delta Decode - Inclusive Range 0..1024");
+    let mut group: criterion::BenchmarkGroup<
+        '_,
+        criterion::measurement::WallTime,
+    > = c.benchmark_group("Delta Decode - Inclusive Range 0..1024");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
 
-    group.bench_with_input(BenchmarkId::new("Pulp Arch Decode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            pulp_delta_decode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Pulp Arch Decode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                pulp_delta_decode(&mut values);
+                values
+            })
+        },
+    );
 
-    group.bench_with_input(BenchmarkId::new("Vanilla Decode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            vanilla_delta_decode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Vanilla Decode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                vanilla_delta_decode(&mut values);
+                values
+            })
+        },
+    );
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simple Decompress", 1024),
@@ -144,27 +157,37 @@ pub fn bench_delta_decode(c: &mut Criterion)
     let compressed = simple_compress(&values1024, &pco_config).unwrap();
     pulp_delta_encode(&mut values1024);
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
-        c.benchmark_group("Delta Decode - Inclusive Range 0..(1024*1024)");
+    let mut group: criterion::BenchmarkGroup<
+        '_,
+        criterion::measurement::WallTime,
+    > = c.benchmark_group("Delta Decode - Inclusive Range 0..(1024*1024)");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
 
-    group.bench_with_input(BenchmarkId::new("Pulp Arch Decode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            pulp_delta_decode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Pulp Arch Decode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                pulp_delta_decode(&mut values);
+                values
+            })
+        },
+    );
 
-    group.bench_with_input(BenchmarkId::new("Vanilla Decode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            vanilla_delta_decode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Vanilla Decode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                vanilla_delta_decode(&mut values);
+                values
+            })
+        },
+    );
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simple Decompress", 1024),
@@ -182,32 +205,44 @@ pub fn bench_delta_decode(c: &mut Criterion)
 
     group.finish();
 
-    let mut values1024: Vec<u32> = (0..1024 * 1024_u32).map(|x| xxh3_64(&x.to_le_bytes()) as u32).collect();
+    let mut values1024: Vec<u32> = (0..1024 * 1024_u32)
+        .map(|x| xxh3_64(&x.to_le_bytes()) as u32)
+        .collect();
     values1024.sort_unstable();
     let compressed = simple_compress(&values1024, &pco_config).unwrap();
     pulp_delta_encode(&mut values1024);
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
-        c.benchmark_group("Delta Decode - Xxh3 as u32 1024*1024 Elements");
+    let mut group: criterion::BenchmarkGroup<
+        '_,
+        criterion::measurement::WallTime,
+    > = c.benchmark_group("Delta Decode - Xxh3 as u32 1024*1024 Elements");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
 
-    group.bench_with_input(BenchmarkId::new("Pulp Arch Decode", 1024), &compressed, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            pulp_delta_decode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Pulp Arch Decode", 1024),
+        &compressed,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                pulp_delta_decode(&mut values);
+                values
+            })
+        },
+    );
 
-    group.bench_with_input(BenchmarkId::new("Vanilla Decode", 1024), &compressed, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            vanilla_delta_decode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Vanilla Decode", 1024),
+        &compressed,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                vanilla_delta_decode(&mut values);
+                values
+            })
+        },
+    );
 
     let compressed = simple_compress(&values1024, &pco_config).unwrap();
 
@@ -232,8 +267,10 @@ pub fn bench_delta_encode(c: &mut Criterion)
 {
     let values1024: Vec<u32> = (0..1024_u32).collect();
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
-        c.benchmark_group("Delta Encode - Inclusive Range - 1024 elements");
+    let mut group: criterion::BenchmarkGroup<
+        '_,
+        criterion::measurement::WallTime,
+    > = c.benchmark_group("Delta Encode - Inclusive Range - 1024 elements");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -256,9 +293,11 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(BenchmarkId::new("Plain Bincode", 1024), &values1024, |b, values| {
-        b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Plain Bincode", 1024),
+        &values1024,
+        |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
+    );
 
     let pco_config = pco::ChunkConfig::default()
         .with_compression_level(8)
@@ -275,21 +314,29 @@ pub fn bench_delta_encode(c: &mut Criterion)
         },
     );
 
-    group.bench_with_input(BenchmarkId::new("Pulp Arch Encode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            pulp_delta_encode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Pulp Arch Encode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                pulp_delta_encode(&mut values);
+                values
+            })
+        },
+    );
 
-    group.bench_with_input(BenchmarkId::new("Vanilla Encode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            vanilla_delta_encode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Vanilla Encode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                vanilla_delta_encode(&mut values);
+                values
+            })
+        },
+    );
 
     group.bench_with_input(
         BenchmarkId::new("Bitpacking Encode 8x", 1024),
@@ -319,8 +366,11 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let values1024: Vec<u32> = (0..1024 * 1024_u32).collect();
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
-        c.benchmark_group("Delta Encode - Inclusive Range - 1024*1024 elements");
+    let mut group: criterion::BenchmarkGroup<
+        '_,
+        criterion::measurement::WallTime,
+    > = c
+        .benchmark_group("Delta Encode - Inclusive Range - 1024*1024 elements");
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -343,9 +393,11 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(BenchmarkId::new("Plain Bincode", 1024), &values1024, |b, values| {
-        b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Plain Bincode", 1024),
+        &values1024,
+        |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
+    );
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simpler Compress", 1024),
@@ -358,21 +410,29 @@ pub fn bench_delta_encode(c: &mut Criterion)
         },
     );
 
-    group.bench_with_input(BenchmarkId::new("Pulp Arch Encode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            pulp_delta_encode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Pulp Arch Encode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                pulp_delta_encode(&mut values);
+                values
+            })
+        },
+    );
 
-    group.bench_with_input(BenchmarkId::new("Vanilla Encode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            vanilla_delta_encode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Vanilla Encode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                vanilla_delta_encode(&mut values);
+                values
+            })
+        },
+    );
 
     group.bench_with_input(
         BenchmarkId::new("Bitpacking Encode 8x", 1024),
@@ -400,11 +460,17 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     group.finish();
 
-    let mut values1024: Vec<u32> = (0..1024_u32).map(|x| xxh3_64(&x.to_le_bytes()) as u32).collect();
+    let mut values1024: Vec<u32> = (0..1024_u32)
+        .map(|x| xxh3_64(&x.to_le_bytes()) as u32)
+        .collect();
     values1024.sort_unstable();
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
-        c.benchmark_group("Delta Encode - Xxh3 Hash (Closer to random) - 1024 elements");
+    let mut group: criterion::BenchmarkGroup<
+        '_,
+        criterion::measurement::WallTime,
+    > = c.benchmark_group(
+        "Delta Encode - Xxh3 Hash (Closer to random) - 1024 elements",
+    );
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -427,9 +493,11 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(BenchmarkId::new("Plain Bincode", 1024), &values1024, |b, values| {
-        b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Plain Bincode", 1024),
+        &values1024,
+        |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
+    );
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simpler Compress", 1024),
@@ -442,21 +510,29 @@ pub fn bench_delta_encode(c: &mut Criterion)
         },
     );
 
-    group.bench_with_input(BenchmarkId::new("Pulp Arch Encode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            pulp_delta_encode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Pulp Arch Encode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                pulp_delta_encode(&mut values);
+                values
+            })
+        },
+    );
 
-    group.bench_with_input(BenchmarkId::new("Vanilla Encode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            vanilla_delta_encode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Vanilla Encode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                vanilla_delta_encode(&mut values);
+                values
+            })
+        },
+    );
 
     group.bench_with_input(
         BenchmarkId::new("Bitpacking Encode 8x", 1024),
@@ -486,11 +562,17 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     group.finish();
 
-    let mut values1024: Vec<u32> = (0..1024 * 1024_u32).map(|x| xxh3_64(&x.to_le_bytes()) as u32).collect();
+    let mut values1024: Vec<u32> = (0..1024 * 1024_u32)
+        .map(|x| xxh3_64(&x.to_le_bytes()) as u32)
+        .collect();
     values1024.sort_unstable();
 
-    let mut group: criterion::BenchmarkGroup<'_, criterion::measurement::WallTime> =
-        c.benchmark_group("Delta Encode - Xxh3 Hash (Closer to random) - 1024*1024 elements");
+    let mut group: criterion::BenchmarkGroup<
+        '_,
+        criterion::measurement::WallTime,
+    > = c.benchmark_group(
+        "Delta Encode - Xxh3 Hash (Closer to random) - 1024*1024 elements",
+    );
     group.throughput(Throughput::Bytes(
         values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
     ));
@@ -513,9 +595,11 @@ pub fn bench_delta_encode(c: &mut Criterion)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(BenchmarkId::new("Plain Bincode", 1024), &values1024, |b, values| {
-        b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Plain Bincode", 1024),
+        &values1024,
+        |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
+    );
 
     group.bench_with_input(
         BenchmarkId::new("PCO Simpler Compress", 1024),
@@ -528,21 +612,29 @@ pub fn bench_delta_encode(c: &mut Criterion)
         },
     );
 
-    group.bench_with_input(BenchmarkId::new("Pulp Arch Encode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            pulp_delta_encode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Pulp Arch Encode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                pulp_delta_encode(&mut values);
+                values
+            })
+        },
+    );
 
-    group.bench_with_input(BenchmarkId::new("Vanilla Encode", 1024), &values1024, |b, values| {
-        b.iter(|| {
-            let mut values = values.clone();
-            vanilla_delta_encode(&mut values);
-            values
-        })
-    });
+    group.bench_with_input(
+        BenchmarkId::new("Vanilla Encode", 1024),
+        &values1024,
+        |b, values| {
+            b.iter(|| {
+                let mut values = values.clone();
+                vanilla_delta_encode(&mut values);
+                values
+            })
+        },
+    );
 
     group.bench_with_input(
         BenchmarkId::new("Bitpacking Encode 8x", 1024),

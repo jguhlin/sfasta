@@ -1,6 +1,7 @@
 //! # Conversion Struct and Functions for FASTA/Q Files, with and without masking, scores, and indexing.
 //!
-//! Conversion functions for FASTA and FASTQ files. Multithreaded by default.
+//! Conversion functions for FASTA and FASTQ files. Multithreaded by
+//! default.
 
 use bumpalo::collections::vec;
 // Easy, high-performance conversion functions
@@ -172,7 +173,8 @@ impl Converter
         self
     }
 
-    /// Write the headers for the SFASTA file, and return the location of th headers (so they can be updated at the end)
+    /// Write the headers for the SFASTA file, and return the location
+    /// of th headers (so they can be updated at the end)
     fn write_headers<W>(&self, mut out_fh: &mut W, sfasta: &Sfasta) -> u64
     where
         W: Write + Seek,
@@ -187,29 +189,48 @@ impl Converter
         // Write the directory, parameters, and metadata structs out...
 
         // Write the version
-        bincode::encode_into_std_write(sfasta.version, &mut out_fh, bincode_config)
-            .expect("Unable to write directory to file");
+        bincode::encode_into_std_write(
+            sfasta.version,
+            &mut out_fh,
+            bincode_config,
+        )
+        .expect("Unable to write directory to file");
 
         // Write the directory
-        let directory_location = out_fh.stream_position().expect("Unable to work with seek API");
+        let directory_location = out_fh
+            .stream_position()
+            .expect("Unable to work with seek API");
 
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
-        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config).expect("Unable to write directory to file");
+        bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
+            .expect("Unable to write directory to file");
 
         // Write the parameters
-        bincode::encode_into_std_write(&sfasta.parameters.as_ref().unwrap(), &mut out_fh, bincode_config)
-            .expect("Unable to write Parameters to file");
+        bincode::encode_into_std_write(
+            &sfasta.parameters.as_ref().unwrap(),
+            &mut out_fh,
+            bincode_config,
+        )
+        .expect("Unable to write Parameters to file");
 
         // Write the metadata
-        bincode::encode_into_std_write(sfasta.metadata.as_ref().unwrap(), &mut out_fh, bincode_config)
-            .expect("Unable to write Metadata to file");
+        bincode::encode_into_std_write(
+            sfasta.metadata.as_ref().unwrap(),
+            &mut out_fh,
+            bincode_config,
+        )
+        .expect("Unable to write Metadata to file");
 
         // Return the directory location
         directory_location
     }
 
     /// Main conversion function for FASTA/Q files
-    pub fn convert<'convert, W, R>(self, in_buf: &mut R, mut out_fh: Box<W>) -> Box<W>
+    pub fn convert<'convert, W, R>(
+        self,
+        in_buf: &mut R,
+        mut out_fh: Box<W>,
+    ) -> Box<W>
     where
         W: WriteAndSeek + 'static + Send + Sync,
         R: Read + Send + 'convert,
@@ -219,17 +240,22 @@ impl Converter
 
         assert!(self.block_size < u32::MAX as u64);
 
-        let mut sfasta = Sfasta::default().conversion().block_size(self.block_size as u32);
+        let mut sfasta = Sfasta::default()
+            .conversion()
+            .block_size(self.block_size as u32);
 
         // Store masks as series of 0s and 1s... Vec<bool>
-        // Compression seems to take care of the size. bitvec! and vec! seem to have similar
-        // performance and on-disk storage requirements
+        // Compression seems to take care of the size. bitvec! and vec! seem
+        // to have similar performance and on-disk storage
+        // requirements
         if self.masking {
             sfasta = sfasta.with_masking();
         }
 
-        sfasta.parameters.as_mut().unwrap().compression_type = self.compression_type;
-        sfasta.parameters.as_mut().unwrap().compression_dict = self.dict.clone();
+        sfasta.parameters.as_mut().unwrap().compression_type =
+            self.compression_type;
+        sfasta.parameters.as_mut().unwrap().compression_dict =
+            self.dict.clone();
         sfasta.parameters.as_mut().unwrap().block_size = self.block_size as u32;
 
         // Set dummy values for the directory
@@ -243,25 +269,38 @@ impl Converter
         // let in_buf = Arc::new(Mutex::new(in_buf));
         // let out_buf = Arc::new(Mutex::new(out_buf));
 
-        log::info!("Writing sequences start... {}", out_fh.stream_position().unwrap());
+        log::info!(
+            "Writing sequences start... {}",
+            out_fh.stream_position().unwrap()
+        );
 
-        // Calls the big function write_fasta_sequence to process both sequences and masking, and write them into a
+        // Calls the big function write_fasta_sequence to process both
+        // sequences and masking, and write them into a
         // file.... Function returns:
         // Vec<(String, Location)>
         // block_index_pos
 
         let out_buffer = Arc::new(Mutex::new(out_fh));
 
-        let (seqlocs, headers_location, ids_location, masking_location, sequences_location, scores_location, ids_to_locs) =
-            self.process(in_buf, Arc::clone(&out_buffer), self.block_size);
+        let (
+            seqlocs,
+            headers_location,
+            ids_location,
+            masking_location,
+            sequences_location,
+            scores_location,
+            ids_to_locs,
+        ) = self.process(in_buf, Arc::clone(&out_buffer), self.block_size);
 
-        // TODO: Here is where we would write out the Seqinfo stream (if it's decided to do it)
+        // TODO: Here is where we would write out the Seqinfo stream (if it's
+        // decided to do it)
 
         // The index points to the location of the Location structs.
         // Location blocks are chunked into SEQLOCS_CHUNK_SIZE
         // So index.get(id) --> integer position of the location struct
         // Which will be in integer position / SEQLOCS_CHUNK_SIZE chunk offset
-        // This will then point to the different location blocks where the sequence is...
+        // This will then point to the different location blocks where the
+        // sequence is...
         //
         // TODO: Optional index can probably be handled better...
         let mut fractaltree_pos = 0;
@@ -283,6 +322,7 @@ impl Converter
             let index_handle = Some(s.spawn(|_| {
                 for (id, loc) in ids_to_locs.into_iter() {
                     let id = xxh3_64(&id);
+                    let loc = loc.load(Ordering::SeqCst);
                     indexer.insert(id as u32, loc as u32);
                 }
                 indexer.flush_all();
@@ -290,7 +330,8 @@ impl Converter
                 indexer
             }));
 
-            seqlocs_location = seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
+            seqlocs_location =
+                seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
             log::info!(
                 "Writing SeqLocs to file: COMPLETE. {}",
                 out_buffer_thread.stream_position().unwrap()
@@ -336,30 +377,39 @@ impl Converter
 
         // Go to the beginning, and write the location of the index
 
-        // sfasta.directory.block_index_loc = NonZeroU64::new(block_index_pos);
+        // sfasta.directory.block_index_loc =
+        // NonZeroU64::new(block_index_pos);
 
         let mut out_buffer_lock = out_buffer.lock().unwrap();
         out_buffer_lock
             .seek(SeekFrom::Start(directory_location))
             .expect("Unable to rewind to start of the file");
 
-        // Here we re-write the directory information at the start of the file, allowing for
-        // easy jumps to important areas while keeping everything in a single file
+        // Here we re-write the directory information at the start of the
+        // file, allowing for easy jumps to important areas while
+        // keeping everything in a single file
 
         let start = out_buffer_lock.stream_position().unwrap();
 
-        let bincode_config_fixed = crate::BINCODE_CONFIG.with_fixed_int_encoding();
+        let bincode_config_fixed =
+            crate::BINCODE_CONFIG.with_fixed_int_encoding();
 
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
-        bincode::encode_into_std_write(dir, &mut *out_buffer_lock, bincode_config_fixed)
-            .expect("Unable to write directory to file");
+        bincode::encode_into_std_write(
+            dir,
+            &mut *out_buffer_lock,
+            bincode_config_fixed,
+        )
+        .expect("Unable to write directory to file");
 
         let end = out_buffer_lock.stream_position().unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
 
         log::info!("DEBUG: {:?}", debug_size);
 
-        out_buffer_lock.flush().expect("Unable to flush output file");
+        out_buffer_lock
+            .flush()
+            .expect("Unable to flush output file");
 
         drop(out_buffer_lock);
 
@@ -383,16 +433,18 @@ impl Converter
         Option<NonZeroU64>,
         Option<NonZeroU64>,
         Option<NonZeroU64>,
-        Vec<(std::sync::Arc<Vec<u8>>, usize)>, // todo: cow?
+        Vec<(std::sync::Arc<Vec<u8>>, Arc<AtomicU32>)>, // todo: cow?
     )
     where
         W: WriteAndSeek + 'convert + Send + Sync + 'static,
         R: Read + Send + 'convert,
     {
-        // TODO: Untested, been awhile... Only useful for very small blocks so hasn't been used lately...
+        // TODO: Untested, been awhile... Only useful for very small blocks so
+        // hasn't been used lately...
         if let Some(_dict) = &self.dict {
             todo!();
-            // sb_config = sb_config.with_compression_dict(dict.clone());
+            // sb_config =
+            // sb_config.with_compression_dict(dict.clone());
         }
 
         let threads = self.threads;
@@ -400,7 +452,8 @@ impl Converter
         let output_buffer = Arc::clone(&out_fh);
 
         // Start the output I/O...
-        let mut output_worker = crate::io::worker::Worker::new(output_buffer).with_buffer_size(1024);
+        let mut output_worker = crate::io::worker::Worker::new(output_buffer)
+            .with_buffer_size(1024);
         output_worker.start();
         let output_queue = output_worker.get_queue();
 
@@ -423,15 +476,17 @@ impl Converter
         let mut ids_string = Vec::new();
         let mut ids_to_locs = Vec::new();
 
-        // TODO: Multithread this part -- maybe, now with compression logic into a threadpool maybe not...
-        // Idea: split into queue's for headers, IDs, sequence, etc....
-        // Thread that handles the heavy lifting of the incoming Seq structs
+        // TODO: Multithread this part -- maybe, now with compression logic
+        // into a threadpool maybe not... Idea: split into queue's for
+        // headers, IDs, sequence, etc.... Thread that handles the
+        // heavy lifting of the incoming Seq structs
         // TODO: Set compression stuff here...
         // And batch this part...
 
         let compression_workers_thread = Arc::clone(&compression_workers);
 
-        let mut seqlocs = SeqLocsStoreBuilder::default();
+        let seqlocs = SeqLocsStoreBuilder::default();
+        let seqlocs = SeqLocsThreadBuilder::new(seqlocs);
 
         let headers = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
@@ -501,94 +556,20 @@ impl Converter
                         None
                     };
 
-                    let mut seqloc = SeqLoc::new();
+                    let loc = seqlocs
+                        .add(
+                            id_locs,
+                            [
+                                Some(sequence_locs),
+                                Some(masking_locs),
+                                score_locs,
+                                headers_loc,
+                                None,
+                                None,
+                            ],
+                        )
+                        .unwrap();
 
-                    // todo move this into a threadbuilder like struct for seqloc store
-
-                    // Have to wait on all of these:
-                    // masking_locs
-                    // sequence_locs
-                    // id_locs
-                    //
-                    // the next two can be is_none, so that's fine
-                    // headers_loc
-                    // score_locs
-
-                    backoff.reset();
-
-                    log::debug!("Waiting on Masking Loc");
-                    loop {
-                        if masking_locs.0.load(Ordering::SeqCst) {
-                            break;
-                        } else {
-                            backoff.snooze()
-                        }                        
-                    }
-
-                    log::debug!("Waiting on Sequence Loc");
-                    loop {
-                        if sequence_locs.0.load(Ordering::SeqCst) {
-                            break;
-                        } else {
-                            backoff.snooze()
-                        }                        
-                    }
-                    
-
-                    log::debug!("Waiting on ID Loc");
-                    loop {
-                        if id_locs.0.load(Ordering::SeqCst) {
-                            break;
-                        } else {
-                            backoff.snooze()
-                        }                        
-                    }
-
-                    log::debug!("Waiting on Headers Loc");
-                    let headers_locs = 
-                        if let Some(x) = headers_loc {
-                            loop {
-                                if x.0.load(Ordering::SeqCst) {
-                                    break
-                                } else {
-                                    backoff.snooze()
-                                }
-                                
-                            }
-                            Arc::into_inner(x).expect("Unable to pull out of arc").1.into_inner().expect("Unable to pull out of mutex")
-                        } else {
-                            vec![]
-                        };
-
-                    log::debug!("Waiting on Score Loc");
-                    let score_locs = 
-                        if let Some(x) = score_locs {
-                            loop {
-                                if x.0.load(Ordering::SeqCst) {
-                                    break
-                                } else {
-                                    backoff.snooze()
-                                }
-                            }
-                            Arc::into_inner(x).unwrap().1.into_inner().unwrap()
-                        } else {
-                            vec![]
-                        };
-
-                    log::debug!("Adding to SeqLoc");
-
-
-                    seqloc.add_locs(
-                        &sequence_locs.1.lock().unwrap(),
-                        &masking_locs.1.lock().unwrap(),
-                        &score_locs,
-                        &id_locs.1.lock().unwrap(),
-                        &headers_locs,
-                        &[],
-                        &[],
-                    );
-
-                    let loc = seqlocs.add_to_index(seqloc);
                     ids_string.push(Arc::clone(&myid));
                     ids_to_locs.push((myid, loc));
                 }
@@ -597,7 +578,7 @@ impl Converter
                 }
             }
         }
-        
+
         log::info!("Finished reading sequences");
 
         let mut headers = headers.join().unwrap();
@@ -624,7 +605,8 @@ impl Converter
 
         let mut out_buffer = out_fh.lock().unwrap();
 
-        let mut headers = match headers.write_block_locations(&mut *out_buffer) {
+        let mut headers = match headers.write_block_locations(&mut *out_buffer)
+        {
             Ok(x) => Some(headers),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
@@ -640,7 +622,8 @@ impl Converter
             },
         };
 
-        let mut masking = match masking.write_block_locations(&mut *out_buffer) {
+        let mut masking = match masking.write_block_locations(&mut *out_buffer)
+        {
             Ok(x) => Some(masking),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
@@ -648,13 +631,14 @@ impl Converter
             },
         };
 
-        let mut sequences = match sequences.write_block_locations(&mut *out_buffer) {
-            Ok(x) => Some(sequences),
-            Err(x) => match x {
-                BlockStoreError::Empty => None,
-                _ => panic!("Error writing sequences: {:?}", x),
-            },
-        };
+        let mut sequences =
+            match sequences.write_block_locations(&mut *out_buffer) {
+                Ok(x) => Some(sequences),
+                Err(x) => match x {
+                    BlockStoreError::Empty => None,
+                    _ => panic!("Error writing sequences: {:?}", x),
+                },
+            };
 
         let mut scores = match scores.write_block_locations(&mut *out_buffer) {
             Ok(x) => Some(scores),
@@ -667,7 +651,8 @@ impl Converter
         // Write the headers for each store...
         if headers.is_some() {
             let x = headers.as_mut().unwrap();
-            headers_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            headers_location =
+                NonZeroU64::new(out_buffer.stream_position().unwrap());
             x.write_header(headers_location.unwrap().get(), &mut *out_buffer);
         } else {
             headers_location = None;
@@ -675,7 +660,8 @@ impl Converter
 
         if ids.is_some() {
             let x = ids.as_mut().unwrap();
-            ids_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            ids_location =
+                NonZeroU64::new(out_buffer.stream_position().unwrap());
             x.write_header(ids_location.unwrap().get(), &mut *out_buffer);
         } else {
             ids_location = None;
@@ -683,7 +669,8 @@ impl Converter
 
         if masking.is_some() {
             let x = masking.as_mut().unwrap();
-            masking_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            masking_location =
+                NonZeroU64::new(out_buffer.stream_position().unwrap());
             x.write_header(masking_location.unwrap().get(), &mut *out_buffer);
         } else {
             masking_location = None;
@@ -691,7 +678,8 @@ impl Converter
 
         if sequences.is_some() {
             let x = sequences.as_mut().unwrap();
-            sequences_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            sequences_location =
+                NonZeroU64::new(out_buffer.stream_position().unwrap());
             x.write_header(sequences_location.unwrap().get(), &mut *out_buffer);
         } else {
             sequences_location = None;
@@ -699,11 +687,14 @@ impl Converter
 
         if scores.is_some() {
             let x = scores.as_mut().unwrap();
-            scores_location = NonZeroU64::new(out_buffer.stream_position().unwrap());
+            scores_location =
+                NonZeroU64::new(out_buffer.stream_position().unwrap());
             x.write_header(scores_location.unwrap().get(), &mut *out_buffer);
         } else {
             scores_location = None;
         }
+
+        let seqlocs = seqlocs.join().unwrap();
 
         out_buffer.flush().expect("Unable to flush output buffer");
 
@@ -721,7 +712,8 @@ impl Converter
 
 // TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
-// TODO: Will need to generalize this function so it works with FASTA & FASTQ & Masking
+// TODO: Will need to generalize this function so it works with FASTA
+// & FASTQ & Masking
 
 /// Input filehandle goes in, output goes out.
 /// Function returns:
@@ -751,10 +743,13 @@ mod tests
         let out_buf = Box::new(Cursor::new(Vec::new()));
 
         println!("test_data/test_convert.fasta");
-        let mut in_buf =
-            BufReader::new(File::open("test_data/test_convert.fasta").expect("Unable to open testing file"));
+        let mut in_buf = BufReader::new(
+            File::open("test_data/test_convert.fasta")
+                .expect("Unable to open testing file"),
+        );
 
-        let converter = Converter::default().with_threads(6).with_block_size(8192);
+        let converter =
+            Converter::default().with_threads(6).with_block_size(8192);
 
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
@@ -768,15 +763,23 @@ mod tests
             .expect("Unable to read SFASTA Marker");
         assert!(sfasta_marker == "sfasta".as_bytes());
 
-        let _version: u64 = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+        let _version: u64 =
+            bincode::decode_from_std_read(&mut out_buf, bincode_config)
+                .unwrap();
 
-        let directory: DirectoryOnDisk = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+        let directory: DirectoryOnDisk =
+            bincode::decode_from_std_read(&mut out_buf, bincode_config)
+                .unwrap();
 
         let _dir = directory;
 
-        let _parameters: Parameters = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+        let _parameters: Parameters =
+            bincode::decode_from_std_read(&mut out_buf, bincode_config)
+                .unwrap();
 
-        let _metadata: Metadata = bincode::decode_from_std_read(&mut out_buf, bincode_config).unwrap();
+        let _metadata: Metadata =
+            bincode::decode_from_std_read(&mut out_buf, bincode_config)
+                .unwrap();
 
         // TODO: Add more tests
     }

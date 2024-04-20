@@ -63,19 +63,26 @@ impl CompressionConfig
         }
     }
 
-    pub const fn with_compression_type(mut self, compression_type: CompressionType) -> Self
+    pub const fn with_compression_type(
+        mut self,
+        compression_type: CompressionType,
+    ) -> Self
     {
         self.compression_type = compression_type;
         self
     }
 
-    pub const fn with_compression_level(mut self, compression_level: i8) -> Self
+    pub const fn with_compression_level(mut self, compression_level: i8)
+        -> Self
     {
         self.compression_level = compression_level;
         self
     }
 
-    pub fn with_compression_dict(mut self, compression_dict: Option<Arc<Vec<u8>>>) -> Self
+    pub fn with_compression_dict(
+        mut self,
+        compression_dict: Option<Arc<Vec<u8>>>,
+    ) -> Self
     {
         self.compression_dict = compression_dict;
         self
@@ -87,7 +94,9 @@ impl CompressionConfig
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
                 // Use thread local
-                ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| zstd_compressor.compress(bytes))
+                ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
+                    zstd_compressor.compress(bytes)
+                })
             }
             #[cfg(target_arch = "wasm32")]
             CompressionType::ZSTD => {
@@ -98,8 +107,12 @@ impl CompressionConfig
                 Ok(bytes.to_vec())
             }
             _ => {
-                // Todo: implement others. This isn't just used for fractaltrees...
-                panic!("Unsupported compression type: {:?}", self.compression_type);
+                // Todo: implement others. This isn't just used for
+                // fractaltrees...
+                panic!(
+                    "Unsupported compression type: {:?}",
+                    self.compression_type
+                );
             }
         }
     }
@@ -108,8 +121,11 @@ impl CompressionConfig
     {
         match self.compression_type {
             #[cfg(not(target_arch = "wasm32"))]
-            CompressionType::ZSTD => ZSTD_DECOMPRESSOR
-                .with_borrow_mut(|zstd_decompressor| zstd_decompressor.decompress(bytes, MAX_DECOMPRESS_SIZE)),
+            CompressionType::ZSTD => {
+                ZSTD_DECOMPRESSOR.with_borrow_mut(|zstd_decompressor| {
+                    zstd_decompressor.decompress(bytes, MAX_DECOMPRESS_SIZE)
+                })
+            }
             #[cfg(target_arch = "wasm32")]
             CompressionType::ZSTD => {
                 unimplemented!("ZSTD decoding is not supported on wasm32");
@@ -119,13 +135,18 @@ impl CompressionConfig
                 Ok(bytes.to_vec())
             }
             _ => {
-                panic!("Unsupported compression type: {:?}", self.compression_type);
+                panic!(
+                    "Unsupported compression type: {:?}",
+                    self.compression_type
+                );
             }
         }
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone, Copy, bincode::Encode, bincode::Decode)]
+#[derive(
+    PartialEq, Eq, Debug, Clone, Copy, bincode::Encode, bincode::Decode,
+)]
 #[non_exhaustive]
 pub enum CompressionType
 {
@@ -164,10 +185,14 @@ pub const fn default_compression_level(ct: CompressionType) -> i8
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn zstd_encoder(compression_level: i32, dict: &Option<Arc<Vec<u8>>>) -> zstd::bulk::Compressor<'static>
+pub fn zstd_encoder(
+    compression_level: i32,
+    dict: &Option<Arc<Vec<u8>>>,
+) -> zstd::bulk::Compressor<'static>
 {
     let mut encoder = if let Some(dict) = dict {
-        zstd::bulk::Compressor::with_dictionary(compression_level, &dict).unwrap()
+        zstd::bulk::Compressor::with_dictionary(compression_level, &dict)
+            .unwrap()
     } else {
         zstd::bulk::Compressor::new(compression_level).unwrap()
     };
@@ -185,7 +210,10 @@ pub fn zstd_encoder(compression_level: i32, dict: &Option<Arc<Vec<u8>>>) -> zstd
     encoder
 }
 
-pub fn change_compression_level(compression_level: i32, dict: &Option<Arc<Vec<u8>>>)
+pub fn change_compression_level(
+    compression_level: i32,
+    dict: &Option<Arc<Vec<u8>>>,
+)
 {
     ZSTD_COMPRESSOR.with(|zstd_compressor| {
         let encoder = zstd_encoder(compression_level, dict);
@@ -194,7 +222,9 @@ pub fn change_compression_level(compression_level: i32, dict: &Option<Arc<Vec<u8
 }
 
 #[cfg(not(target_arch = "wasm32"))]
-pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd::bulk::Decompressor<'a>
+pub fn zstd_decompressor<'a>(
+    dict: Option<&[u8]>,
+) -> zstd::bulk::Decompressor<'a>
 {
     let mut zstd_decompressor = if let Some(dict) = dict {
         zstd::bulk::Decompressor::with_dictionary(dict)
@@ -213,13 +243,17 @@ pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd::bulk::Decompressor<'a
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn zstd_decompressor<'a>(dict: Option<&[u8]>) -> zstd_dict::bulk::Decompressor<'a>
+pub fn zstd_decompressor<'a>(
+    dict: Option<&[u8]>,
+) -> zstd_dict::bulk::Decompressor<'a>
 {
     unimplemented!("ZSTD decoding is not supported on wasm32");
 }
 
 #[cfg(target_arch = "wasm32")]
-pub fn zstd_encoder(compression_level: i32) -> zstd_dict::bulk::Compressor<'static>
+pub fn zstd_encoder(
+    compression_level: i32,
+) -> zstd_dict::bulk::Compressor<'static>
 {
     unimplemented!("ZSTD encoding is not supported on wasm32");
 }
@@ -239,7 +273,10 @@ pub struct CompressionBlock
 
 impl CompressionBlock
 {
-    pub fn new(input: Vec<u8>, compression_config: Arc<CompressionConfig>) -> Self
+    pub fn new(
+        input: Vec<u8>,
+        compression_config: Arc<CompressionConfig>,
+    ) -> Self
     {
         Self {
             input,
@@ -264,7 +301,7 @@ pub struct CompressionWorker
     pub threads: u16,
     pub buffer_size: usize,
     handles: Vec<JoinHandle<()>>,
-    queue: Option<Arc<ArrayQueue<CompressorWork>>>,  // Input
+    queue: Option<Arc<ArrayQueue<CompressorWork>>>, // Input
     writer: Option<Arc<flume::Sender<OutputBlock>>>, // Output
 
     shutdown_flag: Arc<AtomicBool>,
@@ -304,7 +341,10 @@ impl CompressionWorker
         self
     }
 
-    pub fn with_output_queue(mut self, writer: Arc<flume::Sender<OutputBlock>>) -> Self
+    pub fn with_output_queue(
+        mut self,
+        writer: Arc<flume::Sender<OutputBlock>>,
+    ) -> Self
     {
         self.writer = Some(writer);
         self
@@ -312,14 +352,17 @@ impl CompressionWorker
 
     pub fn start(&mut self)
     {
-        let queue = Arc::new(ArrayQueue::<CompressorWork>::new(self.buffer_size));
+        let queue =
+            Arc::new(ArrayQueue::<CompressorWork>::new(self.buffer_size));
         self.queue = Some(queue);
 
         for _ in 0..self.threads {
             let queue = Arc::clone(self.queue.as_ref().unwrap());
             let shutdown = Arc::clone(&self.shutdown_flag);
             let output_queue = Arc::clone(self.writer.as_ref().unwrap());
-            let handle = thread::spawn(move || compression_worker(queue, shutdown, output_queue));
+            let handle = thread::spawn(move || {
+                compression_worker(queue, shutdown, output_queue)
+            });
             self.handles.push(handle);
         }
     }
@@ -341,7 +384,11 @@ impl CompressionWorker
     }
 
     #[inline]
-    pub fn compress(&self, input: Vec<u8>, compression_config: Arc<CompressionConfig>) -> Arc<AtomicU64>
+    pub fn compress(
+        &self,
+        input: Vec<u8>,
+        compression_config: Arc<CompressionConfig>,
+    ) -> Arc<AtomicU64>
     {
         let block = CompressionBlock::new(input, compression_config);
         let location = block.get_location();
@@ -397,31 +444,43 @@ fn compression_worker(
             }
             Some(CompressorWork::Compress(work)) => {
                 // Tests fail otherwise for buffer too small
-                let compressed = match work.compression_config.compression_type {
+                let compressed = match work.compression_config.compression_type
+                {
                     #[cfg(not(target_arch = "wasm32"))]
                     CompressionType::ZSTD => {
                         ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
                             zstd_compressor
-                                .set_compression_level(work.compression_config.compression_level as i32)
+                                .set_compression_level(
+                                    work.compression_config.compression_level
+                                        as i32,
+                                )
                                 .unwrap();
                             // todo dict
-                            zstd_compressor.compress(work.input.as_slice()).unwrap()
+                            zstd_compressor
+                                .compress(work.input.as_slice())
+                                .unwrap()
                         })
                     }
                     #[cfg(target_arch = "wasm32")]
                     CompressionType::ZSTD => {
-                        unimplemented!("ZSTD encoding is not supported on wasm32");
+                        unimplemented!(
+                            "ZSTD encoding is not supported on wasm32"
+                        );
                     }
                     CompressionType::LZ4 => {
                         let mut output = Vec::with_capacity(work.input.len());
-                        let mut lz4_compressor = lz4_flex::frame::FrameEncoder::new(&mut output);
-                        lz4_compressor.write_all(work.input.as_slice()).unwrap();
+                        let mut lz4_compressor =
+                            lz4_flex::frame::FrameEncoder::new(&mut output);
+                        lz4_compressor
+                            .write_all(work.input.as_slice())
+                            .unwrap();
                         lz4_compressor.finish().unwrap();
                         output
                     }
                     CompressionType::SNAPPY => {
                         let mut output = Vec::with_capacity(work.input.len());
-                        let mut compressor = snap::write::FrameEncoder::new(&mut output);
+                        let mut compressor =
+                            snap::write::FrameEncoder::new(&mut output);
                         compressor
                             .write_all(work.input.as_slice())
                             .expect("Unable to compress with Snappy");
@@ -432,7 +491,10 @@ fn compression_worker(
                         let mut output = Vec::with_capacity(work.input.len());
                         let mut compressor = flate2::write::GzEncoder::new(
                             &mut output,
-                            flate2::Compression::new(work.compression_config.compression_level as u32),
+                            flate2::Compression::new(
+                                work.compression_config.compression_level
+                                    as u32,
+                            ),
                         );
                         compressor
                             .write_all(work.input.as_slice())
@@ -444,9 +506,13 @@ fn compression_worker(
                     #[cfg(not(target_arch = "wasm32"))]
                     CompressionType::XZ => {
                         let mut output = Vec::with_capacity(work.input.len());
-                        let mut compressor =
-                            XzEncoder::new(work.input.as_slice(), work.compression_config.compression_level as u32);
-                        compressor.read_to_end(&mut output).expect("Unable to compress with XZ");
+                        let mut compressor = XzEncoder::new(
+                            work.input.as_slice(),
+                            work.compression_config.compression_level as u32,
+                        );
+                        compressor
+                            .read_to_end(&mut output)
+                            .expect("Unable to compress with XZ");
                         output
                     }
                     #[cfg(target_arch = "wasm32")]

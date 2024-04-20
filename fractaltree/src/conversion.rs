@@ -33,13 +33,16 @@ impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
             is_leaf,
             state: NodeState::InMemory,
             keys: keys.into_vec(),
-            children: children.map(|children| children.into_iter().map(|child| child.into()).collect()),
+            children: children.map(|children| {
+                children.into_iter().map(|child| child.into()).collect()
+            }),
             values,
         }
     }
 }
 
-impl<K: Key, V: Value> From<Box<build::NodeBuild<K, V>>> for Box<disk::NodeDisk<K, V>>
+impl<K: Key, V: Value> From<Box<build::NodeBuild<K, V>>>
+    for Box<disk::NodeDisk<K, V>>
 {
     fn from(node: Box<build::NodeBuild<K, V>>) -> Self
     {

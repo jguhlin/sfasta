@@ -9,9 +9,8 @@ use std::{
 };
 
 use crossbeam::utils::Backoff;
-use flume::{Receiver, Sender};
 
-use super::{Builder, LocMutex, Queue};
+use super::Builder;
 use crate::datatypes::Loc;
 use libcompression::*;
 use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
@@ -24,16 +23,18 @@ pub enum BlockStoreError
     Other(&'static str),
 }
 
-/// This underlies most storage. It is a block store that stores bytes of any type and compresses them
-/// Typically not used directly, but used by sequence_block_store and string_block_store
-// TODO: Should be a compression version and already-compressed version that doesn't use Arc<AtomicU64> and compression
-// workers.
+/// This underlies most storage. It is a block store that stores bytes
+/// of any type and compresses them Typically not used directly, but
+/// used by sequence_block_store and string_block_store
+// TODO: Should be a compression version and already-compressed
+// version that doesn't use Arc<AtomicU64> and compression workers.
 pub struct BytesBlockStoreBuilder
 {
     /// Locations of the blocks in the file
     pub block_locations: Vec<Arc<AtomicU64>>,
 
-    /// Locations of the block index (Where the serialized block_locations are stored)
+    /// Locations of the block index (Where the serialized
+    /// block_locations are stored)
     pub block_locations_pos: u64,
 
     /// Maximum block size
@@ -103,7 +104,10 @@ impl BytesBlockStoreBuilder
     }
 
     /// Set the compression worker.
-    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self
+    pub fn with_compression_worker(
+        mut self,
+        compression_worker: Arc<CompressionWorker>,
+    ) -> Self
     {
         self.compression_worker = Some(compression_worker);
         self
@@ -150,7 +154,8 @@ impl BytesBlockStoreBuilder
     /// Check that all block locations are not 0
     pub fn check_complete(&self)
     {
-        // If we aren't using a compression worker, don't need to check that anything is complete
+        // If we aren't using a compression worker, don't need to check that
+        // anything is complete
         if self.compression_worker.is_none() {
             return;
         }
@@ -176,7 +181,8 @@ impl BytesBlockStoreBuilder
     }
 
     /// Add a sequence of bytes to the block store
-    /// Returns a vector of Loc's that point to the location of the bytes in the block store (can span multiple blocks)
+    /// Returns a vector of Loc's that point to the location of the
+    /// bytes in the block store (can span multiple blocks)
     pub fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
     {
         if self.finalized {
@@ -207,8 +213,9 @@ impl BytesBlockStoreBuilder
                     len,
                 });
             } else {
-                self.data
-                    .extend_from_slice(&input[written..(written + remaining as usize)]);
+                self.data.extend_from_slice(
+                    &input[written..(written + remaining as usize)],
+                );
                 written += remaining as usize;
                 // len is how many bytes are copied from the slice
                 let len = (self.data.len() - start_position) as u32;
@@ -236,10 +243,12 @@ impl BytesBlockStoreBuilder
         //
         // let compressed_blocks_count = self.block_locations.len();
         //
-        // let starting_block = (start / self.block_size) + compressed_blocks_count;
-        // let ending_block = (end / self.block_size) + compressed_blocks_count;
+        // let starting_block = (start / self.block_size) +
+        // compressed_blocks_count; let ending_block = (end /
+        // self.block_size) + compressed_blocks_count;
         //
-        // let mut locs = Vec::with_capacity((input.len() / self.block_size).saturating_add(1));
+        // let mut locs = Vec::with_capacity((input.len() /
+        // self.block_size).saturating_add(1));
         //
         // Process at block boundaries...
         // for block in starting_block..=ending_block {
@@ -271,24 +280,45 @@ impl BytesBlockStoreBuilder
     where
         W: Write + Seek,
     {
-        let bincode_config = bincode::config::standard().with_variable_int_encoding();
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
 
         out_buf.seek(SeekFrom::Start(pos)).unwrap();
 
         // Write the compression configuration
-        bincode::encode_into_std_write(self.compression_config.as_ref(), &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(
+            self.compression_config.as_ref(),
+            &mut out_buf,
+            bincode_config,
+        )
+        .unwrap();
 
         // Write the location of the block locations
-        bincode::encode_into_std_write(self.block_locations_pos, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(
+            self.block_locations_pos,
+            &mut out_buf,
+            bincode_config,
+        )
+        .unwrap();
 
         // Write out the block size
-        bincode::encode_into_std_write(self.block_size, &mut out_buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(
+            self.block_size,
+            &mut out_buf,
+            bincode_config,
+        )
+        .unwrap();
     }
 
-    /// Writes the locations of each block. This is used for finding the start of each block.
+    /// Writes the locations of each block. This is used for finding
+    /// the start of each block.
     ///
-    /// Splits the block locations into chunks of 1024 to create an index of block locations. TODO
-    pub fn write_block_locations<W>(&mut self, mut out_buf: W) -> Result<(), BlockStoreError>
+    /// Splits the block locations into chunks of 1024 to create an
+    /// index of block locations. TODO
+    pub fn write_block_locations<W>(
+        &mut self,
+        mut out_buf: W,
+    ) -> Result<(), BlockStoreError>
     where
         W: Write + Seek,
     {
@@ -303,21 +333,28 @@ impl BytesBlockStoreBuilder
             return Err(BlockStoreError::Empty);
         }
 
-        let mut block_locations_tree: FractalTreeBuild<u32, u64> = FractalTreeBuild::new(1024, 2048);
+        let mut block_locations_tree: FractalTreeBuild<u32, u64> =
+            FractalTreeBuild::new(1024, 2048);
 
-        let block_locations: Vec<u64> = self.block_locations.iter().map(|x| x.load(Ordering::Relaxed)).collect();
+        let block_locations: Vec<u64> = self
+            .block_locations
+            .iter()
+            .map(|x| x.load(Ordering::Relaxed))
+            .collect();
         assert!(block_locations.len() < u32::MAX as usize);
         block_locations.iter().enumerate().for_each(|(i, x)| {
             block_locations_tree.insert(i as u32, *x);
         });
 
-        let mut block_locations_tree: FractalTreeDisk<_, _> = block_locations_tree.into();
+        let mut block_locations_tree: FractalTreeDisk<_, _> =
+            block_locations_tree.into();
         block_locations_tree.set_compression(CompressionConfig {
             compression_type: CompressionType::ZSTD,
             compression_level: -9,
             compression_dict: None,
         });
-        let block_locations_pos = block_locations_tree.write_to_buffer(&mut out_buf).unwrap();
+        let block_locations_pos =
+            block_locations_tree.write_to_buffer(&mut out_buf).unwrap();
 
         log::debug!("Block Locations Pos: {}", block_locations_pos);
         self.block_locations_pos = block_locations_pos;
@@ -351,7 +388,8 @@ pub struct BytesBlockStore
     // todo: fractal tree for all blocks across all datatypes...
     pub block_locations: FractalTreeDisk<u32, u64>,
 
-    /// Locations of the block index (Where the serialized block_locations is stored)
+    /// Locations of the block index (Where the serialized
+    /// block_locations is stored)
     pub block_locations_pos: u64,
 
     /// Maximum block size
@@ -387,22 +425,31 @@ impl BytesBlockStore
         }
     }
 
-    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32, buffer: &mut [u8])
-    where
+    pub fn get_block_uncached<R>(
+        &mut self,
+        mut in_buf: &mut R,
+        block: u32,
+        buffer: &mut [u8],
+    ) where
         R: Read + Seek + Send + Sync,
     {
         let bincode_config_fixed = bincode::config::standard()
             .with_fixed_int_encoding()
             .with_limit::<{ 256 * 1024 * 1024 }>(); // 256 MB is max limit TODO: Enforce elsewhere too
 
-        let block_location = self.block_locations.search(in_buf, &block).unwrap();
+        let block_location =
+            self.block_locations.search(in_buf, &block).unwrap();
 
         in_buf.seek(SeekFrom::Start(block_location)).unwrap();
-        let compressed_block: Vec<u8> = bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed).unwrap();
+        let compressed_block: Vec<u8> =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed)
+                .unwrap();
 
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
-        decompressor.decompress_to_buffer(&compressed_block, buffer).unwrap();
+        decompressor
+            .decompress_to_buffer(&compressed_block, buffer)
+            .unwrap();
     }
 
     pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> Vec<u8>
@@ -422,8 +469,11 @@ impl BytesBlockStore
             let loc0 = &loc[0];
             let loc1 = &loc[loc.len() - 1];
 
-            let start = loc0.block as usize * block_size as usize + loc0.start as usize;
-            let end = loc1.block as usize * block_size as usize + loc1.start as usize + loc1.len as usize;
+            let start =
+                loc0.block as usize * block_size as usize + loc0.start as usize;
+            let end = loc1.block as usize * block_size as usize
+                + loc1.start as usize
+                + loc1.len as usize;
 
             // #[cfg(test)]
             // assert!(start + len <= block_size as usize);
@@ -455,8 +505,11 @@ impl BytesBlockStore
             let loc0 = &loc[0];
             let loc1 = &loc[loc.len() - 1];
 
-            let start = loc0.block as usize * block_size as usize + loc0.start as usize;
-            let end = loc1.block as usize * block_size as usize + loc1.start as usize + loc1.len as usize;
+            let start =
+                loc0.block as usize * block_size as usize + loc0.start as usize;
+            let end = loc1.block as usize * block_size as usize
+                + loc1.start as usize
+                + loc1.len as usize;
             result.extend(&self.data.as_ref().unwrap()[start..=end]);
         } else {
             panic!("Data not loaded");
@@ -466,7 +519,10 @@ impl BytesBlockStore
     }
 
     /// Read header from a buffer into a BytesBlockStore
-    pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
+    pub fn from_buffer<R>(
+        mut in_buf: &mut R,
+        starting_pos: u64,
+    ) -> Result<Self, String>
     where
         R: Read + Seek + Send + Sync + BufRead,
     {
@@ -478,13 +534,16 @@ impl BytesBlockStore
         let (compression_config, block_locations_pos, block_size) =
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
-                Err(e) => return Err(format!("Error decoding block store: {e}")),
+                Err(e) => {
+                    return Err(format!("Error decoding block store: {e}"))
+                }
             };
 
         assert!(block_locations_pos > 0);
 
         let block_locations: FractalTreeDisk<u32, u64> =
-            FractalTreeDisk::from_buffer(&mut in_buf, block_locations_pos).unwrap();
+            FractalTreeDisk::from_buffer(&mut in_buf, block_locations_pos)
+                .unwrap();
 
         Ok(BytesBlockStore {
             block_locations,
@@ -511,11 +570,12 @@ mod tests
     #[test]
     fn test_add_id()
     {
-        let output_buffer = Arc::new(std::sync::Mutex::new(Box::new(std::io::Cursor::new(
-            Vec::with_capacity(1024 * 1024),
-        ))));
+        let output_buffer = Arc::new(std::sync::Mutex::new(Box::new(
+            std::io::Cursor::new(Vec::with_capacity(1024 * 1024)),
+        )));
 
-        let mut output_worker = crate::io::worker::Worker::new(output_buffer).with_buffer_size(1024);
+        let mut output_worker = crate::io::worker::Worker::new(output_buffer)
+            .with_buffer_size(1024);
         output_worker.start();
 
         let output_queue = output_worker.get_queue();

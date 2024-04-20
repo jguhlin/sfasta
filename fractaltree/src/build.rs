@@ -2,7 +2,8 @@ use super::*;
 use sorted_vec::SortedVec;
 
 /// This is an insertion-only B+ tree, deletions are not supported
-/// Meant for a write-many, write-once to disk, read-only-and-many database
+/// Meant for a write-many, write-once to disk, read-only-and-many
+/// database
 #[derive(Debug)]
 pub struct FractalTreeBuild<K: Key, V: Value>
 {
@@ -36,7 +37,8 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
         self.root.flush(self.order, self.buffer_size, all);
 
         while self.root.needs_split(self.order) {
-            let (new_key, mut new_node) = self.root.split(self.order, self.buffer_size);
+            let (new_key, mut new_node) =
+                self.root.split(self.order, self.buffer_size);
             let old_root = NodeBuild::internal(self.order, self.buffer_size);
             let mut old_root = Box::new(old_root);
             old_root.is_root = true;
@@ -61,7 +63,8 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
         self.root.search(&key)
     }
 
-    // Gets the depth by following the first child, iteratively, until it's a leaf
+    // Gets the depth by following the first child, iteratively, until
+    // it's a leaf
     pub fn depth(&self) -> usize
     {
         let mut depth = 0;
@@ -143,7 +146,8 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         if self.is_leaf {
             let i = match i {
                 Ok(i) => i,
-                Err(_) => return None, // This is the leaf, if it's not found here it won't be found
+                Err(_) => return None, /* This is the leaf, if it's not found
+                                        * here it won't be found */
             };
 
             debug_assert!(i < self.values.as_ref().unwrap().len());
@@ -166,7 +170,8 @@ impl<K: Key, V: Value> NodeBuild<K, V>
 
     pub fn flush(&mut self, order: usize, buffer_size: usize, all: bool)
     {
-        // This flushes the buffer down the tree, or if a leaf node, into the tree
+        // This flushes the buffer down the tree, or if a leaf node, into the
+        // tree
 
         if self.is_leaf {
             self.keys.reserve(self.buffer.len());
@@ -182,18 +187,30 @@ impl<K: Key, V: Value> NodeBuild<K, V>
                     Err(i) => i,
                 };
                 // Insert into child node
-                let result = self.children.as_mut().unwrap()[i].insert(buffer_size, key, value);
+                let result = self.children.as_mut().unwrap()[i].insert(
+                    buffer_size,
+                    key,
+                    value,
+                );
 
                 if result {
-                    self.children.as_mut().unwrap()[i].flush(order, buffer_size, false);
+                    self.children.as_mut().unwrap()[i].flush(
+                        order,
+                        buffer_size,
+                        false,
+                    );
                 }
             }
         }
 
         if !self.is_leaf {
             for child_i in 0..self.children.as_ref().unwrap().len() {
-                while self.children.as_mut().unwrap()[child_i].needs_split(order) {
-                    let (new_key, new_node) = self.children.as_mut().unwrap()[child_i].split(order, buffer_size);
+                while self.children.as_mut().unwrap()[child_i]
+                    .needs_split(order)
+                {
+                    let (new_key, new_node) = self.children.as_mut().unwrap()
+                        [child_i]
+                        .split(order, buffer_size);
                     let i = self.keys.insert(new_key) + 1;
                     if i >= self.children.as_ref().unwrap().len() {
                         self.children.as_mut().unwrap().push(new_node);
@@ -206,7 +223,11 @@ impl<K: Key, V: Value> NodeBuild<K, V>
 
         if all && !self.is_leaf {
             for child_i in 0..self.children.as_ref().unwrap().len() {
-                self.children.as_mut().unwrap()[child_i].flush(order, buffer_size, all);
+                self.children.as_mut().unwrap()[child_i].flush(
+                    order,
+                    buffer_size,
+                    all,
+                );
             }
         }
 
@@ -215,7 +236,11 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         }
     }
 
-    pub fn split(&mut self, order: usize, buffer_size: usize) -> (K, Box<NodeBuild<K, V>>)
+    pub fn split(
+        &mut self,
+        order: usize,
+        buffer_size: usize,
+    ) -> (K, Box<NodeBuild<K, V>>)
     {
         debug_assert!(self.keys.is_sorted());
 
@@ -232,14 +257,16 @@ impl<K: Key, V: Value> NodeBuild<K, V>
             None
         };
 
-        let children: Option<Vec<Box<NodeBuild<K, V>>>> = if self.children.is_some() {
-            let mut children = self.children.as_mut().unwrap().split_off(mid + 1);
-            self.children.as_mut().unwrap().reserve(children.len());
-            children.reserve(children.len());
-            Some(children)
-        } else {
-            None
-        };
+        let children: Option<Vec<Box<NodeBuild<K, V>>>> =
+            if self.children.is_some() {
+                let mut children =
+                    self.children.as_mut().unwrap().split_off(mid + 1);
+                self.children.as_mut().unwrap().reserve(children.len());
+                children.reserve(children.len());
+                Some(children)
+            } else {
+                None
+            };
 
         debug_assert!(mid < self.keys.len());
 
@@ -292,7 +319,9 @@ mod tests
         let mut node: NodeBuild<u32, u32> = super::NodeBuild {
             is_root: false,
             is_leaf: true,
-            keys: unsafe { SortedVec::from_sorted(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]) },
+            keys: unsafe {
+                SortedVec::from_sorted(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11])
+            },
             children: None,
             values: Some(vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11]),
             buffer: Vec::with_capacity(8),
@@ -310,7 +339,9 @@ mod tests
             SortedVec::from_sorted(vec![6, 7, 8, 9, 10, 11])
         });
         assert_eq!(new_node.values, Some(vec![6, 7, 8, 9, 10, 11]));
-        assert_eq!(node.keys, unsafe { SortedVec::from_sorted(vec![1, 2, 3, 4, 5]) });
+        assert_eq!(node.keys, unsafe {
+            SortedVec::from_sorted(vec![1, 2, 3, 4, 5])
+        });
         assert_eq!(node.values, Some(vec![1, 2, 3, 4, 5]));
 
         let mut node: NodeBuild<u32, u32> = super::NodeBuild {
@@ -324,7 +355,10 @@ mod tests
 
         let (new_key, new_node) = node.split(2, 2);
         assert!(new_key == 14);
-        assert_eq!(new_node.keys, SortedVec::from_unsorted((14..28).collect::<Vec<_>>()));
+        assert_eq!(
+            new_node.keys,
+            SortedVec::from_unsorted((14..28).collect::<Vec<_>>())
+        );
         assert_eq!(new_node.values, Some((14..28).collect::<Vec<_>>()));
         assert_eq!(node.keys.to_vec(), (0..14).collect::<Vec<_>>());
         assert_eq!(node.values, Some((0..14).collect::<Vec<_>>()));
@@ -357,7 +391,8 @@ mod tests
     #[test]
     fn simple_insertions()
     {
-        let mut tree: FractalTreeBuild<u32, u32> = super::FractalTreeBuild::new(6, 3);
+        let mut tree: FractalTreeBuild<u32, u32> =
+            super::FractalTreeBuild::new(6, 3);
         tree.insert(1, 1);
         tree.insert(2, 2);
         tree.insert(3, 3);
@@ -383,12 +418,16 @@ mod tests
             tree.insert(*i, *i as u32);
         }
 
-        // Iterate through the tree, all leaves should have keys.len() == vales.len()
-        // All internal nodes should have keys.len() == children.len() - 1
+        // Iterate through the tree, all leaves should have keys.len() ==
+        // vales.len() All internal nodes should have keys.len() ==
+        // children.len() - 1
         let mut stack = vec![&tree.root];
         while let Some(node) = stack.pop() {
             if node.is_leaf {
-                assert_eq!(node.keys.len(), node.values.as_ref().unwrap().len());
+                assert_eq!(
+                    node.keys.len(),
+                    node.values.as_ref().unwrap().len()
+                );
             } else {
                 assert_eq!(
                     node.keys.len() + 1,
@@ -529,7 +568,8 @@ mod tests
             .map(|x| x as u32)
             .collect::<Vec<u32>>();
 
-        let mut tree: FractalTreeBuild<u32, u32> = FractalTreeBuild::new(128, 256);
+        let mut tree: FractalTreeBuild<u32, u32> =
+            FractalTreeBuild::new(128, 256);
         for i in values128m.iter() {
             tree.insert(*i, *i as u32);
         }
@@ -546,8 +586,9 @@ mod tests
         // Encoding is not implemented yet...
         // Doing a custom method...
 
-        // let encoded: Vec<u8> = bincode::encode_to_vec(&tree, config).unwrap();
-        // println!("Size of 128m tree: {}", encoded.len());
+        // let encoded: Vec<u8> = bincode::encode_to_vec(&tree,
+        // config).unwrap(); println!("Size of 128m tree: {}",
+        // encoded.len());
 
         // let size2: SpecificSize<human_size::Gigabyte> =
         // format!("{} B", encoded.len()).parse().unwrap();

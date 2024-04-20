@@ -12,13 +12,15 @@ use crate::*;
 use libcompression::*;
 
 // todo: load_all use decompression
-// todo: in bytes block store and seqlocs make this into a different thread (not a here todo, but elsewhere)
-// todo: speed would come here from batch inserts!
-// todo: test out simd search instead of binary search (use pulp arch)
+// todo: in bytes block store and seqlocs make this into a different
+// thread (not a here todo, but elsewhere) todo: speed would come here
+// from batch inserts! todo: test out simd search instead of binary
+// search (use pulp arch)
 
 /// This is the on-disk version of the FractalTree
 ///
-/// The root node is loaded with the fractal tree, but children are loaded on demand
+/// The root node is loaded with the fractal tree, but children are
+/// loaded on demand
 #[derive(Debug)]
 pub struct FractalTreeDisk<K: Key, V: Value>
 {
@@ -30,14 +32,22 @@ pub struct FractalTreeDisk<K: Key, V: Value>
 
 impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V>
 {
-    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E)
-        -> core::result::Result<(), bincode::error::EncodeError>
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> core::result::Result<(), bincode::error::EncodeError>
     {
         bincode::Encode::encode(&self.compression, encoder)?;
         bincode::Encode::encode(&self.start, encoder)?;
         if self.compression.is_some() {
-            let encoded = bincode::encode_to_vec(&self.root, *encoder.config()).unwrap();
-            let data = self.compression.as_ref().unwrap().compress(&encoded).unwrap();
+            let encoded =
+                bincode::encode_to_vec(&self.root, *encoder.config()).unwrap();
+            let data = self
+                .compression
+                .as_ref()
+                .unwrap()
+                .compress(&encoded)
+                .unwrap();
             bincode::Encode::encode(&data, encoder)
         } else {
             bincode::Encode::encode(&self.root, encoder)
@@ -47,14 +57,23 @@ impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V>
 
 impl<K: Key, V: Value> Decode for FractalTreeDisk<K, V>
 {
-    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> core::result::Result<Self, bincode::error::DecodeError>
+    fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> core::result::Result<Self, bincode::error::DecodeError>
     {
-        let compression: Option<CompressionConfig> = bincode::Decode::decode(decoder)?;
+        let compression: Option<CompressionConfig> =
+            bincode::Decode::decode(decoder)?;
         let start: u64 = bincode::Decode::decode(decoder)?;
         let root: NodeDisk<K, V> = if compression.is_some() {
             let compressed: Vec<u8> = bincode::Decode::decode(decoder).unwrap();
-            let decompressed = compression.as_ref().unwrap().decompress(&compressed).unwrap();
-            bincode::decode_from_slice(&decompressed, *decoder.config()).unwrap().0
+            let decompressed = compression
+                .as_ref()
+                .unwrap()
+                .decompress(&compressed)
+                .unwrap();
+            bincode::decode_from_slice(&decompressed, *decoder.config())
+                .unwrap()
+                .0
         } else {
             bincode::Decode::decode(decoder)?
         };
@@ -113,7 +132,10 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         self.root.search(in_buf, &self.compression, self.start, key)
     }
 
-    pub fn write_to_buffer<W>(&mut self, mut out_buf: W) -> Result<u64, &'static str>
+    pub fn write_to_buffer<W>(
+        &mut self,
+        mut out_buf: W,
+    ) -> Result<u64, &'static str>
     where
         W: Write + Seek,
     {
@@ -123,8 +145,10 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         self.root.store(&mut out_buf, &self.compression, start_pos);
 
         let tree_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
-        let bincode_config = bincode::config::standard().with_variable_int_encoding();
-        bincode::encode_into_std_write(&*self, &mut out_buf, bincode_config).unwrap();
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
+        bincode::encode_into_std_write(&*self, &mut out_buf, bincode_config)
+            .unwrap();
 
         Ok(tree_location)
     }
@@ -134,9 +158,11 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         R: Read + Seek + BufRead,
     {
         in_buf.seek(SeekFrom::Start(pos)).unwrap();
-        let bincode_config = bincode::config::standard().with_variable_int_encoding();
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
 
-        let tree: FractalTreeDisk<K, V> = bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
+        let tree: FractalTreeDisk<K, V> =
+            bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
         Ok(tree)
     }
@@ -206,8 +232,10 @@ pub struct NodeDisk<K, V>
 
 impl<K: Key, V: Value> Encode for NodeDisk<K, V>
 {
-    fn encode<E: bincode::enc::Encoder>(&self, encoder: &mut E)
-        -> core::result::Result<(), bincode::error::EncodeError>
+    fn encode<E: bincode::enc::Encoder>(
+        &self,
+        encoder: &mut E,
+    ) -> core::result::Result<(), bincode::error::EncodeError>
     {
         bincode::Encode::encode(&self.is_leaf, encoder)?;
         bincode::Encode::encode(&self.keys, encoder)?;
@@ -231,7 +259,9 @@ impl<K: Key, V: Value> Encode for NodeDisk<K, V>
 
 impl<K: Key, V: Value> Decode for NodeDisk<K, V>
 {
-    fn decode<D: bincode::de::Decoder>(decoder: &mut D) -> core::result::Result<Self, bincode::error::DecodeError>
+    fn decode<D: bincode::de::Decoder>(
+        decoder: &mut D,
+    ) -> core::result::Result<Self, bincode::error::DecodeError>
     {
         let is_leaf: bool = bincode::Decode::decode(decoder)?;
         let keys: Vec<K> = bincode::Decode::decode(decoder)?;
@@ -315,19 +345,30 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         }
     }
 
-    pub fn load<R>(&mut self, in_buf: &mut R, compression: &Option<CompressionConfig>, start: u64)
-    where
+    pub fn load<R>(
+        &mut self,
+        in_buf: &mut R,
+        compression: &Option<CompressionConfig>,
+        start: u64,
+    ) where
         R: Read + Seek,
     {
-        in_buf.seek(SeekFrom::Start(start + self.state.loc() as u64)).unwrap();
+        in_buf
+            .seek(SeekFrom::Start(start + self.state.loc() as u64))
+            .unwrap();
 
         *self = if compression.is_some() {
             let config = bincode::config::standard()
                 .with_variable_int_encoding()
                 .with_limit::<{ 1024 * 1024 }>();
 
-            let compressed: Vec<u8> = bincode::decode_from_std_read(in_buf, config).unwrap();
-            let decompressed = compression.as_ref().unwrap().decompress(&compressed).unwrap();
+            let compressed: Vec<u8> =
+                bincode::decode_from_std_read(in_buf, config).unwrap();
+            let decompressed = compression
+                .as_ref()
+                .unwrap()
+                .decompress(&compressed)
+                .unwrap();
             bincode::decode_from_slice(&decompressed, config).unwrap().0
         } else {
             let config = bincode::config::standard()
@@ -340,8 +381,12 @@ impl<K: Key, V: Value> NodeDisk<K, V>
     }
 
     // todo: This doesn't work, need to account for compression better
-    pub fn load_all<R>(&mut self, in_buf: &mut R, compression: &Option<CompressionConfig>, start: u64)
-    where
+    pub fn load_all<R>(
+        &mut self,
+        in_buf: &mut R,
+        compression: &Option<CompressionConfig>,
+        start: u64,
+    ) where
         R: Read + Seek,
     {
         let config = bincode::config::standard()
@@ -349,8 +394,11 @@ impl<K: Key, V: Value> NodeDisk<K, V>
             .with_limit::<{ 1024 * 1024 }>();
 
         if self.state.on_disk() {
-            in_buf.seek(SeekFrom::Start(self.state.loc() as u64 + start)).unwrap();
-            let node: NodeDisk<K, V> = bincode::decode_from_std_read(in_buf, config).unwrap();
+            in_buf
+                .seek(SeekFrom::Start(self.state.loc() as u64 + start))
+                .unwrap();
+            let node: NodeDisk<K, V> =
+                bincode::decode_from_std_read(in_buf, config).unwrap();
             *self = node;
         }
 
@@ -363,8 +411,12 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         self.state = NodeState::InMemory;
     }
 
-    pub fn store<W>(&mut self, out_buf: &mut W, compression: &Option<CompressionConfig>, start: u64)
-    where
+    pub fn store<W>(
+        &mut self,
+        out_buf: &mut W,
+        compression: &Option<CompressionConfig>,
+        start: u64,
+    ) where
         W: Write + Seek,
     {
         // Make sure all the children are stored first...
@@ -385,9 +437,15 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                     .with_limit::<{ 1024 * 1024 }>();
 
                 delta_encode(&mut self.keys);
-                let uncompressed: Vec<u8> = bincode::encode_to_vec(&*self, config).unwrap();
-                let compressed = compression.as_ref().unwrap().compress(&uncompressed).unwrap();
-                bincode::encode_into_std_write(&compressed, out_buf, config).unwrap();
+                let uncompressed: Vec<u8> =
+                    bincode::encode_to_vec(&*self, config).unwrap();
+                let compressed = compression
+                    .as_ref()
+                    .unwrap()
+                    .compress(&uncompressed)
+                    .unwrap();
+                bincode::encode_into_std_write(&compressed, out_buf, config)
+                    .unwrap();
 
                 self.state = NodeState::OnDisk(cur_pos as u32 - start as u32);
                 self.children = None;
@@ -397,7 +455,8 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 let config = bincode::config::standard()
                     .with_variable_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
-                bincode::encode_into_std_write(&*self, out_buf, config).unwrap();
+                bincode::encode_into_std_write(&*self, out_buf, config)
+                    .unwrap();
 
                 self.state = NodeState::OnDisk(cur_pos as u32 - start as u32);
                 self.children = None;
@@ -435,7 +494,12 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 Err(i) => i,
             };
 
-            self.children.as_mut().unwrap()[i].search(in_buf, compression, start, key)
+            self.children.as_mut().unwrap()[i].search(
+                in_buf,
+                compression,
+                start,
+                key,
+            )
         }
     }
 
@@ -444,7 +508,11 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         if self.is_leaf {
             true
         } else {
-            self.children.as_ref().unwrap().iter().all(|x| x.state.on_disk())
+            self.children
+                .as_ref()
+                .unwrap()
+                .iter()
+                .all(|x| x.state.on_disk())
         }
     }
 
@@ -515,10 +583,16 @@ mod tests
     {
         let rng = thread_rng();
         // Get 128 random values
-        let values: Vec<u32> = rng.sample_iter(rand::distributions::Standard).take(128).collect();
+        let values: Vec<u32> = rng
+            .sample_iter(rand::distributions::Standard)
+            .take(128)
+            .collect();
 
         let rng = thread_rng();
-        let mut keys: Vec<u32> = rng.sample_iter(rand::distributions::Standard).take(128).collect();
+        let mut keys: Vec<u32> = rng
+            .sample_iter(rand::distributions::Standard)
+            .take(128)
+            .collect();
         keys.sort();
 
         let mut node = NodeDisk {
@@ -530,23 +604,33 @@ mod tests
             values: Some(values),
         };
 
-        let bincode_config = bincode::config::standard().with_variable_int_encoding();
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
 
         let mut buf = std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
-        bincode::encode_into_std_write(&node.is_leaf, &mut buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&node.keys, &mut buf, bincode_config).unwrap();
-        bincode::encode_into_std_write(&node.values.as_ref().unwrap(), &mut buf, bincode_config).unwrap();
+        bincode::encode_into_std_write(&node.is_leaf, &mut buf, bincode_config)
+            .unwrap();
+        bincode::encode_into_std_write(&node.keys, &mut buf, bincode_config)
+            .unwrap();
+        bincode::encode_into_std_write(
+            &node.values.as_ref().unwrap(),
+            &mut buf,
+            bincode_config,
+        )
+        .unwrap();
         let no_vbyte_len = buf.into_inner().unwrap().into_inner().len();
 
         let mut buf = std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
         node.store(&mut buf, &None, 0);
 
         let len = buf.into_inner().unwrap().into_inner().len();
-        let size: SpecificSize<human_size::Kilobyte> = format!("{} B", len).parse().unwrap();
+        let size: SpecificSize<human_size::Kilobyte> =
+            format!("{} B", len).parse().unwrap();
 
         println!("Node size: {}", size);
 
-        let size: SpecificSize<human_size::Kilobyte> = format!("{} B", no_vbyte_len).parse().unwrap();
+        let size: SpecificSize<human_size::Kilobyte> =
+            format!("{} B", no_vbyte_len).parse().unwrap();
         println!("Node size (no vbyte): {}", size);
     }
 
@@ -589,7 +673,11 @@ mod tests
 
         buf.seek(SeekFrom::Start(tree_loc)).unwrap();
         let mut tree: FractalTreeDisk<u32, u32> =
-            bincode::decode_from_std_read(&mut buf, bincode::config::standard().with_variable_int_encoding()).unwrap();
+            bincode::decode_from_std_read(
+                &mut buf,
+                bincode::config::standard().with_variable_int_encoding(),
+            )
+            .unwrap();
         assert!(tree.root.keys == orig_root_keys);
 
         let result = tree.search(&mut buf, &1);
@@ -604,14 +692,16 @@ mod tests
         assert!(result.is_some());
         assert!(result.unwrap() == u32::MAX / 2);
 
-        let mut tree: FractalTreeBuild<u32, u64> = FractalTreeBuild::new(128, 256);
+        let mut tree: FractalTreeBuild<u32, u64> =
+            FractalTreeBuild::new(128, 256);
         for i in 0..1024 * 1024 {
             tree.insert(i, i as u64);
         }
 
         let mut tree: FractalTreeDisk<u32, u64> = tree.into();
         tree.set_compression(libcompression::CompressionConfig::default());
-        let mut buffer = std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
+        let mut buffer =
+            std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
         // Push some dummy bytes at the front
         buffer.write(&[0; 1024]).unwrap();
 
@@ -619,7 +709,8 @@ mod tests
         let raw_vec = buffer.into_inner().unwrap().into_inner();
         let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
 
-        let mut tree: FractalTreeDisk<u32, u64> = FractalTreeDisk::from_buffer(&mut buf, tree_loc).unwrap();
+        let mut tree: FractalTreeDisk<u32, u64> =
+            FractalTreeDisk::from_buffer(&mut buf, tree_loc).unwrap();
 
         let result = tree.search(&mut buf, &1);
         assert!(result.is_some());
@@ -627,7 +718,8 @@ mod tests
 
     #[ignore]
     #[test]
-    /// This is mostly to see how large a very large tree is (in gigs, and megabytes)
+    /// This is mostly to see how large a very large tree is (in gigs,
+    /// and megabytes)
     fn tree_large_storage()
     {
         let mut rng = thread_rng();
@@ -660,16 +752,22 @@ mod tests
         let raw_vec = buf.into_inner().unwrap().into_inner();
 
         println!("Raw Vec Len: {}", raw_vec.len());
-        let size2: SpecificSize<human_size::multiples::Gigabyte> = format!("{} B", raw_vec.len()).parse().unwrap();
+        let size2: SpecificSize<human_size::multiples::Gigabyte> =
+            format!("{} B", raw_vec.len()).parse().unwrap();
         println!("Raw Vec Size: {}", size2);
-        let size2: SpecificSize<human_size::multiples::Megabyte> = format!("{} B", raw_vec.len()).parse().unwrap();
+        let size2: SpecificSize<human_size::multiples::Megabyte> =
+            format!("{} B", raw_vec.len()).parse().unwrap();
         println!("Raw Vec Size: {}", size2);
 
         let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
 
         buf.seek(SeekFrom::Start(tree_loc)).unwrap();
         let mut tree: FractalTreeDisk<u32, u32> =
-            bincode::decode_from_std_read(&mut buf, bincode::config::standard().with_variable_int_encoding()).unwrap();
+            bincode::decode_from_std_read(
+                &mut buf,
+                bincode::config::standard().with_variable_int_encoding(),
+            )
+            .unwrap();
         assert!(tree.root.keys == orig_root_keys);
 
         let result = tree.search(&mut buf, &1);

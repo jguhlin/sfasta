@@ -13,7 +13,8 @@ pub enum FileFormat
     Gfa,
 }
 
-/// Detect the file format of a file. Prefer the file extension when available.
+/// Detect the file format of a file. Prefer the file extension when
+/// available.
 #[allow(dead_code)]
 pub fn detect_file_format(buffer: &[u8]) -> Result<FileFormat, &'static str>
 {
@@ -32,7 +33,9 @@ pub fn detect_file_format(buffer: &[u8]) -> Result<FileFormat, &'static str>
 
 /// Return the compression type of a file
 #[allow(dead_code)]
-pub fn detect_compression_format(buffer: &[u8]) -> Result<CompressionType, &'static str>
+pub fn detect_compression_format(
+    buffer: &[u8],
+) -> Result<CompressionType, &'static str>
 {
     Ok(match buffer {
         [0x1F, 0x8B, ..] => CompressionType::GZIP,

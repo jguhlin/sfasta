@@ -40,7 +40,8 @@ fn style_pb(pb: ProgressBar) -> ProgressBar
     pb
 }
 
-// TODO: Print out GIT_VERSION in the version text with CLAP (as well as the Cargo.toml version).
+// TODO: Print out GIT_VERSION in the version text with CLAP (as well
+// as the Cargo.toml version).
 
 #[derive(Parser)]
 #[clap(arg_required_else_help = true)]
@@ -194,46 +195,48 @@ fn main()
     // if let Some(matches) = matches.subcommand_matches("stats") {
     // let filename = matches.value_of("input").unwrap();
     // let file = match File::open(filename) {
-    // Err(why) => panic!("Couldn't open {}: {}", filename, why.to_string()),
-    // Ok(file) => file,
+    // Err(why) => panic!("Couldn't open {}: {}", filename,
+    // why.to_string()), Ok(file) => file,
     // };
     //
     // let file = BufReader::with_capacity(8 * 1024 * 1024, file);
     // let sfasta = SfastaParser::open_from_buffer(file);
     // println!("Successfully opened SFASTA");
-    // println!("Found: {} entries", sfasta.index.as_ref().unwrap().len());
-    // println!("{:#?}", sfasta.index.as_ref().unwrap().ids);
-    // }
+    // println!("Found: {} entries",
+    // sfasta.index.as_ref().unwrap().len()); println!("{:#?}",
+    // sfasta.index.as_ref().unwrap().ids); }
     //
-    // TODO: Make this faster but putting the decompression into another thread...
-    // Probs not worth it (NT takes ~10m on my machine)
-    // if let Some(matches) = matches.subcommand_matches("summarize") {
+    // TODO: Make this faster but putting the decompression into
+    // another thread... Probs not worth it (NT takes ~10m on my
+    // machine) if let Some(matches) =
+    // matches.subcommand_matches("summarize") {
     // let fasta_filename = matches.value_of("input").unwrap();
-    // let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
-    // let pb = ProgressBar::new(metadata.len());
+    // let metadata = fs::metadata(fasta_filename).expect("Unable to
+    // get filesize"); let pb = ProgressBar::new(metadata.len());
     // let pb = style_pb(pb);
     //
     // let buf = generic_open_file_pb(pb, fasta_filename);
     // let buf = pb.wrap_read(buf.2);
-    // let summary = summarize_fasta(&mut BufReader::with_capacity(4 * 1024 * 1024, buf.2));
-    // println!("File: {}", fasta_filename);
+    // let summary = summarize_fasta(&mut BufReader::with_capacity(4 *
+    // 1024 * 1024, buf.2)); println!("File: {}", fasta_filename);
     // println!("Total Entries: {}", summary.0);
-    // println!("Total Sequence: {}", summary.2.iter().sum::<usize>());
-    // }
+    // println!("Total Sequence: {}",
+    // summary.2.iter().sum::<usize>()); }
     //
     // if let Some(matches) = matches.subcommand_matches("faidx") {
     // let sfasta_filename = matches.value_of("input").unwrap();
     //
-    // let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    // let sfasta =
-    // SfastaParser::open_from_buffer(BufReader::with_capacity(4 * 1024 * 1024, in_buf));
+    // let in_buf = File::open(sfasta_filename).expect("Unable to open
+    // file"); let sfasta =
+    // SfastaParser::open_from_buffer(BufReader::with_capacity(4 *
+    // 1024 * 1024, in_buf));
     //
     // let ids = matches.values_of("ids").unwrap();
     // for i in ids {
     // let results = sfasta
     // .find(i)
-    // .expect(&format!("Unable to find {} in file {}", i, sfasta_filename))
-    // .unwrap();
+    // .expect(&format!("Unable to find {} in file {}", i,
+    // sfasta_filename)) .unwrap();
     // for result in results {
     // let sequence = sfasta
     // .get_sequence(&result.3)
@@ -244,29 +247,33 @@ fn main()
     // }
     // }
     //
-    // TODO: Store sequence IDs in insertion order at the end of the file
-    // insertion-order output should be a custom function
+    // TODO: Store sequence IDs in insertion order at the end of the
+    // file insertion-order output should be a custom function
     // (Decompress entire block, output sequences appropriately)
     // So don't need this more random (and slower) method anymore...
     // if let Some(matches) = matches.subcommand_matches("view") {
-    // TODO: Add ability to store sequences in order, to reorder sequences, and
-    // to identify when sequences are in order and display them that way...
+    // TODO: Add ability to store sequences in order, to reorder
+    // sequences, and to identify when sequences are in order and
+    // display them that way...
     //
     // let sfasta_filename = matches.value_of("input").unwrap();
     //
-    // let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    // let mut sfasta =
-    // SfastaParser::open_from_buffer(BufReader::with_capacity(8 * 1024 * 1024, in_buf));
+    // let in_buf = File::open(sfasta_filename).expect("Unable to open
+    // file"); let mut sfasta =
+    // SfastaParser::open_from_buffer(BufReader::with_capacity(8 *
+    // 1024 * 1024, in_buf));
     //
-    // TODO: We could process this in blocks to be more memory efficient...
-    // sfasta.decompress_all_ids();
+    // TODO: We could process this in blocks to be more memory
+    // efficient... sfasta.decompress_all_ids();
     //
     // let mut bump = Bump::new();
     //
-    // for seqid in sfasta.index.as_ref().unwrap().ids.as_ref().unwrap() {
+    // for seqid in
+    // sfasta.index.as_ref().unwrap().ids.as_ref().unwrap() {
     // let results = sfasta
     // .find(&seqid)
-    // .expect(&format!("Unable to find {} in file {}, even though it is in the index! File is likely corrupt, or this
+    // .expect(&format!("Unable to find {} in file {}, even though it
+    // is in the index! File is likely corrupt, or this
     // is a serious bug.", &seqid, sfasta_filename)) .unwrap();
     //
     // TODO: Disabled bumpalo... for now...
@@ -285,14 +292,15 @@ fn main()
     // if let Some(matches) = matches.subcommand_matches("list") {
     // let sfasta_filename = matches.value_of("input").unwrap();
     //
-    // let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    // let mut sfasta =
-    // SfastaParser::open_from_buffer(BufReader::with_capacity(32 * 1024 * 1024, in_buf));
+    // let in_buf = File::open(sfasta_filename).expect("Unable to open
+    // file"); let mut sfasta =
+    // SfastaParser::open_from_buffer(BufReader::with_capacity(32 *
+    // 1024 * 1024, in_buf));
     //
     // sfasta.decompress_all_ids();
     //
-    // for i in sfasta.index.as_ref().unwrap().ids.as_ref().unwrap().iter() {
-    // println!("{}", i);
+    // for i in sfasta.index.as_ref().unwrap().ids.as_ref().unwrap().
+    // iter() { println!("{}", i);
     // }
     // }
 
@@ -308,7 +316,11 @@ fn main()
 }
 
 #[inline]
-fn print_sequence(stdout: &mut std::io::StdoutLock, seq: &[u8], line_length: usize)
+fn print_sequence(
+    stdout: &mut std::io::StdoutLock,
+    seq: &[u8],
+    line_length: usize,
+)
 {
     let iter = seq.chunks_exact(line_length);
     let seq = iter.remainder();
@@ -343,12 +355,16 @@ fn faidx(input: &str, ids: &Vec<String>)
 
         let headers = result.get_headers();
         let header = if result.has_headers() {
-            format!(" {}", sfasta.get_header(&headers).expect("Unable to fetch header"))
+            format!(
+                " {}",
+                sfasta.get_header(&headers).expect("Unable to fetch header")
+            )
         } else {
             "".to_string()
         };
 
-        write!(stdout, ">{}{}\n", i, header).expect("Unable to write to stdout");
+        write!(stdout, ">{}{}\n", i, header)
+            .expect("Unable to write to stdout");
 
         let sequence = sfasta
             .get_sequence(result.get_sequence(), result.get_masking())
@@ -365,7 +381,8 @@ fn view(input: &str)
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    let mut sfasta = SfastaParser::open_from_buffer(BufReader::new(in_buf), true).unwrap();
+    let mut sfasta =
+        SfastaParser::open_from_buffer(BufReader::new(in_buf), true).unwrap();
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty or corrupt");
@@ -404,8 +421,8 @@ fn view(input: &str)
     //
     // #[cfg(nightly)]
     // {
-    // let newlines = (0..1).map(|_| std::io::IoSlice::new(b"\n")).cycle();
-    // let x = sequence
+    // let newlines = (0..1).map(|_|
+    // std::io::IoSlice::new(b"\n")).cycle(); let x = sequence
     // .chunks(line_length)
     // .map(|x| std::io::IoSlice::new(x))
     // .zip(newlines)
@@ -476,7 +493,8 @@ fn convert(
     dict_samples: u64,
 )
 {
-    let metadata = fs::metadata(fasta_filename).expect("Unable to get filesize");
+    let metadata =
+        fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(metadata.len());
     let pb = style_pb(pb);
 
@@ -506,8 +524,8 @@ fn convert(
     // s.send(libsfasta::utils::ReaderData::EOF).unwrap();
     // break;
     // }
-    // s.send(libsfasta::utils::ReaderData::Data(current.to_vec())).unwrap();
-    // buf.consume(bytes_read);
+    // s.send(libsfasta::utils::ReaderData::Data(current.to_vec())).
+    // unwrap(); buf.consume(bytes_read);
     // }
     // })
     // .unwrap();
@@ -550,11 +568,14 @@ fn convert(
     }
 
     if noindex {
-        println!("Noindex received -- But this doesn't work yet -- Here be dragons");
+        println!(
+            "Noindex received -- But this doesn't work yet -- Here be dragons"
+        );
         converter = converter.without_index();
     }
 
-    // let mut in_buf = libsfasta::utils::CrossbeamReader::from_channel(r);
+    // let mut in_buf =
+    // libsfasta::utils::CrossbeamReader::from_channel(r);
     let mut in_buf = BufReader::new(buf);
     let out_fh = Box::new(std::io::BufWriter::new(output));
 
@@ -564,10 +585,15 @@ fn convert(
     // log::info!("IO thread joined");
 }
 
-pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, indicatif::ProgressBarIter<File>)
+pub fn generic_open_file_pb(
+    pb: ProgressBar,
+    filename: &str,
+) -> (usize, indicatif::ProgressBarIter<File>)
 {
     let filesize = metadata(filename)
-        .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
+        .unwrap_or_else(|_| {
+            panic!("{}", &format!("Unable to open file: {}", filename))
+        })
         .len();
 
     let file = match File::open(filename) {
@@ -581,8 +607,8 @@ pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, indicati
     // let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
     // compressed = true;
     // Box::new(flate2::read::MultiGzDecoder::new(file))
-    // } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai") {
-    // compressed = true;
+    // } else if filename.ends_with("snappy") || filename.ends_with("sz")
+    // || filename.ends_with("sfai") { compressed = true;
     // Box::new(snap::read::FrameDecoder::new(file))
     // } else {
     // Box::new(file)
@@ -591,10 +617,13 @@ pub fn generic_open_file_pb(pb: ProgressBar, filename: &str) -> (usize, indicati
     (filesize as usize, file)
 }
 
-pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>)
+pub fn generic_open_file(filename: &str)
+    -> (usize, bool, Box<dyn Read + Send>)
 {
     let filesize = metadata(filename)
-        .unwrap_or_else(|_| panic!("{}", &format!("Unable to open file: {}", filename)))
+        .unwrap_or_else(|_| {
+            panic!("{}", &format!("Unable to open file: {}", filename))
+        })
         .len();
 
     let file = match File::open(filename) {
@@ -607,7 +636,10 @@ pub fn generic_open_file(filename: &str) -> (usize, bool, Box<dyn Read + Send>)
     let fasta: Box<dyn Read + Send> = if filename.ends_with("gz") {
         compressed = true;
         Box::new(flate2::read::MultiGzDecoder::new(file))
-    } else if filename.ends_with("snappy") || filename.ends_with("sz") || filename.ends_with("sfai") {
+    } else if filename.ends_with("snappy")
+        || filename.ends_with("sz")
+        || filename.ends_with("sfai")
+    {
         compressed = true;
         Box::new(snap::read::FrameDecoder::new(file))
     } else {

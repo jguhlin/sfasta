@@ -30,7 +30,8 @@ pub enum ReaderData
 
 impl CrossbeamReader
 {
-    pub fn from_channel(input: channel::Receiver<ReaderData>) -> CrossbeamReader
+    pub fn from_channel(input: channel::Receiver<ReaderData>)
+        -> CrossbeamReader
     {
         CrossbeamReader {
             input,
@@ -60,13 +61,15 @@ impl Read for CrossbeamReader
             self.offset = 0;
         }
         let size = min(buf.len(), self.buffer.len() - self.offset);
-        buf[..size].copy_from_slice(&self.buffer[self.offset..self.offset + size]);
+        buf[..size]
+            .copy_from_slice(&self.buffer[self.offset..self.offset + size]);
         self.offset += size;
         Ok(size)
     }
 }
 
-/// Checks that the file extension ends in .sfasta or adds it if necessary
+/// Checks that the file extension ends in .sfasta or adds it if
+/// necessary
 pub fn check_extension(filename: &str) -> String
 {
     if !filename.ends_with(".sfasta") {
@@ -76,15 +79,15 @@ pub fn check_extension(filename: &str) -> String
     }
 }
 
-// pub fn get_good_sequence_coords(seq: &[u8]) -> Vec<(usize, usize)> {
-// let mut start: Option<usize> = None;
+// pub fn get_good_sequence_coords(seq: &[u8]) -> Vec<(usize, usize)>
+// { let mut start: Option<usize> = None;
 // let mut end: usize;
 // let mut cur: usize = 0;
 // let mut start_coords;
 // let mut end_coords;
 // let mut coords: Vec<(usize, usize)> = Vec::with_capacity(64);
-// let results = seq.windows(3).enumerate().filter(|(_y, x)| x != &[78, 78,
-// 78]).map(|(y, _x)| y);
+// let results = seq.windows(3).enumerate().filter(|(_y, x)| x !=
+// &[78, 78, 78]).map(|(y, _x)| y);
 //
 // Do we need to filter the sequence at all?
 // if bytecount::count(&seq, b'N') < 3 {
@@ -175,7 +178,8 @@ const fn _complement_nucl(nucl: u8) -> u8
 }
 
 // Mutability here because we change everything to uppercase
-/// Complement nucleotides -- Reverse is easy enough with Rust internals
+/// Complement nucleotides -- Reverse is easy enough with Rust
+/// internals
 pub fn complement_nucleotides(slice: &mut [u8])
 {
     for x in slice.iter_mut() {
@@ -196,29 +200,34 @@ mod tests
     use std::io::BufRead;
     // #[test]
     // pub fn test_get_good_sequence_coords() {
-    // let coords = get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAA");
-    // println!("{:#?}", coords);
-    // assert!(coords == [(0, 19), (22, 47)]);
+    // let coords =
+    // get_good_sequence_coords(b"
+    // AAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAA"); println!("{:
+    // #?}", coords); assert!(coords == [(0, 19), (22, 47)]);
     //
     // TODO: Error, but such a minor edge case...
     // let coords =
-    // get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAANNN");
+    // get_good_sequence_coords(b"
+    // AAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAANNN");
     // println!("{:#?}", coords);
     // assert!(coords == [(0, 19), (22, 50)]);
     //
     // TODO: Error, but such a minor edge case...
     // let coords =
-    // get_good_sequence_coords(b"NNNAAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAANNN");
+    // get_good_sequence_coords(b"
+    // NNNAAAAAAAAAAAAAAAAAAAANNNAAAAAAAAAAAAAAAAAAAAAAAANNN");
     // println!("{:#?}", coords);
     // assert!(coords == [(1, 22), (25, 53)]);
     //
-    // let coords = get_good_sequence_coords(b"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
-    // println!("{:#?}", coords);
-    // assert!(coords == [(0, 44)]);
+    // let coords =
+    // get_good_sequence_coords(b"
+    // AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"); println!("{:#?
+    // }", coords); assert!(coords == [(0, 44)]);
     //
-    // let coords = get_good_sequence_coords(b"AAAAAAAANAAAAAAAAANAAAAAAAAAAAAAAAAAAAAAANAA");
-    // println!("{:#?}", coords);
-    // assert!(coords == [(0, 44)]);
+    // let coords =
+    // get_good_sequence_coords(b"
+    // AAAAAAAANAAAAAAAAANAAAAAAAAAAAAAAAAAAAAAANAA"); println!("{:#?
+    // }", coords); assert!(coords == [(0, 44)]);
     // }
     #[test]
     pub fn test_complement_nucleotides()
@@ -245,7 +254,8 @@ mod tests
         let (s, r) = crossbeam::channel::unbounded();
         for _ in 0..100 {
             s.send(ReaderData::Data(
-                b"ACTGHAGCGATCGGTGCAGCAGTGAGCTGATGCGATCGAGTCGATCGCGATA".to_vec(),
+                b"ACTGHAGCGATCGGTGCAGCAGTGAGCTGATGCGATCGAGTCGATCGCGATA"
+                    .to_vec(),
             ))
             .unwrap();
         }

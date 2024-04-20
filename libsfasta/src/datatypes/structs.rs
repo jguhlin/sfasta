@@ -38,13 +38,21 @@ pub struct Sequence
     pub scores: Option<Vec<u8>>,
     pub header: Option<Vec<u8>>,
     pub id: Option<Vec<u8>>,
-    /// Primarily used downstream, but when used for random access this is the offset from the start of the sequence
+    /// Primarily used downstream, but when used for random access
+    /// this is the offset from the start of the sequence
     pub offset: usize,
 }
 
 impl Sequence
 {
-    pub fn into_parts(self) -> (Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>, Option<Vec<u8>>)
+    pub fn into_parts(
+        self,
+    ) -> (
+        Option<Vec<u8>>,
+        Option<Vec<u8>>,
+        Option<Vec<u8>>,
+        Option<Vec<u8>>,
+    )
     {
         {
             (self.id, self.header, self.sequence, self.scores)

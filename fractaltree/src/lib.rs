@@ -33,7 +33,8 @@ pub trait Key = 'static
 
 pub trait Value = 'static + std::fmt::Debug + Encode + Decode + Clone;
 
-// Impl can't be a trait because need for buffer for Disk version and no need for Read
+// Impl can't be a trait because need for buffer for Disk version and
+// no need for Read
 
 #[cfg(test)]
 mod test
@@ -53,6 +54,9 @@ mod test
         assert!(tree.root.children.is_some());
         assert!(tree.root.children.as_ref().unwrap().len() > 0);
 
-        println!("Found {} children", tree.root.children.as_ref().unwrap().len());
+        println!(
+            "Found {} children",
+            tree.root.children.as_ref().unwrap().len()
+        );
     }
 }

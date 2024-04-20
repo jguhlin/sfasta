@@ -5,8 +5,10 @@ use std::{
 
 use simdutf8::basic::from_utf8;
 
-use super::{Builder, LocMutex, Queue};
-use crate::datatypes::{BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc};
+use super::Builder;
+use crate::datatypes::{
+    BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc,
+};
 use libcompression::*;
 
 pub struct StringBlockStoreBuilder
@@ -34,7 +36,10 @@ impl Builder<Vec<u8>> for StringBlockStoreBuilder
 {
     fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
     {
-        Ok(self.inner.add(input).expect("Failed to add string to block store"))
+        Ok(self
+            .inner
+            .add(input)
+            .expect("Failed to add string to block store"))
     }
 
     fn finalize(&mut self)
@@ -45,7 +50,10 @@ impl Builder<Vec<u8>> for StringBlockStoreBuilder
 
 impl StringBlockStoreBuilder
 {
-    pub fn with_compression_worker(mut self, compression_worker: Arc<CompressionWorker>) -> Self
+    pub fn with_compression_worker(
+        mut self,
+        compression_worker: Arc<CompressionWorker>,
+    ) -> Self
     {
         self.inner = self.inner.with_compression_worker(compression_worker);
         self
@@ -58,7 +66,10 @@ impl StringBlockStoreBuilder
         self.inner.write_header(pos, &mut out_buf);
     }
 
-    pub fn write_block_locations<W>(&mut self, mut out_buf: W) -> Result<(), BlockStoreError>
+    pub fn write_block_locations<W>(
+        &mut self,
+        mut out_buf: W,
+    ) -> Result<(), BlockStoreError>
     where
         W: Write + Seek,
     {
@@ -83,7 +94,9 @@ impl StringBlockStoreBuilder
 
     pub fn add(&mut self, input: Vec<u8>) -> Vec<Loc>
     {
-        self.inner.add(input).expect("Failed to add string to block store")
+        self.inner
+            .add(input)
+            .expect("Failed to add string to block store")
     }
 }
 
@@ -94,14 +107,18 @@ pub struct StringBlockStore
 
 impl StringBlockStore
 {
-    pub fn from_buffer<R>(mut in_buf: &mut R, starting_pos: u64) -> Result<Self, String>
+    pub fn from_buffer<R>(
+        mut in_buf: &mut R,
+        starting_pos: u64,
+    ) -> Result<Self, String>
     where
         R: Read + Seek + Send + Sync + BufRead,
     {
-        let inner = match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
-            Ok(inner) => inner,
-            Err(e) => return Err(e),
-        };
+        let inner =
+            match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
+                Ok(inner) => inner,
+                Err(e) => return Err(e),
+            };
 
         let store = StringBlockStore { inner };
         Ok(store)
@@ -116,8 +133,12 @@ impl StringBlockStore
     }
 
     // TODO: Needed?
-    pub fn get_block_uncached<R>(&mut self, mut in_buf: &mut R, block: u32, buffer: &mut [u8])
-    where
+    pub fn get_block_uncached<R>(
+        &mut self,
+        mut in_buf: &mut R,
+        block: u32,
+        buffer: &mut [u8],
+    ) where
         R: Read + Seek + Send + Sync,
     {
         self.inner.get_block_uncached(&mut in_buf, block, buffer)
@@ -148,7 +169,9 @@ mod tests
     #[test]
     fn test_add_id()
     {
-        let mut store = StringBlockStoreBuilder { ..Default::default() };
+        let mut store = StringBlockStoreBuilder {
+            ..Default::default()
+        };
 
         let test_ids = vec![
             "Medtr5g026775.t1",
