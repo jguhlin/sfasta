@@ -87,10 +87,10 @@ impl Default for BytesBlockStoreBuilder
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
             finalized: false,
-            create_dict: true, // FOR NOW
+            create_dict: true, // FOR NOW todo configurable from sfa
             dict_data: Vec::new(),
-            dict_size: 256 * 1024,
-            dict_samples: 128,
+            dict_size: 256 * 1024, // todo configurable from sfa
+            dict_samples: 128, // todo configurable from sfa
         }
     }
 }
