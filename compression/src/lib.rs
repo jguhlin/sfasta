@@ -452,18 +452,32 @@ fn compression_worker(
                                 )
                                 .unwrap();
 
-                            if work.compression_config.compression_dict.is_some()
+                            if work
+                                .compression_config
+                                .compression_dict
+                                .is_some()
                             {
                                 zstd_compressor
                                     .set_dictionary(
-                                        work.compression_config.compression_level
+                                        work.compression_config
+                                            .compression_level
                                             as i32,
-                                        work.compression_config.compression_dict
+                                        work.compression_config
+                                            .compression_dict
                                             .as_ref()
                                             .unwrap()
                                             .as_ref(),
                                     )
                                     .unwrap();
+                            } else {
+                                // Annoying.. todo
+                                // todo store in hashmap so that one encoder is
+                                // built for each compression config already?
+                                *zstd_compressor = zstd_encoder(
+                                    work.compression_config.compression_level
+                                        as i32,
+                                    &None,
+                                );
                             }
                             // todo dict
                             zstd_compressor

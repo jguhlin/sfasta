@@ -134,15 +134,17 @@ impl BytesBlockStoreBuilder
             self.dict_data.push(data.clone());
             // Sum all the data for the dictionary
             let sum: usize = self.dict_data.iter().map(|x| x.len()).sum();
-            
-            // Std dict size is 100kb, they recommend at least 100x samples to train
-            if sum >= (self.dict_samples * self.dict_size) as usize { 
+
+            // Std dict size is 100kb, they recommend at least 100x samples to
+            // train
+            if sum >= (self.dict_samples * self.dict_size) as usize {
                 // Create the dict with the data we have...
-                self.create_dict();                                
+                self.create_dict();
             }
         } else {
             let worker = self.compression_worker.as_ref().unwrap();
-            let loc = worker.compress(data, Arc::clone(&self.compression_config));
+            let loc =
+                worker.compress(data, Arc::clone(&self.compression_config));
             self.block_locations.push(loc);
         }
     }
@@ -166,16 +168,17 @@ impl BytesBlockStoreBuilder
         self.block_locations.push(loc);
     }
 
-    pub fn create_dict(&mut self) {
-        let dict = zstd::dict::from_samples(&self.dict_data, self.dict_size as usize);
+    pub fn create_dict(&mut self)
+    {
+        let dict =
+            zstd::dict::from_samples(&self.dict_data, self.dict_size as usize);
         match dict {
             Ok(v) => {
                 log::info!("Dict Size: {}", v.len());
                 let mut cc = (*self.compression_config).clone();
                 cc.compression_dict = Some(Arc::new(v));
                 self.compression_config = Arc::new(cc);
-        
-            },
+            }
             Err(e) => {
                 log::error!("Error creating dictionary: {}", e);
             }
@@ -186,7 +189,8 @@ impl BytesBlockStoreBuilder
         // Compress the data we have
         for data in self.dict_data.iter() {
             let worker = self.compression_worker.as_ref().unwrap();
-            let loc = worker.compress(data.clone(), Arc::clone(&self.compression_config));
+            let loc = worker
+                .compress(data.clone(), Arc::clone(&self.compression_config));
             self.block_locations.push(loc);
         }
     }
