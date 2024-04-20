@@ -44,7 +44,7 @@ pub struct Converter
 /// Default settings for Converter
 ///
 /// * threads: 4
-/// * block_size: 4Mb
+/// * block_size: 512kb
 /// * seqlocs_chunk_size: 128k
 /// * index: on
 /// * masking: off
@@ -57,7 +57,7 @@ impl Default for Converter
     {
         Converter {
             threads: 8,
-            block_size: 512 * 1024, // 4Mb
+            block_size: 512 * 1024, // 512kb
             index: true,
             masking: false,
             quality_scores: false,
@@ -444,7 +444,7 @@ impl Converter
 
         // Start the compression workers
         let mut compression_workers = CompressionWorker::new()
-            .with_buffer_size(128)
+            .with_buffer_size(1024)
             .with_threads(threads as u16)
             .with_output_queue(Arc::clone(&output_queue));
 
@@ -470,35 +470,46 @@ impl Converter
 
         let compression_workers_thread = Arc::clone(&compression_workers);
 
+        let compression_config = CompressionConfig {
+            compression_type: self.compression_type,
+            compression_level: self.compression_level.unwrap_or(9),
+            compression_dict: None,
+        };
+
         let mut seqlocs = SeqLocsStoreBuilder::default();
         // let seqlocs = SeqLocsThreadBuilder::new(seqlocs);
 
         let mut headers = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
+            .with_compression(compression_config.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let headers = ThreadBuilder::new(headers);
 
         let mut ids = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
+            .with_compression(compression_config.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let ids = ThreadBuilder::new(ids);
 
         let mut masking = MaskingStoreBuilder::default()
             .with_compression_worker(Arc::clone(&compression_workers_thread))
+            .with_compression(compression_config.clone())
             .with_block_size(block_size as usize);
 
         // let masking = ThreadBuilder::new(masking);
 
         let mut sequences = BytesBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
+            .with_compression(compression_config.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let sequences = ThreadBuilder::new(sequences);
 
         let mut scores = BytesBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
+            .with_compression(compression_config.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let scores = ThreadBuilder::new(scores);

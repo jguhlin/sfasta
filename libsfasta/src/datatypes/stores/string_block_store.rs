@@ -66,6 +66,12 @@ impl StringBlockStoreBuilder
         self
     }
 
+    pub fn with_compression(mut self, config: CompressionConfig) -> Self
+    {
+        self.inner = self.inner.with_compression(config);
+        self
+    }
+
     pub fn with_compression_worker(
         mut self,
         compression_worker: Arc<CompressionWorker>,

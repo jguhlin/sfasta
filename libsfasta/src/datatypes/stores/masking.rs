@@ -61,6 +61,11 @@ impl MaskingStoreBuilder
         self
     }
 
+    pub fn with_compression(mut self, compression: CompressionConfig) -> Self {
+        self.inner = self.inner.with_compression(compression);
+        self
+    }
+
     pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
     where
         W: Write + Seek,
