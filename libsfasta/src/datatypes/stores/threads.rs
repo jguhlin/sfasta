@@ -40,7 +40,7 @@ where
     {
         let builder = Arc::new(Mutex::new(builder));
 
-        let (sender, receiver) = flume::bounded::<(LocMutex, T)>(32);
+        let (sender, receiver) = flume::bounded::<(LocMutex, T)>(1024);
         let receiver = Arc::new(receiver);
         let shutdown_flag = Arc::new(AtomicBool::new(false));
 
@@ -154,7 +154,7 @@ impl SeqLocsThreadBuilder
             Arc<AtomicU32>,
             LocMutex,
             [Option<LocMutex>; 6],
-        )>(32);
+        )>(1024);
         let receiver = Arc::new(receiver);
         let shutdown_flag = Arc::new(AtomicBool::new(false));
 

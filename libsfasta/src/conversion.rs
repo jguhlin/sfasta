@@ -520,8 +520,6 @@ impl Converter
 
         let mut reader = parse_fastx_reader(in_buf).unwrap();
 
-        let backoff = Backoff::new();
-
         while let Some(x) = reader.next() {
             match x {
                 Ok(x) => {
