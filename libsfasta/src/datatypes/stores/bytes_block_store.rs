@@ -89,7 +89,7 @@ impl Default for BytesBlockStoreBuilder
             finalized: false,
             create_dict: true, // FOR NOW
             dict_data: Vec::new(),
-            dict_size: 128 * 1024,
+            dict_size: 256 * 1024,
             dict_samples: 128,
         }
     }

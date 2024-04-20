@@ -442,7 +442,7 @@ impl Converter
 
         // Start the output I/O...
         let mut output_worker = crate::io::worker::Worker::new(output_buffer)
-            .with_buffer_size(1024);
+            .with_buffer_size(2048);
         output_worker.start();
         let output_queue = output_worker.get_queue();
 
