@@ -40,7 +40,7 @@ where
     {
         let builder = Arc::new(Mutex::new(builder));
 
-        let (sender, receiver) = flume::bounded::<(LocMutex, T)>(1024);
+        let (sender, receiver) = flume::bounded::<(LocMutex, T)>(32);
         let receiver = Arc::new(receiver);
         let shutdown_flag = Arc::new(AtomicBool::new(false));
 
@@ -154,7 +154,7 @@ impl SeqLocsThreadBuilder
             Arc<AtomicU32>,
             LocMutex,
             [Option<LocMutex>; 6],
-        )>(1024);
+        )>(32);
         let receiver = Arc::new(receiver);
         let shutdown_flag = Arc::new(AtomicBool::new(false));
 
@@ -172,7 +172,7 @@ impl SeqLocsThreadBuilder
 
             let backoff = Backoff::new();
 
-            let mut buffer = VecDeque::with_capacity(1024);
+            let mut buffer = VecDeque::with_capacity(128);
 
             loop {
                 for (loc_storage, id_loc, locs) in receiver.drain() {
@@ -219,15 +219,12 @@ impl SeqLocsThreadBuilder
                     loc_storage.store(loc, Ordering::SeqCst);
                 }
 
-                if buffer.is_empty() {
+                while buffer.is_empty() {
                     if shutdown_flag.load(Ordering::SeqCst) {
                         return;
                     } else if buffer.is_empty() {
                         backoff.snooze();
                         if backoff.is_completed() {
-                            std::thread::sleep(
-                                std::time::Duration::from_millis(64),
-                            );
                             backoff.reset();
                         }
                     }
