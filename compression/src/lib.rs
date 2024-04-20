@@ -202,7 +202,7 @@ pub fn zstd_encoder(
     encoder
         .long_distance_matching(true)
         .expect("Unable to set long_distance_matching");
-    // encoder.window_log(31);
+    encoder.window_log(31).expect("Unable to set window_log");
     encoder
 }
 
