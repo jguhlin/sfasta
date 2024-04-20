@@ -5,6 +5,7 @@ use std::{
 
 use simdutf8::basic::from_utf8;
 
+use super::{Builder, LocMutex, Queue};
 use crate::datatypes::{BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc};
 use libcompression::*;
 
@@ -26,6 +27,19 @@ impl Default for StringBlockStoreBuilder
                     compression_dict: None,
                 }),
         }
+    }
+}
+
+impl Builder<Vec<u8>> for StringBlockStoreBuilder
+{
+    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
+    {
+        Ok(self.inner.add(input).expect("Failed to add string to block store"))
+    }
+
+    fn finalize(&mut self)
+    {
+        self.inner.finalize();
     }
 }
 
@@ -67,7 +81,7 @@ impl StringBlockStoreBuilder
         self
     }
 
-    pub fn add(&mut self, input: &[u8]) -> Vec<Loc>
+    pub fn add(&mut self, input: Vec<u8>) -> Vec<Loc>
     {
         self.inner.add(input).expect("Failed to add string to block store")
     }
@@ -146,7 +160,7 @@ mod tests
         let mut locs = Vec::new();
 
         for id in test_ids.iter() {
-            locs.push(store.add(id.as_bytes()));
+            locs.push(store.add(id.as_bytes().to_vec()));
         }
     }
 }

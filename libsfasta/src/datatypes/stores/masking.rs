@@ -6,6 +6,7 @@ use std::{
     sync::Arc,
 };
 
+use super::Builder;
 use crate::datatypes::{BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc};
 use libcompression::*;
 
@@ -14,6 +15,19 @@ use pulp::Arch;
 pub struct MaskingStoreBuilder
 {
     inner: BytesBlockStoreBuilder,
+}
+
+impl Builder<Vec<u8>> for MaskingStoreBuilder
+{
+    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
+    {
+        Ok(self.add(input))
+    }
+
+    fn finalize(&mut self)
+    {
+        self.inner.finalize();
+    }
 }
 
 impl Default for MaskingStoreBuilder
@@ -54,7 +68,7 @@ impl MaskingStoreBuilder
         self
     }
 
-    pub fn add_masking(&mut self, seq: &[u8]) -> Vec<Loc>
+    pub fn add(&mut self, seq: Vec<u8>) -> Vec<Loc>
     {
         // If none are lowercase, nope out here... Written in a way that allows for easy vectorization for SIMD
         let arch = Arch::new();
@@ -74,7 +88,7 @@ impl MaskingStoreBuilder
         // No benefit to using pulp here... (even with for loop)
         let masked: Vec<u8> = seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
 
-        self.inner.add(&masked).expect("Failed to add masking to block store")
+        self.inner.add(masked).expect("Failed to add masking to block store")
     }
 
     pub fn finalize(&mut self)
@@ -165,29 +179,29 @@ mod tests
 
         let seq = test_seqs[0].as_bytes();
         println!("Len: {:#?}", seq.len());
-        let loc = masking.add_masking(seq);
+        let loc = masking.add(seq.to_vec());
         println!("{loc:#?}");
 
         for _ in 0..1000 {
             (0..test_seqs.len()).for_each(|i| {
                 let seq = test_seqs[i].as_bytes();
-                masking.add_masking(seq);
+                masking.add(seq.to_vec());
             });
         }
 
         let seq = test_seqs[0].as_bytes();
-        let loc2 = masking.add_masking(seq);
+        let loc2 = masking.add(seq.to_vec());
         println!("{loc2:#?}");
 
         let seq = test_seqs[3].as_bytes();
-        let loc3 = masking.add_masking(seq);
+        let loc3 = masking.add(seq.to_vec());
 
         println!("{loc3:#?}");
 
         for _ in 0..1000 {
             (0..test_seqs.len()).for_each(|i| {
                 let seq = test_seqs[i].as_bytes();
-                masking.add_masking(seq);
+                masking.add(seq.to_vec());
             });
         }
     }

@@ -1,11 +1,16 @@
-use flume::{Receiver, Sender};
 use crossbeam::utils::Backoff;
+use flume::{Receiver, Sender};
 
 use super::*;
-use std::sync::{Arc, Condvar, Mutex, atomic::{AtomicBool, Ordering}};
-use std::thread::JoinHandle;
+use std::{
+    sync::{
+        atomic::{AtomicBool, Ordering},
+        Arc, Mutex,
+    },
+    thread::JoinHandle,
+};
 
-pub(crate) trait Builder<T>
+pub trait Builder<T>
 where
     T: Send + Sync,
 {
@@ -13,7 +18,7 @@ where
     fn finalize(&mut self);
 }
 
-pub(crate) struct ThreadBuilder<T>
+pub struct ThreadBuilder<T>
 where
     T: Send + Sync,
 {
@@ -23,10 +28,12 @@ where
     worker: Option<JoinHandle<()>>,
 }
 
-impl<T> ThreadBuilder<T> 
-where T: Send + Sync + 'static {
-    pub fn new(builder: impl Builder<T> + Send + Sync + 'static) -> Self {
-
+impl<T> ThreadBuilder<T>
+where
+    T: Send + Sync + 'static,
+{
+    pub fn new(builder: impl Builder<T> + Send + Sync + 'static) -> Self
+    {
         let builder = Arc::new(Mutex::new(builder));
 
         let (sender, receiver) = flume::bounded::<(LocMutex, T)>(32);
@@ -34,12 +41,9 @@ where T: Send + Sync + 'static {
         let shutdown_flag = Arc::new(AtomicBool::new(false));
 
         let receiver_worker = Arc::clone(&receiver);
-        let builder_worker = Arc::clone(&
-            builder);
+        let builder_worker = Arc::clone(&builder);
 
         let shutdown_flag_worker = Arc::clone(&shutdown_flag);
-
-
 
         let handle = std::thread::spawn(move || {
             let receiver = receiver_worker;
@@ -73,7 +77,6 @@ where T: Send + Sync + 'static {
                             std::thread::sleep(std::time::Duration::from_millis(128));
                             backoff.reset();
                         }
-
                     }
                 }
             }
@@ -87,44 +90,60 @@ where T: Send + Sync + 'static {
         }
     }
 
-    pub fn join(self) -> Result<(), std::boxed::Box<(dyn std::any::Any + Send + 'static)>> {
+    pub fn join(self) -> Result<(), std::boxed::Box<(dyn std::any::Any + Send + 'static)>>
+    {
         {
             self.shutdown.store(true, Ordering::SeqCst);
-            
         }
-        
+
         self.worker.unwrap().join()
     }
 
+    pub fn add(&self, data: T) -> Result<LocMutex, flume::SendError<(LocMutex, T)>>
+    {
+        let loc = Arc::new(Mutex::new((false, vec![])));
+        self.sender.send((Arc::clone(&loc), data))?;
+        Ok(loc)
+    }
 }
 
 #[cfg(test)]
-mod tests {
+mod tests
+{
     use super::*;
     use flume::RecvError;
-    use std::sync::atomic::{AtomicBool, Ordering};
-    use std::sync::Arc;
-    use std::thread::sleep;
-    use std::time::Duration;
+    use std::{
+        sync::{
+            atomic::{AtomicBool, Ordering},
+            Arc,
+        },
+        thread::sleep,
+        time::Duration,
+    };
 
-    struct TestBuilder {
+    struct TestBuilder
+    {
         data: Vec<u8>,
         finalized: AtomicBool,
     }
 
-    impl Builder<Vec<u8>> for TestBuilder {
-        fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str> {
+    impl Builder<Vec<u8>> for TestBuilder
+    {
+        fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
+        {
             self.data.extend(input);
             Ok(vec![])
         }
 
-        fn finalize(&mut self) {
+        fn finalize(&mut self)
+        {
             self.finalized.store(true, Ordering::SeqCst);
         }
     }
 
     #[test]
-    fn test_thread_builder() {
+    fn test_thread_builder()
+    {
         let builder = TestBuilder {
             data: vec![],
             finalized: AtomicBool::new(false),
@@ -175,6 +194,5 @@ mod tests {
         assert_eq!(loc.1, vec![]);
 
         thread_builder.join().expect("Failed to join thread");
-
     }
 }

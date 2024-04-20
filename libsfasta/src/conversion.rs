@@ -18,7 +18,13 @@ use std::{
     },
 };
 
-use crate::{datatypes::*, formats::*};
+use crate::{
+    datatypes::{
+        stores::threads::{Builder, ThreadBuilder},
+        *,
+    },
+    formats::*,
+};
 use libcompression::*;
 use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
 
@@ -424,23 +430,37 @@ impl Converter
 
         let compression_workers_thread = Arc::clone(&compression_workers);
 
+        let mut seqlocs = SeqLocsStoreBuilder::default();
+
         let mut headers = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
-        let mut seqlocs = SeqLocsStoreBuilder::default();
+        let mut headers = ThreadBuilder::new(headers);
 
         let mut ids = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
+        let mut ids = ThreadBuilder::new(ids);
+
         let mut masking = MaskingStoreBuilder::default()
             .with_compression_worker(Arc::clone(&compression_workers_thread))
             .with_block_size(block_size as usize);
 
+        let mut masking = ThreadBuilder::new(masking);
+
         let mut sequences = BytesBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
+
+        let mut sequences = ThreadBuilder::new(sequences);
+
+        let mut scores = BytesBlockStoreBuilder::default()
+            .with_block_size(block_size as usize)
+            .with_compression_worker(Arc::clone(&compression_workers_thread));
+
+        let mut scores = ThreadBuilder::new(scores);
 
         let mut reader = parse_fastx_reader(in_buf).unwrap();
 
@@ -453,20 +473,28 @@ impl Converter
                     let seqid = id.next().unwrap();
                     let seqheader = id.next();
 
-                    let masking_locs = masking.add_masking(&seq);
+                    // Scores
+                    let score_locs = if let Some(quals) = x.qual() {
+                        let loc = scores.add(quals.to_vec());
+                        Some(loc.unwrap())
+                    } else {
+                        None
+                    };
+
+                    let masking_locs = masking.add(seq.to_vec());
 
                     // Capitalize and add to sequences
                     seq.to_mut().make_ascii_uppercase();
-                    let loc = sequences.add(&mut seq);
+                    let loc = sequences.add(seq.to_vec());
                     let sequence_locs = loc;
 
                     let myid = std::sync::Arc::new(seqid.to_vec());
-                    let idloc = ids.add(&(*myid));
+                    let idloc = ids.add(*myid).unwrap();
 
                     let headers_loc = if let Some(x) = seqheader {
-                        headers.add(&x)
+                        Some(headers.add(x.to_vec()).unwrap())
                     } else {
-                        vec![]
+                        None
                     };
 
                     let mut seqloc = SeqLoc::new();
@@ -605,14 +633,6 @@ impl Converter
 /// block_index_pos
 /// in_buffer
 /// out_buffer
-
-#[derive(Debug)]
-enum Work
-{
-    FastaPayload((Vec<u8>, Vec<u8>)),
-    FastqPayload((Vec<u8>, Vec<u8>)), // TODO
-    Shutdown,
-}
 
 #[cfg(test)]
 mod tests

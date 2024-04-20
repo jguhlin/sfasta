@@ -11,7 +11,7 @@ use std::{
 use crossbeam::utils::Backoff;
 use flume::{Receiver, Sender};
 
-use super::{LocMutex, Queue};
+use super::{Builder, LocMutex, Queue};
 use crate::datatypes::Loc;
 use libcompression::*;
 use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
@@ -54,6 +54,20 @@ pub struct BytesBlockStoreBuilder
 
 unsafe impl Send for BytesBlockStoreBuilder {}
 unsafe impl Sync for BytesBlockStoreBuilder {}
+
+// The generic here is Vec<u8>
+impl Builder<Vec<u8>> for BytesBlockStoreBuilder
+{
+    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
+    {
+        self.add(input)
+    }
+
+    fn finalize(&mut self)
+    {
+        self.finalize();
+    }
+}
 
 impl Default for BytesBlockStoreBuilder
 {
@@ -163,7 +177,7 @@ impl BytesBlockStoreBuilder
 
     /// Add a sequence of bytes to the block store
     /// Returns a vector of Loc's that point to the location of the bytes in the block store (can span multiple blocks)
-    pub fn add(&mut self, input: &[u8]) -> Result<Vec<Loc>, &str>
+    pub fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
     {
         if self.finalized {
             panic!("Cannot add to finalized block store.");
@@ -525,7 +539,7 @@ mod tests
             ..Default::default()
         };
 
-        let loc = store.add(b"Medtr5g026775.t1").unwrap();
+        let loc = store.add(b"Medtr5g026775.t1".to_vec()).unwrap();
         println!("{:?}", loc);
         assert!(
             loc == vec![
@@ -558,7 +572,7 @@ mod tests
         let mut locs = Vec::new();
 
         for id in test_ids.iter() {
-            locs.push(store.add(id.as_bytes()).unwrap());
+            locs.push(store.add(id.as_bytes().to_vec()).unwrap());
         }
     }
 }
