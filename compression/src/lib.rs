@@ -9,10 +9,6 @@ use std::{
     time::Duration,
 };
 
-pub mod dict;
-
-pub use dict::*;
-
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
 use std::{cell::RefCell, rc::Rc};
@@ -455,6 +451,20 @@ fn compression_worker(
                                         as i32,
                                 )
                                 .unwrap();
+
+                            if work.compression_config.compression_dict.is_some()
+                            {
+                                zstd_compressor
+                                    .set_dictionary(
+                                        work.compression_config.compression_level
+                                            as i32,
+                                        work.compression_config.compression_dict
+                                            .as_ref()
+                                            .unwrap()
+                                            .as_ref(),
+                                    )
+                                    .unwrap();
+                            }
                             // todo dict
                             zstd_compressor
                                 .compress(work.input.as_slice())
