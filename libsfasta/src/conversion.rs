@@ -438,13 +438,13 @@ impl Converter
 
         // Start the output I/O...
         let mut output_worker = crate::io::worker::Worker::new(output_buffer)
-            .with_buffer_size(2048);
+            .with_buffer_size(threads as usize * 2);
         output_worker.start();
         let output_queue = output_worker.get_queue();
 
         // Start the compression workers
         let mut compression_workers = CompressionWorker::new()
-            .with_buffer_size(1)
+            .with_buffer_size(threads as usize)
             .with_threads(threads as u16)
             .with_output_queue(Arc::clone(&output_queue));
 
