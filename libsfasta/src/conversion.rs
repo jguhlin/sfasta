@@ -3,31 +3,20 @@
 //! Conversion functions for FASTA and FASTQ files. Multithreaded by
 //! default.
 
-use bumpalo::collections::vec;
 // Easy, high-performance conversion functions
-use crossbeam::{queue::ArrayQueue, thread, utils::Backoff};
-use lz4_flex::block;
+use crossbeam::{thread, utils::Backoff};
 use needletail::parse_fastx_reader;
-use xxhash_rust::xxh3::{self, xxh3_64};
+use xxhash_rust::xxh3::xxh3_64;
 
 use std::{
-    io::{BufReader, Read, Seek, SeekFrom, Write},
+    io::{Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
-    sync::{
-        atomic::{AtomicBool, AtomicU32, Ordering},
-        Arc, Mutex, RwLock,
-    },
+    sync::{Arc, Mutex},
 };
 
-use crate::{
-    datatypes::{
-        stores::threads::{Builder, ThreadBuilder},
-        *,
-    },
-    formats::*,
-};
+use crate::{datatypes::*, formats::*};
 use libcompression::*;
-use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
+use libfractaltree::FractalTreeDisk;
 
 /// Main conversion struct
 ///
@@ -498,7 +487,7 @@ impl Converter
             .with_block_size(block_size as usize)
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
-        //let ids = ThreadBuilder::new(ids);
+        // let ids = ThreadBuilder::new(ids);
 
         let mut masking = MaskingStoreBuilder::default()
             .with_compression_worker(Arc::clone(&compression_workers_thread))
@@ -565,8 +554,7 @@ impl Converter
                         &vec![],
                     );
 
-                    let loc = seqlocs
-                        .add_to_index(seqloc);
+                    let loc = seqlocs.add_to_index(seqloc);
 
                     ids_string.push(Arc::clone(&myid));
                     ids_to_locs.push((myid, loc));
@@ -579,12 +567,11 @@ impl Converter
 
         log::info!("Finished reading sequences");
 
-        /*
-        let mut headers = headers.join().unwrap();
-        let mut ids = ids.join().unwrap();
-        let mut masking = masking.join().unwrap();
-        let mut sequences = sequences.join().unwrap();
-        let mut scores = scores.join().unwrap(); */
+        // let mut headers = headers.join().unwrap();
+        // let mut ids = ids.join().unwrap();
+        // let mut masking = masking.join().unwrap();
+        // let mut sequences = sequences.join().unwrap();
+        // let mut scores = scores.join().unwrap();
 
         // Wait for all the workers to finish...
         headers.finalize();
@@ -592,7 +579,6 @@ impl Converter
         masking.finalize();
         sequences.finalize();
         scores.finalize();
-
 
         let backoff = Backoff::new();
         while compression_workers.len() > 0 || output_worker.len() > 0 {
@@ -614,7 +600,7 @@ impl Converter
 
         let mut headers = match headers.write_block_locations(&mut *out_buffer)
         {
-            Ok(x) => Some(headers),
+            Ok(_) => Some(headers),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
                 _ => panic!("Error writing headers: {:?}", x),
@@ -622,7 +608,7 @@ impl Converter
         };
 
         let mut ids = match ids.write_block_locations(&mut *out_buffer) {
-            Ok(x) => Some(ids),
+            Ok(_) => Some(ids),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
                 _ => panic!("Error writing ids: {:?}", x),
@@ -631,7 +617,7 @@ impl Converter
 
         let mut masking = match masking.write_block_locations(&mut *out_buffer)
         {
-            Ok(x) => Some(masking),
+            Ok(_) => Some(masking),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
                 _ => panic!("Error writing masking: {:?}", x),
@@ -640,7 +626,7 @@ impl Converter
 
         let mut sequences =
             match sequences.write_block_locations(&mut *out_buffer) {
-                Ok(x) => Some(sequences),
+                Ok(_) => Some(sequences),
                 Err(x) => match x {
                     BlockStoreError::Empty => None,
                     _ => panic!("Error writing sequences: {:?}", x),
@@ -648,7 +634,7 @@ impl Converter
             };
 
         let mut scores = match scores.write_block_locations(&mut *out_buffer) {
-            Ok(x) => Some(scores),
+            Ok(_) => Some(scores),
             Err(x) => match x {
                 BlockStoreError::Empty => None,
                 _ => panic!("Error writing scores: {:?}", x),
@@ -750,7 +736,7 @@ mod tests
         let out_buf = Box::new(Cursor::new(Vec::new()));
 
         println!("test_data/test_convert.fasta");
-        let mut in_buf = BufReader::new(
+        let mut in_buf = std::io::BufReader::new(
             File::open("test_data/test_convert.fasta")
                 .expect("Unable to open testing file"),
         );
