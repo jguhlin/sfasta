@@ -89,7 +89,7 @@ impl Default for BytesBlockStoreBuilder
             finalized: false,
             create_dict: true, // FOR NOW todo configurable from sfa
             dict_data: Vec::new(),
-            dict_size: 256 * 1024, // todo configurable from sfa
+            dict_size: 64 * 1024, // todo configurable from sfa
             dict_samples: 128, // todo configurable from sfa
         }
     }
