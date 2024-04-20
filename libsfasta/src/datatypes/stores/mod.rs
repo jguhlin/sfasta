@@ -1,6 +1,6 @@
 use super::Loc;
 use flume::{Receiver, Sender};
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 pub mod bytes_block_store;
 pub mod masking;
@@ -14,4 +14,4 @@ pub use threads::*;
 
 type Queue = (Sender<(LocMutex, Vec<u8>)>, Receiver<(LocMutex, Vec<u8>)>);
 
-pub(crate) type LocMutex = Arc<Mutex<(bool, Vec<Loc>)>>;
+pub(crate) type LocMutex = Arc<(AtomicBool, Mutex<Vec<Loc>>)>;

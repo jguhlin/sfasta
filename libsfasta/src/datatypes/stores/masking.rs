@@ -87,7 +87,7 @@ impl MaskingStoreBuilder
 
         // No benefit to using pulp here... (even with for loop)
         let masked: Vec<u8> = seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
-
+        
         self.inner.add(masked).expect("Failed to add masking to block store")
     }
 

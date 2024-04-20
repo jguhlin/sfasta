@@ -465,10 +465,12 @@ impl Converter
 
         let mut reader = parse_fastx_reader(in_buf).unwrap();
 
+        let backoff = Backoff::new();
+
         while let Some(x) = reader.next() {
             match x {
                 Ok(x) => {
-                    let mut seq = x.seq();
+                    let seq = x.seq();
                     let mut id = x.id().split(|x| *x == b' ');
                     // Split at first space
                     let seqid = id.next().unwrap();
@@ -512,87 +514,63 @@ impl Converter
                     // headers_loc
                     // score_locs
 
+                    backoff.reset();
+
+                    log::debug!("Waiting on Masking Loc");
                     loop {
-                        match masking_locs.try_lock() {
-                            Ok(x) => {
-                                if x.0 == true {
-                                    break
-                                } else {
-                                    std::thread::sleep(std::time::Duration::from_millis(32));
-                                }
-                            }
-                            Err(_) => {
-                                std::thread::sleep(std::time::Duration::from_millis(32));
-                            }
-                        }
+                        if masking_locs.0.load(Ordering::SeqCst) {
+                            break;
+                        } else {
+                            backoff.snooze()
+                        }                        
                     }
 
+                    log::debug!("Waiting on Sequence Loc");
                     loop {
-                        match sequence_locs.try_lock() {
-                            Ok(x) => {
-                                if x.0 == true {
-                                    break
-                                } else {
-                                    std::thread::sleep(std::time::Duration::from_millis(32));
-                                }
-                            }
-                            Err(_) => {
-                                std::thread::sleep(std::time::Duration::from_millis(32));
-                            }
-                        }
+                        if sequence_locs.0.load(Ordering::SeqCst) {
+                            break;
+                        } else {
+                            backoff.snooze()
+                        }                        
+                    }
+                    
+
+                    log::debug!("Waiting on ID Loc");
+                    loop {
+                        if id_locs.0.load(Ordering::SeqCst) {
+                            break;
+                        } else {
+                            backoff.snooze()
+                        }                        
                     }
 
-                    loop {
-                        match id_locs.try_lock() {
-                            Ok(x) => {
-                                if x.0 == true {
-                                    break
-                                } else {
-                                    std::thread::sleep(std::time::Duration::from_millis(32));
-                                }
-                            }
-                            Err(_) => {
-                                std::thread::sleep(std::time::Duration::from_millis(32));
-                            }
-                        }
-                    }
-
+                    log::debug!("Waiting on Headers Loc");
                     let headers_locs = 
                         if let Some(x) = headers_loc {
                             loop {
-                                match x.try_lock() {
-                                    Ok(x) => {
-                                        if x.0 == true {
-                                            break
-                                        } else {
-                                            std::thread::sleep(std::time::Duration::from_millis(32));
-                                        }
-                                    }
-                                    Err(_) => {
-                                        std::thread::sleep(std::time::Duration::from_millis(32));
-                                    }
+                                if x.0.load(Ordering::SeqCst) {
+                                    break
+                                } else {
+                                    backoff.snooze()
                                 }
+                                
                             }
-                            Arc::into_inner(x).unwrap().into_inner().unwrap().1
+                            Arc::into_inner(x).expect("Unable to pull out of arc").1.into_inner().expect("Unable to pull out of mutex")
                         } else {
                             vec![]
                         };
 
+                    log::debug!("Waiting on Score Loc");
                     let score_locs = 
                         if let Some(x) = score_locs {
                             loop {
-                                match x.try_lock() {
-                                    Ok(x) => {
-                                        if x.0 == true {
-                                            break
-                                        }
-                                    }
-                                    Err(_) => {
-                                        std::thread::sleep(std::time::Duration::from_millis(32));
-                                    }
+                                if x.0.load(Ordering::SeqCst) {
+                                    break
+                                } else {
+                                    backoff.snooze()
                                 }
                             }
-                            Arc::into_inner(x).unwrap().into_inner().unwrap().1
+                            Arc::into_inner(x).unwrap().1.into_inner().unwrap()
                         } else {
                             vec![]
                         };
@@ -601,10 +579,10 @@ impl Converter
 
 
                     seqloc.add_locs(
-                        &sequence_locs.lock().unwrap().1,
-                        &masking_locs.lock().unwrap().1,
+                        &sequence_locs.1.lock().unwrap(),
+                        &masking_locs.1.lock().unwrap(),
                         &score_locs,
-                        &id_locs.lock().unwrap().1,
+                        &id_locs.1.lock().unwrap(),
                         &headers_locs,
                         &[],
                         &[],
@@ -627,7 +605,6 @@ impl Converter
         let mut masking = masking.join().unwrap();
         let mut sequences = sequences.join().unwrap();
         let mut scores = scores.join().unwrap();
-
 
         let backoff = Backoff::new();
         while compression_workers.len() > 0 || output_worker.len() > 0 {

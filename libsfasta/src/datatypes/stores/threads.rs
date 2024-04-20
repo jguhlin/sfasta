@@ -61,9 +61,8 @@ where
                 for (store_loc, data) in receiver.drain() {
                     let loc = builder.add(data).unwrap();
 
-                    let mut store_loc = store_loc.lock().unwrap();
-                    store_loc.1 = loc;
-                    store_loc.0 = true;
+                    *store_loc.1.lock().unwrap() = loc;
+                    store_loc.0.store(true, Ordering::SeqCst);
                 }
 
                 if receiver.is_empty() {
@@ -105,7 +104,7 @@ where
 
     pub fn add(&self, data: T) -> Result<LocMutex, flume::SendError<(LocMutex, T)>>
     {
-        let loc = Arc::new(Mutex::new((false, vec![])));
+        let loc = Arc::new((AtomicBool::new(false), Mutex::new(vec![])));
         self.sender.send((Arc::clone(&loc), data))?;
         Ok(loc)
     }
@@ -157,46 +156,17 @@ mod tests
 
         println!("Thread builder created");
 
-        let data = vec![1, 2, 3, 4, 5];
-        let loc = Arc::new(Mutex::new((false, vec![])));
-        thread_builder.sender.send((Arc::clone(&loc), data)).unwrap();
+        let loc = thread_builder.add(vec![1, 2, 3]).unwrap();
 
-        sleep(Duration::from_millis(100));
+        assert!(!loc.0.load(Ordering::SeqCst));
 
-        let loc_return = loc.lock().unwrap();
-        assert_eq!(loc_return.0, true);
-        assert_eq!(loc_return.1, vec![]);
+        sleep(Duration::from_millis(128));
 
-        let data = vec![6, 7, 8, 9, 10];
-        let loc = Arc::new(Mutex::new((false, vec![])));
-        thread_builder.sender.send((Arc::clone(&loc), data)).unwrap();
+        assert!(loc.0.load(Ordering::SeqCst));
 
-        sleep(Duration::from_millis(100));
+        let builder = thread_builder.join().unwrap();
 
-        let loc_return = loc.lock().unwrap();
-        assert_eq!(loc_return.0, true);
-        assert_eq!(loc_return.1, vec![]);
+        assert!(builder.finalized.load(Ordering::SeqCst));
 
-        let data = vec![11, 12, 13, 14, 15];
-        let loc = Arc::new(Mutex::new((false, vec![])));
-        thread_builder.sender.send((Arc::clone(&loc), data)).unwrap();
-
-        sleep(Duration::from_millis(100));
-
-        let loc_return = loc.lock().unwrap();
-        assert_eq!(loc_return.0, true);
-        assert_eq!(loc_return.1, vec![]);
-
-        let data = vec![16, 17, 18, 19, 20];
-        let loc = Arc::new(Mutex::new((false, vec![])));
-        thread_builder.sender.send((Arc::clone(&loc), data)).unwrap();
-
-        sleep(Duration::from_millis(100));
-
-        let loc = loc.lock().unwrap();
-        assert_eq!(loc.0, true);
-        assert_eq!(loc.1, vec![]);
-
-        thread_builder.join().expect("Failed to join thread");
     }
 }
