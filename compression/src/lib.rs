@@ -22,8 +22,8 @@ thread_local! {
 
 use crossbeam::{queue::ArrayQueue, utils::Backoff};
 
-#[cfg(not(target_arch = "wasm32"))]
-use liblzma::read::{XzDecoder, XzEncoder};
+// #[cfg(not(target_arch = "wasm32"))]
+// use liblzma::read::{XzDecoder, XzEncoder};
 
 #[derive(Debug, Clone)]
 pub struct OutputBlock
@@ -526,7 +526,7 @@ fn compression_worker(
                         output
                     }
                     CompressionType::NONE => work.input,
-                    #[cfg(not(target_arch = "wasm32"))]
+                    /*#[cfg(not(target_arch = "wasm32"))]
                     CompressionType::XZ => {
                         let mut output = Vec::with_capacity(work.input.len());
                         let mut compressor = XzEncoder::new(
@@ -537,7 +537,7 @@ fn compression_worker(
                             .read_to_end(&mut output)
                             .expect("Unable to compress with XZ");
                         output
-                    }
+                    } */
                     #[cfg(target_arch = "wasm32")]
                     CompressionType::XZ => {
                         panic!("XZ compression is not supported on wasm32");
