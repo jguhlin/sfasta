@@ -167,21 +167,19 @@ impl BytesBlockStoreBuilder
     }
 
     pub fn create_dict(&mut self) {
-        let sum: usize = self.dict_data.iter().map(|x| x.len()).sum();
-        if sum >= (12 * self.dict_size) as usize {
-            let dict = zstd::dict::from_samples(&self.dict_data, self.dict_size as usize);
-            let dict = match dict {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    log::error!("Error creating dictionary: {}", e);
-                    None
-                }
-            };
-            log::info!("Dict Size: {}", dict.as_ref().unwrap().len());
-            let mut cc = (*self.compression_config).clone();
-            cc.compression_dict = Some(Arc::new(dict.unwrap()));
-            self.compression_config = Arc::new(cc);
-        }
+        let dict = zstd::dict::from_samples(&self.dict_data, self.dict_size as usize);
+        match dict {
+            Ok(v) => {
+                log::info!("Dict Size: {}", v.len());
+                let mut cc = (*self.compression_config).clone();
+                cc.compression_dict = Some(Arc::new(v));
+                self.compression_config = Arc::new(cc);
+        
+            },
+            Err(e) => {
+                log::error!("Error creating dictionary: {}", e);
+            }
+        };
 
         self.create_dict = false;
 
