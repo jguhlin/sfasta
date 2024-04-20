@@ -91,6 +91,10 @@ impl CompressionConfig
             CompressionType::ZSTD => {
                 // Use thread local
                 ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
+                    *zstd_compressor = zstd_encoder(
+                        9,
+                        &None
+                    );
                     zstd_compressor.compress(bytes)
                 })
             }
