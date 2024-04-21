@@ -583,7 +583,7 @@ fn convert(
     // let mut in_buf =
     // libsfasta::utils::CrossbeamReader::from_channel(r);
     let mut in_buf = BufReader::new(buf);
-    let out_fh = Box::new(std::io::BufWriter::new(output));
+    let out_fh = Box::new(std::io::BufWriter::with_capacity(1024 * 1024, output));
 
     let _out_fh = converter.convert(&mut in_buf, out_fh);
     // log::info!("Joining IO thread");
