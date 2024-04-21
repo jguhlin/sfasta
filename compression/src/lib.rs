@@ -9,6 +9,8 @@ use std::{
     time::Duration,
 };
 
+use lz4_flex::block::{compress_prepend_size, decompress_size_prepended};
+
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
 use std::{cell::RefCell, rc::Rc};
@@ -94,7 +96,7 @@ impl CompressionConfig
                 // Use thread local
                 ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
                     *zstd_compressor = zstd_encoder(
-                        6,
+                        self.compression_level as i32,
                         &None
                     );
                     zstd_compressor.compress(bytes)
@@ -103,6 +105,9 @@ impl CompressionConfig
             #[cfg(target_arch = "wasm32")]
             CompressionType::ZSTD => {
                 unimplemented!("ZSTD encoding is not supported on wasm32");
+            }
+            CompressionType::LZ4 => {
+                Ok(compress_prepend_size(&bytes))
             }
             CompressionType::NONE => {
                 log::debug!("Compress called for none, which involes copying bytes. Prefer not to use it!");
@@ -127,6 +132,9 @@ impl CompressionConfig
                 ZSTD_DECOMPRESSOR.with_borrow_mut(|zstd_decompressor| {
                     zstd_decompressor.decompress(bytes, MAX_DECOMPRESS_SIZE)
                 })
+            }
+            CompressionType::LZ4 => {
+                Ok(decompress_size_prepended(bytes).unwrap())
             }
             #[cfg(target_arch = "wasm32")]
             CompressionType::ZSTD => {

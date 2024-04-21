@@ -435,8 +435,8 @@ impl SeqLocsStoreBuilder
 
         let mut tree: FractalTreeDisk<u32, SeqLoc> = self.tree.into();
         tree.set_compression(CompressionConfig {
-            compression_type: CompressionType::ZSTD,
-            compression_level: -9,
+            compression_type: CompressionType::LZ4,
+            compression_level: 3, // Irrelevant for LZ4
             compression_dict: None,
         });
         tree.write_to_buffer(&mut out_buf)

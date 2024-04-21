@@ -423,8 +423,8 @@ impl BytesBlockStoreBuilder
         let mut block_locations_tree: FractalTreeDisk<_, _> =
             block_locations_tree.into();
         block_locations_tree.set_compression(CompressionConfig {
-            compression_type: CompressionType::ZSTD,
-            compression_level: -9,
+            compression_type: CompressionType::LZ4,
+            compression_level: -6, // Irrelevant for LZ4
             compression_dict: None,
         });
         let block_locations_pos =
