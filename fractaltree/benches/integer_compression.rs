@@ -263,409 +263,185 @@ pub fn bench_delta_decode(c: &mut Criterion)
     group.finish();
 }
 
-pub fn bench_delta_encode(c: &mut Criterion)
+pub fn bench_delta_encode_u32(c: &mut Criterion)
 {
     let values1024: Vec<u32> = (0..1024_u32).collect();
 
-    let mut group: criterion::BenchmarkGroup<
-        '_,
-        criterion::measurement::WallTime,
-    > = c.benchmark_group("Delta Encode - Inclusive Range - 1024 elements");
-    group.throughput(Throughput::Bytes(
-        values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
-    ));
+    let values1mil: Vec<u32> = (0..1024 * 1024_u32).collect();
 
-    group.bench_with_input(
-        BenchmarkId::new("Stream VByte Crate", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut encoded_data = Vec::new();
-                // make some space to encode into
-                encoded_data.resize(5 * values.len(), 0x0);
-
-                // use Scalar implementation that works on any hardware
-                encode::<Scalar>(&values, &mut encoded_data);
-                encoded_data
-            })
-        },
-    );
-
-    let config = bincode::config::standard().with_variable_int_encoding();
-
-    group.bench_with_input(
-        BenchmarkId::new("Plain Bincode", 1024),
-        &values1024,
-        |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
-    );
-
-    let pco_config = pco::ChunkConfig::default()
-        .with_compression_level(8)
-        .with_delta_encoding_order(Some(1));
-
-    group.bench_with_input(
-        BenchmarkId::new("PCO Simpler Compress", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| match simple_compress(&values, &pco_config) {
-                Ok(_) => values,
-                Err(_) => panic!("Failed to compress"),
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("Pulp Arch Encode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut values = values.clone();
-                pulp_delta_encode(&mut values);
-                values
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("Vanilla Encode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut values = values.clone();
-                vanilla_delta_encode(&mut values);
-                values
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("Bitpacking Encode 8x", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                for chunk in values.chunks(bitpacking::BitPacker8x::BLOCK_LEN) {
-                    bitpacking8x_delta_encode(chunk);
-                }
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("Bitpacking Encode 4x", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                for chunk in values.chunks(bitpacking::BitPacker4x::BLOCK_LEN) {
-                    bitpacking4x_delta_encode(chunk);
-                }
-            })
-        },
-    );
-
-    group.finish();
-
-    let values1024: Vec<u32> = (0..1024 * 1024_u32).collect();
-
-    let mut group: criterion::BenchmarkGroup<
-        '_,
-        criterion::measurement::WallTime,
-    > = c
-        .benchmark_group("Delta Encode - Inclusive Range - 1024*1024 elements");
-    group.throughput(Throughput::Bytes(
-        values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
-    ));
-
-    group.bench_with_input(
-        BenchmarkId::new("Stream VByte Crate", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut encoded_data = Vec::new();
-                // make some space to encode into
-                encoded_data.resize(5 * values.len(), 0x0);
-
-                // use Scalar implementation that works on any hardware
-                encode::<Scalar>(&values, &mut encoded_data);
-                encoded_data
-            })
-        },
-    );
-
-    let config = bincode::config::standard().with_variable_int_encoding();
-
-    group.bench_with_input(
-        BenchmarkId::new("Plain Bincode", 1024),
-        &values1024,
-        |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("PCO Simpler Compress", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| match simple_compress(&values, &pco_config) {
-                Ok(_) => values,
-                Err(_) => panic!("Failed to compress"),
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("Pulp Arch Encode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut values = values.clone();
-                pulp_delta_encode(&mut values);
-                values
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("Vanilla Encode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut values = values.clone();
-                vanilla_delta_encode(&mut values);
-                values
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("Bitpacking Encode 8x", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                for chunk in values.chunks(bitpacking::BitPacker8x::BLOCK_LEN) {
-                    bitpacking8x_delta_encode(chunk);
-                }
-            })
-        },
-    );
-
-    group.bench_with_input(
-        BenchmarkId::new("Bitpacking Encode 4x", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                for chunk in values.chunks(bitpacking::BitPacker4x::BLOCK_LEN) {
-                    bitpacking4x_delta_encode(chunk);
-                }
-            })
-        },
-    );
-
-    group.finish();
-
-    let mut values1024: Vec<u32> = (0..1024_u32)
+    let mut values1024xxh3: Vec<u32> = (0..1024_u32)
         .map(|x| xxh3_64(&x.to_le_bytes()) as u32)
         .collect();
-    values1024.sort_unstable();
+    values1024xxh3.sort_unstable();
 
-    let mut group: criterion::BenchmarkGroup<
-        '_,
-        criterion::measurement::WallTime,
-    > = c.benchmark_group(
-        "Delta Encode - Xxh3 Hash (Closer to random) - 1024 elements",
-    );
-    group.throughput(Throughput::Bytes(
-        values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
-    ));
+    let mut values1milxxh3: Vec<u32> = (0..1024 * 1024_u32)
+        .map(|x| xxh3_64(&x.to_le_bytes()) as u32)
+        .collect();
+    values1milxxh3.sort_unstable();
 
-    group.bench_with_input(
-        BenchmarkId::new("Stream VByte Crate", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut encoded_data = Vec::new();
-                // make some space to encode into
-                encoded_data.resize(5 * values.len(), 0x0);
+    let mut group = c.benchmark_group("Delta Encode");
+    
+    for input in [("1024 Elem Inclusive", values1024), ("1mil Elem Inclusive", values1mil), ("1024 Elem Xxh3", values1024xxh3), ("1mil Elem Xxh3", values1milxxh3)] {
 
-                // use Scalar implementation that works on any hardware
-                encode::<Scalar>(&values, &mut encoded_data);
-                encoded_data
-            })
-        },
-    );
+        let data = input.1;
 
-    let config = bincode::config::standard().with_variable_int_encoding();
+        group.throughput(Throughput::Bytes(
+            data.len() as u64 * std::mem::size_of::<u32>() as u64,
+        ));
 
-    group.bench_with_input(
-        BenchmarkId::new("Plain Bincode", 1024),
-        &values1024,
-        |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
-    );
+        group.bench_with_input(
+            BenchmarkId::new("Stream VByte Crate", input.0),
+            &data,
+            |b, values| {
+                b.iter(|| {
+                    let mut encoded_data = Vec::new();
+                    // make some space to encode into
+                    encoded_data.resize(5 * values.len(), 0x0);
 
-    group.bench_with_input(
-        BenchmarkId::new("PCO Simpler Compress", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| match simple_compress(&values, &pco_config) {
-                Ok(_) => values,
-                Err(_) => panic!("Failed to compress"),
-            })
-        },
-    );
+                    // use Scalar implementation that works on any hardware
+                    encode::<Scalar>(&values, &mut encoded_data);
+                    encoded_data
+                })
+            },
+        );
 
-    group.bench_with_input(
-        BenchmarkId::new("Pulp Arch Encode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut values = values.clone();
-                pulp_delta_encode(&mut values);
-                values
-            })
-        },
-    );
+        let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(
-        BenchmarkId::new("Vanilla Encode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut values = values.clone();
-                vanilla_delta_encode(&mut values);
-                values
-            })
-        },
-    );
+        group.bench_with_input(
+            BenchmarkId::new("Plain Bincode", input.0),
+            &data,
+            |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
+        );
 
-    group.bench_with_input(
-        BenchmarkId::new("Bitpacking Encode 8x", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                for chunk in values.chunks(bitpacking::BitPacker8x::BLOCK_LEN) {
-                    bitpacking8x_delta_encode(chunk);
-                }
-                values
-            })
-        },
-    );
+        let pco_config = pco::ChunkConfig::default()
+            .with_compression_level(8)
+            .with_delta_encoding_order(Some(1));
 
-    group.bench_with_input(
-        BenchmarkId::new("Bitpacking Encode 4x", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                for chunk in values.chunks(bitpacking::BitPacker4x::BLOCK_LEN) {
-                    bitpacking4x_delta_encode(chunk);
-                }
-                values
-            })
-        },
-    );
+        group.bench_with_input(
+            BenchmarkId::new("PCO Simpler Compress", input.0),
+            &data,
+            |b, values| {
+                b.iter(|| match simple_compress(&values, &pco_config) {
+                    Ok(_) => values,
+                    Err(_) => panic!("Failed to compress"),
+                })
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Pulp Arch Encode", input.0),
+            &data,
+            |b, values| {
+                b.iter(|| {
+                    let mut values = values.clone();
+                    pulp_delta_encode(&mut values);
+                    values
+                })
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Vanilla Encode", input.0),
+            &data,
+            |b, values| {
+                b.iter(|| {
+                    let mut values = values.clone();
+                    vanilla_delta_encode(&mut values);
+                    values
+                })
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Bitpacking Encode 8x", input.0),
+            &data,
+            |b, values| {
+                b.iter(|| {
+                    for chunk in values.chunks(bitpacking::BitPacker8x::BLOCK_LEN) {
+                        bitpacking8x_delta_encode(chunk);
+                    }
+                })
+            },
+        );
+
+        group.bench_with_input(
+            BenchmarkId::new("Bitpacking Encode 4x", input.0),
+            &data,
+            |b, values| {
+                b.iter(|| {
+                    for chunk in values.chunks(bitpacking::BitPacker4x::BLOCK_LEN) {
+                        bitpacking4x_delta_encode(chunk);
+                    }
+                })
+            },
+        );
+    }
 
     group.finish();
 
-    let mut values1024: Vec<u32> = (0..1024 * 1024_u32)
-        .map(|x| xxh3_64(&x.to_le_bytes()) as u32)
-        .collect();
-    values1024.sort_unstable();
 
-    let mut group: criterion::BenchmarkGroup<
-        '_,
-        criterion::measurement::WallTime,
-    > = c.benchmark_group(
-        "Delta Encode - Xxh3 Hash (Closer to random) - 1024*1024 elements",
-    );
-    group.throughput(Throughput::Bytes(
-        values1024.len() as u64 * std::mem::size_of::<u32>() as u64,
-    ));
+}
 
-    group.bench_with_input(
-        BenchmarkId::new("Stream VByte Crate", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut encoded_data = Vec::new();
-                // make some space to encode into
-                encoded_data.resize(5 * values.len(), 0x0);
+pub fn bench_delta_encode_u8(c: &mut Criterion)
+{
+    let fastq_illumina_scores = include_bytes!("data/fastq_scores_illumina.txt").to_vec();
+    let fastq_illumina_scores_1024 = fastq_illumina_scores[..1024].to_vec();
+    let fastq_illumina_scores_2048 = fastq_illumina_scores[..2048].to_vec();
 
-                // use Scalar implementation that works on any hardware
-                encode::<Scalar>(&values, &mut encoded_data);
-                encoded_data
-            })
-        },
-    );
+    let mut group = c.benchmark_group("Delta Encode");
+    
+    for input in [("FASTQ Quality Scores Illumina", fastq_illumina_scores), ("FASTQ Quality Scores Illumina 1024", fastq_illumina_scores_1024), ("FASTQ Quality Scores Illumina 2048", fastq_illumina_scores_2048)] {
 
-    let config = bincode::config::standard().with_variable_int_encoding();
+        let data = input.1;
 
-    group.bench_with_input(
-        BenchmarkId::new("Plain Bincode", 1024),
-        &values1024,
-        |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
-    );
+        group.throughput(Throughput::Bytes(
+            data.len() as u64 * std::mem::size_of::<u32>() as u64,
+        ));
 
-    group.bench_with_input(
-        BenchmarkId::new("PCO Simpler Compress", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| match simple_compress(&values, &pco_config) {
-                Ok(_) => values,
-                Err(_) => panic!("Failed to compress"),
-            })
-        },
-    );
+        let config = bincode::config::standard().with_variable_int_encoding();
 
-    group.bench_with_input(
-        BenchmarkId::new("Pulp Arch Encode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut values = values.clone();
-                pulp_delta_encode(&mut values);
-                values
-            })
-        },
-    );
+        group.bench_with_input(
+            BenchmarkId::new("Plain Bincode", input.0),
+            &data,
+            |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
+        );
 
-    group.bench_with_input(
-        BenchmarkId::new("Vanilla Encode", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                let mut values = values.clone();
-                vanilla_delta_encode(&mut values);
-                values
-            })
-        },
-    );
+        let mut data = data.to_vec();
 
-    group.bench_with_input(
-        BenchmarkId::new("Bitpacking Encode 8x", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                for chunk in values.chunks(bitpacking::BitPacker8x::BLOCK_LEN) {
-                    bitpacking8x_delta_encode(chunk);
-                }
-                values
-            })
-        },
-    );
+       group.bench_with_input(
+            BenchmarkId::new("Pulp Arch Encode", input.0),
+            &data,
+            |b, values| {
+                b.iter(|| {
+                    let mut values = values.clone();
+                    pulp_delta_encode(&mut values);
+                    values
+                })
+            },
+        );
 
-    group.bench_with_input(
-        BenchmarkId::new("Bitpacking Encode 4x", 1024),
-        &values1024,
-        |b, values| {
-            b.iter(|| {
-                for chunk in values.chunks(bitpacking::BitPacker4x::BLOCK_LEN) {
-                    bitpacking4x_delta_encode(chunk);
-                }
-                values
-            })
-        },
-    );
+        group.bench_with_input(
+            BenchmarkId::new("Vanilla Encode", input.0),
+            &data,
+            |b, values| {
+                b.iter(|| {
+                    let mut values = values.clone();
+                    vanilla_delta_encode(&mut values);
+                    values
+                })
+            },
+        );
+
+    }
+
+    group.finish();
+
+
 }
 
 criterion_group!(name = integercompression;
     config = Criterion::default().measurement_time(std::time::Duration::from_secs(20));
-    targets = bench_delta_encode, bench_delta_decode
+    targets = bench_delta_encode_u8 // bench_delta_encode_u32 // , bench_delta_decode
 );
 
 criterion_main!(integercompression);
