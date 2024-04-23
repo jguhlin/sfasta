@@ -25,7 +25,7 @@ impl Default for StringBlockStoreBuilder
                 .with_block_size(512 * 1024)
                 .with_compression(CompressionConfig {
                     compression_type: CompressionType::ZSTD,
-                    compression_level: 3,
+                    compression_level: 6,
                     compression_dict: None,
                 }),
         }

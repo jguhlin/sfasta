@@ -343,7 +343,7 @@ impl Converter
                 let mut index: FractalTreeDisk<u32, u32> = index.into();
                 index.set_compression(CompressionConfig {
                     compression_type: CompressionType::ZSTD,
-                    compression_level: -9,
+                    compression_level: -3,
                     compression_dict: None,
                 });
 
@@ -535,7 +535,10 @@ impl Converter
 
                     // Scores
                     let score_locs = if let Some(quals) = x.qual() {
-                        let loc = scores.add(quals.to_vec());
+                        let quals = quals.to_vec();
+                        // Makes it larger for some reason...
+                        // libfractaltree::disk::delta_encode(&mut quals);
+                        let loc = scores.add(quals);
                         loc.unwrap()
                     } else {
                         vec![]

@@ -439,13 +439,18 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 delta_encode(&mut self.keys);
                 let uncompressed: Vec<u8> =
                     bincode::encode_to_vec(&*self, config).unwrap();
+
                 let compressed = compression
                     .as_ref()
                     .unwrap()
                     .compress(&uncompressed)
                     .unwrap();
-                bincode::encode_into_std_write(&compressed, out_buf, config)
-                    .unwrap();
+                match bincode::encode_into_std_write(&compressed, out_buf, config) {
+                    Ok(size) => (), //log::debug!("Compressed size of NodeDisk with {:?}: {}", compression.as_ref().unwrap().compression_type, size),
+                    Err(e) => {
+                        panic!("Error compressing NodeDisk: {:?}", e)
+                    }
+                }
 
                 self.state = NodeState::OnDisk(cur_pos as u32 - start as u32);
                 self.children = None;
