@@ -24,6 +24,7 @@ stream-vbyte = "0.4.1"
 log = "0.4"
 flume = "0.11.0"
 bytes = "1.6.0"
+core_affinity = "0.8.1"
 # liblzma = "0.3.1"
 
 

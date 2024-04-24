@@ -1,3 +1,5 @@
+extern crate core_affinity;
+
 use std::{
     io::{Read, Write},
     sync::{
@@ -366,12 +368,27 @@ impl CompressionWorker
             Arc::new(ArrayQueue::<CompressorWork>::new(self.buffer_size));
         self.queue = Some(queue);
 
+        let mut core_ids = core_affinity::get_core_ids().unwrap();
+
+        if self.threads as usize <= core_ids.len() {
+            println!("More threads than cores specified, using all cores");
+            self.threads = core_ids.len() as u16;
+
+        }
+
         for _ in 0..self.threads {
+            let id = core_ids.pop().unwrap();
+
             let queue = Arc::clone(self.queue.as_ref().unwrap());
             let shutdown = Arc::clone(&self.shutdown_flag);
             let output_queue = Arc::clone(self.writer.as_ref().unwrap());
             let handle = thread::spawn(move || {
-                compression_worker(queue, shutdown, output_queue)
+
+                // NOTE: This shaves off a few seconds on my FASTQ example, so keeping it. Could be more for even larger files, and won't affect much for small files
+                let res = core_affinity::set_for_current(id);
+                if res {
+                    compression_worker(queue, shutdown, output_queue)
+                }
             });
             self.handles.push(handle);
         }

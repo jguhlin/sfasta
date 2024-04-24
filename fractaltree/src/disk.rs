@@ -484,8 +484,12 @@ impl<K: Key, V: Value> NodeDisk<K, V>
             self.load(in_buf, compression, start);
         }
 
+        // Optimization notes:
+        // Binary search is a bit faster than linear search (even in --release mode)
+        // and equal to using pulp's automatic dispatch
+        let i = self.keys.binary_search(&key);
+
         if self.is_leaf {
-            let i = self.keys.binary_search(&key);
             let i = match i {
                 Ok(i) => i,
                 Err(_) => return None,
@@ -493,7 +497,6 @@ impl<K: Key, V: Value> NodeDisk<K, V>
 
             Some(self.values.as_ref().unwrap()[i].clone())
         } else {
-            let i = self.keys.binary_search(&key);
             let i = match i {
                 Ok(i) => i.saturating_add(1),
                 Err(i) => i,

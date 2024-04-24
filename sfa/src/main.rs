@@ -17,9 +17,7 @@ extern crate rand;
 extern crate rand_chacha;
 
 use std::{
-    fs::{self, metadata, File},
-    io::{BufRead, BufReader, Read, Write},
-    path::Path,
+    fs::{self, metadata, File}, io::{BufRead, BufReader, Read, Write}, os::fd::AsRawFd, path::Path
 };
 
 use clap::{Parser, Subcommand};
@@ -346,6 +344,15 @@ fn faidx(input: &str, ids: &Vec<String>)
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+
+    #[cfg(unix)]
+    nix::fcntl::posix_fadvise(
+        in_buf.as_raw_fd(),
+        0,
+        0,
+        nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
+    ).expect("Fadvise Failed");
+
     let in_buf = BufReader::new(in_buf);
 
     let mut sfasta = SfastaParser::open_from_buffer(in_buf, false).unwrap();
@@ -388,6 +395,15 @@ fn view(input: &str)
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+
+    #[cfg(unix)]
+    nix::fcntl::posix_fadvise(
+        in_buf.as_raw_fd(),
+        0,
+        0,
+        nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
+    ).expect("Fadvise Failed");
+
     let mut sfasta =
         SfastaParser::open_from_buffer(BufReader::new(in_buf), true).unwrap();
 
@@ -461,6 +477,15 @@ fn list(input: &str)
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+
+    #[cfg(unix)]
+    nix::fcntl::posix_fadvise(
+        in_buf.as_raw_fd(),
+        0,
+        0,
+        nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
+    ).expect("Fadvise Failed");
+
     let in_buf = BufReader::new(in_buf);
     let mut sfasta = SfastaParser::open_from_buffer(in_buf, false).unwrap();
 
@@ -583,7 +608,8 @@ fn convert(
     // let mut in_buf =
     // libsfasta::utils::CrossbeamReader::from_channel(r);
     let mut in_buf = BufReader::new(buf);
-    let out_fh = Box::new(std::io::BufWriter::with_capacity(1024 * 1024, output));
+
+    let out_fh = Box::new(std::io::BufWriter::new(output));
 
     let _out_fh = converter.convert(&mut in_buf, out_fh);
     // log::info!("Joining IO thread");
@@ -606,6 +632,14 @@ pub fn generic_open_file_pb(
         Err(why) => panic!("Couldn't open {}: {}", filename, why),
         Ok(file) => file,
     };
+
+    #[cfg(unix)]
+    nix::fcntl::posix_fadvise(
+        file.as_raw_fd(),
+        0,
+        0,
+        nix::fcntl::PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
+    ).expect("Fadvise Failed");
 
     // let mut compressed: bool = false;
     let file = pb.wrap_read(file);
