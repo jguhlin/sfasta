@@ -97,6 +97,7 @@ impl Default for BytesBlockStoreBuilder
 
 impl BytesBlockStoreBuilder
 {
+
     pub fn with_dict(mut self) -> Self
     {
         self.create_dict = true;
@@ -406,7 +407,7 @@ impl BytesBlockStoreBuilder
             return Err(BlockStoreError::Empty);
         }
 
-        let mut block_locations_tree: FractalTreeBuild<u32, u64, true> =
+        let mut block_locations_tree: FractalTreeBuild<u32, u64> =
             FractalTreeBuild::new(2048, 2048);
 
         let block_locations: Vec<u64> = self
@@ -419,7 +420,7 @@ impl BytesBlockStoreBuilder
             block_locations_tree.insert(i as u32, *x);
         });
 
-        let mut block_locations_tree: FractalTreeDisk<_, _, true> =
+        let mut block_locations_tree: FractalTreeDisk<_, _> =
             block_locations_tree.into();
         block_locations_tree.set_compression(CompressionConfig {
             compression_type: CompressionType::ZSTD,
@@ -459,7 +460,7 @@ pub struct BytesBlockStore
 {
     /// Locations of the blocks in the file
     // todo: fractal tree for all blocks across all datatypes...
-    pub block_locations: FractalTreeDisk<u32, u64, true>,
+    pub block_locations: FractalTreeDisk<u32, u64>,
 
     /// Locations of the block index (Where the serialized
     /// block_locations is stored)
@@ -614,7 +615,7 @@ impl BytesBlockStore
 
         assert!(block_locations_pos > 0);
 
-        let block_locations: FractalTreeDisk<u32, u64, true> =
+        let block_locations: FractalTreeDisk<u32, u64> =
             FractalTreeDisk::from_buffer(&mut in_buf, block_locations_pos)
                 .unwrap();
 

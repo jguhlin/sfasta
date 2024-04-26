@@ -3,7 +3,7 @@ use std::{
     ops::SubAssign,
 };
 
-use bincode::{de, BorrowDecode, Decode, Encode};
+use bincode::{BorrowDecode, Decode, Encode};
 use binout::{Serializer, VByte};
 use pulp::Arch;
 use rayon::prelude::*;
@@ -22,16 +22,15 @@ use libcompression::*;
 /// The root node is loaded with the fractal tree, but children are
 /// loaded on demand
 #[derive(Debug)]
-pub struct FractalTreeDisk<K: Key, V: Value, const RANGE: bool>
+pub struct FractalTreeDisk<K: Key, V: Value>
 {
-    pub root: NodeDisk<K, V, RANGE>,
+    pub root: NodeDisk<K, V>,
     pub start: u64, /* On disk position of the fractal tree, such that
                      * all locations are start + offset */
     pub compression: Option<CompressionConfig>,
 }
 
-impl<K: Key, V: Value, const RANGE: bool> Encode
-    for FractalTreeDisk<K, V, RANGE>
+impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V>
 {
     fn encode<E: bincode::enc::Encoder>(
         &self,
@@ -56,8 +55,7 @@ impl<K: Key, V: Value, const RANGE: bool> Encode
     }
 }
 
-impl<K: Key, V: Value, const RANGE: bool> Decode
-    for FractalTreeDisk<K, V, RANGE>
+impl<K: Key, V: Value> Decode for FractalTreeDisk<K, V>
 {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
@@ -66,7 +64,7 @@ impl<K: Key, V: Value, const RANGE: bool> Decode
         let compression: Option<CompressionConfig> =
             bincode::Decode::decode(decoder)?;
         let start: u64 = bincode::Decode::decode(decoder)?;
-        let root: NodeDisk<K, V, RANGE> = if compression.is_some() {
+        let root: NodeDisk<K, V> = if compression.is_some() {
             let compressed: Vec<u8> = bincode::Decode::decode(decoder).unwrap();
             let decompressed = compression
                 .as_ref()
@@ -87,8 +85,7 @@ impl<K: Key, V: Value, const RANGE: bool> Decode
     }
 }
 
-impl<K: Key, V: Value, const RANGE: bool> Default
-    for FractalTreeDisk<K, V, RANGE>
+impl<K: Key, V: Value> Default for FractalTreeDisk<K, V>
 {
     fn default() -> Self
     {
@@ -107,7 +104,7 @@ impl<K: Key, V: Value, const RANGE: bool> Default
     }
 }
 
-impl<K: Key, V: Value, const RANGE: bool> FractalTreeDisk<K, V, RANGE>
+impl<K: Key, V: Value> FractalTreeDisk<K, V>
 {
     pub fn load_tree<R>(&mut self, in_buf: &mut R) -> Result<(), &'static str>
     where
@@ -164,7 +161,7 @@ impl<K: Key, V: Value, const RANGE: bool> FractalTreeDisk<K, V, RANGE>
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
-        let tree: FractalTreeDisk<K, V, RANGE> =
+        let tree: FractalTreeDisk<K, V> =
             bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
         Ok(tree)
@@ -223,17 +220,17 @@ impl NodeState
 }
 
 #[derive(Debug)]
-pub struct NodeDisk<K, V, const RANGE: bool>
+pub struct NodeDisk<K, V>
 {
     pub is_root: bool,
     pub is_leaf: bool,
     pub state: NodeState,
     pub keys: Vec<K>,
-    pub children: Option<Vec<Box<NodeDisk<K, V, RANGE>>>>,
+    pub children: Option<Vec<Box<NodeDisk<K, V>>>>,
     pub values: Option<Vec<V>>,
 }
 
-impl<K: Key, V: Value, const RANGE: bool> Encode for NodeDisk<K, V, RANGE>
+impl<K: Key, V: Value> Encode for NodeDisk<K, V>
 {
     fn encode<E: bincode::enc::Encoder>(
         &self,
@@ -241,33 +238,7 @@ impl<K: Key, V: Value, const RANGE: bool> Encode for NodeDisk<K, V, RANGE>
     ) -> core::result::Result<(), bincode::error::EncodeError>
     {
         bincode::Encode::encode(&self.is_leaf, encoder)?;
-
-        if self.is_leaf {
-            if RANGE {
-                // Numbers are stored sequentially, so store the first number and the number of numbers
-                let first = self.keys.first().unwrap();
-                let last = self.keys.last().unwrap();
-                bincode::Encode::encode(first, encoder)?;
-                bincode::Encode::encode(&last, encoder)?;
-                // Delta here is essentially 1
-            } else {
-                bincode::Encode::encode(&self.keys, encoder)?;
-            }
-        } else {
-            if RANGE {
-                // Numbers are stored sequentially, and should have consistent delta between them
-                let first = self.keys.first().unwrap();
-                let last = self.keys.last().unwrap();
-                let delta = self.keys[1] - self.keys[0];
-                bincode::Encode::encode(first, encoder)?;
-                bincode::Encode::encode(&last, encoder)?;
-                bincode::Encode::encode(&delta, encoder)?;
-                log::info!("RANGE mode enabled");
-                debug_assert!(self.keys.windows(2).all(|x| x[1] - x[0] == delta));
-            } else {
-                bincode::Encode::encode(&self.keys, encoder)?;
-            }
-        }
+        bincode::Encode::encode(&self.keys, encoder)?;
 
         if self.is_leaf {
             bincode::Encode::encode(&self.values, encoder)?;
@@ -286,33 +257,14 @@ impl<K: Key, V: Value, const RANGE: bool> Encode for NodeDisk<K, V, RANGE>
     }
 }
 
-impl<K: Key, V: Value, const RANGE: bool> Decode for NodeDisk<K, V, RANGE>
+impl<K: Key, V: Value> Decode for NodeDisk<K, V>
 {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
     ) -> core::result::Result<Self, bincode::error::DecodeError>
     {
         let is_leaf: bool = bincode::Decode::decode(decoder)?;
-
-        let keys: Vec<K> = if is_leaf {
-            if RANGE {
-                let first: K = bincode::Decode::decode(decoder)?;
-                let last: K = bincode::Decode::decode(decoder)?;
-                (first..last).collect()
-            } else {
-                bincode::Decode::decode(decoder)?          
-            }
-        } else {
-            if RANGE {
-                // Numbers are in order, and based on sequential, should be able to figure out the delta between each and store that
-                let first: K = bincode::Decode::decode(decoder)?;
-                let last: K = bincode::Decode::decode(decoder)?;
-                let delta: u64 = bincode::Decode::decode(decoder)?;
-                (first..last).step_by(delta as usize).collect()
-            } else {
-                bincode::Decode::decode(decoder)?
-            }
-        };
+        let keys: Vec<K> = bincode::Decode::decode(decoder)?;
 
         let values: Option<Vec<V>> = if is_leaf {
             bincode::Decode::decode(decoder)?
@@ -324,9 +276,9 @@ impl<K: Key, V: Value, const RANGE: bool> Decode for NodeDisk<K, V, RANGE>
             None
         } else {
             let locs: Vec<u32> = bincode::Decode::decode(decoder)?;
-            let children: Vec<Box<NodeDisk<K, V, RANGE>>> = locs
+            let children: Vec<Box<NodeDisk<K, V>>> = locs
                 .iter()
-                .map(|x| Box::new(NodeDisk::<K, V, RANGE>::from_loc(*x)))
+                .map(|x| Box::new(NodeDisk::<K, V>::from_loc(*x)))
                 .collect::<Vec<_>>();
             Some(children)
         };
@@ -342,8 +294,7 @@ impl<K: Key, V: Value, const RANGE: bool> Decode for NodeDisk<K, V, RANGE>
     }
 }
 
-impl<K: Key, V: Value, const RANGE: bool> BorrowDecode<'_>
-    for NodeDisk<K, V, RANGE>
+impl<K: Key, V: Value> BorrowDecode<'_> for NodeDisk<K, V>
 {
     fn borrow_decode<D: bincode::de::Decoder>(
         decoder: &mut D,
@@ -362,9 +313,9 @@ impl<K: Key, V: Value, const RANGE: bool> BorrowDecode<'_>
             None
         } else {
             let locs: Vec<u32> = bincode::Decode::decode(decoder)?;
-            let children: Vec<Box<NodeDisk<K, V, RANGE>>> = locs
+            let children: Vec<Box<NodeDisk<K, V>>> = locs
                 .iter()
-                .map(|x| Box::new(NodeDisk::<K, V, RANGE>::from_loc(*x)))
+                .map(|x| Box::new(NodeDisk::<K, V>::from_loc(*x)))
                 .collect::<Vec<_>>();
             Some(children)
         };
@@ -380,7 +331,7 @@ impl<K: Key, V: Value, const RANGE: bool> BorrowDecode<'_>
     }
 }
 
-impl<K: Key, V: Value, const RANGE: bool> NodeDisk<K, V, RANGE>
+impl<K: Key, V: Value> NodeDisk<K, V>
 {
     pub fn from_loc(loc: u32) -> Self
     {
@@ -426,9 +377,7 @@ impl<K: Key, V: Value, const RANGE: bool> NodeDisk<K, V, RANGE>
             bincode::decode_from_std_read(in_buf, config).unwrap()
         };
 
-        if !RANGE {
-            delta_decode(&mut self.keys);
-        }
+        delta_decode(&mut self.keys);
     }
 
     // todo: This doesn't work, need to account for compression better
@@ -448,7 +397,7 @@ impl<K: Key, V: Value, const RANGE: bool> NodeDisk<K, V, RANGE>
             in_buf
                 .seek(SeekFrom::Start(self.state.loc() as u64 + start))
                 .unwrap();
-            let node: NodeDisk<K, V, RANGE> =
+            let node: NodeDisk<K, V> =
                 bincode::decode_from_std_read(in_buf, config).unwrap();
             *self = node;
         }
@@ -487,10 +436,7 @@ impl<K: Key, V: Value, const RANGE: bool> NodeDisk<K, V, RANGE>
                     .with_variable_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
 
-                if !RANGE {
-                    delta_encode(&mut self.keys);
-                }
-
+                delta_encode(&mut self.keys);
                 let uncompressed: Vec<u8> =
                     bincode::encode_to_vec(&*self, config).unwrap();
 
@@ -499,15 +445,8 @@ impl<K: Key, V: Value, const RANGE: bool> NodeDisk<K, V, RANGE>
                     .unwrap()
                     .compress(&uncompressed)
                     .unwrap();
-                match bincode::encode_into_std_write(
-                    &compressed,
-                    out_buf,
-                    config,
-                ) {
-                    Ok(size) => (), // log::debug!("Compressed size of
-                    // NodeDisk with {:?}: {}",
-                    // compression.as_ref().unwrap().
-                    // compression_type, size),
+                match bincode::encode_into_std_write(&compressed, out_buf, config) {
+                    Ok(size) => (), //log::debug!("Compressed size of NodeDisk with {:?}: {}", compression.as_ref().unwrap().compression_type, size),
                     Err(e) => {
                         panic!("Error compressing NodeDisk: {:?}", e)
                     }
@@ -546,8 +485,8 @@ impl<K: Key, V: Value, const RANGE: bool> NodeDisk<K, V, RANGE>
         }
 
         // Optimization notes:
-        // Binary search is a bit faster than linear search (even in --release
-        // mode) and equal to using pulp's automatic dispatch
+        // Binary search is a bit faster than linear search (even in --release mode)
+        // and equal to using pulp's automatic dispatch
         let i = self.keys.binary_search(&key);
 
         if self.is_leaf {
@@ -664,7 +603,7 @@ mod tests
             .collect();
         keys.sort();
 
-        let mut node: NodeDisk<u32, u32, false> = NodeDisk {
+        let mut node = NodeDisk {
             is_root: true,
             is_leaf: true,
             state: NodeState::InMemory,
@@ -708,8 +647,7 @@ mod tests
     {
         let mut rng = thread_rng();
 
-        let mut tree: FractalTreeBuild<u32, u32, false> =
-            FractalTreeBuild::new(128, 256);
+        let mut tree = FractalTreeBuild::new(128, 256);
 
         // Generate 1024 * 1024 random key value pairs
 
@@ -725,7 +663,7 @@ mod tests
         tree.insert(u32::MAX - 1, u32::MAX - 1);
         tree.insert(u32::MAX / 2, u32::MAX / 2);
 
-        let mut tree: FractalTreeDisk<u32, u32, false> = tree.into();
+        let mut tree: FractalTreeDisk<u32, u32> = tree.into();
         let orig_root_keys = tree.root.keys.clone();
         println!("Root keys: {:?}", orig_root_keys);
 
@@ -742,7 +680,7 @@ mod tests
         let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
 
         buf.seek(SeekFrom::Start(tree_loc)).unwrap();
-        let mut tree: FractalTreeDisk<u32, u32, false> =
+        let mut tree: FractalTreeDisk<u32, u32> =
             bincode::decode_from_std_read(
                 &mut buf,
                 bincode::config::standard().with_variable_int_encoding(),
@@ -762,13 +700,13 @@ mod tests
         assert!(result.is_some());
         assert!(result.unwrap() == u32::MAX / 2);
 
-        let mut tree: FractalTreeBuild<u32, u64, false> =
+        let mut tree: FractalTreeBuild<u32, u64> =
             FractalTreeBuild::new(128, 256);
         for i in 0..1024 * 1024 {
             tree.insert(i, i as u64);
         }
 
-        let mut tree: FractalTreeDisk<u32, u64, false> = tree.into();
+        let mut tree: FractalTreeDisk<u32, u64> = tree.into();
         tree.set_compression(libcompression::CompressionConfig::default());
         let mut buffer =
             std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
@@ -779,7 +717,7 @@ mod tests
         let raw_vec = buffer.into_inner().unwrap().into_inner();
         let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
 
-        let mut tree: FractalTreeDisk<u32, u64, false> =
+        let mut tree: FractalTreeDisk<u32, u64> =
             FractalTreeDisk::from_buffer(&mut buf, tree_loc).unwrap();
 
         let result = tree.search(&mut buf, &1);
@@ -794,8 +732,7 @@ mod tests
     {
         let mut rng = thread_rng();
 
-        let mut tree: FractalTreeBuild<_, _, false> =
-            FractalTreeBuild::new(128, 256);
+        let mut tree = FractalTreeBuild::new(128, 256);
 
         // Generate 1024 * 1024 random key value pairs
 
@@ -811,7 +748,7 @@ mod tests
         tree.insert(u32::MAX - 1, u32::MAX - 1);
         tree.insert(u32::MAX / 2, u32::MAX / 2);
 
-        let mut tree: FractalTreeDisk<u32, u32, false> = tree.into();
+        let mut tree: FractalTreeDisk<u32, u32> = tree.into();
         let orig_root_keys = tree.root.keys.clone();
 
         let mut buf = std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
@@ -833,7 +770,7 @@ mod tests
         let mut buf = std::io::BufReader::new(std::io::Cursor::new(raw_vec));
 
         buf.seek(SeekFrom::Start(tree_loc)).unwrap();
-        let mut tree: FractalTreeDisk<u32, u32, false> =
+        let mut tree: FractalTreeDisk<u32, u32> =
             bincode::decode_from_std_read(
                 &mut buf,
                 bincode::config::standard().with_variable_int_encoding(),
