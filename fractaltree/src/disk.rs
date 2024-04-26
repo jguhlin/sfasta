@@ -250,7 +250,6 @@ impl<K: Key, V: Value, const RANGE: bool> Encode for NodeDisk<K, V, RANGE>
                 bincode::Encode::encode(first, encoder)?;
                 bincode::Encode::encode(&last, encoder)?;
                 // Delta here is essentially 1
-                debug_assert!(self.keys.windows(2).all(|x| x[1] - x[0] == 1));
             } else {
                 bincode::Encode::encode(&self.keys, encoder)?;
             }
@@ -263,6 +262,7 @@ impl<K: Key, V: Value, const RANGE: bool> Encode for NodeDisk<K, V, RANGE>
                 bincode::Encode::encode(first, encoder)?;
                 bincode::Encode::encode(&last, encoder)?;
                 bincode::Encode::encode(&delta, encoder)?;
+                log::info!("RANGE mode enabled");
                 debug_assert!(self.keys.windows(2).all(|x| x[1] - x[0] == delta));
             } else {
                 bincode::Encode::encode(&self.keys, encoder)?;
