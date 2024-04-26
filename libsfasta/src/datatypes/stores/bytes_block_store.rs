@@ -424,7 +424,7 @@ impl BytesBlockStoreBuilder
             block_locations_tree.into();
         block_locations_tree.set_compression(CompressionConfig {
             compression_type: CompressionType::ZSTD,
-            compression_level: -3, // Irrelevant for LZ4
+            compression_level: 1,
             compression_dict: None,
         });
         let block_locations_pos =

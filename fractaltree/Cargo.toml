@@ -30,6 +30,7 @@ binout = "0.2.1"
 log = "0.4"
 rayon = "1.10.0"
 num = { version = "0.4.1", features = ["alloc", "libm"] }
+zstd = { version="0.13", default-features = false, features=["arrays", "zdict_builder", "experimental"] }
 
 [dev-dependencies]
 criterion = "0.5.1"

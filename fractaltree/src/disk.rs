@@ -4,9 +4,7 @@ use std::{
 };
 
 use bincode::{BorrowDecode, Decode, Encode};
-use binout::{Serializer, VByte};
 use pulp::Arch;
-use rayon::prelude::*;
 
 use crate::*;
 use libcompression::*;
@@ -21,7 +19,7 @@ use libcompression::*;
 ///
 /// The root node is loaded with the fractal tree, but children are
 /// loaded on demand
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct FractalTreeDisk<K: Key, V: Value>
 {
     pub root: NodeDisk<K, V>,
@@ -124,6 +122,32 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         self.compression = Some(compression);
     }
 
+    pub fn create_zstd_dict(&mut self) -> Vec<u8>
+    {
+        let out_buf = Vec::new();
+        let mut out_buf = std::io::Cursor::new(out_buf);
+
+        let mut sample_sizes = Vec::new();
+
+        let mut new_root = self.root.clone();
+        new_root.store_dummy(&mut out_buf, &mut sample_sizes);
+
+        log::info!("Average Size: {}", sample_sizes.iter().sum::<usize>() / sample_sizes.len());
+
+        let buf = out_buf.into_inner();
+
+        // First 128 bytes
+
+        match zstd::dict::from_continuous(&buf, &sample_sizes, 32 * 1024) {
+            Ok(dict) => {
+                dict
+            }
+            Err(e) => {
+                panic!("Error creating zstd dict: {:?}", e);
+            }
+        }
+    }
+
     pub fn search<R>(&mut self, in_buf: &mut R, key: &K) -> Option<V>
     where
         R: Read + Seek + Send + Sync,
@@ -168,7 +192,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum NodeState
 {
     InMemory,
@@ -219,7 +243,7 @@ impl NodeState
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct NodeDisk<K, V>
 {
     pub is_root: bool,
@@ -411,6 +435,46 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         self.state = NodeState::InMemory;
     }
 
+    pub fn store_dummy<W>(&mut self, out_buf: &mut W, sample_sizes: &mut Vec<usize>)
+    where
+        W: Write + Seek,
+    {
+        let config = bincode::config::standard()
+                    .with_variable_int_encoding()
+                    .with_limit::<{ 1024 * 1024 }>();
+
+        // let mut new_self = self.clone();
+
+        // Make sure all the children are stored first...
+        if !self.is_leaf {
+            for child in self.children.as_mut().unwrap() {
+                while !child.state.on_disk() {
+                    child.store_dummy(out_buf, sample_sizes);
+                }
+            }
+        }
+        
+        let cur_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
+        // Don't store the root separately...
+        if !self.is_root {
+            delta_encode(&mut self.keys);
+
+            match bincode::encode_into_std_write(&*self, out_buf, config) {
+                Ok(size) => {
+                    sample_sizes.push(size);
+                }
+                Err(e) => {
+                    panic!("Error bincoding NodeDisk: {:?}", e)
+                }
+            }
+
+            self.state = NodeState::OnDisk(cur_pos as u32);
+            self.children = None;
+            self.values = None;
+        }
+
+    }
+
     pub fn store<W>(
         &mut self,
         out_buf: &mut W,
@@ -445,8 +509,15 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                     .unwrap()
                     .compress(&uncompressed)
                     .unwrap();
-                match bincode::encode_into_std_write(&compressed, out_buf, config) {
-                    Ok(size) => (), //log::debug!("Compressed size of NodeDisk with {:?}: {}", compression.as_ref().unwrap().compression_type, size),
+                match bincode::encode_into_std_write(
+                    &compressed,
+                    out_buf,
+                    config,
+                ) {
+                    Ok(size) => (), /* log::debug!("Compressed size of
+                                      * NodeDisk with {:?}: {}",
+                                      * compression.as_ref().unwrap().
+                                      * compression_type, size), */
                     Err(e) => {
                         panic!("Error compressing NodeDisk: {:?}", e)
                     }
@@ -485,8 +556,8 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         }
 
         // Optimization notes:
-        // Binary search is a bit faster than linear search (even in --release mode)
-        // and equal to using pulp's automatic dispatch
+        // Binary search is a bit faster than linear search (even in --release
+        // mode) and equal to using pulp's automatic dispatch
         let i = self.keys.binary_search(&key);
 
         if self.is_leaf {
@@ -640,6 +711,62 @@ mod tests
         let size: SpecificSize<human_size::Kilobyte> =
             format!("{} B", no_vbyte_len).parse().unwrap();
         println!("Node size (no vbyte): {}", size);
+    }
+
+    #[test]
+    fn tree_create_dict()
+    {
+        let mut rng = thread_rng();
+
+        let mut tree = FractalTreeBuild::new(2048, 8192);
+
+        // Generate 1024 * 1024 random key value pairs
+
+        for i in 0..1024 * 1024_u32 {
+            let value = rng.gen::<u32>();
+
+            tree.insert(i, value);
+        }
+
+        tree.insert(1, 1);
+        tree.insert(u32::MAX - 1, u32::MAX - 1);
+        tree.insert(u32::MAX / 2, u32::MAX / 2);
+
+        let mut tree: FractalTreeDisk<u32, u32> = tree.into();
+
+        let dict = tree.create_zstd_dict();
+        println!("Dict size: {}", dict.len());
+       
+        let mut tree_no_compression = tree.clone();
+        let out_buf = Vec::new();
+        let mut out_buf = std::io::Cursor::new(out_buf);
+        tree_no_compression.write_to_buffer(&mut out_buf).unwrap();
+        println!("Size without compression: {}", out_buf.into_inner().len());
+
+        let mut tree_compression = tree.clone();
+        tree_compression.set_compression(libcompression::CompressionConfig {
+            compression_type: libcompression::CompressionType::ZSTD,
+            // compression_dict: Some(std::sync::Arc::new(dict)),
+            compression_dict: None,
+            compression_level: -1,
+        });
+        let out_buf = Vec::new();
+        let mut out_buf = std::io::Cursor::new(out_buf);
+        tree_compression.write_to_buffer(&mut out_buf).unwrap();
+        println!("Size with compression: {}", out_buf.into_inner().len());
+
+        let mut tree_dict = tree.clone();
+        tree_dict.set_compression(libcompression::CompressionConfig {
+            compression_type: libcompression::CompressionType::ZSTD,
+            compression_dict: Some(std::sync::Arc::new(dict)),
+            // compression_dict: None,
+            compression_level: -1,
+        });
+        let out_buf = Vec::new();
+        let mut out_buf = std::io::Cursor::new(out_buf);
+        tree_dict.write_to_buffer(&mut out_buf).unwrap();
+        println!("Size with compression + dict: {}", out_buf.into_inner().len());
+
     }
 
     #[test]

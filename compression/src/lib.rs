@@ -95,14 +95,25 @@ impl CompressionConfig
         match self.compression_type {
             #[cfg(not(target_arch = "wasm32"))]
             CompressionType::ZSTD => {
-                // Use thread local
-                ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
-                    *zstd_compressor = zstd_encoder(
-                        self.compression_level as i32,
-                        &None
-                    );
-                    zstd_compressor.compress(bytes)
-                })
+
+                if self.compression_dict.is_some() {
+                    ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
+                        *zstd_compressor = zstd_encoder(
+                            self.compression_level as i32,
+                            &self.compression_dict,
+                        );
+                        zstd_compressor.compress(bytes)
+                    })
+                } else {
+                        // Use thread local
+                    ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
+                        *zstd_compressor = zstd_encoder(
+                            self.compression_level as i32,
+                            &None
+                        );
+                        zstd_compressor.compress(bytes)
+                    })
+                }
             }
             #[cfg(target_arch = "wasm32")]
             CompressionType::ZSTD => {
