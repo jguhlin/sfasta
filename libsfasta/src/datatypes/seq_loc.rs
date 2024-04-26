@@ -390,7 +390,7 @@ impl Default for SeqLocsStoreBuilder
     {
         SeqLocsStoreBuilder {
             location: 0,
-            tree: FractalTreeBuild::new(2048, 2048),
+            tree: FractalTreeBuild::new(2048, 8192),
             count: 0,
         }
     }

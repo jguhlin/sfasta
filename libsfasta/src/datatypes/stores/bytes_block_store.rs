@@ -408,7 +408,7 @@ impl BytesBlockStoreBuilder
         }
 
         let mut block_locations_tree: FractalTreeBuild<u32, u64> =
-            FractalTreeBuild::new(2048, 2048);
+            FractalTreeBuild::new(2048, 8192);
 
         let block_locations: Vec<u64> = self
             .block_locations
