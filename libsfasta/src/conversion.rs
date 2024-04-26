@@ -328,21 +328,11 @@ impl Converter
 
             seqlocs_location =
                 seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
-            log::info!(
-                "Writing SeqLocs to file: COMPLETE. {}",
-                out_buffer_thread.stream_position().unwrap()
-            );
 
             log::info!("SeqLocs Size: {} {}", formatter(out_buffer_thread.stream_position().unwrap() - seqlocs_location), out_buffer_thread.stream_position().unwrap() - seqlocs_location);
 
             if self.index {
-                log::info!("Joining index");
                 let index = index_handle.unwrap().join().unwrap();
-                log::info!(
-                    "Writing index to file. {}",
-                    out_buffer_thread.stream_position().unwrap()
-                );
-
                 let start = out_buffer_thread.stream_position().unwrap();
 
                 let mut index: FractalTreeDisk<u32, u32> = index.into();
