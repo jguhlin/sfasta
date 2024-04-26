@@ -1,113 +1,142 @@
 [![CircleCI](https://dl.circleci.com/status-badge/img/gh/jguhlin/sfasta/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/jguhlin/sfasta/tree/main)
 
-
-
 # Introduction
-Sfasta is a replacement for the FASTA/Q format with a goal of both saving space but also having very fast random-access for machine learning, even for large datasets (such as the nt database, 217Gb gzip compressed, 225Gb bgzip compressed, and 175Gb with sfasta, including an index). 
+Sfasta is a replacement for the FASTA/Q format with the twin goals of saving space and having very fast random-access, even for large datasets (such as the nt database, 203Gb gzip compressed, 210Gb bgzip compressed(+1.8Gb index), and 141Gb with sfasta, index inclusive). 
 
 Speed comes from assuming modern hardware, thus: 
-* Multiple compression threads
-* I/O dedicated threads 
-* SIMD bitpacking support
-* modern compression algorithms (ZSTD, as default). 
-* Dual level ID Index
-* Everything stored as sequence streams (for better compression).
+* Multiple threads by default
+* Dedicated I/O Threads
+* Modern compression algorithms (ZSTD, as default)
+* Fractal Index
+* Everything stored as sequence streams (for better compression)
 
-If you need different hardware support, open an issue. There are SIMD support for other architectures that could be implemented.
-
-While the goals are random-access speed by ID query, and smaller size, I hope it can become a more general purpose format. It supports other compression algorithms, which could be used for archival purposes (such as xz compression). This is a work in progress, but ready for community feedback. Because the goals are not simple decompression, this part of the code is not-optimized yet, and is much slower than zcat and other tools. This will be remedied in the future.
-
-## Note
-This has taken a few years of on again, off again development. FORMAT.md and other files are likely out of date.
+While the goals are random-access speed by ID query, and smaller size, I hope it can become a more general purpose format. It supports other compression algorithms, which could be used for archival purposes (such as xz compression). This is a work in progress, but ready for community feedback. 
 
 ## Community Feedback Period
 I'm hopeful folks will check this out, play around, break it, and give feedback. 
 
-## FASTQ support
-It's now trivial to add the scores as another compression stream, and the struct that puts it all back together already has an entries for scores. I'll get to it soon.
+## Data Types Supported
 
-## TODO
-* Does Zstd dict support work for small block sizes (8kb, 16kb, 4kb)?
-* less than 8kbp block sizes should use dicts by default
-* Masking as bitvec or [Bool; N]?
-
+| Data | Status |
+|:----:|:------:|
+| Sequences | Fully supported |
+| Sequence IDs | Fully Supported |
+| Additional Header Information | Fully Supported |
+| Quality Scores | Fully Supported |
+| Masking | Fully Supported |
+| Nanopore Signals | Planned |
+| Base Modifications | Planned |
 
 # Usage
 ## Installation
 `cargo install sfasta` [Don't have cargo?](https://rustup.rs/)
 
 ## Usage
+
+### Compression
 To compress a file:
+```bash
+sfa convert MyFile.fasta
 
-`sfa convert MyFile.fasta`
-
-You can also convert directly from gzipped files:
-
-`sfa convert MyFile.fasta.gz`
+#You can also convert directly from gzipped files:
+sfa convert MyFile.fasta.gz
+```
 
 You can use other compression schemes. The software automatically detects which is used and decompresses accordingly.
 
-`sfa convert --snappy MyFile.fasta`
-`sfa convert --xz MyFile.fasta`
+```bash
+sfa convert --snappy MyFile.fasta
+sfa convert --xz MyFile.fasta
 
-You can also change the block size. Units are in * 1024 bytes. Default is 4Mb (4096):
+# Reading the file "just works"
+sfa view MyFile.sfasta 
+```
 
-`sfa convert --block-size 8192 MyFile.fasta`
+You can also change the block size. Smaller blocks will speed up random access, while larger blocks will increase compression ratios. 512 (512kb, 524288 bytes) is default.
+
+```bash
+sfa convert --block-size 8192 MyFile.fasta
+```
 
 View a file:
-
-`sfa view MyFile.sfasta`
+```bash
+sfa view MyFile.sfasta
+```
 
 Query a file by sequence ID:
-
-`sfa faidx MyFile.sfasta Chr1`
+```bash
+sfa faidx MyFile.sfasta Chr1
+```
 
 For help:
-
-`sfa --help`
+```bash
+sfa --help
+```
 
 Please note, not all subcommands are implemented yet. The following should work: convert, view, list, faidx.
 
 ## Requirements
-Should work anywhere that supports [Rust](https://www.rust-lang.org/). Tested on Ubuntu, Red Hat, and Windows 10. I suspect it will work on Mac OS. I also do not think it supports WASM at this time.
+Should work anywhere that supports [Rust](https://www.rust-lang.org/). Tested on Ubuntu, Red Hat, and Windows 10. I suspect it will work on Mac OS. WASM support is forthcoming.
 
 # Comparisons
 
 ## Features
-| Compression Type | Random Access | Multithreaded |
-|:---:|:---:|:----|
-| [NAF](https://github.com/KirillKryukov/naf) | No | No |
-| [ZSTD](http://facebook.github.io/zstd/) | No | Yes |
-| sfasta | Yes | Yes |
-| [bgzip](http://www.htslib.org/doc/bgzip.html) | Yes | Yes |
+| Compression Type | Random Access | Multithreaded | Tools |
+|:---:|:---:|:----:|:-----:|
+| sfasta | Yes | Yes | sfa |
+| gzip | No | Yes | gzip, pigz, crabz |
+| [bgzip](http://www.htslib.org/doc/bgzip.html) | Yes | Yes | bgzip, crabz |
+| [NAF](https://github.com/KirillKryukov/naf) | No | No | naf |
+| [ZSTD](http://facebook.github.io/zstd/) | No | Yes | zstd |
+
+# Future Plans
+## Speed
+- Final Index generation and compression is the most time consuming task. It can be parallelized.
+
+## Benchmarks
 
 ### Uniprot Random Access
-Samtools index pre-built
+Using [UniProt SWISS-Prot release 2024_02](https://www.uniprot.org/help/downloads). File size is ~88Mb. 
+
+Samtools index pre-built with ```samtools faidx uniprot_sprot.fasta.gz``` with a bgzip compressed file.
 
 | Command | Mean [ms] | Min [ms] | Max [ms] | Relative |
 |:---|---:|---:|---:|---:|
-| `sfa faidx uniprot_sprot.sfasta "sp\|Q6GZX1\|004R_FRG3G"` | 123.8 ± 4.5 | 121.8 | 143.7 | 1.00 |
-| `samtools faidx uniprot_sprot.fasta.gz "sp\|Q6GZX1\|004R_FRG3G"` | 423.0 ± 3.3 | 419.4 | 434.1 | 3.42 ± 0.13 |
+| `sfa faidx uniprot_sprot.sfasta "sp\|Q8CIX8\|LGSN_MOUSE" "sp\|O31861\|YOJB_BACSU" "sp\|B2XTX0\|PSAJ_HETA4" "sp\|A2YNP0\|SPX6_ORYSI" "sp\|P69474\|CAPSD_CGMVS" ` | 16.5 ± 0.3 | 15.7 | 18.2 | 1.00 |
+| `samtools faidx uniprot_sprot.fasta.gz "sp\|Q8CIX8\|LGSN_MOUSE" "sp\|O31861\|YOJB_BACSU" "sp\|B2XTX0\|PSAJ_HETA4" "sp\|A2YNP0\|SPX6_ORYSI" "sp\|P69474\|CAPSD_CGMVS" ` | 456.9 ± 6.8 | 451.8 | 474.9 | 27.75 ± 0.66 |
+
+### Uniprot Size
+Uncompressed: 272M
+
+| Compression Type | Size |
+| --- | --- |
+| sfasta (index incl) | 71Mb |
+| NAF (no index) | 66Mb |
+| zstd (no index) | 76Mb | 
+| bgzip (excl. index) | 88Mb |
+| bgzip (incl. index) | 111Mb (88Mb + 23Mb)
+| pigz (no index) | 89Mb |
+
+* SFASTA contains an index, where the other formats do not. An fai index is 23Mb for this uniprot.
+* SFASTA uses a higher compression level for zstd as default, as well as stream compression like NAF, thus the smaller size.
+
+```
+❯ ls -lah uniprot_sprot.fasta.gz.fai
+-rw-rw-r-- 1 joseph joseph 23M Apr 26 17:02 uniprot_sprot.fasta.gz.fai
+```
 
 ### Uniprot Compression Speed
 | Command | Mean [s] | Min [s] | Max [s] | Relative |
 |:---|---:|---:|---:|---:|
-| `sfa convert uniprot_sprot.fasta` | 1.974 ± 0.128 | 1.673 | 2.143 | 5.75 ± 0.59 |
-| `ennaf --protein uniprot_sprot.fasta --temp-dir /tmp` | 0.923 ± 0.009 | 0.913 | 0.942 | 2.69 ± 0.22 |
-| `bgzip -k --index -f --threads 8 uniprot_sprot.fasta` | 0.670 ± 0.019 | 0.641 | 0.734 | 1.95 ± 0.17 |
-| `pigz -k -p 8 uniprot_sprot.fasta -f` | 0.636 ± 0.021 | 0.612 | 0.682 | 1.85 ± 0.16 |
-| `crabz -p 8 Erow_1.0.fasta -f > uniprot_sprot.crabz` | 9.150 ± 0.182 | 8.883 | 9.523 | 26.67 ± 2.20 |
-| `zstd -k uniprot_sprot.fasta -f -T8` | 0.343 ± 0.027 | 0.296 | 0.406 | 1.00 |
+| `sfa convert --threads 14 uniprot_sprot.fasta` | 1.543 ± 0.057 | 1.458 | 1.648 | 3.67 ± 0.34 |
+| `bgzip -kf --threads 16 uniprot_sprot.fasta` | 1.293 ± 0.042 | 1.187 | 1.345 | 3.08 ± 0.28 |
+| `pigz -kf -p 16 uniprot_sprot.fasta` | 0.959 ± 0.017 | 0.934 | 0.990 | 2.28 ± 0.20 |
+| `ennaf --protein --temp-dir /tmp uniprot_sprot.fasta -o uniprot_sprot.naf` | 1.078 ± 0.008 | 1.069 | 1.094 | 2.57 ± 0.22 |
+| `zstd -k uniprot_sprot.fasta -f -T16` | 0.420 ± 0.035 | 0.363 | 0.485 | 1.00 |
+| `crabz -f bgzf -p 16 uniprot_sprot.fasta -o uniprot_sprot.fasta.gz` | 0.674 ± 0.017 | 0.649 | 0.703 | 1.60 ± 0.14 |
 
-### Uniprot Size
-Uncompressed: 282M
+Compression speed is slower, but this is primarily due to the index creation. For bgzip samtools takes 2.07 seconds to generate the index. Also of note is pigz, ennaf, and zstd do not support indexing, while crabz does (using bgzf format).
 
-| Compression Type | Size |
-| --- | --- |
-| sfasta (index incl) | 83M |
-| NAF (no index) | 68M |
-| zstd (no index) | 78M | 
-| bgzip (excl. indexx) | 92M |
 
 
 ## Nanopore Reads
