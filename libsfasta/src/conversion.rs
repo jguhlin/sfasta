@@ -7,6 +7,7 @@
 use crossbeam::{thread, utils::Backoff};
 use needletail::parse_fastx_reader;
 use xxhash_rust::xxh3::xxh3_64;
+use humansize::{make_format, DECIMAL};
 
 use std::{
     io::{Read, Seek, SeekFrom, Write},
@@ -323,12 +324,16 @@ impl Converter
                 indexer
             }));
 
+            let formatter = make_format(DECIMAL);
+
             seqlocs_location =
                 seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
             log::info!(
                 "Writing SeqLocs to file: COMPLETE. {}",
                 out_buffer_thread.stream_position().unwrap()
             );
+
+            log::info!("SeqLocs Size: {}", formatter(seqlocs_location - out_buffer_thread.stream_position().unwrap()));
 
             if self.index {
                 log::info!("Joining index");
@@ -343,16 +348,17 @@ impl Converter
                 let mut index: FractalTreeDisk<u32, u32> = index.into();
                 index.set_compression(CompressionConfig {
                     compression_type: CompressionType::ZSTD,
-                    compression_level: -3,
+                    compression_level: 1,
                     compression_dict: None,
                 });
 
                 fractaltree_pos = index
                     .write_to_buffer(&mut *out_buffer_thread)
                     .expect("Unable to write index to file");
-                log::debug!("Index pos: {}", fractaltree_pos);
 
                 let end = out_buffer_thread.stream_position().unwrap();
+
+                log::info!("Index Size: {}", formatter(end - start));
                 debug_size.push(("index".to_string(), (end - start) as usize));
             }
         })
@@ -614,7 +620,10 @@ impl Converter
 
         output_worker.shutdown();
 
+        let formatter = make_format(DECIMAL);
         let mut out_buffer = out_fh.lock().unwrap();
+
+        let start = out_buffer.stream_position().unwrap();
 
         let mut headers = match headers.write_block_locations(&mut *out_buffer)
         {
@@ -625,6 +634,10 @@ impl Converter
             },
         };
 
+        let end = out_buffer.stream_position().unwrap();
+        log::info!("Headers Fractal Tree Size: {}", formatter(end - start));
+
+        let start = out_buffer.stream_position().unwrap();
         let mut ids = match ids.write_block_locations(&mut *out_buffer) {
             Ok(_) => Some(ids),
             Err(x) => match x {
@@ -632,7 +645,10 @@ impl Converter
                 _ => panic!("Error writing ids: {:?}", x),
             },
         };
+        let end = out_buffer.stream_position().unwrap();
+        log::info!("IDs Fractal Tree Size: {}", formatter(end - start));
 
+        let start = out_buffer.stream_position().unwrap();
         let mut masking = match masking.write_block_locations(&mut *out_buffer)
         {
             Ok(_) => Some(masking),
@@ -641,7 +657,10 @@ impl Converter
                 _ => panic!("Error writing masking: {:?}", x),
             },
         };
+        let end = out_buffer.stream_position().unwrap();
+        log::info!("Masking Fractal Tree Size: {}", formatter(end - start));
 
+        let start = out_buffer.stream_position().unwrap();
         let mut sequences =
             match sequences.write_block_locations(&mut *out_buffer) {
                 Ok(_) => Some(sequences),
@@ -650,7 +669,10 @@ impl Converter
                     _ => panic!("Error writing sequences: {:?}", x),
                 },
             };
+        let end = out_buffer.stream_position().unwrap();
+        log::info!("Sequences Fractal Tree Size: {}", formatter(end - start));
 
+        let start = out_buffer.stream_position().unwrap();
         let mut scores = match scores.write_block_locations(&mut *out_buffer) {
             Ok(_) => Some(scores),
             Err(x) => match x {
@@ -658,6 +680,8 @@ impl Converter
                 _ => panic!("Error writing scores: {:?}", x),
             },
         };
+        let end = out_buffer.stream_position().unwrap();
+        log::info!("Scores Fractal Tree Size: {}", formatter(end - start));
 
         // Write the headers for each store...
         if headers.is_some() {
