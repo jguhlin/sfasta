@@ -21,7 +21,7 @@ use std::{
 };
 
 #[cfg(unix)]
-use os::fd::AsRawFd;
+use std::os::fd::AsRawFd;
 
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
