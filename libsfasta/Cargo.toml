@@ -33,7 +33,9 @@ bincode = { version = "2.0.0-rc.3" } #, features = ["serde"] }
 bytelines = { version = "2.5", default-features = false }
 simdutf8 = {version = "0.1.4", features = ["aarch64_neon"] }
 itertools = "0.12.1"
-needletail = "0.5.1"
+# needletail = "0.5.1"
+needletail = { git = "https://github.com/jguhlin/needletail" }
+
 bumpalo = "3.16"
 flume = "0.11.0"
 

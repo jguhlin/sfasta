@@ -13,6 +13,9 @@ use std::{
 
 use lz4_flex::block::{compress_prepend_size, decompress_size_prepended};
 
+#[cfg(not(target_arch = "wasm32"))]
+use liblzma::read::{XzEncoder, XzDecoder};
+
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
 use std::{cell::RefCell, rc::Rc};
@@ -568,7 +571,7 @@ fn compression_worker(
                         output
                     }
                     CompressionType::NONE => work.input,
-                    /*#[cfg(not(target_arch = "wasm32"))]
+                    #[cfg(not(target_arch = "wasm32"))]
                     CompressionType::XZ => {
                         let mut output = Vec::with_capacity(work.input.len());
                         let mut compressor = XzEncoder::new(
@@ -579,7 +582,7 @@ fn compression_worker(
                             .read_to_end(&mut output)
                             .expect("Unable to compress with XZ");
                         output
-                    } */
+                    }
                     #[cfg(target_arch = "wasm32")]
                     CompressionType::XZ => {
                         panic!("XZ compression is not supported on wasm32");
