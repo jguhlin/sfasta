@@ -17,8 +17,11 @@ extern crate rand;
 extern crate rand_chacha;
 
 use std::{
-    fs::{self, metadata, File}, io::{BufRead, BufReader, Read, Write}, os::fd::AsRawFd, path::Path
+    fs::{self, metadata, File}, io::{BufRead, BufReader, Read, Write}, path::Path
 };
+
+#[cfg(unix)]
+use os::fd::AsRawFd;
 
 use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
