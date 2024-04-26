@@ -3,7 +3,7 @@ use std::{
     ops::SubAssign,
 };
 
-use bincode::{BorrowDecode, Decode, Encode};
+use bincode::{de, BorrowDecode, Decode, Encode};
 use binout::{Serializer, VByte};
 use pulp::Arch;
 use rayon::prelude::*;
@@ -249,6 +249,8 @@ impl<K: Key, V: Value, const RANGE: bool> Encode for NodeDisk<K, V, RANGE>
                 let last = self.keys.last().unwrap();
                 bincode::Encode::encode(first, encoder)?;
                 bincode::Encode::encode(&last, encoder)?;
+                // Delta here is essentially 1
+                debug_assert!(self.keys.windows(2).all(|x| x[1] - x[0] == 1));
             } else {
                 bincode::Encode::encode(&self.keys, encoder)?;
             }
