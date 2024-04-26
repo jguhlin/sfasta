@@ -129,6 +129,17 @@ impl CompressionConfig
                 log::debug!("Compress called for none, which involes copying bytes. Prefer not to use it!");
                 Ok(bytes.to_vec())
             }
+            CompressionType::XZ => {
+                let mut output = Vec::with_capacity(bytes.len());
+                let mut compressor = XzEncoder::new(
+                    bytes,
+                    self.compression_level as u32,
+                );
+                compressor
+                    .read_to_end(&mut output)
+                    .expect("Unable to compress with XZ");
+                Ok(output)
+            }
             _ => {
                 // Todo: implement others. This isn't just used for
                 // fractaltrees...
