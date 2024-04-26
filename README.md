@@ -258,4 +258,4 @@ The best source is currently this file: [conversion.rs](https://github.com/jguhl
 | [struct] | [SeqLocs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs) | Sequence locations, stored as a vector of u64. |
 | Special | [Dual Index](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/dual_level_index/dual_index.rs) | See file for more description. Rest of this table TBD |
 
-![Genomics Aotearoa](info/genomics-aotearoa.png)
+![Genomics Aotearoa](./static/genomics-aotearoa.png)
