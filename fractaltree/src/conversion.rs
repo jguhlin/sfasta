@@ -1,11 +1,12 @@
 use super::*;
 
-impl<K: Key, V: Value> From<FractalTreeBuild<K, V>> for FractalTreeDisk<K, V>
+impl<K: Key, V: Value, const RANGE: bool> From<FractalTreeBuild<K, V, RANGE>>
+    for FractalTreeDisk<K, V, RANGE>
 {
-    fn from(mut tree: FractalTreeBuild<K, V>) -> Self
+    fn from(mut tree: FractalTreeBuild<K, V, RANGE>) -> Self
     {
         tree.flush_all();
-        let root: NodeBuild<K, V> = tree.root.into();
+        let root: NodeBuild<K, V, RANGE> = tree.root.into();
         FractalTreeDisk {
             root: root.into(),
             ..Default::default()
@@ -13,9 +14,10 @@ impl<K: Key, V: Value> From<FractalTreeBuild<K, V>> for FractalTreeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
+impl<K: Key, V: Value, const RANGE: bool> From<NodeBuild<K, V, RANGE>>
+    for NodeDisk<K, V, RANGE>
 {
-    fn from(node: NodeBuild<K, V>) -> Self
+    fn from(node: NodeBuild<K, V, RANGE>) -> Self
     {
         let NodeBuild {
             is_root,
@@ -41,10 +43,11 @@ impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> From<Box<build::NodeBuild<K, V>>>
-    for Box<disk::NodeDisk<K, V>>
+impl<K: Key, V: Value, const RANGE: bool>
+    From<Box<build::NodeBuild<K, V, RANGE>>>
+    for Box<disk::NodeDisk<K, V, RANGE>>
 {
-    fn from(node: Box<build::NodeBuild<K, V>>) -> Self
+    fn from(node: Box<build::NodeBuild<K, V, RANGE>>) -> Self
     {
         Box::new((*node).into())
     }

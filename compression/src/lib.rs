@@ -97,10 +97,8 @@ impl CompressionConfig
             CompressionType::ZSTD => {
                 // Use thread local
                 ZSTD_COMPRESSOR.with_borrow_mut(|zstd_compressor| {
-                    *zstd_compressor = zstd_encoder(
-                        self.compression_level as i32,
-                        &None
-                    );
+                    *zstd_compressor =
+                        zstd_encoder(self.compression_level as i32, &None);
                     zstd_compressor.compress(bytes)
                 })
             }
@@ -108,9 +106,7 @@ impl CompressionConfig
             CompressionType::ZSTD => {
                 unimplemented!("ZSTD encoding is not supported on wasm32");
             }
-            CompressionType::LZ4 => {
-                Ok(compress_prepend_size(&bytes))
-            }
+            CompressionType::LZ4 => Ok(compress_prepend_size(&bytes)),
             CompressionType::NONE => {
                 log::debug!("Compress called for none, which involes copying bytes. Prefer not to use it!");
                 Ok(bytes.to_vec())
@@ -373,7 +369,6 @@ impl CompressionWorker
         if self.threads as usize <= core_ids.len() {
             println!("More threads than cores specified, using all cores");
             self.threads = core_ids.len() as u16;
-
         }
 
         for _ in 0..self.threads {
@@ -383,8 +378,9 @@ impl CompressionWorker
             let shutdown = Arc::clone(&self.shutdown_flag);
             let output_queue = Arc::clone(self.writer.as_ref().unwrap());
             let handle = thread::spawn(move || {
-
-                // NOTE: This shaves off a few seconds on my FASTQ example, so keeping it. Could be more for even larger files, and won't affect much for small files
+                // NOTE: This shaves off a few seconds on my FASTQ example, so
+                // keeping it. Could be more for even larger files, and won't
+                // affect much for small files
                 let res = core_affinity::set_for_current(id);
                 if res {
                     compression_worker(queue, shutdown, output_queue)
@@ -557,18 +553,18 @@ fn compression_worker(
                         output
                     }
                     CompressionType::NONE => work.input,
-                    /*#[cfg(not(target_arch = "wasm32"))]
-                    CompressionType::XZ => {
-                        let mut output = Vec::with_capacity(work.input.len());
-                        let mut compressor = XzEncoder::new(
-                            work.input.as_slice(),
-                            work.compression_config.compression_level as u32,
-                        );
-                        compressor
-                            .read_to_end(&mut output)
-                            .expect("Unable to compress with XZ");
-                        output
-                    } */
+                    // #[cfg(not(target_arch = "wasm32"))]
+                    // CompressionType::XZ => {
+                    // let mut output = Vec::with_capacity(work.input.len());
+                    // let mut compressor = XzEncoder::new(
+                    // work.input.as_slice(),
+                    // work.compression_config.compression_level as u32,
+                    // );
+                    // compressor
+                    // .read_to_end(&mut output)
+                    // .expect("Unable to compress with XZ");
+                    // output
+                    // }
                     #[cfg(target_arch = "wasm32")]
                     CompressionType::XZ => {
                         panic!("XZ compression is not supported on wasm32");
