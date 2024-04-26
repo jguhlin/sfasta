@@ -430,7 +430,6 @@ impl BytesBlockStoreBuilder
         let block_locations_pos =
             block_locations_tree.write_to_buffer(&mut out_buf).unwrap();
 
-        log::debug!("Block Locations Pos: {}", block_locations_pos);
         self.block_locations_pos = block_locations_pos;
 
         Ok(())

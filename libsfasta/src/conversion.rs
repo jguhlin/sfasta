@@ -307,12 +307,6 @@ impl Converter
         thread::scope(|s| {
             let mut indexer = libfractaltree::FractalTreeBuild::new(1024, 2048);
 
-            // Use the main thread to write the sequence locations...
-            log::info!(
-                "Writing SeqLocs to file. {}",
-                out_buffer_thread.stream_position().unwrap()
-            );
-
             let index_handle = Some(s.spawn(|_| {
                 for (id, loc) in ids_to_locs.into_iter() {
                     let id = xxh3_64(&id);
