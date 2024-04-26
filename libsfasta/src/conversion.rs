@@ -333,7 +333,7 @@ impl Converter
                 out_buffer_thread.stream_position().unwrap()
             );
 
-            log::info!("SeqLocs Size: {} {}", formatter(seqlocs_location - out_buffer_thread.stream_position().unwrap()), seqlocs_location - out_buffer_thread.stream_position().unwrap());
+            log::info!("SeqLocs Size: {} {}", formatter(out_buffer_thread.stream_position().unwrap() - seqlocs_location), out_buffer_thread.stream_position().unwrap() - seqlocs_location);
 
             if self.index {
                 log::info!("Joining index");
