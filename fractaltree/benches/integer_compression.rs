@@ -280,9 +280,13 @@ pub fn bench_delta_encode_u32(c: &mut Criterion)
     values1milxxh3.sort_unstable();
 
     let mut group = c.benchmark_group("Delta Encode");
-    
-    for input in [("1024 Elem Inclusive", values1024), ("1mil Elem Inclusive", values1mil), ("1024 Elem Xxh3", values1024xxh3), ("1mil Elem Xxh3", values1milxxh3)] {
 
+    for input in [
+        ("1024 Elem Inclusive", values1024),
+        ("1mil Elem Inclusive", values1mil),
+        ("1024 Elem Xxh3", values1024xxh3),
+        ("1mil Elem Xxh3", values1milxxh3),
+    ] {
         let data = input.1;
 
         group.throughput(Throughput::Bytes(
@@ -310,7 +314,9 @@ pub fn bench_delta_encode_u32(c: &mut Criterion)
         group.bench_with_input(
             BenchmarkId::new("Plain Bincode", input.0),
             &data,
-            |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
+            |b, values| {
+                b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
+            },
         );
 
         let pco_config = pco::ChunkConfig::default()
@@ -357,7 +363,9 @@ pub fn bench_delta_encode_u32(c: &mut Criterion)
             &data,
             |b, values| {
                 b.iter(|| {
-                    for chunk in values.chunks(bitpacking::BitPacker8x::BLOCK_LEN) {
+                    for chunk in
+                        values.chunks(bitpacking::BitPacker8x::BLOCK_LEN)
+                    {
                         bitpacking8x_delta_encode(chunk);
                     }
                 })
@@ -369,7 +377,9 @@ pub fn bench_delta_encode_u32(c: &mut Criterion)
             &data,
             |b, values| {
                 b.iter(|| {
-                    for chunk in values.chunks(bitpacking::BitPacker4x::BLOCK_LEN) {
+                    for chunk in
+                        values.chunks(bitpacking::BitPacker4x::BLOCK_LEN)
+                    {
                         bitpacking4x_delta_encode(chunk);
                     }
                 })
@@ -378,20 +388,28 @@ pub fn bench_delta_encode_u32(c: &mut Criterion)
     }
 
     group.finish();
-
-
 }
 
 pub fn bench_delta_encode_u8(c: &mut Criterion)
 {
-    let fastq_illumina_scores = include_bytes!("data/fastq_scores_illumina.txt").to_vec();
+    let fastq_illumina_scores =
+        include_bytes!("data/fastq_scores_illumina.txt").to_vec();
     let fastq_illumina_scores_1024 = fastq_illumina_scores[..1024].to_vec();
     let fastq_illumina_scores_2048 = fastq_illumina_scores[..2048].to_vec();
 
     let mut group = c.benchmark_group("Delta Encode");
-    
-    for input in [("FASTQ Quality Scores Illumina", fastq_illumina_scores), ("FASTQ Quality Scores Illumina 1024", fastq_illumina_scores_1024), ("FASTQ Quality Scores Illumina 2048", fastq_illumina_scores_2048)] {
 
+    for input in [
+        ("FASTQ Quality Scores Illumina", fastq_illumina_scores),
+        (
+            "FASTQ Quality Scores Illumina 1024",
+            fastq_illumina_scores_1024,
+        ),
+        (
+            "FASTQ Quality Scores Illumina 2048",
+            fastq_illumina_scores_2048,
+        ),
+    ] {
         let data = input.1;
 
         group.throughput(Throughput::Bytes(
@@ -403,12 +421,14 @@ pub fn bench_delta_encode_u8(c: &mut Criterion)
         group.bench_with_input(
             BenchmarkId::new("Plain Bincode", input.0),
             &data,
-            |b, values| b.iter(|| bincode::encode_to_vec(&values, config).unwrap()),
+            |b, values| {
+                b.iter(|| bincode::encode_to_vec(&values, config).unwrap())
+            },
         );
 
         let mut data = data.to_vec();
 
-       group.bench_with_input(
+        group.bench_with_input(
             BenchmarkId::new("Pulp Arch Encode", input.0),
             &data,
             |b, values| {
@@ -431,12 +451,9 @@ pub fn bench_delta_encode_u8(c: &mut Criterion)
                 })
             },
         );
-
     }
 
     group.finish();
-
-
 }
 
 criterion_group!(name = integercompression;
