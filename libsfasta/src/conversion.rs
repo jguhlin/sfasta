@@ -323,7 +323,7 @@ impl Converter
             seqlocs_location =
                 seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
 
-            log::info!("SeqLocs Size: {} {}", formatter(out_buffer_thread.stream_position().unwrap() - seqlocs_location), out_buffer_thread.stream_position().unwrap() - seqlocs_location);
+            log::info!("SeqLocs Size: {} {} {}", formatter(out_buffer_thread.stream_position().unwrap() - seqlocs_location), out_buffer_thread.stream_position().unwrap(), seqlocs_location);
 
             if self.index {
                 let index = index_handle.unwrap().join().unwrap();

@@ -26,6 +26,8 @@ I'm hopeful folks will check this out, play around, break it, and give feedback.
 | Masking | Fully Supported |
 | Nanopore Signals | Planned |
 | Base Modifications | Planned |
+| Pangenome Graph | Maybe |
+| Alignments | Not Planned. CRAM fulfills this role. |
 
 # Usage
 ## Installation
