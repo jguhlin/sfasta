@@ -4,15 +4,19 @@ use sorted_vec::SortedVec;
 /// This is an insertion-only B+ tree, deletions are not supported
 /// Meant for a write-many, write-once to disk, read-only-and-many
 /// database
+///
+/// RANGE indicates that keys are (ultimately) stored as a consecutive
+/// sequence of integers (1, 2, 3, 4, 5, ...) and can be expressed as
+/// a range (1..5) instead of storing each value individually
 #[derive(Debug)]
-pub struct FractalTreeBuild<K: Key, V: Value>
+pub struct FractalTreeBuild<K: Key, V: Value, const RANGE: bool>
 {
-    pub root: NodeBuild<K, V>,
+    pub root: NodeBuild<K, V, RANGE>,
     pub order: usize,
     pub buffer_size: usize,
 }
 
-impl<K: Key, V: Value> FractalTreeBuild<K, V>
+impl<K: Key, V: Value, const RANGE: bool> FractalTreeBuild<K, V, RANGE>
 {
     pub fn new(order: usize, buffer_size: usize) -> Self
     {
@@ -92,26 +96,18 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
     }
 }
 
-// Must use
-#[must_use]
-pub enum InsertionAction<K: Key, V: Value>
-{
-    Success,
-    NodeSplit(K, Box<NodeBuild<K, V>>),
-}
-
 #[derive(Debug)]
-pub struct NodeBuild<K: Key, V: Value>
+pub struct NodeBuild<K: Key, V: Value, const RANGE: bool>
 {
     pub is_root: bool,
     pub is_leaf: bool,
     pub keys: SortedVec<K>,
-    pub children: Option<Vec<Box<NodeBuild<K, V>>>>,
+    pub children: Option<Vec<Box<NodeBuild<K, V, RANGE>>>>,
     pub values: Option<Vec<V>>,
     pub buffer: Vec<(K, V)>,
 }
 
-impl<K: Key, V: Value> NodeBuild<K, V>
+impl<K: Key, V: Value, const RANGE: bool> NodeBuild<K, V, RANGE>
 {
     pub fn internal(order: usize, buffer_size: usize) -> Self
     {
@@ -240,7 +236,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         &mut self,
         order: usize,
         buffer_size: usize,
-    ) -> (K, Box<NodeBuild<K, V>>)
+    ) -> (K, Box<NodeBuild<K, V, RANGE>>)
     {
         debug_assert!(self.keys.is_sorted());
 
@@ -257,7 +253,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
             None
         };
 
-        let children: Option<Vec<Box<NodeBuild<K, V>>>> =
+        let children: Option<Vec<Box<NodeBuild<K, V, RANGE>>>> =
             if self.children.is_some() {
                 let mut children =
                     self.children.as_mut().unwrap().split_off(mid + 1);
@@ -316,7 +312,7 @@ mod tests
     #[test]
     fn split()
     {
-        let mut node: NodeBuild<u32, u32> = super::NodeBuild {
+        let mut node: NodeBuild<u32, u32, false> = super::NodeBuild {
             is_root: false,
             is_leaf: true,
             keys: unsafe {
@@ -344,7 +340,7 @@ mod tests
         });
         assert_eq!(node.values, Some(vec![1, 2, 3, 4, 5]));
 
-        let mut node: NodeBuild<u32, u32> = super::NodeBuild {
+        let mut node: NodeBuild<u32, u32, false> = super::NodeBuild {
             is_root: false,
             is_leaf: true,
             keys: SortedVec::from_unsorted((0..28).collect()),
@@ -374,7 +370,8 @@ mod tests
     #[test]
     fn basic_tree()
     {
-        let mut tree = super::FractalTreeBuild::new(6, 3);
+        let mut tree: FractalTreeBuild<u32, u32, false> =
+            super::FractalTreeBuild::new(6, 3);
         tree.insert(0, 0);
 
         let mut rng = thread_rng();
@@ -391,7 +388,7 @@ mod tests
     #[test]
     fn simple_insertions()
     {
-        let mut tree: FractalTreeBuild<u32, u32> =
+        let mut tree: FractalTreeBuild<u32, u32, false> =
             super::FractalTreeBuild::new(6, 3);
         tree.insert(1, 1);
         tree.insert(2, 2);
@@ -408,7 +405,8 @@ mod tests
     #[test]
     fn tree_structure()
     {
-        let mut tree = super::FractalTreeBuild::new(8, 3);
+        let mut tree: FractalTreeBuild<u32, u32, false> =
+            super::FractalTreeBuild::new(8, 3);
 
         let mut rng = thread_rng();
         let mut values = (0..1024_u32).collect::<Vec<u32>>();
@@ -469,7 +467,8 @@ mod tests
         let mut values_8192 = (0..8192_u32).collect::<Vec<u32>>();
         values_8192.shuffle(&mut rng);
 
-        let mut tree = super::FractalTreeBuild::new(8, 8);
+        let mut tree: FractalTreeBuild<u32, u32, false> =
+            super::FractalTreeBuild::new(8, 8);
 
         for i in values_1024.iter() {
             tree.insert(*i, *i as u32);
@@ -481,7 +480,8 @@ mod tests
             assert_eq!(tree.search(i), Some(*i as u32));
         }
 
-        let mut tree = super::FractalTreeBuild::new(16, 32);
+        let mut tree: FractalTreeBuild<u32, u32, false> =
+            super::FractalTreeBuild::new(16, 32);
 
         for i in values_8192.iter() {
             tree.insert(*i, *i as u32);
@@ -494,9 +494,10 @@ mod tests
         }
 
         // Find value does not exist
-        assert_eq!(tree.search(&8192), None);
+        assert_eq!(tree.search(&8192_u32), None);
 
-        let mut tree = super::FractalTreeBuild::new(64, 32);
+        let mut tree: FractalTreeBuild<u32, u32, false> =
+            super::FractalTreeBuild::new(64, 32);
         for i in 0..(1024 * 1024_u32) {
             tree.insert(i as u32, i as u32);
         }
@@ -512,7 +513,8 @@ mod tests
         assert!(tree.search(&(1024 * 1024_u32 + 1)) == None);
 
         // New tree
-        let mut tree = super::FractalTreeBuild::new(8, 4);
+        let mut tree: FractalTreeBuild<u32, u32, false> =
+            super::FractalTreeBuild::new(8, 4);
         for i in 1024..2048_u32 {
             tree.insert(i, i as u32);
         }
@@ -542,7 +544,8 @@ mod tests
         let mut values_8192 = (0..8192_u32).collect::<Vec<u32>>();
         values_8192.shuffle(&mut rng);
 
-        let mut tree = super::FractalTreeBuild::new(32, 8);
+        let mut tree: FractalTreeBuild<u32, u32, false> =
+            super::FractalTreeBuild::new(32, 8);
 
         for i in values_1024.iter() {
             tree.insert(*i, *i as u32);
@@ -568,7 +571,7 @@ mod tests
             .map(|x| x as u32)
             .collect::<Vec<u32>>();
 
-        let mut tree: FractalTreeBuild<u32, u32> =
+        let mut tree: FractalTreeBuild<u32, u32, false> =
             FractalTreeBuild::new(128, 256);
         for i in values128m.iter() {
             tree.insert(*i, *i as u32);
@@ -578,7 +581,7 @@ mod tests
         let depth = tree.depth();
         let node_count = tree.count_all_nodes();
 
-        let tree: FractalTreeDisk<u32, u32> = tree.into();
+        let tree: FractalTreeDisk<u32, u32, false> = tree.into();
 
         let config = config::standard();
 
@@ -608,7 +611,8 @@ mod tests
 
         let mut rng = thread_rng();
 
-        let mut tree = FractalTreeBuild::new(128, 256);
+        let mut tree: FractalTreeBuild<u32, u32, false> =
+            FractalTreeBuild::new(128, 256);
 
         // Generate 1024 * 1024 random key value pairs
 

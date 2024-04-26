@@ -340,7 +340,7 @@ impl Converter
 
                 let start = out_buffer_thread.stream_position().unwrap();
 
-                let mut index: FractalTreeDisk<u32, u32> = index.into();
+                let mut index: FractalTreeDisk<u32, u32, false> = index.into();
                 index.set_compression(CompressionConfig {
                     compression_type: CompressionType::ZSTD,
                     compression_level: -3,
@@ -515,11 +515,26 @@ impl Converter
         // let scores = ThreadBuilder::new(scores);
 
         if self.dict {
-            ids = ids.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
-            headers = headers.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
-            masking = masking.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
-            sequences = sequences.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
-            scores = scores.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
+            ids = ids
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
+            headers = headers
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
+            masking = masking
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
+            sequences = sequences
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
+            scores = scores
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
         }
 
         let mut reader = parse_fastx_reader(in_buf).unwrap();
