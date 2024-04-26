@@ -46,7 +46,7 @@ pub fn bench_large_tree(c: &mut Criterion)
                 &(*order, *buffer_size),
                 |b, (order, buffer_size)| {
                     b.iter(|| {
-                        let mut tree: FractalTreeBuild<u64, u64, false> =
+                        let mut tree =
                             FractalTreeBuild::new(*order, *buffer_size);
                         for i in values128m.iter() {
                             tree.insert(*i, *i);
@@ -68,7 +68,7 @@ pub fn bench_large_tree(c: &mut Criterion)
                 &(*order, *buffer_size),
                 |b, (order, buffer_size)| {
                     b.iter(|| {
-                        let mut tree: FractalTreeBuild<u64, u64, false> = FractalTreeBuild::new(*order, *buffer_size);
+                        let mut tree = FractalTreeBuild::new(*order, *buffer_size);
                         for i in values1m.iter() {
                             tree.insert(*i, *i);
                         }
@@ -132,8 +132,7 @@ pub fn bench_search(c: &mut Criterion)
     ]
     .iter()
     {
-        let mut tree: FractalTreeBuild<u64, u64, false> =
-            FractalTreeBuild::new(*order, 128);
+        let mut tree = FractalTreeBuild::new(*order, 128);
         for i in values128m.iter() {
             tree.insert(*i, *i);
         }

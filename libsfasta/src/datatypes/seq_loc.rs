@@ -380,7 +380,7 @@ impl Decode for SeqLoc
 pub struct SeqLocsStoreBuilder
 {
     pub location: u64,
-    pub tree: FractalTreeBuild<u32, SeqLoc, true>,
+    pub tree: FractalTreeBuild<u32, SeqLoc>,
     count: usize,
 }
 
@@ -433,7 +433,7 @@ impl SeqLocsStoreBuilder
     {
         self.location = out_buf.stream_position().unwrap();
 
-        let mut tree: FractalTreeDisk<u32, SeqLoc, true> = self.tree.into();
+        let mut tree: FractalTreeDisk<u32, SeqLoc> = self.tree.into();
         tree.set_compression(CompressionConfig {
             compression_type: CompressionType::ZSTD,
             compression_level: -3, // Irrelevant for LZ4, 3 is ZSTD default
@@ -512,7 +512,7 @@ pub struct SeqLocsStore
 {
     preloaded: bool,
     location: u64,
-    tree: FractalTreeDisk<u32, SeqLoc, true>,
+    tree: FractalTreeDisk<u32, SeqLoc>,
 }
 
 impl SeqLocsStore

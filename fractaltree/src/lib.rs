@@ -1,13 +1,12 @@
 #![feature(is_sorted)]
 #![feature(trait_alias)]
-#![feature(step_trait)]
 
 pub mod build;
 pub mod conversion;
 pub mod disk;
 pub mod fractal;
 
-use std::{iter::Step, ops::{AddAssign, RangeBounds, SubAssign}};
+use std::ops::{AddAssign, SubAssign};
 
 pub use build::*;
 pub use conversion::*;
@@ -30,14 +29,7 @@ pub trait Key = 'static
     + num::traits::Unsigned
     + Copy
     + SubAssign
-    + AddAssign
-    + Step
-    + TryFrom<usize>
-    + TryFrom<u64>
-    + TryFrom<u32>
-    + TryFrom<u16>
-    + TryFrom<u8>
-    ;
+    + AddAssign;
 
 pub trait Value = 'static + std::fmt::Debug + Encode + Decode + Clone;
 
@@ -52,13 +44,12 @@ mod test
     #[test]
     fn test_duplicate_tree()
     {
-        let mut tree: FractalTreeBuild<_, _, false> =
-            FractalTreeBuild::new(8, 16);
+        let mut tree = FractalTreeBuild::new(8, 16);
         for _ in 0..8192 {
             tree.insert(1, 1);
         }
         tree.flush_all();
-        let tree: FractalTreeDisk<u32, u32, false> = tree.into();
+        let tree: FractalTreeDisk<u32, u32> = tree.into();
 
         assert!(tree.root.children.is_some());
         assert!(tree.root.children.as_ref().unwrap().len() > 0);

@@ -1,3 +1,5 @@
+[![CircleCI](https://dl.circleci.com/status-badge/img/gh/jguhlin/sfasta/tree/main.svg?style=svg)](https://dl.circleci.com/status-badge/redirect/gh/jguhlin/sfasta/tree/main)
+
 # Introduction
 Sfasta is a replacement for the FASTA/Q format with the twin goals of saving space and having very fast random-access, even for large datasets (such as the nt database, 203Gb gzip compressed, 210Gb bgzip compressed(+1.8Gb index), and 141Gb with sfasta, index inclusive). 
 

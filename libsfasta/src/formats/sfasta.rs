@@ -27,7 +27,7 @@ pub struct Sfasta<'sfa>
     pub directory: Directory,
     pub parameters: Option<Parameters>,
     pub metadata: Option<Metadata>,
-    pub index: Option<FractalTreeDisk<u32, u32, false>>,
+    pub index: Option<FractalTreeDisk<u32, u32>>,
     buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<BytesBlockStore>,
     pub seqlocs: Option<SeqLocsStore>,
