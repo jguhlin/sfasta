@@ -32,6 +32,11 @@ pub trait Key = 'static
     + SubAssign
     + AddAssign
     + Step
+    + TryFrom<usize>
+    + TryFrom<u64>
+    + TryFrom<u32>
+    + TryFrom<u16>
+    + TryFrom<u8>
     ;
 
 pub trait Value = 'static + std::fmt::Debug + Encode + Decode + Clone;

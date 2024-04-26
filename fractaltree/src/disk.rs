@@ -246,16 +246,26 @@ impl<K: Key, V: Value, const RANGE: bool> Encode for NodeDisk<K, V, RANGE>
             if RANGE {
                 // Numbers are stored sequentially, so store the first number and the number of numbers
                 let first = self.keys.first().unwrap();
-                let count = self.keys.len();
+                let last = self.keys.last().unwrap();
                 bincode::Encode::encode(first, encoder)?;
-                bincode::Encode::encode(&count, encoder)?;
-                // bincode::Encode::encode(&self.keys, encoder)?;
+                bincode::Encode::encode(&last, encoder)?;
+            } else {
+                bincode::Encode::encode(&self.keys, encoder)?;
+            }
+        } else {
+            if RANGE {
+                // Numbers are stored sequentially, and should have consistent delta between them
+                let first = self.keys.first().unwrap();
+                let last = self.keys.last().unwrap();
+                let delta = self.keys[1] - self.keys[0];
+                bincode::Encode::encode(first, encoder)?;
+                bincode::Encode::encode(&last, encoder)?;
+                bincode::Encode::encode(&delta, encoder)?;
+                debug_assert!(self.keys.windows(2).all(|x| x[1] - x[0] == delta));
             } else {
                 bincode::Encode::encode(&self.keys, encoder)?;
             }
         }
-
-        
 
         if self.is_leaf {
             bincode::Encode::encode(&self.values, encoder)?;
@@ -291,7 +301,15 @@ impl<K: Key, V: Value, const RANGE: bool> Decode for NodeDisk<K, V, RANGE>
                 bincode::Decode::decode(decoder)?          
             }
         } else {
-            bincode::Decode::decode(decoder)?        
+            if RANGE {
+                // Numbers are in order, and based on sequential, should be able to figure out the delta between each and store that
+                let first: K = bincode::Decode::decode(decoder)?;
+                let last: K = bincode::Decode::decode(decoder)?;
+                let delta: u64 = bincode::Decode::decode(decoder)?;
+                (first..last).step_by(delta as usize).collect()
+            } else {
+                bincode::Decode::decode(decoder)?
+            }
         };
 
         let values: Option<Vec<V>> = if is_leaf {
