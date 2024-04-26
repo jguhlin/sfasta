@@ -13,7 +13,6 @@ use std::{
 
 use lz4_flex::block::{compress_prepend_size, decompress_size_prepended};
 
-#[cfg(not(target_arch = "wasm32"))]
 use liblzma::read::{XzEncoder, XzDecoder};
 
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
@@ -396,7 +395,8 @@ impl CompressionWorker
         let mut core_ids = core_affinity::get_core_ids().unwrap();
 
         if self.threads as usize <= core_ids.len() {
-            println!("More threads than cores specified, using all cores");
+            log::debug!("Detected {} Physical Cores. Setting threads to {}", core_ids.len(), self.threads);
+
             self.threads = core_ids.len() as u16;
 
         }

@@ -518,6 +518,7 @@ impl BytesBlockStore
             bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed)
                 .unwrap();
 
+        // todo support all compression algos
         let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
         decompressor.include_magicbytes(false).unwrap();
         decompressor
