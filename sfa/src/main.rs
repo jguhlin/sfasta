@@ -116,6 +116,10 @@ enum Commands
         #[clap(long)]
         zstd: bool,
 
+        /// LZ4 compression for all
+        #[clap(long)]
+        lz4: bool,
+
         /// XZ compression for all
         #[clap(long)]
         xz: bool,
@@ -218,6 +222,7 @@ fn main()
             dict_samples,
             dict_size,
             metadata,
+            lz4,
         } => convert(
             &input,
             threads as usize,
@@ -229,6 +234,7 @@ fn main()
             profile,
             blocksize,
             zstd,
+            lz4,
             xz,
             brotli,
             snappy,
@@ -584,6 +590,7 @@ fn convert(
     profile: Option<String>,
     blocksize: Option<u32>,
     zstd: bool,
+    lz4: bool,
     xz: bool,
     brotli: bool,
     snappy: bool,
@@ -705,6 +712,13 @@ fn convert(
         compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Bzip2");
+        }
+    }
+    if lz4 {
+        compression_type = CompressionType::LZ4;
+        compression_set = true;
+        if compression_set {
+            log::warn!("Multiple compression types specified -- Using LZ4");
         }
     }
 
