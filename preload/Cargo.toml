@@ -1,0 +1,9 @@
+[package]
+name = "preload"
+version = "0.1.0"
+edition = "2021"
+crate-type = ["cdylib"]
+
+[dependencies]
+flate2 = { version = "1", features = ["zlib-ng"] }
+libc = "0.2"
