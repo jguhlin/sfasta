@@ -46,3 +46,6 @@ index:
 seqlocs:
   compression_type: LZ4
   compression_level: 1
+id_index:
+  compression_type: ZSTD
+  compression_level: 1

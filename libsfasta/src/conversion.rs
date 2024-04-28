@@ -727,10 +727,7 @@ impl Converter
     }
 }
 
-// TODO: Add support for metadata here...
 // TODO: Will likely need to be the same builder style
-// TODO: Will need to generalize this function so it works with FASTA
-// & FASTQ & Masking
 
 /// Input filehandle goes in, output goes out.
 /// Function returns:
