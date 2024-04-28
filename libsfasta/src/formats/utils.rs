@@ -41,13 +41,15 @@ pub fn detect_compression_format(
         [0x1F, 0x8B, ..] => CompressionType::GZIP,
         [0x42, 0x5A, ..] => CompressionType::BZIP2,
         [0xFD, b'7', b'z', b'X', b'Z', 0x00] => CompressionType::XZ,
-        [0x28, 0xB5, 0x2F, 0xFD, ..] => CompressionType::LZMA,
-        [0x5D, 0x00, ..] => CompressionType::LZMA,
-        [0x1F, 0x9D, ..] => CompressionType::LZMA,
         [0x37, 0x7A, 0xBC, 0xAF, 0x27, 0x1C] => CompressionType::ZSTD,
         [0x04, 0x22, 0x4D, 0x18, ..] => CompressionType::LZ4,
         [0x08, 0x22, 0x4D, 0x18, ..] => CompressionType::LZ4,
-        [0x52, 0x61, 0x72, 0x21, 0x1A, 0x07] => CompressionType::RAR,
+        // Snappy
+        [b'S', b'N', b'A', b'P', b'P', b'Y', 0x00] => CompressionType::SNAPPY,
+        // ZSTD
+        [b'Z', b'S', b'T', b'D', 0x01, 0x00, 0x00, 0x00] => {
+            CompressionType::ZSTD
+        }
         _ => return Err("File does not appear to be compressed"),
     })
 }

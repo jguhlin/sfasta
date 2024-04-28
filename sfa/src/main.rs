@@ -17,7 +17,9 @@ extern crate rand;
 extern crate rand_chacha;
 
 use std::{
-    fs::{self, metadata, File}, io::{BufRead, BufReader, Read, Write}, path::Path
+    fs::{self, metadata, File},
+    io::{BufRead, BufReader, Read, Write},
+    path::Path,
 };
 
 #[cfg(unix)]
@@ -354,7 +356,8 @@ fn faidx(input: &str, ids: &Vec<String>)
         0,
         0,
         nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-    ).expect("Fadvise Failed");
+    )
+    .expect("Fadvise Failed");
 
     let in_buf = BufReader::new(in_buf);
 
@@ -405,7 +408,8 @@ fn view(input: &str)
         0,
         0,
         nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-    ).expect("Fadvise Failed");
+    )
+    .expect("Fadvise Failed");
 
     let mut sfasta =
         SfastaParser::open_from_buffer(BufReader::new(in_buf), true).unwrap();
@@ -487,7 +491,8 @@ fn list(input: &str)
         0,
         0,
         nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-    ).expect("Fadvise Failed");
+    )
+    .expect("Fadvise Failed");
 
     let in_buf = BufReader::new(in_buf);
     let mut sfasta = SfastaParser::open_from_buffer(in_buf, false).unwrap();
@@ -642,7 +647,8 @@ pub fn generic_open_file_pb(
         0,
         0,
         nix::fcntl::PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
-    ).expect("Fadvise Failed");
+    )
+    .expect("Fadvise Failed");
 
     // let mut compressed: bool = false;
     let file = pb.wrap_read(file);

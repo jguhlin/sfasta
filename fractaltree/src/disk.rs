@@ -132,16 +132,17 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         let mut new_root = self.root.clone();
         new_root.store_dummy(&mut out_buf, &mut sample_sizes);
 
-        log::info!("Average Size: {}", sample_sizes.iter().sum::<usize>() / sample_sizes.len());
+        log::info!(
+            "Average Size: {}",
+            sample_sizes.iter().sum::<usize>() / sample_sizes.len()
+        );
 
         let buf = out_buf.into_inner();
 
         // First 128 bytes
 
         match zstd::dict::from_continuous(&buf, &sample_sizes, 32 * 1024) {
-            Ok(dict) => {
-                dict
-            }
+            Ok(dict) => dict,
             Err(e) => {
                 panic!("Error creating zstd dict: {:?}", e);
             }
@@ -435,13 +436,16 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         self.state = NodeState::InMemory;
     }
 
-    pub fn store_dummy<W>(&mut self, out_buf: &mut W, sample_sizes: &mut Vec<usize>)
-    where
+    pub fn store_dummy<W>(
+        &mut self,
+        out_buf: &mut W,
+        sample_sizes: &mut Vec<usize>,
+    ) where
         W: Write + Seek,
     {
         let config = bincode::config::standard()
-                    .with_variable_int_encoding()
-                    .with_limit::<{ 1024 * 1024 }>();
+            .with_variable_int_encoding()
+            .with_limit::<{ 1024 * 1024 }>();
 
         // let mut new_self = self.clone();
 
@@ -453,7 +457,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 }
             }
         }
-        
+
         let cur_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
         // Don't store the root separately...
         if !self.is_root {
@@ -472,7 +476,6 @@ impl<K: Key, V: Value> NodeDisk<K, V>
             self.children = None;
             self.values = None;
         }
-
     }
 
     pub fn store<W>(
@@ -514,10 +517,10 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                     out_buf,
                     config,
                 ) {
-                    Ok(size) => (), /* log::debug!("Compressed size of
-                                      * NodeDisk with {:?}: {}",
-                                      * compression.as_ref().unwrap().
-                                      * compression_type, size), */
+                    Ok(size) => (), // log::debug!("Compressed size of
+                    // NodeDisk with {:?}: {}",
+                    // compression.as_ref().unwrap().
+                    // compression_type, size),
                     Err(e) => {
                         panic!("Error compressing NodeDisk: {:?}", e)
                     }
@@ -736,7 +739,7 @@ mod tests
 
         let dict = tree.create_zstd_dict();
         println!("Dict size: {}", dict.len());
-       
+
         let mut tree_no_compression = tree.clone();
         let out_buf = Vec::new();
         let mut out_buf = std::io::Cursor::new(out_buf);
@@ -758,15 +761,17 @@ mod tests
         let mut tree_dict = tree.clone();
         tree_dict.set_compression(libcompression::CompressionConfig {
             compression_type: libcompression::CompressionType::ZSTD,
-            compression_dict: Some(std::sync::Arc::new(dict)),
+            compression_dict: Some(dict),
             // compression_dict: None,
             compression_level: -1,
         });
         let out_buf = Vec::new();
         let mut out_buf = std::io::Cursor::new(out_buf);
         tree_dict.write_to_buffer(&mut out_buf).unwrap();
-        println!("Size with compression + dict: {}", out_buf.into_inner().len());
-
+        println!(
+            "Size with compression + dict: {}",
+            out_buf.into_inner().len()
+        );
     }
 
     #[test]

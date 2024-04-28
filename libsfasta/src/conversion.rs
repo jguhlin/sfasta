@@ -5,9 +5,9 @@
 
 // Easy, high-performance conversion functions
 use crossbeam::{thread, utils::Backoff};
+use humansize::{make_format, DECIMAL};
 use needletail::parse_fastx_reader;
 use xxhash_rust::xxh3::xxh3_64;
-use humansize::{make_format, DECIMAL};
 
 use std::{
     io::{Read, Seek, SeekFrom, Write},
@@ -320,10 +320,17 @@ impl Converter
 
             let formatter = make_format(DECIMAL);
 
+            let start = out_buffer_thread.stream_position().unwrap();
+
             seqlocs_location =
                 seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
 
-            log::info!("SeqLocs Size: {} {} {}", formatter(out_buffer_thread.stream_position().unwrap() - seqlocs_location), out_buffer_thread.stream_position().unwrap(), seqlocs_location);
+            log::info!(
+                "SeqLocs Size: {} {} {}",
+                formatter(out_buffer_thread.stream_position().unwrap() - start),
+                out_buffer_thread.stream_position().unwrap(),
+                start
+            );
 
             if self.index {
                 let index = index_handle.unwrap().join().unwrap();
@@ -505,11 +512,26 @@ impl Converter
         // let scores = ThreadBuilder::new(scores);
 
         if self.dict {
-            ids = ids.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
-            headers = headers.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
-            masking = masking.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
-            sequences = sequences.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
-            scores = scores.with_dict().with_dict_samples(self.dict_samples).with_dict_size(self.dict_size);
+            ids = ids
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
+            headers = headers
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
+            masking = masking
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
+            sequences = sequences
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
+            scores = scores
+                .with_dict()
+                .with_dict_samples(self.dict_samples)
+                .with_dict_size(self.dict_size);
         }
 
         let mut reader = parse_fastx_reader(in_buf).unwrap();

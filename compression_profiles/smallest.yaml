@@ -1,0 +1,50 @@
+data:
+  ids:
+    compression_type: XZ
+    compression_level: 9
+  headers:
+    compression_type: XZ
+    compression_level: 9
+  sequence:
+    compression_type: XZ
+    compression_level: 9
+  masking:
+    compression_type: XZ
+    compression_level: 9
+  quality:
+    compression_type: XZ
+    compression_level: 9
+  signals:
+    compression_type: XZ
+    compression_level: 9
+  modifications:
+    compression_type: XZ
+    compression_level: 9
+index:
+  ids:
+    compression_type: XZ
+    compression_level: 9
+  headers:
+    compression_type: XZ
+    compression_level: 9
+  sequence:
+    compression_type: XZ
+    compression_level: 9
+  masking:
+    compression_type: XZ
+    compression_level: 9
+  quality:
+    compression_type: XZ
+    compression_level: 9
+  signals:
+    compression_type: XZ
+    compression_level: 9
+  modifications:
+    compression_type: XZ
+    compression_level: 9
+seqlocs:
+  compression_type: XZ
+  compression_level: 9
+id_index:
+  compression_type: XZ
+  compression_level: 9

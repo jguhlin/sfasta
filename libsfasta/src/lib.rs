@@ -1,7 +1,5 @@
 // #![feature(byte_slice_trim_ascii)]
 
-pub mod block_index;
-pub mod convenience;
 pub mod conversion;
 pub mod datastructures;
 pub mod datatypes;

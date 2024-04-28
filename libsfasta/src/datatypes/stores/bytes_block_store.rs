@@ -97,7 +97,6 @@ impl Default for BytesBlockStoreBuilder
 
 impl BytesBlockStoreBuilder
 {
-
     pub fn with_dict(mut self) -> Self
     {
         self.create_dict = true;
@@ -195,7 +194,7 @@ impl BytesBlockStoreBuilder
             Ok(v) => {
                 log::info!("Dict Size: {}", v.len());
                 let mut cc = (*self.compression_config).clone();
-                cc.compression_dict = Some(Arc::new(v));
+                cc.compression_dict = Some(v);
                 self.compression_config = Arc::new(cc);
             }
             Err(e) => {
@@ -518,12 +517,13 @@ impl BytesBlockStore
             bincode::decode_from_std_read(&mut in_buf, bincode_config_fixed)
                 .unwrap();
 
-        // todo support all compression algos
-        let mut decompressor = zstd::bulk::Decompressor::new().unwrap();
-        decompressor.include_magicbytes(false).unwrap();
-        decompressor
-            .decompress_to_buffer(&compressed_block, buffer)
-            .unwrap();
+        // todo unnecessary allocations, also should be async
+        buffer.copy_from_slice(
+            &self
+                .compression_config
+                .decompress(&compressed_block)
+                .unwrap(),
+        );
     }
 
     pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> Vec<u8>

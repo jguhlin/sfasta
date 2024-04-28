@@ -46,22 +46,26 @@ impl Default for MaskingStoreBuilder
 
 impl MaskingStoreBuilder
 {
-    pub fn with_dict(mut self) -> Self {
+    pub fn with_dict(mut self) -> Self
+    {
         self.inner = self.inner.with_dict();
         self
     }
 
-    pub fn with_dict_size(mut self, dict_size: u64) -> Self {
+    pub fn with_dict_size(mut self, dict_size: u64) -> Self
+    {
         self.inner = self.inner.with_dict_size(dict_size);
         self
     }
 
-    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self {
+    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self
+    {
         self.inner = self.inner.with_dict_samples(dict_samples);
         self
     }
 
-    pub fn with_compression(mut self, compression: CompressionConfig) -> Self {
+    pub fn with_compression(mut self, compression: CompressionConfig) -> Self
+    {
         self.inner = self.inner.with_compression(compression);
         self
     }
