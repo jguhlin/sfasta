@@ -106,8 +106,9 @@ impl CompressionConfig
 
     pub fn with_compression_level(mut self, compression_level: i8) -> Self
     {
+        self.compression_level = compression_level;
         match self.check_compression_level() {
-            Ok(_) => {}
+            Ok(_) => (),
             Err(x) => {
                 log::warn!(
                     "Compression level {} is out of range for {:?}. Setting to {}",
@@ -115,9 +116,9 @@ impl CompressionConfig
                     self.compression_type,
                     x
                 );
-                self.compression_level = x;
+                self.compression_level = x;                
             }
-        }
+        };
         self
     }
 
@@ -130,7 +131,7 @@ impl CompressionConfig
         self
     }
 
-    pub const fn check_compression_level(&self) -> Result<(), i8>
+    pub fn check_compression_level(&self) -> Result<(), i8>
     {
         let (min, max) = self.compression_type.compression_level_range();
         if self.compression_level < min {
@@ -773,5 +774,19 @@ fn compression_worker(
 mod tests
 {
     use super::*;
-    use flate2::Compression;
+
+    #[test]
+    pub fn test_out_of_range() {
+        let compression_config = CompressionConfig::new();
+        let compression_config = compression_config.with_compression_type(CompressionType::ZSTD);
+        let compression_config = compression_config.with_compression_level(23);
+        assert_eq!(compression_config.compression_level, 22);
+
+        // BROTLI
+        let compression_config = CompressionConfig::new();
+        let compression_config = compression_config.with_compression_type(CompressionType::BROTLI);
+        let compression_config = compression_config.with_compression_level(12);
+        assert_eq!(compression_config.compression_level, 11);
+
+    }
 }
