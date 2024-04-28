@@ -38,7 +38,7 @@ pub struct BytesBlockStoreBuilder
     pub block_locations_pos: u64,
 
     /// Maximum block size
-    pub block_size: usize,
+    pub block_size: u32,
 
     /// Data, typically a temporary store
     pub data: Vec<u8>, // Used for writing and reading...
@@ -122,8 +122,8 @@ impl BytesBlockStoreBuilder
     /// Configuration. Set the block size
     pub fn with_block_size(mut self, block_size: usize) -> Self
     {
-        self.block_size = block_size;
-        self.data = Vec::with_capacity(self.block_size);
+        self.block_size = block_size as u32;
+        self.data = Vec::with_capacity(self.block_size as usize);
         self
     }
 
@@ -159,7 +159,7 @@ impl BytesBlockStoreBuilder
     {
         debug_assert!(self.compression_worker.is_some());
 
-        let mut data = Vec::with_capacity(self.block_size);
+        let mut data = Vec::with_capacity(self.block_size as usize);
         std::mem::swap(&mut self.data, &mut data);
 
         if self.create_dict {
@@ -235,7 +235,7 @@ impl BytesBlockStoreBuilder
 
     pub fn block_size(&self) -> usize
     {
-        self.block_size
+        self.block_size as usize
     }
 
     /// Check that all block locations are not 0
@@ -284,7 +284,7 @@ impl BytesBlockStoreBuilder
 
         while written < input.len() {
             // How many bytes can we write to the current block?
-            let remaining = self.block_size - self.data.len();
+            let remaining = self.block_size as usize - self.data.len();
 
             // If we can write the entire input, do so
             if input.len() - written <= remaining as usize {
@@ -314,8 +314,8 @@ impl BytesBlockStoreBuilder
                 });
             }
 
-            debug_assert!(self.data.len() <= self.block_size);
-            if self.data.len() == self.block_size {
+            debug_assert!(self.data.len() <= self.block_size as usize);
+            if self.data.len() == self.block_size as usize {
                 self.compress_block();
                 current_block += 1;
                 start_position = self.data.len();
@@ -476,7 +476,7 @@ pub struct BytesBlockStore
     pub block_locations_pos: u64,
 
     /// Maximum block size
-    pub block_size: usize,
+    pub block_size: u32,
 
     pub compression_config: CompressionConfig,
 
@@ -498,7 +498,7 @@ impl BytesBlockStore
         } else {
             let mut cache = match self.cache.take() {
                 Some(x) => x,
-                None => (block, vec![0; self.block_size]),
+                None => (block, vec![0; self.block_size as usize]),
             };
             cache.0 = block;
 
@@ -642,7 +642,7 @@ impl BytesBlockStore
 
     pub fn block_size(&self) -> usize
     {
-        self.block_size
+        self.block_size as usize
     }
 }
 

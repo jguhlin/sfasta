@@ -374,16 +374,7 @@ impl Converter
 
         let start = out_buffer_lock.stream_position().unwrap();
 
-        let bincode_config_fixed =
-            crate::BINCODE_CONFIG.with_fixed_int_encoding();
-
-        let dir: DirectoryOnDisk = sfasta.directory.clone().into();
-        bincode::encode_into_std_write(
-            dir,
-            &mut *out_buffer_lock,
-            bincode_config_fixed,
-        )
-        .expect("Unable to write directory to file");
+        self.write_headers(&mut *out_buffer_lock, &sfasta);
 
         let end = out_buffer_lock.stream_position().unwrap();
         debug_size.push(("directory".to_string(), (end - start) as usize));
