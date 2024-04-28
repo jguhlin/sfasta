@@ -70,6 +70,15 @@ impl MaskingStoreBuilder
         self
     }
 
+    pub fn with_tree_compression(
+        mut self,
+        tree_compression: CompressionConfig,
+    ) -> Self
+    {
+        self.inner = self.inner.with_tree_compression(tree_compression);
+        self
+    }
+
     pub fn write_header<W>(&mut self, pos: u64, mut out_buf: &mut W)
     where
         W: Write + Seek,

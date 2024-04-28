@@ -381,6 +381,7 @@ pub struct SeqLocsStoreBuilder
 {
     pub location: u64,
     pub tree: FractalTreeBuild<u32, SeqLoc>,
+    pub compression: CompressionConfig,
     count: usize,
 }
 
@@ -391,6 +392,11 @@ impl Default for SeqLocsStoreBuilder
         SeqLocsStoreBuilder {
             location: 0,
             tree: FractalTreeBuild::new(2048, 8192),
+            compression: CompressionConfig {
+                compression_type: CompressionType::ZSTD,
+                compression_level: 1,
+                compression_dict: None,
+            },
             count: 0,
         }
     }
@@ -402,6 +408,12 @@ impl SeqLocsStoreBuilder
     pub fn new() -> Self
     {
         SeqLocsStoreBuilder::default()
+    }
+
+    pub fn with_compression(mut self, compression: CompressionConfig) -> Self
+    {
+        self.compression = compression;
+        self
     }
 
     /// Add a SeqLoc to the store

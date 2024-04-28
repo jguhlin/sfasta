@@ -43,7 +43,10 @@ pub struct BytesBlockStoreBuilder
     /// Data, typically a temporary store
     pub data: Vec<u8>, // Used for writing and reading...
 
-    /// Compression configuration
+    /// Tree Compression configuration
+    pub tree_compression_config: CompressionConfig,
+
+    /// Compression config for the block store
     pub compression_config: Arc<CompressionConfig>,
 
     /// Compression worker. Enables multithreading for compression.
@@ -84,6 +87,7 @@ impl Default for BytesBlockStoreBuilder
             block_locations: Vec::new(),
             block_size: 8 * 1024,
             data: Vec::new(),
+            tree_compression_config: CompressionConfig::default(),
             compression_config: Arc::new(CompressionConfig::default()),
             compression_worker: None,
             finalized: false,
@@ -123,7 +127,17 @@ impl BytesBlockStoreBuilder
         self
     }
 
-    /// Configuration. Set the compressino config.
+    /// Configuration. Set the compression config.
+    pub fn with_tree_compression(
+        mut self,
+        compression: CompressionConfig,
+    ) -> Self
+    {
+        self.tree_compression_config = compression;
+        self
+    }
+
+    /// Configuration. Set the compression config.
     pub fn with_compression(mut self, compression: CompressionConfig) -> Self
     {
         self.compression_config = Arc::new(compression);
@@ -421,11 +435,8 @@ impl BytesBlockStoreBuilder
 
         let mut block_locations_tree: FractalTreeDisk<_, _> =
             block_locations_tree.into();
-        block_locations_tree.set_compression(CompressionConfig {
-            compression_type: CompressionType::ZSTD,
-            compression_level: 1,
-            compression_dict: None,
-        });
+        block_locations_tree
+            .set_compression(self.tree_compression_config.clone());
         let block_locations_pos =
             block_locations_tree.write_to_buffer(&mut out_buf).unwrap();
 

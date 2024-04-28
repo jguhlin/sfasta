@@ -549,80 +549,84 @@ fn convert(
     let buf = generic_open_file_pb(pb, fasta_filename);
     let buf = buf.1;
 
-    // let (s, r) = crossbeam::channel::bounded(1024);
-
-    // let io_thread = std::thread::Builder::new()
-    // .name("IO_Thread".to_string())
-    // .spawn(move || {
-    // let mut buf = BufReader::new(buf);
-    // loop {
-    // let current = buf.fill_buf().unwrap();
-    // let bytes_read = current.len();
-    //
-    // if bytes_read == 0 {
-    // s.send(libsfasta::utils::ReaderData::EOF).unwrap();
-    // break;
-    // }
-    // s.send(libsfasta::utils::ReaderData::Data(current.to_vec())).
-    // unwrap(); buf.consume(bytes_read);
-    // }
-    // })
-    // .unwrap();
-
     // TODO: Handle all of the compression options...
     // TODO: Warn if more than one compression option specified
     let mut compression_type = CompressionType::default();
 
+    let mut compression_set = false;
     if zstd {
         compression_type = CompressionType::ZSTD;
+        compression_set = true;
     } else if lz4 {
         compression_type = CompressionType::LZ4;
+        compression_set = true;
+        if compression_set {
+            log::warn!("Multiple compression types specified -- Using LZ4");
+        }
     } else if xz {
         compression_type = CompressionType::XZ;
+        compression_set = true;
+        if compression_set {
+            log::warn!("Multiple compression types specified -- Using XZ");
+        }
     } else if brotli {
         compression_type = CompressionType::BROTLI;
+        compression_set = true;
+        if compression_set {
+            log::warn!("Multiple compression types specified -- Using Brotli");
+        }
     } else if gzip {
         println!("🤨");
         compression_type = CompressionType::GZIP;
+        compression_set = true;
+        if compression_set {
+            log::warn!("Multiple compression types specified -- Using Gzip");
+        }
     } else if snappy {
         compression_type = CompressionType::SNAPPY;
+        compression_set = true;
+        if compression_set {
+            log::warn!("Multiple compression types specified -- Using Snappy");
+        }
     } else if nocompression {
         compression_type = CompressionType::NONE;
+        compression_set = true;
+        if compression_set {
+            log::warn!("Multiple compression types specified -- Using None");
+        }
     }
 
-    let mut converter = Converter::default()
-        .with_threads(threads)
-        .with_compression_type(compression_type);
+    let mut converter = Converter::default();
 
-    if let Some(level) = level {
-        converter = converter.with_compression_level(level);
+    if compression_set {
+        let level = match level {
+            Some(x) => x,
+            None => compression_type.default_compression_level(),
+        };
+
+        converter
+            .with_threads(threads)
+            .with_compression(compression_type, level);
     }
 
     if let Some(size) = blocksize {
-        converter = converter.with_block_size(size as usize * 1024);
+        converter.with_block_size(size as usize * 1024);
     }
 
     if dict {
-        converter = converter.with_dict(dict_samples, dict_size * 1024)
+        converter.with_dict(dict_samples, dict_size * 1024);
     }
 
     if noindex {
-        println!(
-            "Noindex received -- But this doesn't work yet -- Here be dragons"
-        );
-        converter = converter.without_index();
+        log::info!("Building without an ID index");
+        converter.without_index();
     }
 
-    // let mut in_buf =
-    // libsfasta::utils::CrossbeamReader::from_channel(r);
     let mut in_buf = BufReader::new(buf);
 
     let out_fh = Box::new(std::io::BufWriter::new(output));
 
     let _out_fh = converter.convert(&mut in_buf, out_fh);
-    // log::info!("Joining IO thread");
-    // io_thread.join().expect("Unable to join IO thread");
-    // log::info!("IO thread joined");
 }
 
 pub fn generic_open_file_pb(

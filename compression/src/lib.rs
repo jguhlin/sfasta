@@ -104,10 +104,20 @@ impl CompressionConfig
         self
     }
 
-    pub const fn with_compression_level(mut self, compression_level: i8)
-        -> Self
+    pub fn with_compression_level(mut self, compression_level: i8) -> Self
     {
-        self.compression_level = compression_level;
+        match self.check_compression_level() {
+            Ok(_) => {}
+            Err(x) => {
+                log::warn!(
+                    "Compression level {} is out of range for {:?}. Setting to {}",
+                    compression_level,
+                    self.compression_type,
+                    x
+                );
+                self.compression_level = x;
+            }
+        }
         self
     }
 

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use libcompression::CompressionConfig;
+use libcompression::{CompressionConfig, CompressionType};
 
 impl CompressionProfile
 {
@@ -43,6 +43,19 @@ impl CompressionProfile
         ))
         .unwrap()
     }
+
+    pub fn set_global(ct: CompressionType, level: i8) -> Self
+    {
+        let config = CompressionConfig::new()
+            .with_compression_type(ct)
+            .with_compression_level(level);
+        Self {
+            data: DataCompressionProfile::splat(config.clone()),
+            index: IndexCompressionProfile::splat(config.clone()),
+            seqlocs: config.clone(),
+            id_index: config,
+        }
+    }
 }
 
 impl Default for CompressionProfile
@@ -56,10 +69,10 @@ impl Default for CompressionProfile
 #[derive(Serialize, Deserialize)]
 pub struct CompressionProfile
 {
-    data: DataCompressionProfile,
-    index: IndexCompressionProfile,
-    seqlocs: CompressionConfig,
-    id_index: CompressionConfig,
+    pub data: DataCompressionProfile,
+    pub index: IndexCompressionProfile,
+    pub seqlocs: CompressionConfig,
+    pub id_index: CompressionConfig,
 }
 
 #[derive(Default, Serialize, Deserialize)]
@@ -74,6 +87,22 @@ pub struct DataCompressionProfile
     pub modifications: CompressionConfig,
 }
 
+impl DataCompressionProfile
+{
+    fn splat(cc: CompressionConfig) -> Self
+    {
+        Self {
+            ids: cc.clone(),
+            headers: cc.clone(),
+            sequence: cc.clone(),
+            masking: cc.clone(),
+            quality: cc.clone(),
+            signals: cc.clone(),
+            modifications: cc.clone(),
+        }
+    }
+}
+
 #[derive(Default, Serialize, Deserialize)]
 pub struct IndexCompressionProfile
 {
@@ -84,6 +113,22 @@ pub struct IndexCompressionProfile
     pub quality: CompressionConfig,
     pub signals: CompressionConfig,
     pub modifications: CompressionConfig,
+}
+
+impl IndexCompressionProfile
+{
+    fn splat(cc: CompressionConfig) -> Self
+    {
+        Self {
+            ids: cc.clone(),
+            headers: cc.clone(),
+            sequence: cc.clone(),
+            masking: cc.clone(),
+            quality: cc.clone(),
+            signals: cc.clone(),
+            modifications: cc.clone(),
+        }
+    }
 }
 
 #[cfg(test)]

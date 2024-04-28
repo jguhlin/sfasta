@@ -75,25 +75,6 @@ impl<'sfa> Sfasta<'sfa>
         self
     }
 
-    pub fn with_sequences(self) -> Self
-    {
-        // TODO: Should we really have SFASTA without sequences?!
-        // self.directory = self.directory.with_sequences();
-        self
-    }
-
-    pub fn with_scores(mut self) -> Self
-    {
-        self.directory = self.directory.with_scores();
-        self
-    }
-
-    pub fn with_masking(mut self) -> Self
-    {
-        self.directory = self.directory.with_masking();
-        self
-    }
-
     pub fn block_size(mut self, block_size: u32) -> Self
     {
         self.parameters.as_mut().unwrap().block_size = block_size;
@@ -103,12 +84,6 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_block_size(&self) -> u32
     {
         self.parameters.as_ref().unwrap().block_size
-    }
-
-    pub fn compression_type(mut self, compression: CompressionType) -> Self
-    {
-        self.parameters.as_mut().unwrap().compression_type = compression;
-        self
     }
 
     pub fn seq_slice(
@@ -977,7 +952,8 @@ mod tests
                 .expect("Unable to open testing file"),
         );
 
-        let converter = Converter::default()
+        let mut converter = Converter::default();
+        converter
             .with_threads(6)
             .with_block_size(8 * 1024)
             .with_index();
@@ -1030,10 +1006,8 @@ mod tests
                 .expect("Unable to open testing file"),
         );
 
-        let converter = Converter::default()
-            .with_threads(6)
-            .with_block_size(512)
-            .with_index();
+        let mut converter = Converter::default();
+        converter.with_threads(6).with_block_size(512).with_index();
 
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
@@ -1094,8 +1068,8 @@ mod tests
                 .expect("Unable to open testing file"),
         );
 
-        let converter =
-            Converter::default().with_block_size(512).with_threads(1);
+        let mut converter = Converter::default();
+        converter.with_block_size(512).with_threads(1);
 
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 

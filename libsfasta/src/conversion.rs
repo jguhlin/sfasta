@@ -30,16 +30,13 @@ use libfractaltree::FractalTreeDisk;
 /// ```
 pub struct Converter
 {
-    masking: bool,
     index: bool,
     threads: usize,
     pub block_size: u64,
-    quality_scores: bool,
-    compression_type: CompressionType,
-    compression_level: Option<i8>,
     dict: bool,
     dict_samples: u64,
     dict_size: u64,
+    compression_profile: CompressionProfile,
 }
 
 /// Default settings for Converter
@@ -60,13 +57,10 @@ impl Default for Converter
             threads: 8,
             block_size: 512 * 1024, // 512kb
             index: true,
-            masking: false,
-            quality_scores: false,
-            compression_type: CompressionType::ZSTD,
             dict: false,
             dict_samples: 100,
             dict_size: 110 * 1024,
-            compression_level: None,
+            compression_profile: CompressionProfile::default(),
         }
     }
 }
@@ -75,7 +69,8 @@ impl Converter
 {
     // Builder configuration functions...
     /// Specify a dictionary to use for compression. Untested.
-    pub fn with_dict(mut self, dict_samples: u64, dict_size: u64) -> Self
+    pub fn with_dict(&mut self, dict_samples: u64, dict_size: u64)
+        -> &mut Self
     {
         self.dict = true;
         self.dict_samples = dict_samples;
@@ -84,49 +79,28 @@ impl Converter
     }
 
     /// Disable dictionary
-    pub fn without_dict(mut self) -> Self
+    pub fn without_dict(&mut self) -> &mut Self
     {
         self.dict = false;
         self
     }
 
-    /// Enable masking
-    pub fn with_masking(mut self) -> Self
-    {
-        self.masking = true;
-        self
-    }
-
     /// Enable seq index
-    pub fn with_index(mut self) -> Self
+    pub fn with_index(&mut self) -> &mut Self
     {
         self.index = true;
         self
     }
 
     /// Disable index
-    pub fn without_index(mut self) -> Self
+    pub fn without_index(&mut self) -> &mut Self
     {
         self.index = false;
         self
     }
 
-    /// Enable quality scores
-    pub fn with_scores(mut self) -> Self
-    {
-        self.quality_scores = true;
-        self
-    }
-
-    /// Disable quality scores
-    pub fn without_scores(mut self) -> Self
-    {
-        self.quality_scores = false;
-        self
-    }
-
     /// Set the number of threads to use
-    pub fn with_threads(mut self, threads: usize) -> Self
+    pub fn with_threads(&mut self, threads: usize) -> &mut Self
     {
         assert!(
             threads < u16::MAX as usize,
@@ -137,7 +111,7 @@ impl Converter
     }
 
     /// Set the block size for the sequence blocks
-    pub fn with_block_size(mut self, block_size: usize) -> Self
+    pub fn with_block_size(&mut self, block_size: usize) -> &mut Self
     {
         assert!(
             block_size < u32::MAX as usize,
@@ -149,23 +123,15 @@ impl Converter
     }
 
     /// Set the compression type
-    pub fn with_compression_type(mut self, ct: CompressionType) -> Self
+    pub fn with_compression(
+        &mut self,
+        ct: CompressionType,
+        level: i8,
+    ) -> &mut Self
     {
-        self.compression_type = ct;
-        self
-    }
-
-    /// Set the compression level
-    pub fn with_compression_level(mut self, level: i8) -> Self
-    {
-        self.compression_level = Some(level);
-        self
-    }
-
-    /// Reset compression level to default
-    pub fn with_default_compression_level(mut self) -> Self
-    {
-        self.compression_level = None;
+        log::info!("Setting compression to {:?} at level {}", ct, level);
+        log::info!("Custom compression profiles often perform better...");
+        self.compression_profile = CompressionProfile::set_global(ct, level);
         self
     }
 
@@ -244,12 +210,7 @@ impl Converter
         // Compression seems to take care of the size. bitvec! and vec! seem
         // to have similar performance and on-disk storage
         // requirements
-        if self.masking {
-            sfasta = sfasta.with_masking();
-        }
 
-        sfasta.parameters.as_mut().unwrap().compression_type =
-            self.compression_type;
         sfasta.parameters.as_mut().unwrap().block_size = self.block_size as u32;
 
         // Set dummy values for the directory
@@ -337,11 +298,9 @@ impl Converter
                 let start = out_buffer_thread.stream_position().unwrap();
 
                 let mut index: FractalTreeDisk<u32, u32> = index.into();
-                index.set_compression(CompressionConfig {
-                    compression_type: CompressionType::ZSTD,
-                    compression_level: 1,
-                    compression_dict: None,
-                });
+                // todo can the index be made into a dict?
+                index
+                    .set_compression(self.compression_profile.id_index.clone());
 
                 fractaltree_pos = index
                     .write_to_buffer(&mut *out_buffer_thread)
@@ -467,46 +426,53 @@ impl Converter
 
         let compression_workers_thread = Arc::clone(&compression_workers);
 
-        let compression_config = CompressionConfig {
-            compression_type: self.compression_type,
-            compression_level: self.compression_level.unwrap_or(9),
-            compression_dict: None,
-        };
-
         let mut seqlocs = SeqLocsStoreBuilder::default();
-        // let seqlocs = SeqLocsThreadBuilder::new(seqlocs);
+        seqlocs =
+            seqlocs.with_compression(self.compression_profile.seqlocs.clone());
+
+        // todo lots of clones below...
 
         let mut headers = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
-            .with_compression(compression_config.clone())
+            .with_compression(self.compression_profile.data.headers.clone())
+            .with_tree_compression(
+                self.compression_profile.index.headers.clone(),
+            )
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let headers = ThreadBuilder::new(headers);
 
         let mut ids = StringBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
-            .with_compression(compression_config.clone())
+            .with_compression(self.compression_profile.data.ids.clone())
+            .with_tree_compression(self.compression_profile.index.ids.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let ids = ThreadBuilder::new(ids);
 
         let mut masking = MaskingStoreBuilder::default()
             .with_compression_worker(Arc::clone(&compression_workers_thread))
-            .with_compression(compression_config.clone())
+            .with_compression(self.compression_profile.data.masking.clone())
+            .with_tree_compression(
+                self.compression_profile.index.masking.clone(),
+            )
             .with_block_size(block_size as usize);
 
         // let masking = ThreadBuilder::new(masking);
 
         let mut sequences = BytesBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
-            .with_compression(compression_config.clone())
+            .with_compression(self.compression_profile.data.sequence.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let sequences = ThreadBuilder::new(sequences);
 
         let mut scores = BytesBlockStoreBuilder::default()
             .with_block_size(block_size as usize)
-            .with_compression(compression_config.clone())
+            .with_compression(self.compression_profile.data.quality.clone())
+            .with_tree_compression(
+                self.compression_profile.index.quality.clone(),
+            )
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
         // let scores = ThreadBuilder::new(scores);
@@ -789,8 +755,8 @@ mod tests
                 .expect("Unable to open testing file"),
         );
 
-        let converter =
-            Converter::default().with_threads(6).with_block_size(8192);
+        let mut converter = Converter::default();
+        converter.with_threads(6).with_block_size(8192);
 
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
