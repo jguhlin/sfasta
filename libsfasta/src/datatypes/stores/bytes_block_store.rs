@@ -529,12 +529,14 @@ impl BytesBlockStore
                 .unwrap();
 
         // todo unnecessary allocations, also should be async
-        buffer.copy_from_slice(
-            &self
-                .compression_config
-                .decompress(&compressed_block)
-                .unwrap(),
-        );
+        // Copy this Vec<u8> into the buffer
+        // Lengths may be different
+        let decompressed = self
+            .compression_config
+            .decompress(&compressed_block)
+            .unwrap();
+
+        buffer[..decompressed.len()].copy_from_slice(&decompressed);
     }
 
     pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> Vec<u8>
@@ -629,8 +631,6 @@ impl BytesBlockStore
         let block_locations: FractalTreeDisk<u32, u64> =
             FractalTreeDisk::from_buffer(&mut in_buf, block_locations_pos)
                 .unwrap();
-
-        log::info!("Block size: {}", block_size);
 
         Ok(BytesBlockStore {
             block_locations,
