@@ -5,5 +5,12 @@ edition = "2021"
 crate-type = ["cdylib"]
 
 [dependencies]
+env_logger = "0.11.3"
 flate2 = { version = "1", features = ["zlib-ng"] }
 libc = "0.2"
+log = "0.4.21"
+mimalloc = "0.1.41"
+
+# Unix only
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.28.0", features = ["fs"] }
