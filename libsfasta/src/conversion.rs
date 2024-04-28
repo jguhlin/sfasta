@@ -499,6 +499,8 @@ impl Converter
             .with_compression(self.compression_profile.data.sequence.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
 
+        log::info!("Block Size: {}", block_size);
+
         // let sequences = ThreadBuilder::new(sequences);
 
         let mut scores = BytesBlockStoreBuilder::default()
