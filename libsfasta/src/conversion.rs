@@ -205,7 +205,7 @@ impl Converter
 
     /// Main conversion function for FASTA/Q files
     pub fn convert<'convert, W, R>(
-        mut self,
+        self,
         in_buf: &mut R,
         mut out_fh: Box<W>,
     ) -> Box<W>
@@ -376,7 +376,7 @@ impl Converter
         self.write_headers(&mut *out_buffer_lock, &sfasta);
 
         let end = out_buffer_lock.stream_position().unwrap();
-        debug_size.push(("directory".to_string(), (end - start) as usize));
+        debug_size.push(("sfasta headers".to_string(), (end - start) as usize));
 
         log::info!("DEBUG: {:?}", debug_size);
 

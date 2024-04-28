@@ -630,6 +630,8 @@ impl BytesBlockStore
             FractalTreeDisk::from_buffer(&mut in_buf, block_locations_pos)
                 .unwrap();
 
+        log::info!("Block size: {}", block_size);
+
         Ok(BytesBlockStore {
             block_locations,
             block_locations_pos,
