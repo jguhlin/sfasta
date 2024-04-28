@@ -41,10 +41,10 @@ index:
     compression_type: ZSTD
     compression_level: 1
   modifications:
-    compression_type: LZ4
+    compression_type: ZSTD
     compression_level: 1
 seqlocs:
-  compression_type: LZ4
+  compression_type: ZSTD
   compression_level: 1
 id_index:
   compression_type: ZSTD
