@@ -154,13 +154,17 @@ impl Converter
     }
 
     /// Write the headers for the SFASTA file, and return the location
-    /// of th headers (so they can be updated at the end)
+    /// of the headers (so they can be updated at the end)
     fn write_headers<W>(&self, mut out_fh: &mut W, sfasta: &Sfasta) -> u64
     where
         W: Write + Seek,
     {
         // IMPORTANT: Headers must ALWAYS be fixed int encoding
         let bincode_config = crate::BINCODE_CONFIG.with_fixed_int_encoding();
+
+        let loc = out_fh
+            .stream_position()
+            .expect("Unable to work with seek API");
 
         out_fh
             .write_all("sfasta".as_bytes())
@@ -176,11 +180,6 @@ impl Converter
         )
         .expect("Unable to write directory to file");
 
-        // Write the directory
-        let directory_location = out_fh
-            .stream_position()
-            .expect("Unable to work with seek API");
-
         let dir: DirectoryOnDisk = sfasta.directory.clone().into();
         bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
             .expect("Unable to write directory to file");
@@ -193,6 +192,7 @@ impl Converter
         )
         .expect("Unable to write Parameters to file");
 
+        // Write the metadata
         bincode::encode_into_std_write(
             sfasta.metadata.as_ref().unwrap(),
             &mut out_fh,
@@ -200,8 +200,7 @@ impl Converter
         )
         .expect("Unable to write Metadata to file");
 
-        // Return the directory location
-        directory_location
+        loc
     }
 
     /// Main conversion function for FASTA/Q files
