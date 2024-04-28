@@ -50,6 +50,7 @@ impl CompressionProfile
             .with_compression_type(ct)
             .with_compression_level(level);
         Self {
+            block_size: 512,
             data: DataCompressionProfile::splat(config.clone()),
             index: IndexCompressionProfile::splat(config.clone()),
             seqlocs: config.clone(),
@@ -69,6 +70,7 @@ impl Default for CompressionProfile
 #[derive(Serialize, Deserialize)]
 pub struct CompressionProfile
 {
+    pub block_size: u32,
     pub data: DataCompressionProfile,
     pub index: IndexCompressionProfile,
     pub seqlocs: CompressionConfig,

@@ -135,6 +135,16 @@ impl Converter
         self
     }
 
+    /// Set the compression profile
+    pub fn with_compression_profile(
+        &mut self,
+        profile: CompressionProfile,
+    ) -> &mut Self
+    {
+        self.compression_profile = profile;
+        self
+    }
+
     /// Write the headers for the SFASTA file, and return the location
     /// of th headers (so they can be updated at the end)
     fn write_headers<W>(&self, mut out_fh: &mut W, sfasta: &Sfasta) -> u64

@@ -1,6 +1,7 @@
 pub use crate::conversion::Converter; // generic_open_file,
 pub use crate::{
-    datatypes::Sequence,
+    datatypes::{Sequence, compression_profile::*},
     formats::sfasta::{SeqMode, Sequences, Sfasta, SfastaParser},
+    
 };
 pub use libcompression::*;

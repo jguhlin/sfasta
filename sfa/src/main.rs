@@ -77,33 +77,73 @@ enum Commands
     Convert
     {
         input: String,
+
+        /// Number of compression threads (Total usage will be this + 2, typically)
         #[clap(short, long)]
         #[clap(default_value_t = 4)]
         threads: u8,
+
         #[clap(short, long)]
         noindex: bool,
-        #[clap(short, long)]
-        zstd: bool,
+        
+        /// Fast compression profile
         #[clap(long)]
-        lz4: bool,
-        #[clap(short, long)]
-        xz: bool,
+        fast: bool,
+        /// Fastest compression profile
         #[clap(long)]
-        brotli: bool,
-        #[clap(short, long)]
-        snappy: bool,
-        #[clap(short, long)]
-        gzip: bool,
+        fastest: bool,
+        /// Small compression profile
         #[clap(long)]
-        nocompression: bool,
-        /// Block size for sequence blocks * 1024
+        small: bool,
+        /// Smallest compression profile
+        #[clap(long)]
+        smallest: bool,
+
+        /// Use a custom profile (in YAML format)
+        #[clap(short, long)]
+        profile: Option<String>,
+
+        /// Block size for sequence blocks in kb
         /// 512 (512kbp) is the default
         #[clap(short, long)]
-        blocksize: Option<u64>,
+        blocksize: Option<u32>,
+
+        /// Zstandard compression for all. Prefer to use a profile
+        #[clap(long)]
+        zstd: bool,
+
+        /// XZ compression for all
+        #[clap(long)]
+        xz: bool,
+
+        /// Brotli compression for all
+        #[clap(long)]
+        brotli: bool,
+
+        /// Snappy compression for all
+        #[clap(long)]
+        snappy: bool,
+
+        /// GZIP compression for all
+        #[clap(long)]
+        gzip: bool,
+
+        /// BZIP2 compression for all
+        #[clap(long)]
+        bzip2: bool,
+
+        /// Disable compression
+        #[clap(long)]
+        nocompression: bool,
+       
+        /// Compression level for all
         #[clap(short, long)]
         level: Option<i8>,
+
+        /// Create a dictionary for the block stores?
         #[clap(long)]
         dict: bool,
+
         /// Number of sample blocks to take for dictionary training
         #[clap(long)]
         #[clap(default_value_t = 100)]
@@ -148,42 +188,53 @@ fn main()
 
     let cli = Cli::parse();
 
-    match &cli.command {
-        Commands::View { input } => view(input),
-        Commands::List { input } => list(input),
+    match cli.command {
+        Commands::View { input } => view(&input),
+        Commands::List { input } => list(&input),
         Commands::Faidx { input, ids } => faidx(&input, &ids),
         Commands::Convert {
             input,
             threads,
             noindex,
+            fast,
+            fastest,
+            small,
+            smallest,
+            profile,
+            blocksize,
             zstd,
-            lz4,
             xz,
             brotli,
             snappy,
             gzip,
+            bzip2,
             nocompression,
-            blocksize,
             level,
             dict,
             dict_samples,
             dict_size,
         } => convert(
-            input,
-            *threads as usize,
-            *zstd,
-            *lz4,
-            *xz,
-            *gzip,
-            *brotli,
-            *snappy,
-            *nocompression,
-            *noindex,
-            *blocksize,
-            *level,
-            *dict,
-            *dict_samples,
-            *dict_size,
+            &input,
+            threads as usize,
+            noindex,
+            fast,
+            fastest,
+            small,
+            smallest,
+            profile,
+            blocksize,
+            zstd,
+            xz,
+            brotli,
+            snappy,
+            gzip,
+            bzip2,
+            nocompression,
+            level,
+            dict,
+            dict_samples,
+            dict_size,
+            
         ),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
@@ -519,15 +570,20 @@ fn list(input: &str)
 fn convert(
     fasta_filename: &str,
     threads: usize,
+    noindex: bool,
+    fast: bool,
+    fastest: bool,
+    small: bool,
+    smallest: bool,
+    profile: Option<String>,
+    blocksize: Option<u32>,
     zstd: bool,
-    lz4: bool,
     xz: bool,
-    gzip: bool,
     brotli: bool,
     snappy: bool,
+    gzip: bool,
+    bzip2: bool,
     nocompression: bool,
-    noindex: bool,
-    blocksize: Option<u64>,
     level: Option<i8>,
     dict: bool,
     dict_samples: u64,
@@ -549,6 +605,40 @@ fn convert(
     let buf = generic_open_file_pb(pb, fasta_filename);
     let buf = buf.1;
 
+    let mut converter = Converter::default();
+    converter.with_threads(threads);
+    log::info!("Using {} threads", threads);
+
+    if fast {
+        log::info!("Using fast compression profile");
+        let profile = CompressionProfile::fast();
+        converter.with_compression_profile(profile);
+    }
+    if fastest {
+        log::info!("Using fastest compression profile");
+        let profile = CompressionProfile::fastest();
+        converter.with_compression_profile(profile);
+    }
+    if small {
+        log::info!("Using small compression profile");
+        let profile = CompressionProfile::small();
+        converter.with_compression_profile(profile);
+    }
+    if smallest {
+        log::info!("Using smallest compression profile");
+        let profile = CompressionProfile::smallest();
+        converter.with_compression_profile(profile);
+    }
+
+    if profile.is_some() {
+        let profile = profile.as_ref().unwrap();
+        let profile = std::fs::read_to_string(profile)
+            .expect("Unable to read profile file");
+        let profile: CompressionProfile =
+            serde_yml::from_str(&profile).expect("Unable to parse profile");
+        converter.with_compression_profile(profile);
+    }
+
     // TODO: Handle all of the compression options...
     // TODO: Warn if more than one compression option specified
     let mut compression_type = CompressionType::default();
@@ -557,46 +647,50 @@ fn convert(
     if zstd {
         compression_type = CompressionType::ZSTD;
         compression_set = true;
-    } else if lz4 {
-        compression_type = CompressionType::LZ4;
-        compression_set = true;
-        if compression_set {
-            log::warn!("Multiple compression types specified -- Using LZ4");
-        }
-    } else if xz {
+    } 
+    if xz {
         compression_type = CompressionType::XZ;
         compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using XZ");
         }
-    } else if brotli {
+    }
+    if brotli {
         compression_type = CompressionType::BROTLI;
         compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Brotli");
         }
-    } else if gzip {
+    } 
+    if gzip {
         println!("🤨");
         compression_type = CompressionType::GZIP;
         compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Gzip");
         }
-    } else if snappy {
+    } 
+    if snappy {
         compression_type = CompressionType::SNAPPY;
         compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Snappy");
         }
-    } else if nocompression {
+    } 
+    if nocompression {
         compression_type = CompressionType::NONE;
         compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using None");
         }
+    } 
+    if bzip2 {
+        compression_type = CompressionType::BZIP2;
+        compression_set = true;
+        if compression_set {
+            log::warn!("Multiple compression types specified -- Using Bzip2");
+        }
     }
-
-    let mut converter = Converter::default();
 
     if compression_set {
         let level = match level {
@@ -605,11 +699,18 @@ fn convert(
         };
 
         converter
-            .with_threads(threads)
             .with_compression(compression_type, level);
+
+        // If any profiles were set, issue a warning that they were overridden
+        if fast || fastest || small || smallest || profile.is_some() {
+            log::warn!("Compression profile overridden by manual compression settings");
+        }
     }
 
     if let Some(size) = blocksize {
+        if size as usize * 1024 > u32::MAX as usize {
+            panic!("Block size too large");
+        }
         converter.with_block_size(size as usize * 1024);
     }
 
