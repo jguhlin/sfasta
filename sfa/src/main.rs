@@ -673,53 +673,53 @@ fn convert(
     } 
     if xz {
         compression_type = CompressionType::XZ;
-        compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using XZ");
         }
+        compression_set = true;
     }
     if brotli {
         compression_type = CompressionType::BROTLI;
-        compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Brotli");
         }
+        compression_set = true;
     } 
     if gzip {
         println!("🤨");
         compression_type = CompressionType::GZIP;
-        compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Gzip");
         }
+        compression_set = true;
     } 
     if snappy {
         compression_type = CompressionType::SNAPPY;
-        compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Snappy");
         }
+        compression_set = true;
     } 
     if nocompression {
         compression_type = CompressionType::NONE;
-        compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using None");
         }
+        compression_set = true;
     } 
     if bzip2 {
         compression_type = CompressionType::BZIP2;
-        compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Bzip2");
         }
+        compression_set = true;
     }
     if lz4 {
         compression_type = CompressionType::LZ4;
-        compression_set = true;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using LZ4");
         }
+        compression_set = true;
     }
 
     if compression_set {
