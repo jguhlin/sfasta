@@ -1,6 +1,9 @@
+use serde::{Serialize, Deserialize};
+
 use crate::*;
 
-#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default, Serialize, Deserialize)]
+#[serde(default)] 
 pub struct Metadata
 {
     pub created_by: Option<String>,

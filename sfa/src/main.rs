@@ -17,9 +17,9 @@ extern crate rand;
 extern crate rand_chacha;
 
 use std::{
-    fs::{self, metadata, File},
-    io::{BufRead, BufReader, Read, Write},
-    path::Path,
+    fs::{self, File},
+    io::{BufReader, Read, Write},
+    path::Path
 };
 
 #[cfg(unix)]
@@ -82,6 +82,10 @@ enum Commands
         #[clap(short, long)]
         #[clap(default_value_t = 4)]
         threads: u8,
+
+        /// Read metadata from a file (YAML format)
+        #[clap(long)]
+        metadata: Option<String>,
 
         #[clap(short, long)]
         noindex: bool,
@@ -213,6 +217,7 @@ fn main()
             dict,
             dict_samples,
             dict_size,
+            metadata,
         } => convert(
             &input,
             threads as usize,
@@ -234,6 +239,7 @@ fn main()
             dict,
             dict_samples,
             dict_size,
+            metadata,
             
         ),
         Commands::Summarize { input } => todo!(),
@@ -588,11 +594,12 @@ fn convert(
     dict: bool,
     dict_samples: u64,
     dict_size: u64,
+    metadata: Option<String>,
 )
 {
-    let metadata =
+    let fs_metadata =
         fs::metadata(fasta_filename).expect("Unable to get filesize");
-    let pb = ProgressBar::new(metadata.len());
+    let pb = ProgressBar::new(fs_metadata.len());
     let pb = style_pb(pb);
 
     let path = Path::new(fasta_filename);
@@ -637,6 +644,15 @@ fn convert(
         let profile: CompressionProfile =
             serde_yml::from_str(&profile).expect("Unable to parse profile");
         converter.with_compression_profile(profile);
+    }
+
+    if metadata.is_some() {
+        let metadata = metadata.as_ref().unwrap();
+        let metadata = std::fs::read_to_string(metadata)
+            .expect("Unable to read metadata file");
+        let metadata: Metadata =
+            serde_yml::from_str(&metadata).expect("Unable to parse metadata");
+        converter.with_metadata(metadata);
     }
 
     // TODO: Handle all of the compression options...
@@ -735,7 +751,7 @@ pub fn generic_open_file_pb(
     filename: &str,
 ) -> (usize, indicatif::ProgressBarIter<File>)
 {
-    let filesize = metadata(filename)
+    let filesize = fs::metadata(filename)
         .unwrap_or_else(|_| {
             panic!("{}", &format!("Unable to open file: {}", filename))
         })
@@ -774,7 +790,7 @@ pub fn generic_open_file_pb(
 pub fn generic_open_file(filename: &str)
     -> (usize, bool, Box<dyn Read + Send>)
 {
-    let filesize = metadata(filename)
+    let filesize = fs::metadata(filename)
         .unwrap_or_else(|_| {
             panic!("{}", &format!("Unable to open file: {}", filename))
         })

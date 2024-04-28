@@ -14,6 +14,7 @@ use std::{
     num::NonZeroU64,
     sync::{Arc, Mutex},
 };
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{datatypes::*, formats::*};
 use libcompression::*;
@@ -37,6 +38,7 @@ pub struct Converter
     dict_samples: u64,
     dict_size: u64,
     compression_profile: CompressionProfile,
+    metadata: Option<Metadata>,
 }
 
 /// Default settings for Converter
@@ -61,6 +63,7 @@ impl Default for Converter
             dict_samples: 100,
             dict_size: 110 * 1024,
             compression_profile: CompressionProfile::default(),
+            metadata: None,
         }
     }
 }
@@ -145,6 +148,13 @@ impl Converter
         self
     }
 
+    /// Set the metadata for the SFASTA file
+    pub fn with_metadata(&mut self, metadata: Metadata) -> &mut Self
+    {
+        self.metadata = Some(metadata);
+        self
+    }
+
     /// Write the headers for the SFASTA file, and return the location
     /// of th headers (so they can be updated at the end)
     fn write_headers<W>(&self, mut out_fh: &mut W, sfasta: &Sfasta) -> u64
@@ -185,7 +195,7 @@ impl Converter
         )
         .expect("Unable to write Parameters to file");
 
-        // Write the metadata
+
         bincode::encode_into_std_write(
             sfasta.metadata.as_ref().unwrap(),
             &mut out_fh,
@@ -225,6 +235,22 @@ impl Converter
 
         // Set dummy values for the directory
         sfasta.directory.dummy();
+
+        if sfasta.metadata.is_none() {
+            sfasta.metadata = Some(Metadata::default());
+        }
+
+        // Write the metadata
+        if self.metadata.is_some() {
+            sfasta.metadata = self.metadata.clone();
+        }
+
+        // epoch time is fine...
+        let epoch_time = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap();
+
+        sfasta.metadata.as_mut().unwrap().date_created = epoch_time.as_secs();
 
         // Store the location of the directory so we can update it later...
         // It's right after the SFASTA and version identifier...
