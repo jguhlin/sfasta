@@ -50,7 +50,7 @@ impl CompressionProfile
             .with_compression_type(ct)
             .with_compression_level(level);
         Self {
-            block_size: 512,
+            block_size: 512, // Not really read after this point...
             data: DataCompressionProfile::splat(config.clone()),
             index: IndexCompressionProfile::splat(config.clone()),
             seqlocs: config.clone(),

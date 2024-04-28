@@ -662,8 +662,6 @@ fn convert(
         converter.with_metadata(metadata);
     }
 
-    // TODO: Handle all of the compression options...
-    // TODO: Warn if more than one compression option specified
     let mut compression_type = CompressionType::default();
 
     let mut compression_set = false;

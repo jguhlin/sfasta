@@ -83,7 +83,7 @@ impl<'sfa> Sfasta<'sfa>
 
     pub fn get_block_size(&self) -> u32
     {
-        self.parameters.as_ref().unwrap().block_size
+        self.parameters.as_ref().unwrap().block_size * 1024
     }
 
     pub fn seq_slice(

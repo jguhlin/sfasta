@@ -33,7 +33,6 @@ pub struct Converter
 {
     index: bool,
     threads: usize,
-    pub block_size: u64,
     dict: bool,
     dict_samples: u64,
     dict_size: u64,
@@ -57,7 +56,6 @@ impl Default for Converter
     {
         Converter {
             threads: 8,
-            block_size: 512 * 1024, // 512kb
             index: true,
             dict: false,
             dict_samples: 100,
@@ -117,11 +115,11 @@ impl Converter
     pub fn with_block_size(&mut self, block_size: usize) -> &mut Self
     {
         assert!(
-            block_size < u32::MAX as usize,
+            block_size * 1024 < u32::MAX as usize,
             "Block size must be less than u32::MAX (~4Gb)"
         );
 
-        self.block_size = block_size as u64;
+        self.compression_profile.block_size = block_size as u32;
         self
     }
 
@@ -209,7 +207,7 @@ impl Converter
 
     /// Main conversion function for FASTA/Q files
     pub fn convert<'convert, W, R>(
-        self,
+        mut self,
         in_buf: &mut R,
         mut out_fh: Box<W>,
     ) -> Box<W>
@@ -220,18 +218,16 @@ impl Converter
         // Track how much space each individual element takes up
         let mut debug_size: Vec<(String, usize)> = Vec::new();
 
-        assert!(self.block_size < u32::MAX as u64);
-
         let mut sfasta = Sfasta::default()
             .conversion()
-            .block_size(self.block_size as u32);
+            .block_size(self.compression_profile.block_size as u32 * 1024);
 
         // Store masks as series of 0s and 1s... Vec<bool>
         // Compression seems to take care of the size. bitvec! and vec! seem
         // to have similar performance and on-disk storage
         // requirements
 
-        sfasta.parameters.as_mut().unwrap().block_size = self.block_size as u32;
+        sfasta.parameters.as_mut().unwrap().block_size = self.compression_profile.block_size as u32;
 
         // Set dummy values for the directory
         sfasta.directory.dummy();
@@ -281,7 +277,7 @@ impl Converter
             sequences_location,
             scores_location,
             ids_to_locs,
-        ) = self.process(in_buf, Arc::clone(&out_buffer), self.block_size);
+        ) = self.process(in_buf, Arc::clone(&out_buffer), self.compression_profile.block_size * 1024);
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's
         // decided to do it)
@@ -410,7 +406,7 @@ impl Converter
         &self,
         in_buf: &mut R,
         out_fh: Arc<Mutex<Box<W>>>,
-        block_size: u64,
+        block_size: u32,
     ) -> (
         SeqLocsStoreBuilder,
         Option<NonZeroU64>,
