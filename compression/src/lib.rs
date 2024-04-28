@@ -116,7 +116,7 @@ impl CompressionConfig
                     self.compression_type,
                     x
                 );
-                self.compression_level = x;                
+                self.compression_level = x;
             }
         };
         self
@@ -776,17 +776,19 @@ mod tests
     use super::*;
 
     #[test]
-    pub fn test_out_of_range() {
+    pub fn test_out_of_range()
+    {
         let compression_config = CompressionConfig::new();
-        let compression_config = compression_config.with_compression_type(CompressionType::ZSTD);
+        let compression_config =
+            compression_config.with_compression_type(CompressionType::ZSTD);
         let compression_config = compression_config.with_compression_level(23);
         assert_eq!(compression_config.compression_level, 22);
 
         // BROTLI
         let compression_config = CompressionConfig::new();
-        let compression_config = compression_config.with_compression_type(CompressionType::BROTLI);
+        let compression_config =
+            compression_config.with_compression_type(CompressionType::BROTLI);
         let compression_config = compression_config.with_compression_level(12);
         assert_eq!(compression_config.compression_level, 11);
-
     }
 }

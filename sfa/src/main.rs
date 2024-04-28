@@ -19,7 +19,7 @@ extern crate rand_chacha;
 use std::{
     fs::{self, File},
     io::{BufReader, Read, Write},
-    path::Path
+    path::Path,
 };
 
 #[cfg(unix)]
@@ -78,7 +78,8 @@ enum Commands
     {
         input: String,
 
-        /// Number of compression threads (Total usage will be this + 2, typically)
+        /// Number of compression threads (Total usage will be this +
+        /// 2, typically)
         #[clap(short, long)]
         #[clap(default_value_t = 4)]
         threads: u8,
@@ -89,7 +90,7 @@ enum Commands
 
         #[clap(short, long)]
         noindex: bool,
-        
+
         /// Fast compression profile
         #[clap(long)]
         fast: bool,
@@ -143,7 +144,7 @@ enum Commands
         /// Disable compression
         #[clap(long)]
         nocompression: bool,
-       
+
         /// Compression level for all
         #[clap(short, long)]
         level: Option<i8>,
@@ -246,7 +247,6 @@ fn main()
             dict_samples,
             dict_size,
             metadata,
-            
         ),
         Commands::Summarize { input } => todo!(),
         Commands::Stats { input } => todo!(),
@@ -668,7 +668,7 @@ fn convert(
     if zstd {
         compression_type = CompressionType::ZSTD;
         compression_set = true;
-    } 
+    }
     if xz {
         compression_type = CompressionType::XZ;
         if compression_set {
@@ -682,7 +682,7 @@ fn convert(
             log::warn!("Multiple compression types specified -- Using Brotli");
         }
         compression_set = true;
-    } 
+    }
     if gzip {
         println!("🤨");
         compression_type = CompressionType::GZIP;
@@ -690,21 +690,21 @@ fn convert(
             log::warn!("Multiple compression types specified -- Using Gzip");
         }
         compression_set = true;
-    } 
+    }
     if snappy {
         compression_type = CompressionType::SNAPPY;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using Snappy");
         }
         compression_set = true;
-    } 
+    }
     if nocompression {
         compression_type = CompressionType::NONE;
         if compression_set {
             log::warn!("Multiple compression types specified -- Using None");
         }
         compression_set = true;
-    } 
+    }
     if bzip2 {
         compression_type = CompressionType::BZIP2;
         if compression_set {
@@ -726,12 +726,13 @@ fn convert(
             None => compression_type.default_compression_level(),
         };
 
-        converter
-            .with_compression(compression_type, level);
+        converter.with_compression(compression_type, level);
 
         // If any profiles were set, issue a warning that they were overridden
         if fast || fastest || small || smallest || profile.is_some() {
-            log::warn!("Compression profile overridden by manual compression settings");
+            log::warn!(
+                "Compression profile overridden by manual compression settings"
+            );
         }
     }
 

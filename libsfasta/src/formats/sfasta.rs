@@ -316,8 +316,7 @@ impl<'sfa> Sfasta<'sfa>
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let locs = seqloc.get_sequence();
 
-        let mut buffer =
-            vec![0u8; self.sequenceblocks.as_ref().unwrap().block_size()];
+        let mut buffer = vec![0u8; self.get_block_size() as usize];
 
         locs.iter().for_each(|l| {
             self.sequenceblocks.as_mut().unwrap().get_block_uncached(

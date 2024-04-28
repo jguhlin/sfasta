@@ -13,8 +13,8 @@ use std::{
     io::{Read, Seek, SeekFrom, Write},
     num::NonZeroU64,
     sync::{Arc, Mutex},
+    time::{SystemTime, UNIX_EPOCH},
 };
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::{datatypes::*, formats::*};
 use libcompression::*;
@@ -193,7 +193,6 @@ impl Converter
         )
         .expect("Unable to write Parameters to file");
 
-
         bincode::encode_into_std_write(
             sfasta.metadata.as_ref().unwrap(),
             &mut out_fh,
@@ -220,14 +219,15 @@ impl Converter
 
         let mut sfasta = Sfasta::default()
             .conversion()
-            .block_size(self.compression_profile.block_size as u32 * 1024);
+            .block_size(self.compression_profile.block_size);
 
         // Store masks as series of 0s and 1s... Vec<bool>
         // Compression seems to take care of the size. bitvec! and vec! seem
         // to have similar performance and on-disk storage
         // requirements
 
-        sfasta.parameters.as_mut().unwrap().block_size = self.compression_profile.block_size as u32;
+        sfasta.parameters.as_mut().unwrap().block_size =
+            self.compression_profile.block_size as u32;
 
         // Set dummy values for the directory
         sfasta.directory.dummy();
@@ -242,9 +242,7 @@ impl Converter
         }
 
         // epoch time is fine...
-        let epoch_time = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap();
+        let epoch_time = SystemTime::now().duration_since(UNIX_EPOCH).unwrap();
 
         sfasta.metadata.as_mut().unwrap().date_created = epoch_time.as_secs();
 
@@ -277,7 +275,11 @@ impl Converter
             sequences_location,
             scores_location,
             ids_to_locs,
-        ) = self.process(in_buf, Arc::clone(&out_buffer), self.compression_profile.block_size * 1024);
+        ) = self.process(
+            in_buf,
+            Arc::clone(&out_buffer),
+            self.compression_profile.block_size * 1024,
+        );
 
         // TODO: Here is where we would write out the Seqinfo stream (if it's
         // decided to do it)
