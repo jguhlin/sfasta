@@ -57,6 +57,11 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
         self
     }
 
+    pub fn buffer_size(&self) -> usize
+    {
+        self.buffer_size
+    }
+
     /// Starts the worker thread, and returns the JoinHandle.
     pub fn start(&mut self) -> JoinHandle<()>
     {
@@ -131,5 +136,37 @@ fn worker<W>(
         if shutdown_flag.load(Ordering::Relaxed) {
             break;
         }
+    }
+}
+
+#[cfg(test)]
+mod tests
+{
+    use super::*;
+    use std::io::Cursor;
+
+    #[test]
+    fn test_worker()
+    {
+        let output_buffer = Arc::new(Mutex::new(Box::new(Cursor::new(Vec::new()))));
+        let mut worker = Worker::new(output_buffer);
+        let mut worker = worker.with_buffer_size(8192);
+        assert!(worker.buffer_size() == 8192);
+
+        let handle = worker.start();
+
+        let queue = worker.get_queue();
+        queue.send(OutputBlock {
+            data: vec![1, 2, 3],
+            location: Arc::new(AtomicU64::new(0)),
+        })
+        .unwrap();
+
+        worker.shutdown();
+        handle.join().unwrap();
+
+        let output_buffer = worker.into_inner();
+        let output_buffer = output_buffer.into_inner();
+        assert_eq!(output_buffer, vec![1, 2, 3]);
     }
 }

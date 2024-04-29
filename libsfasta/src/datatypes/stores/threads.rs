@@ -332,8 +332,15 @@ mod tests
 
         assert!(loc.0.load(Ordering::SeqCst));
 
-        let builder = thread_builder.join().unwrap();
+        // Test add
+        let loc = thread_builder.add(vec![1, 2, 3]).unwrap();
+        assert!(!loc.0.load(Ordering::SeqCst));
+        sleep(Duration::from_millis(128));
+        assert!(loc.0.load(Ordering::SeqCst));
 
+        let builder = thread_builder.join().unwrap();
         assert!(builder.finalized.load(Ordering::SeqCst));
+
+
     }
 }

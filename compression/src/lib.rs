@@ -65,7 +65,7 @@ pub struct OutputBlock
 }
 
 #[derive(
-    Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize,
+    Debug, Clone, bincode::Encode, bincode::Decode, Serialize, Deserialize, Eq, PartialEq
 )]
 pub struct CompressionConfig
 {

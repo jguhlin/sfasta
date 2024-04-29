@@ -111,6 +111,11 @@ impl Converter
         self
     }
 
+    pub fn threads(&self) -> usize
+    {
+        self.threads
+    }
+
     /// Set the block size for the sequence blocks
     pub fn with_block_size(&mut self, block_size: usize) -> &mut Self
     {
@@ -419,6 +424,12 @@ impl Converter
         // Start the output I/O...
         let mut output_worker = crate::io::worker::Worker::new(output_buffer)
             .with_buffer_size(threads as usize * 8);
+
+        debug_assert!(output_worker.buffer_size() > 0, "Buffer size is 0");
+        // for mutans testing
+        debug_assert!(output_worker.buffer_size() == threads as usize * 8); 
+
+
         output_worker.start();
         let output_queue = output_worker.get_queue();
 
@@ -743,15 +754,6 @@ impl Converter
     }
 }
 
-// TODO: Will likely need to be the same builder style
-
-/// Input filehandle goes in, output goes out.
-/// Function returns:
-/// Vec<(String, Location)>
-/// block_index_pos
-/// in_buffer
-/// out_buffer
-
 #[cfg(test)]
 mod tests
 {
@@ -779,7 +781,9 @@ mod tests
         );
 
         let mut converter = Converter::default();
-        converter.with_threads(6).with_block_size(8192);
+        converter.with_threads(6).with_block_size(8);
+
+        assert!(converter.threads() == 6);
 
         let mut out_buf = converter.convert(&mut in_buf, out_buf);
 
@@ -803,13 +807,17 @@ mod tests
 
         let _dir = directory;
 
-        let _parameters: Parameters =
+        let parameters: Parameters =
             bincode::decode_from_std_read(&mut out_buf, bincode_config)
                 .unwrap();
+
+        assert!(parameters.block_size == 8192);
 
         let _metadata: Metadata =
             bincode::decode_from_std_read(&mut out_buf, bincode_config)
                 .unwrap();
+
+        
 
         // TODO: Add more tests
     }

@@ -67,7 +67,7 @@ impl Default for CompressionProfile
     }
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct CompressionProfile
 {
     pub block_size: u32,
@@ -77,7 +77,7 @@ pub struct CompressionProfile
     pub id_index: CompressionConfig,
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct DataCompressionProfile
 {
     pub ids: CompressionConfig,
@@ -105,7 +105,7 @@ impl DataCompressionProfile
     }
 }
 
-#[derive(Default, Serialize, Deserialize)]
+#[derive(Default, Serialize, Deserialize, PartialEq, Eq, Debug)]
 pub struct IndexCompressionProfile
 {
     pub ids: CompressionConfig,
@@ -148,5 +148,31 @@ mod tests
             include_str!("../../../compression_profiles/default.yaml"),
         )
         .unwrap();
+    }
+
+    #[test]
+    fn test_splat()
+    {
+        let cc = CompressionConfig::new()
+            .with_compression_type(CompressionType::BZIP2)
+            .with_compression_level(9);
+        let dcp = DataCompressionProfile::splat(cc.clone());
+        assert_eq!(dcp.ids, cc);
+        assert_eq!(dcp.headers, cc);
+        assert_eq!(dcp.sequence, cc);
+        assert_eq!(dcp.masking, cc);
+        assert_eq!(dcp.quality, cc);
+        assert_eq!(dcp.signals, cc);
+        assert_eq!(dcp.modifications, cc);
+    }
+
+    #[test]
+    fn test_profiles() 
+    {
+        // Should not equal default
+        assert_ne!(CompressionProfile::default(), CompressionProfile::fast());
+        assert_ne!(CompressionProfile::default(), CompressionProfile::fastest());
+        assert_ne!(CompressionProfile::default(), CompressionProfile::small());
+        assert_ne!(CompressionProfile::default(), CompressionProfile::smallest());
     }
 }
