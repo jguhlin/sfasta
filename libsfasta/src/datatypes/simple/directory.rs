@@ -90,7 +90,7 @@ impl DirectoryOnDisk
 // , bincode::Encode, bincode::Decode
 // Directory should not be encoded, DirectoryOnDisk should be (can use
 // .into or .from to get there and back)
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Directory
 {
     pub index_loc: Option<NonZeroU64>,
@@ -263,13 +263,73 @@ mod tests
     #[test]
     pub fn directory_constructors()
     {
-        let d = Directory::default().with_scores().with_masking();
+        let d = Directory::default().with_scores().with_masking().with_index();
         assert!(d.scores_loc == NonZeroU64::new(1));
         assert!(d.masking_loc == NonZeroU64::new(1));
+        assert!(d.index_loc == NonZeroU64::new(1));
 
-        let d = Directory::default();
+        let mut d = Directory::default();
         assert!(d.scores_loc.is_none());
 
+        d.dummy();
+        assert!(d.index_loc == NonZeroU64::new(std::u64::MAX));
+        assert!(d.ids_loc == NonZeroU64::new(std::u64::MAX));
+    }
 
+    #[test]
+    pub fn test_sanity_check()
+    {
+        let d = DirectoryOnDisk {
+            index_loc: 0,
+            ids_loc: 0,
+            block_index_loc: 0,
+            seqlocs_loc: 0,
+            scores_loc: 0,
+            masking_loc: 0,
+            headers_loc: 0,
+            sequences_loc: 0,
+        };
+
+        assert!(d.sanity_check(0).is_ok());
+
+        let d = DirectoryOnDisk {
+            index_loc: 1,
+            ids_loc: 1,
+            block_index_loc: 1,
+            seqlocs_loc: 1,
+            scores_loc: 1,
+            masking_loc: 1,
+            headers_loc: 1,
+            sequences_loc: 1,
+        };
+
+        assert!(d.sanity_check(1).is_ok());
+
+        let d = DirectoryOnDisk {
+            index_loc: 1,
+            ids_loc: 1,
+            block_index_loc: 1,
+            seqlocs_loc: 1,
+            scores_loc: 1,
+            masking_loc: 1,
+            headers_loc: 1,
+            sequences_loc: 1,
+        };
+
+        assert!(d.sanity_check(0).is_err());
+    }
+
+    #[test]
+    fn test_encode_decode() {
+        let d = Directory::default().with_scores().with_masking().with_index();
+        let bincode_config =
+            bincode::config::standard().with_fixed_int_encoding();
+
+        let encoded: Vec<u8> =
+            bincode::encode_to_vec(&d, bincode_config).unwrap();
+        let decoded: Directory =
+            bincode::decode_from_slice(&encoded[..], bincode_config).unwrap().0;
+
+        assert!(d == decoded);
     }
 }

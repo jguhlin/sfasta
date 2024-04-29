@@ -727,4 +727,16 @@ mod tests
             locs.push(store.add(id.as_bytes().to_vec()).unwrap());
         }
     }
+
+    #[test]
+    fn test_constructor() {
+        let mut store = BytesBlockStoreBuilder::default();
+        store.block_size = 10;
+        store = store.with_dict().with_dict_samples(128).with_dict_size(64 * 1024);
+        assert!(store.create_dict);
+        assert!(store.dict_samples == 128);
+        assert!(store.dict_size == 64 * 1024);
+        assert!(store.block_size == 10);
+    }
+
 }
