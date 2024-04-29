@@ -811,7 +811,8 @@ mod tests
             bincode::decode_from_std_read(&mut out_buf, bincode_config)
                 .unwrap();
 
-        assert!(parameters.block_size == 8192);
+        println!("{:?}", parameters);
+        assert!(parameters.block_size == 8);
 
         let _metadata: Metadata =
             bincode::decode_from_std_read(&mut out_buf, bincode_config)

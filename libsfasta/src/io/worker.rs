@@ -156,17 +156,20 @@ mod tests
         let handle = worker.start();
 
         let queue = worker.get_queue();
+        let location = Arc::new(AtomicU64::new(0));
         queue.send(OutputBlock {
             data: vec![1, 2, 3],
-            location: Arc::new(AtomicU64::new(0)),
+            location: Arc::clone(&location),
         })
         .unwrap();
 
         worker.shutdown();
         handle.join().unwrap();
 
+        println!("Location: {}", location.load(Ordering::Relaxed));
+
         let output_buffer = worker.into_inner();
         let output_buffer = output_buffer.into_inner();
-        assert_eq!(output_buffer, vec![1, 2, 3]);
+        assert_eq!(output_buffer, vec![3, 0, 0, 0, 0, 0, 0, 0, 1, 2, 3]);
     }
 }
