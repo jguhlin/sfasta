@@ -42,9 +42,12 @@ impl Builder<Vec<u8>> for StringBlockStoreBuilder
             .expect("Failed to add string to block store"))
     }
 
-    fn finalize(&mut self)
+    fn finalize(&mut self) -> Result<(), &str>
     {
-        self.inner.finalize();
+        match self.inner.finalize() {
+            Ok(_) => Ok(()),
+            Err(e) => Err("Unable to finalize string block store"),
+        }
     }
 }
 

@@ -414,17 +414,8 @@ impl<K: Key, V: Value> NodeDisk<K, V>
     ) where
         R: Read + Seek,
     {
-        let config = bincode::config::standard()
-            .with_variable_int_encoding()
-            .with_limit::<{ 1024 * 1024 }>();
-
         if self.state.on_disk() {
-            in_buf
-                .seek(SeekFrom::Start(self.state.loc() as u64 + start))
-                .unwrap();
-            let node: NodeDisk<K, V> =
-                bincode::decode_from_std_read(in_buf, config).unwrap();
-            *self = node;
+            self.load(in_buf, compression, start);            
         }
 
         if !self.is_leaf {

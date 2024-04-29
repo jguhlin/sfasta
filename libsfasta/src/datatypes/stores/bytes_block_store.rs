@@ -72,9 +72,12 @@ impl Builder<Vec<u8>> for BytesBlockStoreBuilder
         self.add(input)
     }
 
-    fn finalize(&mut self)
+    fn finalize(&mut self) -> Result<(), &str>
     {
-        self.finalize();
+        match self.finalize() {
+            Ok(_) => Ok(()),
+            Err(_) => Err("Unable to finalize block store"),
+        }
     }
 }
 
@@ -446,12 +449,12 @@ impl BytesBlockStoreBuilder
     }
 
     // Push the last block into the compression queue
-    pub fn finalize(&mut self)
+    pub fn finalize(&mut self) -> Result<(), BlockStoreError>
     {
         assert!(self.compression_worker.is_some());
 
         if self.data.len() == 0 {
-            return;
+            return Ok(())
         }
 
         self.compress_block();
@@ -460,6 +463,7 @@ impl BytesBlockStoreBuilder
         self.check_complete();
 
         self.finalized = true;
+        Ok(())
     }
 }
 
@@ -562,8 +566,9 @@ impl BytesBlockStore
                 + loc1.start as usize
                 + loc1.len as usize;
 
-            // #[cfg(test)]
-            // assert!(start + len <= block_size as usize);
+            debug_assert!(end > start);
+            debug_assert!(start + loc1.len as usize <= block_size as usize);
+            debug_assert!(start + end <= block_size as usize);
 
             result.extend_from_slice(&self.data.as_ref().unwrap()[start..end]);
         } else {
@@ -626,7 +631,7 @@ impl BytesBlockStore
                 }
             };
 
-        assert!(block_locations_pos > 0);
+        // assert!(block_locations_pos > 0);
 
         let block_locations: FractalTreeDisk<u32, u64> =
             FractalTreeDisk::from_buffer(&mut in_buf, block_locations_pos)

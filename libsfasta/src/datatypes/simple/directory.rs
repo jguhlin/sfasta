@@ -263,10 +263,13 @@ mod tests
     #[test]
     pub fn directory_constructors()
     {
-        let d = Directory::default().with_scores();
+        let d = Directory::default().with_scores().with_masking();
         assert!(d.scores_loc == NonZeroU64::new(1));
+        assert!(d.masking_loc == NonZeroU64::new(1));
 
         let d = Directory::default();
         assert!(d.scores_loc.is_none());
+
+
     }
 }

@@ -612,6 +612,7 @@ mod tests
 
         seqloc.sequence = 5;
         seqloc.add_locs(
+            &[],
             &vec![
                 Loc::new(0, 0, 10),
                 Loc::new(1, 0, 10),
@@ -624,9 +625,9 @@ mod tests
             &[],
             &[],
             &[],
-            &[],
         );
 
+        println!("{:#?}", seqloc);
         let slice = seqloc.seq_slice(10, 0..10);
         assert_eq!(slice, vec![Loc::new(0, 0, 10)]);
         let slice = seqloc.seq_slice(10, 5..7);
@@ -649,11 +650,11 @@ mod tests
         let block_size = 262144;
 
         seqloc.add_locs(
+            &[],
             &vec![
                 Loc::new(3097440, 261735, 262144 - 261735),
                 Loc::new(3097441, 0, 1274),
             ],
-            &[],
             &[],
             &[],
             &[],
@@ -677,11 +678,11 @@ mod tests
 
         let mut seqloc = SeqLoc::new();
         seqloc.add_locs(
+            &[],
             &vec![
                 Loc::new(1652696, 260695, 262144 - 260695),
                 Loc::new(1652697, 0, 28424),
             ],
-            &[],
             &[],
             &[],
             &[],
@@ -785,12 +786,110 @@ mod tests
         let mut buf = std::io::Cursor::new(buf);
         let mut buf = BufWriter::new(&mut buf);
 
-        store.write_to_buffer(&mut buf);
+        store.write_to_buffer(&mut buf).expect("Unable to write");
 
         let mut buf = buf.into_inner().unwrap();
 
         let mut store = SeqLocsStore::from_existing(0, &mut buf).unwrap();
-        let seqloc = store.get_seqloc(&mut buf, 1).unwrap().unwrap();
-        assert_eq!(seqloc.sequence, 5);
+        let seqloc = store.get_seqloc(&mut buf, 1).unwrap();
+        assert_eq!(seqloc, None);
+        let seqloc = store.get_seqloc(&mut buf, 0).unwrap();
+        assert_eq!(
+            seqloc,
+            Some(SeqLoc {
+                sequence: 0,
+                masking: 0,
+                scores: 0,
+                signal: 0,
+                headers: 0,
+                ids: 5,
+                mods: 0,
+                locs: vec![
+                    Loc {
+                        block: 0,
+                        start: 0,
+                        len: 10
+                    },
+                    Loc {
+                        block: 1,
+                        start: 0,
+                        len: 10
+                    },
+                    Loc {
+                        block: 2,
+                        start: 0,
+                        len: 10
+                    },
+                    Loc {
+                        block: 3,
+                        start: 0,
+                        len: 10
+                    },
+                    Loc {
+                        block: 4,
+                        start: 0,
+                        len: 10
+                    }
+                ]
+            })
+        );
+    }
+
+    #[test]
+    fn test_pos() {
+        let mut seqloc = SeqLoc::new();
+        seqloc.sequence = 5;
+        seqloc.add_locs(
+            &vec![
+                Loc::new(0, 0, 10),
+                Loc::new(1, 0, 10),
+                Loc::new(2, 0, 10),
+                Loc::new(3, 0, 10),
+                Loc::new(4, 0, 10),
+            ],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+            &[],
+        );
+
+        assert_eq!(seqloc.ids_pos(), 0..5);
+        assert_eq!(seqloc.sequence_pos(), 5..5);
+        assert_eq!(seqloc.masking_pos(), 5..5);
+        assert_eq!(seqloc.scores_pos(), 5..5);
+        assert_eq!(seqloc.signal_pos(), 5..5);
+        assert_eq!(seqloc.headers_pos(), 5..5);
+        assert_eq!(seqloc.mods_pos(), 5..5);
+        
+        let mut seqloc = SeqLoc::new();
+        let dummy_locs = vec![
+                Loc::new(0, 0, 10),
+                Loc::new(1, 0, 10),
+                Loc::new(2, 0, 10),
+                Loc::new(3, 0, 10),
+                Loc::new(4, 0, 10),
+            ];
+        seqloc.add_locs(
+            &dummy_locs,
+            &dummy_locs,
+            &dummy_locs,
+            &dummy_locs,
+            &dummy_locs,
+            &dummy_locs,
+            &dummy_locs,
+        );
+
+        assert_eq!(seqloc.ids_pos(), 0..5);
+        assert_eq!(seqloc.sequence_pos(), 5..10);
+        assert_eq!(seqloc.masking_pos(), 10..15);
+        assert_eq!(seqloc.scores_pos(), 15..20);
+        assert_eq!(seqloc.signal_pos(), 20..25);
+        assert_eq!(seqloc.headers_pos(), 25..30);
+        assert_eq!(seqloc.mods_pos(), 30..35);
+
+
+
     }
 }

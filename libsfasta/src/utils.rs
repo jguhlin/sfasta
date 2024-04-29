@@ -60,65 +60,6 @@ impl Read for CrossbeamReader
     }
 }
 
-/// Checks that the file extension ends in .sfasta or adds it if
-/// necessary
-pub fn check_extension(filename: &str) -> String
-{
-    if !filename.ends_with(".sfasta") {
-        format!("{}.sfasta", filename)
-    } else {
-        filename.to_string()
-    }
-}
-
-// Mutability here because we change everything to uppercase
-#[inline]
-pub fn capitalize_nucleotides(slice: &mut [u8])
-{
-    for nucl in slice.iter_mut() {
-        match &nucl {
-            // Is lower case?
-            97..=122 => *nucl -= 32,
-            _ => *nucl = *nucl,
-        }
-    }
-}
-
-#[inline]
-const fn _complement_nucl(nucl: u8) -> u8
-{
-    // Should all be capitalized by now...
-    // N -> 78
-    // A -> 65
-    // C -> 67
-    // G -> 71
-    // T -> 84
-    match &nucl {
-        65 => 84, // A -> T
-        67 => 71, // C -> G
-        84 => 65, // T -> A
-        71 => 67, // G -> C
-        78 => 78, // Complement of N is N
-        _ => 78,  // Everything else -> N
-    }
-}
-
-// Mutability here because we change everything to uppercase
-/// Complement nucleotides -- Reverse is easy enough with Rust
-/// internals
-pub fn complement_nucleotides(slice: &mut [u8])
-{
-    for x in slice.iter_mut() {
-        *x = _complement_nucl(*x);
-    }
-}
-
-#[inline]
-pub fn get_masking(seq: &[u8]) -> Vec<bool>
-{
-    seq.iter().map(|&x| x > 96).collect()
-}
-
 #[cfg(test)]
 mod tests
 {
@@ -155,24 +96,6 @@ mod tests
     // AAAAAAAANAAAAAAAAANAAAAAAAAAAAAAAAAAAAAAANAA"); println!("{:#?
     // }", coords); assert!(coords == [(0, 44)]);
     // }
-    #[test]
-    pub fn test_complement_nucleotides()
-    {
-        let mut seq = b"AGTCCCNTNNNNTAAGATTTAGAGACCAAAAA".to_vec();
-        complement_nucleotides(&mut seq);
-        assert!(seq == b"TCAGGGNANNNNATTCTAAATCTCTGGTTTTT");
-        seq.reverse();
-        assert!(seq == b"TTTTTGGTCTCTAAATCTTANNNNANGGGACT");
-    }
-
-    #[test]
-    pub fn test_capitalize_nucleotides()
-    {
-        let mut seq = b"agtcn".to_vec();
-        capitalize_nucleotides(&mut seq);
-        assert!(seq == b"AGTCN");
-    }
-
     // Test crossbeam reader channel
     #[test]
     pub fn test_crossbeam_reader()

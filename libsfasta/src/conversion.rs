@@ -598,9 +598,9 @@ impl Converter
         // Wait for all the workers to finish...
         headers.finalize();
         ids.finalize();
-        masking.finalize();
-        sequences.finalize();
-        scores.finalize();
+        masking.finalize().expect("Unable to finalize masking store");
+        sequences.finalize().expect("Unable to finalize sequences store");
+        scores.finalize().expect("Unable to finalize scores store");
 
         let backoff = Backoff::new();
         while compression_workers.len() > 0 || output_worker.len() > 0 {

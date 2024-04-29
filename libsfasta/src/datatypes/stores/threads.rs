@@ -17,7 +17,7 @@ where
     T: Send + Sync + Sized,
 {
     fn add(&mut self, input: T) -> Result<Vec<Loc>, &str>;
-    fn finalize(&mut self);
+    fn finalize(&mut self) -> Result<(), &str>;
 }
 
 pub struct ThreadBuilder<T, Z>
@@ -305,9 +305,10 @@ mod tests
             Ok(vec![])
         }
 
-        fn finalize(&mut self)
+        fn finalize(&mut self) -> Result<(), &str>
         {
             self.finalized.store(true, Ordering::SeqCst);
+            Ok(())
         }
     }
 

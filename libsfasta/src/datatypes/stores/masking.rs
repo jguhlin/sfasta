@@ -27,9 +27,12 @@ impl Builder<Vec<u8>> for MaskingStoreBuilder
         Ok(self.add(input))
     }
 
-    fn finalize(&mut self)
+    fn finalize(&mut self) -> Result<(), &str>
     {
-        self.inner.finalize();
+        match self.inner.finalize() {
+            Ok(_) => Ok(()),
+            Err(e) => Err("Unable to finalize masking store"),
+        }
     }
 }
 
@@ -138,9 +141,9 @@ impl MaskingStoreBuilder
             .expect("Failed to add masking to block store")
     }
 
-    pub fn finalize(&mut self)
+    pub fn finalize(&mut self) -> Result<(), BlockStoreError>
     {
-        self.inner.finalize();
+        self.inner.finalize()
     }
 }
 
@@ -210,11 +213,15 @@ mod tests
     #[test]
     fn test_masking()
     {
-        use simdutf8::basic::from_utf8;
-
-        let output_buffer = Arc::new(std::sync::Mutex::new(Box::new(
-            std::io::Cursor::new(Vec::with_capacity(1024 * 1024)),
+        let mut buffer = vec![0x0];
+        buffer.reserve(64 * 1024);
+        let mut output_buffer = Arc::new(std::sync::Mutex::new(Box::new(
+            std::io::Cursor::new(buffer),
         )));
+
+        // Move cursor to 1
+        output_buffer.lock().unwrap().seek(std::io::SeekFrom::Start(1)).unwrap();
+
 
         let mut output_worker = crate::io::worker::Worker::new(output_buffer)
             .with_buffer_size(1024);
@@ -228,7 +235,7 @@ mod tests
             .with_output_queue(Arc::clone(&output_queue));
 
         compression_workers.start();
-        let compression_workers = Arc::new(compression_workers);
+        let mut compression_workers = Arc::new(compression_workers);
 
         let mut masking = MaskingStoreBuilder::default()
             .with_compression_worker(Arc::clone(&compression_workers));
@@ -240,9 +247,7 @@ mod tests
         ];
 
         let seq = test_seqs[0].as_bytes();
-        println!("Len: {:#?}", seq.len());
         let loc = masking.add(seq.to_vec());
-        println!("{loc:#?}");
 
         for _ in 0..1000 {
             (0..test_seqs.len()).for_each(|i| {
@@ -253,12 +258,10 @@ mod tests
 
         let seq = test_seqs[0].as_bytes();
         let loc2 = masking.add(seq.to_vec());
-        println!("{loc2:#?}");
 
         let seq = test_seqs[3].as_bytes();
         let loc3 = masking.add(seq.to_vec());
-
-        println!("{loc3:#?}");
+        assert!(loc3 != vec![]);
 
         for _ in 0..1000 {
             (0..test_seqs.len()).for_each(|i| {
@@ -266,5 +269,34 @@ mod tests
                 masking.add(seq.to_vec());
             });
         }
+
+        // compression_workers.shutdown();
+        println!("Finalizing masking store...");
+        masking.finalize().expect("Failed to finalize masking store");
+        std::thread::sleep(std::time::Duration::from_millis(500));
+
+        println!("Masking store finalized, now doing output worker...");
+        output_worker.shutdown();
+
+        // todo bad hack!
+        std::thread::sleep(std::time::Duration::from_millis(500));
+        
+        let mut output_buffer = output_worker.into_inner();
+
+        masking.write_block_locations(&mut output_buffer).expect("Failed to write block locations");
+        let pos = output_buffer.stream_position().unwrap();
+        masking.write_header(pos, &mut output_buffer);
+
+        println!("Got it opening now");
+
+        let mut masking = Masking::from_buffer(&mut output_buffer, pos).unwrap();
+
+        let mut seq = test_seqs[0].as_bytes().to_vec();
+        masking.mask_sequence(&mut output_buffer, &loc, &mut seq);
+        // Print out as text
+        println!("{}", std::str::from_utf8(&seq).unwrap());
+        assert!(seq == test_seqs[0].as_bytes());
+
     }
+
 }
