@@ -13,6 +13,71 @@ The goals are random-access speed by query or random, and smaller size. It suppo
 ## Community Feedback Period
 I'm hopeful folks will check this out, play around, break it, and give feedback. 
 
+# Usage
+## Installation
+`cargo install sfasta` [Don't have cargo?](https://rustup.rs/)
+
+## Usage
+
+### Compression
+To compress a file:
+```bash
+sfa convert MyFile.fasta
+
+#You can also convert directly from gzipped files:
+sfa convert MyFile.fasta.gz
+```
+
+Compression profiles are supported. The built-in ones can be accessed with --fast, --fastest, --small, --smallest.
+```bash
+sfa convert --fast reads.fastq
+sfa convert --fastest reads.fastq
+```
+
+Fast / Fastest are optimized for fast reading and random access, while Small / Smallest are optimized for size of file on disk. *These are in development, let me know what works best for you*
+
+You can specify your own profile, using a template from [GitHub](https://github.com/jguhlin/sfasta) as an starting point:
+```
+sfa convert -p myprofile.yml reads.fastq
+```
+
+You can use other compression schemes. The software automatically detects which is used and decompresses accordingly.
+
+```bash
+sfa convert --snappy MyFile.fasta
+sfa convert --xz MyFile.fasta
+
+# Reading the file "just works"
+sfa view MyFile.sfasta 
+```
+
+You can also change the block size. Smaller blocks will speed up random access, while larger blocks will increase compression ratios. 512 (512kb, 524288 bytes) is default.
+
+```bash
+# This will create 8Mb blocks
+sfa convert --block-size 8192 MyFile.fasta
+```
+
+View a file:
+```bash
+sfa view MyFile.sfasta
+```
+
+Query a file by sequence ID:
+```bash
+sfa faidx MyFile.sfasta Chr1
+```
+
+For help:
+```bash
+sfa --help
+```
+
+## Requirements
+Should work anywhere that supports [Rust](https://www.rust-lang.org/). Tested on Ubuntu, Red Hat, and Windows 10. I suspect it will work on Mac OS. WASM support is forthcoming.
+
+# Details
+
 ## Compression Types Supported
 | Type | Status | Notes |
 |:-----|:------:|:-----:|
@@ -46,62 +111,13 @@ The same rule applies for FASTQ.
 | Additional Header Information | Fully Supported |
 | Quality Scores | Fully Supported |
 | Masking | Fully Supported |
+| Flags | Planned |
 | Nanopore Signals | Planned |
 | Base Modifications | Planned |
 | Pangenome Graph | Maybe |
 | Alignments | Not Planned. CRAM fulfills this role. |
 | Variants | Too different, another solution needed. |
 
-# Usage
-## Installation
-`cargo install sfasta` [Don't have cargo?](https://rustup.rs/)
-
-## Usage
-
-### Compression
-To compress a file:
-```bash
-sfa convert MyFile.fasta
-
-#You can also convert directly from gzipped files:
-sfa convert MyFile.fasta.gz
-```
-
-You can use other compression schemes. The software automatically detects which is used and decompresses accordingly.
-
-```bash
-sfa convert --snappy MyFile.fasta
-sfa convert --xz MyFile.fasta
-
-# Reading the file "just works"
-sfa view MyFile.sfasta 
-```
-
-You can also change the block size. Smaller blocks will speed up random access, while larger blocks will increase compression ratios. 512 (512kb, 524288 bytes) is default.
-
-```bash
-sfa convert --block-size 8192 MyFile.fasta
-```
-
-View a file:
-```bash
-sfa view MyFile.sfasta
-```
-
-Query a file by sequence ID:
-```bash
-sfa faidx MyFile.sfasta Chr1
-```
-
-For help:
-```bash
-sfa --help
-```
-
-Please note, not all subcommands are implemented yet. The following should work: convert, view, list, faidx.
-
-## Requirements
-Should work anywhere that supports [Rust](https://www.rust-lang.org/). Tested on Ubuntu, Red Hat, and Windows 10. I suspect it will work on Mac OS. WASM support is forthcoming.
 
 # Comparisons
 
@@ -113,10 +129,6 @@ Should work anywhere that supports [Rust](https://www.rust-lang.org/). Tested on
 | [bgzip](http://www.htslib.org/doc/bgzip.html) | Yes | Yes | bgzip, crabz |
 | [NAF](https://github.com/KirillKryukov/naf) | No | No | naf |
 | [ZSTD](http://facebook.github.io/zstd/) | No | Yes | zstd |
-
-# Future Plans
-## Speed
-- Final Index generation and compression is the most time consuming task. It can be parallelized.
 
 ## Benchmarks
 
@@ -149,6 +161,15 @@ Uncompressed: 272M
 ❯ ls -lah uniprot_sprot.fasta.gz.fai
 -rw-rw-r-- 1 joseph joseph 23M Apr 26 17:02 uniprot_sprot.fasta.gz.fai
 ```
+
+### UniProt Size (sfa profiles)
+| Profile | Size |
+|:-------:|:----:|
+| smallest | 59Mb |
+| small | 62Mb |
+| default | 68Mb |
+| fast | 73Mb |
+| fastest | 78Mb |
 
 ### Uniprot Compression Speed
 | Command | Mean [s] | Min [s] | Max [s] | Relative |

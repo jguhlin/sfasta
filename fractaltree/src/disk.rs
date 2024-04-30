@@ -385,7 +385,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         *self = if compression.is_some() {
             let config = bincode::config::standard()
                 .with_variable_int_encoding()
-                .with_limit::<{ 1024 * 1024 }>();
+                .with_limit::<{ 8 * 1024 * 1024 }>();
 
             let compressed: Vec<u8> =
                 bincode::decode_from_std_read(in_buf, config).unwrap();
