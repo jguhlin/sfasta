@@ -4,22 +4,46 @@
 Sfasta is a replacement for the FASTA/Q format with the twin goals of saving space and having very fast random-access, even for large datasets (such as the nt database, 203Gb gzip compressed, 210Gb bgzip compressed(+1.8Gb index), and 141Gb with sfasta, index inclusive). 
 
 Speed comes from assuming modern hardware, thus: 
-* Multiple threads by default
+* Multiple compression threads by default
 * Dedicated I/O Threads
 * Modern compression algorithms (ZSTD, as default)
 * Fractal Index
-* Everything stored as sequence streams (for better compression)
+* Everything stored as sequence streams (like stored with like, for better compression)
 
-While the goals are random-access speed by ID query, and smaller size, I hope it can become a more general purpose format. It supports other compression algorithms, which could be used for archival purposes (such as xz compression). This is a work in progress, but ready for community feedback. 
+The goals are random-access speed by query or random, and smaller size. It supports other compression algorithms, which could be used for archival purposes (such as xz compression).
 
 ## Community Feedback Period
 I'm hopeful folks will check this out, play around, break it, and give feedback. 
+
+## Compression Types Supported
+| Type | Status | Notes |
+|:-----|:------:|:-----:|
+| ZSTD | Default | Optimized |
+| Brotli | Implemented | Could be more optimized |
+| LZ4 | Implemented | Rust implementation does not support levels |
+| XZ | Implemented | Slow, high compression |
+| Snappy | Implemented | Not recommended |
+| GZIP | Implemented | Not recommended |
+| BZIP2 | Implemented | Not recommended |
+| NONE | | No compression, supported |
+
+*Compression can be set per data type*
+- You can use ZSTD for sequence compression, XZ for masking, Brotli for IDs and Headers, for example.
+- Compression profiles are found in [compression_profiles](https://github.com/jguhlin/sfasta) folder and are stored as YAML.
+- You can load your own compression profile from the command line.
+- IDs are interpreted from FASTA/Q files as the part before the space on an identified line, for example
+```
+>Chr1 This is the chromosome
+^---^ ^--------------------^
+ ID    Header
+```
+The same rule applies for FASTQ.
 
 ## Data Types Supported
 
 | Data | Status |
 |:----:|:------:|
-| Sequences | Fully supported |
+| Sequences | Fully supported, nucleotide, amino, and RNA (anything, really) |
 | Sequence IDs | Fully Supported |
 | Additional Header Information | Fully Supported |
 | Quality Scores | Fully Supported |
@@ -28,6 +52,7 @@ I'm hopeful folks will check this out, play around, break it, and give feedback.
 | Base Modifications | Planned |
 | Pangenome Graph | Maybe |
 | Alignments | Not Planned. CRAM fulfills this role. |
+| Variants | Too different, another solution needed. |
 
 # Usage
 ## Installation
