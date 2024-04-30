@@ -378,6 +378,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
     ) where
         R: Read + Seek,
     {
+        log::info!("Start position {}", start);
         in_buf
             .seek(SeekFrom::Start(start + self.state.loc() as u64))
             .unwrap();
