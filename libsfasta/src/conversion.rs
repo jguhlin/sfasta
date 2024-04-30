@@ -364,9 +364,6 @@ impl Converter
 
         // Go to the beginning, and write the location of the index
 
-        // sfasta.directory.block_index_loc =
-        // NonZeroU64::new(block_index_pos);
-
         let mut out_buffer_lock = out_buffer.lock().unwrap();
         out_buffer_lock
             .seek(SeekFrom::Start(directory_location))

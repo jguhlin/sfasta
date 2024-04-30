@@ -183,8 +183,6 @@ Uncompressed: 272M
 
 Compression speed is slower, but this is primarily due to the index creation. For bgzip samtools takes 2.07 seconds to generate the index. Also of note is pigz, ennaf, and zstd do not support indexing, while crabz does (using bgzf format).
 
-
-
 ## Nanopore Reads
 As a FASTA file.
 
@@ -245,6 +243,31 @@ Uncompressed: 2.7G
 | bgzip (excl index) | 635M |
 | Zstd (no index) | 663M |
 
+## Illumina Reads
+11Gb of reads (FASTQ)
+
+### Compression Speed
+| Command | Mean [s] | Min [s] | Max [s] | Relative |
+|:---|---:|---:|---:|---:|
+| `sfa convert --threads 14 reads.fastq` | 80.794 ± 3.379 | 77.700 | 87.570 | 9.59 ± 0.53 |
+| `bgzip -kf --threads 16 reads.fastq` | 48.920 ± 0.264 | 48.645 | 49.279 | 5.81 ± 0.21 |
+| `pigz -kf -p 16 reads.fastq` | 80.712 ± 1.461 | 78.945 | 83.181 | 9.58 ± 0.39 |
+| `ennaf --dna --fastq --temp-dir /tmp reads.fastq -o reads.naf` | 38.276 ± 0.246 | 37.951 |
+38.602 | 4.54 ± 0.17 |
+| `zstd -k reads.fastq -f -T16` | 8.423 ± 0.303 | 7.915 | 8.889 | 1.00 |
+| `crabz -f bgzf -p 16 reads.fastq -o reads.fastq.gz` | 22.176 ± 3.802 | 17.889 | 26.813 | 2.63 ± 0.46 |
+
+### Genome Size 
+Uncompressed: 2.7G
+
+| Compression Type | Size |
+|---|--|
+| NAF (no index) | 1.9Gb |
+| sfasta (incl index) | 2.5Gb |
+| bgzip (excl index) | 635M |
+| Zstd (no index) | 663M |
+
+
 # Future Plans
 ## Implement NAF-like algorithm
 [NAF](https://github.com/KirillKryukov/naf) has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some SIMD support for 2bit and 4bit DNA/RNA encoding.
@@ -273,7 +296,6 @@ To make it easier to use in other programs and in python/jupyter
 ## Small file optimization
 Sfasta is currently optimized for larger files.
 
-
 ## GFA file format support
 Graph genome file format is in dire need of an optimized format
 
@@ -294,43 +316,13 @@ cargo fuzz run parse_sfasta -- -detect_leaks=0 -rss_limit_mb=4096mb -max_len=838
 ## I get a strange symbol near the progress bar
 You need to install a font that supports Unicode. I'll see if there is a way to auto-detect.
 
-## XZ compression is fast until about halfway, then slows to a crawl.
-The buffers can store lots of sequence, but the compression algorithm takes longer.
-
 ## Why so many dependencies?
 Right it it works with a wide range of compression functions. Once some are determined to be the best others could be dropped from future versions. The file format itself has a version identifier so we could request people rollback to an older version if they need to.
 
 ## Why samtools comparison?
-I've got plenty of experiments trying to get a fast gzip compressed multi-threaded reader, but even when mounted on a ramdisk, it is too slow. Samtools is an awesome, handy tool that has the 'faidx' function, of which I am a huge fan. While the faidx is not it's main function, it is not optimized for large datasets, thus the test is a little unfair. Still, it's helpful to have something to compare to. 
+I've got plenty of experiments trying to get a fast gzip compressed multi-threaded reader, but even when mounted on a ramdisk, it is too slow. Samtools is an awesome, handy tool that has the 'faidx' function, which I use almost constantly. While faidx is a handy utility function, it is not optimized for large datasets, thus the test is a little unfair. Still, it's helpful to have something to compare to. 
 
 # File Format
-The best source is currently this file: [conversion.rs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/conversion.rs#L148). Masking is converted into instructions in a u32, see [ml32bit.rs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/masking/ml32bit.rs).
-
-## Header
-| Data Type | Name | Description |
-| ---:|:--- |:--- |
-| [u8; 6] | b"sfasta" | Indicates an sfasta file |
-| u64 | Version | Version of the SFASTA file (currently set to 1) |
-| struct | [Directory](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/directory.rs#L53) | Directory of the file; u64 bytes pointing to indices, sequence blocks, etc... |
-| struct | [Parameters](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/parameters.rs#L5) | Parameters used to create the file |
-| struct | [Metadata](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/metadata.rs#L3) | unused |
-| structs | [SequenceBlock](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs#L11) | Sequences, split into block_size chunks, and compressed on disk (see: [SequenceBlockCompressed](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs#L154)) |
-| Vec<u64> | Sequence Block Offsets | Location of each sequence block, in bytes, from the start of the file. Stored on disk as bitpacked u32. |
-| [Header](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/header.rs) Region ||
-| enum | [CompressionType](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/structs.rs#L23) | Type of compression used for the Headers. |
-| u64 | Block Locations Position | Position of the header blocks locations |
-| [u8] | Header Block | Header (everything after the sequence ID in a FASTA file) stored as blocks of u8 on disk, zstd compressed. |
-| [u64] | Header Block Offsets | Location of each header block, in bytes, from the start of the file. |
-| [IDs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/id.rs) Region ||
-| enum | [CompressionType](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/structs.rs#L23) | Type of compression used for the IDs. |
-| u64 | Block Locations Position | Position of the ID blocks locations |
-| [u8] | ID Block | IDs (everything after the sequence ID in a FASTA file) stored as blocks of u8 on disk, zstd compressed. |
-| [u64] | ID Block Offsets | Location of each header block, in bytes, from the start of the file. |
-| [Masking](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/masking.rs) Region ||
-| u64 | bitpack_len | Length of each bitpacked block |
-| u8 | num_bits| Number of bits used to bitpack each integer |
-| [Packed] | BitPacked Masking Instructions | Bitpacked masking instructions. [See here](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/masking/ml32bit.rs) |
-| [struct] | [SeqLocs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs) | Sequence locations, stored as a vector of u64. |
-| Special | [Dual Index](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/dual_level_index/dual_index.rs) | See file for more description. Rest of this table TBD |
+The format is found in the docs.
 
 ![Genomics Aotearoa](./static/genomics-aotearoa.png)

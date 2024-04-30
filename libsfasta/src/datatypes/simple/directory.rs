@@ -95,14 +95,14 @@ pub struct Directory
 {
     pub index_loc: Option<NonZeroU64>,
     pub ids_loc: Option<NonZeroU64>,
-    pub block_index_loc: Option<NonZeroU64>,
     pub seqlocs_loc: Option<NonZeroU64>,
     pub scores_loc: Option<NonZeroU64>,
     pub masking_loc: Option<NonZeroU64>,
     pub headers_loc: Option<NonZeroU64>,
     pub sequences_loc: Option<NonZeroU64>,
-    // TODO: Add pangenome stuff
-    // TODO: Add signals stuff
+    pub flags_loc: Option<NonZeroU64>,
+    pub signals_loc: Option<NonZeroU64>,
+    pub mods_loc: Option<NonZeroU64>,
 }
 
 impl From<DirectoryOnDisk> for Directory
@@ -112,12 +112,14 @@ impl From<DirectoryOnDisk> for Directory
         Directory {
             index_loc: NonZeroU64::new(dir.index_loc),
             ids_loc: NonZeroU64::new(dir.ids_loc),
-            block_index_loc: NonZeroU64::new(dir.block_index_loc),
             seqlocs_loc: NonZeroU64::new(dir.seqlocs_loc),
             scores_loc: NonZeroU64::new(dir.scores_loc),
             masking_loc: NonZeroU64::new(dir.masking_loc),
             headers_loc: NonZeroU64::new(dir.headers_loc),
             sequences_loc: NonZeroU64::new(dir.sequences_loc),
+            flags_loc: NonZeroU64::new(dir.flags_loc),
+            mods_loc: NonZeroU64::new(dir.mods_lob),
+            signals_loc: NonZeroU64::new(dir.signals_loc)
         }
     }
 }
@@ -224,12 +226,14 @@ mod tests
         let mut directory = Directory {
             index_loc: None,
             ids_loc: None,
-            block_index_loc: None,
             seqlocs_loc: None,
             scores_loc: None,
             masking_loc: None,
             headers_loc: None,
             sequences_loc: None,
+            mods_loc: None,
+            signals_loc: None,
+            flags_loc: None,
         };
 
         let bincode_config =
