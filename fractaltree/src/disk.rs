@@ -415,7 +415,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         R: Read + Seek,
     {
         if self.state.on_disk() {
-            self.load(in_buf, compression, start);            
+            self.load(in_buf, compression, start);
         }
 
         if !self.is_leaf {

@@ -454,7 +454,7 @@ impl BytesBlockStoreBuilder
         assert!(self.compression_worker.is_some());
 
         if self.data.len() == 0 {
-            return Ok(())
+            return Ok(());
         }
 
         self.compress_block();
@@ -729,14 +729,17 @@ mod tests
     }
 
     #[test]
-    fn test_constructor() {
+    fn test_constructor()
+    {
         let mut store = BytesBlockStoreBuilder::default();
         store.block_size = 10;
-        store = store.with_dict().with_dict_samples(128).with_dict_size(64 * 1024);
+        store = store
+            .with_dict()
+            .with_dict_samples(128)
+            .with_dict_size(64 * 1024);
         assert!(store.create_dict);
         assert!(store.dict_samples == 128);
         assert!(store.dict_size == 64 * 1024);
         assert!(store.block_size == 10);
     }
-
 }

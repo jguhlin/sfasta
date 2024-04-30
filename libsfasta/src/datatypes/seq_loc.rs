@@ -836,7 +836,8 @@ mod tests
     }
 
     #[test]
-    fn test_pos() {
+    fn test_pos()
+    {
         let mut seqloc = SeqLoc::new();
         seqloc.sequence = 5;
         seqloc.add_locs(
@@ -862,15 +863,15 @@ mod tests
         assert_eq!(seqloc.signal_pos(), 5..5);
         assert_eq!(seqloc.headers_pos(), 5..5);
         assert_eq!(seqloc.mods_pos(), 5..5);
-        
+
         let mut seqloc = SeqLoc::new();
         let dummy_locs = vec![
-                Loc::new(0, 0, 10),
-                Loc::new(1, 0, 10),
-                Loc::new(2, 0, 10),
-                Loc::new(3, 0, 10),
-                Loc::new(4, 0, 10),
-            ];
+            Loc::new(0, 0, 10),
+            Loc::new(1, 0, 10),
+            Loc::new(2, 0, 10),
+            Loc::new(3, 0, 10),
+            Loc::new(4, 0, 10),
+        ];
         seqloc.add_locs(
             &dummy_locs,
             &dummy_locs,
@@ -888,8 +889,5 @@ mod tests
         assert_eq!(seqloc.signal_pos(), 20..25);
         assert_eq!(seqloc.headers_pos(), 25..30);
         assert_eq!(seqloc.mods_pos(), 30..35);
-
-
-
     }
 }

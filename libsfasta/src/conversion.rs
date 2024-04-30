@@ -427,8 +427,7 @@ impl Converter
 
         debug_assert!(output_worker.buffer_size() > 0, "Buffer size is 0");
         // for mutans testing
-        debug_assert!(output_worker.buffer_size() == threads as usize * 8); 
-
+        debug_assert!(output_worker.buffer_size() == threads as usize * 8);
 
         output_worker.start();
         let output_queue = output_worker.get_queue();
@@ -609,8 +608,12 @@ impl Converter
         // Wait for all the workers to finish...
         headers.finalize();
         ids.finalize();
-        masking.finalize().expect("Unable to finalize masking store");
-        sequences.finalize().expect("Unable to finalize sequences store");
+        masking
+            .finalize()
+            .expect("Unable to finalize masking store");
+        sequences
+            .finalize()
+            .expect("Unable to finalize sequences store");
         scores.finalize().expect("Unable to finalize scores store");
 
         let backoff = Backoff::new();
@@ -817,8 +820,6 @@ mod tests
         let _metadata: Metadata =
             bincode::decode_from_std_read(&mut out_buf, bincode_config)
                 .unwrap();
-
-        
 
         // TODO: Add more tests
     }

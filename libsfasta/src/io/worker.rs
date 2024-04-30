@@ -148,7 +148,8 @@ mod tests
     #[test]
     fn test_worker()
     {
-        let output_buffer = Arc::new(Mutex::new(Box::new(Cursor::new(Vec::new()))));
+        let output_buffer =
+            Arc::new(Mutex::new(Box::new(Cursor::new(Vec::new()))));
         let mut worker = Worker::new(output_buffer);
         let mut worker = worker.with_buffer_size(8192);
         assert!(worker.buffer_size() == 8192);
@@ -157,11 +158,12 @@ mod tests
 
         let queue = worker.get_queue();
         let location = Arc::new(AtomicU64::new(0));
-        queue.send(OutputBlock {
-            data: vec![1, 2, 3],
-            location: Arc::clone(&location),
-        })
-        .unwrap();
+        queue
+            .send(OutputBlock {
+                data: vec![1, 2, 3],
+                location: Arc::clone(&location),
+            })
+            .unwrap();
 
         worker.shutdown();
         handle.join().unwrap();

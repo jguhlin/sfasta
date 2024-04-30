@@ -340,7 +340,5 @@ mod tests
 
         let builder = thread_builder.join().unwrap();
         assert!(builder.finalized.load(Ordering::SeqCst));
-
-
     }
 }

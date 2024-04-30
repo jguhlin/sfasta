@@ -167,12 +167,18 @@ mod tests
     }
 
     #[test]
-    fn test_profiles() 
+    fn test_profiles()
     {
         // Should not equal default
         assert_ne!(CompressionProfile::default(), CompressionProfile::fast());
-        assert_ne!(CompressionProfile::default(), CompressionProfile::fastest());
+        assert_ne!(
+            CompressionProfile::default(),
+            CompressionProfile::fastest()
+        );
         assert_ne!(CompressionProfile::default(), CompressionProfile::small());
-        assert_ne!(CompressionProfile::default(), CompressionProfile::smallest());
+        assert_ne!(
+            CompressionProfile::default(),
+            CompressionProfile::smallest()
+        );
     }
 }

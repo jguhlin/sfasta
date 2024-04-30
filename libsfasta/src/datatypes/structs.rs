@@ -119,7 +119,10 @@ mod tests
     fn test_sequence()
     {
         let seq = Sequence::from(vec![b'A', b'C', b'G', b'T']);
-        assert_eq!(seq.sequence.as_ref().unwrap(), &vec![b'A', b'C', b'G', b'T']);
+        assert_eq!(
+            seq.sequence.as_ref().unwrap(),
+            &vec![b'A', b'C', b'G', b'T']
+        );
         assert_eq!(seq.len(), 4);
         assert_eq!(seq.is_empty(), false);
 
@@ -138,7 +141,10 @@ mod tests
             Some(vec![b'7', b'8', b'9']),
         );
 
-        assert_eq!(seq.sequence.as_ref().unwrap(), &vec![b'A', b'C', b'G', b'T']);
+        assert_eq!(
+            seq.sequence.as_ref().unwrap(),
+            &vec![b'A', b'C', b'G', b'T']
+        );
         assert_eq!(seq.id.as_ref().unwrap(), &vec![b'1', b'2', b'3']);
         assert_eq!(seq.header.as_ref().unwrap(), &vec![b'4', b'5', b'6']);
         assert_eq!(seq.scores.as_ref().unwrap(), &vec![b'7', b'8', b'9']);
@@ -153,9 +159,15 @@ mod tests
         // Test make_uppercase and make_lowercase
         let mut seq = Sequence::from(vec![b'a', b'c', b'g', b't']);
         seq.make_uppercase();
-        assert_eq!(seq.sequence.as_ref().unwrap(), &vec![b'A', b'C', b'G', b'T']);
+        assert_eq!(
+            seq.sequence.as_ref().unwrap(),
+            &vec![b'A', b'C', b'G', b'T']
+        );
         seq.make_lowercase();
-        assert_eq!(seq.sequence.as_ref().unwrap(), &vec![b'a', b'c', b'g', b't']);
+        assert_eq!(
+            seq.sequence.as_ref().unwrap(),
+            &vec![b'a', b'c', b'g', b't']
+        );
 
         // Test is_empty
         let seq = Sequence::from(vec![]);

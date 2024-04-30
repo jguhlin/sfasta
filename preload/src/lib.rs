@@ -8,9 +8,10 @@ use std::os::fd::AsRawFd;
 
 use std::io::Read;
 
-use libc::{c_char, c_int, c_long, c_uint, c_void, c_uchar, c_ulong};
+use libc::{c_char, c_int, c_long, c_uchar, c_uint, c_ulong, c_void};
 
-enum FileCompressionType {
+enum FileCompressionType
+{
     Sfasta,
     Gz,
     Bz2,
@@ -22,7 +23,10 @@ enum FileCompressionType {
     Plaintext,
 }
 
-fn get_file_compression_type(mut file: &std::fs::File) -> Result<FileCompressionType, std::io::Error> {
+fn get_file_compression_type(
+    mut file: &std::fs::File,
+) -> Result<FileCompressionType, std::io::Error>
+{
     // Read the first few bytes of the file
     let mut buffer = [0; 8];
     let bytes_read = file.read(&mut buffer).expect("Read failed");
@@ -49,20 +53,24 @@ fn get_file_compression_type(mut file: &std::fs::File) -> Result<FileCompression
         return Ok(FileCompressionType::Lz4);
     } else if buffer.starts_with(&[0xff, 0x06, 0x00, 0x00, 0x00]) {
         return Ok(FileCompressionType::Snappy);
-    } if buffer.starts_with(b"SFASTA") {
+    }
+    if buffer.starts_with(b"SFASTA") {
         return Ok(FileCompressionType::Sfasta);
     } else {
         return Ok(FileCompressionType::Plaintext);
     }
 }
 
-enum FileType {
+enum FileType
+{
     FASTA,
-    FASTQ,   
+    FASTQ,
 }
 
-// Read the first few bytes (after decompression, if applicable) to determine the file type
-fn get_file_type(in_buf: &[u8]) -> Result<FileType, std::io::Error> {
+// Read the first few bytes (after decompression, if applicable) to
+// determine the file type
+fn get_file_type(in_buf: &[u8]) -> Result<FileType, std::io::Error>
+{
     // Check for FASTA
     if in_buf.starts_with(b">") {
         return Ok(FileType::FASTA);
@@ -76,16 +84,19 @@ fn get_file_type(in_buf: &[u8]) -> Result<FileType, std::io::Error> {
     }
 }
 
-pub struct GzFile {
-    file_type: FileType,    
+pub struct GzFile
+{
+    file_type: FileType,
     buffer: Vec<u8>,
     position: usize,
     is_open: bool,
     file_handle: std::fs::File,
 }
 
-impl GzFile {
-    pub fn new(path: &str, mode: &str) -> Self {
+impl GzFile
+{
+    pub fn new(path: &str, mode: &str) -> Self
+    {
         Self {
             buffer: Vec::new(),
             position: 0,
@@ -94,8 +105,8 @@ impl GzFile {
         }
     }
 
-    pub fn open(path: *const c_char, mode: *const c_char) -> *mut Self {
-
+    pub fn open(path: *const c_char, mode: *const c_char) -> *mut Self
+    {
         // File type dependent (sfasta is RA, everything else is sequential)
         #[cfg(unix)]
         nix::fcntl::posix_fadvise(
@@ -107,67 +118,97 @@ impl GzFile {
         )
         .expect("Fadvise Failed");
 
-        let path_str = unsafe { std::ffi::CStr::from_ptr(path).to_str().unwrap() };
-        let mode_str = unsafe { std::ffi::CStr::from_ptr(mode).to_str().unwrap() };
+        let path_str =
+            unsafe { std::ffi::CStr::from_ptr(path).to_str().unwrap() };
+        let mode_str =
+            unsafe { std::ffi::CStr::from_ptr(mode).to_str().unwrap() };
         // Allocate and return a new GzFile instance
         Box::into_raw(Box::new(Self::new(path_str, mode_str)))
     }
 
-    pub fn read(&mut self, buf: &mut [u8]) -> c_int {
+    pub fn read(&mut self, buf: &mut [u8]) -> c_int
+    {
         // Implement your custom read functionality
         0 // Placeholder
     }
 
-    pub fn write(&mut self, buf: &[u8]) -> c_int {
+    pub fn write(&mut self, buf: &[u8]) -> c_int
+    {
         // Implement your custom write functionality
         0 // Placeholder
     }
 
-    pub fn close(self) -> c_int {
+    pub fn close(self) -> c_int
+    {
         // Clean up resources
         0 // Placeholder
     }
 }
 
-impl Drop for GzFile {
-    fn drop(&mut self) {
+impl Drop for GzFile
+{
+    fn drop(&mut self)
+    {
         // Clean up code here, if needed
     }
 }
 
 // C API wrappers to be used with LD_PRELOAD or similar mechanisms
 #[no_mangle]
-pub extern "C" fn gzopen(path: *const c_char, mode: *const c_char) -> *mut GzFile {
+pub extern "C" fn gzopen(
+    path: *const c_char,
+    mode: *const c_char,
+) -> *mut GzFile
+{
     GzFile::open(path, mode)
 }
 
 #[no_mangle]
-pub extern "C" fn gzread(file: *mut GzFile, buf: *mut libc::c_void, len: libc::c_uint) -> c_int {
+pub extern "C" fn gzread(
+    file: *mut GzFile,
+    buf: *mut libc::c_void,
+    len: libc::c_uint,
+) -> c_int
+{
     let gz_file = unsafe { &mut *file };
-    let buffer = unsafe { std::slice::from_raw_parts_mut(buf as *mut u8, len as usize) };
+    let buffer =
+        unsafe { std::slice::from_raw_parts_mut(buf as *mut u8, len as usize) };
     gz_file.read(buffer)
 }
 
 #[no_mangle]
-pub extern "C" fn gzwrite(file: *mut GzFile, buf: *const libc::c_void, len: libc::c_uint) -> c_int {
+pub extern "C" fn gzwrite(
+    file: *mut GzFile,
+    buf: *const libc::c_void,
+    len: libc::c_uint,
+) -> c_int
+{
     let gz_file = unsafe { &mut *file };
-    let buffer = unsafe { std::slice::from_raw_parts(buf as *const u8, len as usize) };
+    let buffer =
+        unsafe { std::slice::from_raw_parts(buf as *const u8, len as usize) };
     gz_file.write(buffer)
 }
 
 #[no_mangle]
-pub extern "C" fn gzclose(file: *mut GzFile) -> c_int {
+pub extern "C" fn gzclose(file: *mut GzFile) -> c_int
+{
     let gz_file = unsafe { Box::from_raw(file) }; // Take ownership and drop
     gz_file.close()
 }
 
 #[no_mangle]
-pub extern "C" fn gzseek(file: *mut GzFile, offset: c_long, whence: c_int) -> c_long {
+pub extern "C" fn gzseek(
+    file: *mut GzFile,
+    offset: c_long,
+    whence: c_int,
+) -> c_long
+{
     // Your interposing code here
 }
 
 #[no_mangle]
-pub extern "C" fn zlibVersion() -> *const c_char {
+pub extern "C" fn zlibVersion() -> *const c_char
+{
     // Your interposing code here
     // Return a custom version string
     let version = "1.3.1-custom-flate2-1.0.29-zlibng-sfasta";
@@ -175,7 +216,13 @@ pub extern "C" fn zlibVersion() -> *const c_char {
 }
 
 #[no_mangle]
-pub extern "C" fn uncompress(dest: *mut c_uchar, destLen: *mut c_ulong, source: *const c_uchar, sourceLen: c_ulong) -> c_int {
+pub extern "C" fn uncompress(
+    dest: *mut c_uchar,
+    destLen: *mut c_ulong,
+    source: *const c_uchar,
+    sourceLen: c_ulong,
+) -> c_int
+{
     // Your interposing code here
 }
 

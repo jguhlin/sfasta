@@ -220,8 +220,11 @@ mod tests
         )));
 
         // Move cursor to 1
-        output_buffer.lock().unwrap().seek(std::io::SeekFrom::Start(1)).unwrap();
-
+        output_buffer
+            .lock()
+            .unwrap()
+            .seek(std::io::SeekFrom::Start(1))
+            .unwrap();
 
         let mut output_worker = crate::io::worker::Worker::new(output_buffer)
             .with_buffer_size(1024);
@@ -272,7 +275,9 @@ mod tests
 
         // compression_workers.shutdown();
         println!("Finalizing masking store...");
-        masking.finalize().expect("Failed to finalize masking store");
+        masking
+            .finalize()
+            .expect("Failed to finalize masking store");
         std::thread::sleep(std::time::Duration::from_millis(500));
 
         println!("Masking store finalized, now doing output worker...");
@@ -280,23 +285,24 @@ mod tests
 
         // todo bad hack!
         std::thread::sleep(std::time::Duration::from_millis(500));
-        
+
         let mut output_buffer = output_worker.into_inner();
 
-        masking.write_block_locations(&mut output_buffer).expect("Failed to write block locations");
+        masking
+            .write_block_locations(&mut output_buffer)
+            .expect("Failed to write block locations");
         let pos = output_buffer.stream_position().unwrap();
         masking.write_header(pos, &mut output_buffer);
 
         println!("Got it opening now");
 
-        let mut masking = Masking::from_buffer(&mut output_buffer, pos).unwrap();
+        let mut masking =
+            Masking::from_buffer(&mut output_buffer, pos).unwrap();
 
         let mut seq = test_seqs[0].as_bytes().to_vec();
         masking.mask_sequence(&mut output_buffer, &loc, &mut seq);
         // Print out as text
         println!("{}", std::str::from_utf8(&seq).unwrap());
         assert!(seq == test_seqs[0].as_bytes());
-
     }
-
 }

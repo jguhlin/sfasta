@@ -263,7 +263,10 @@ mod tests
     #[test]
     pub fn directory_constructors()
     {
-        let d = Directory::default().with_scores().with_masking().with_index();
+        let d = Directory::default()
+            .with_scores()
+            .with_masking()
+            .with_index();
         assert!(d.scores_loc == NonZeroU64::new(1));
         assert!(d.masking_loc == NonZeroU64::new(1));
         assert!(d.index_loc == NonZeroU64::new(1));
@@ -320,15 +323,21 @@ mod tests
     }
 
     #[test]
-    fn test_encode_decode() {
-        let d = Directory::default().with_scores().with_masking().with_index();
+    fn test_encode_decode()
+    {
+        let d = Directory::default()
+            .with_scores()
+            .with_masking()
+            .with_index();
         let bincode_config =
             bincode::config::standard().with_fixed_int_encoding();
 
         let encoded: Vec<u8> =
             bincode::encode_to_vec(&d, bincode_config).unwrap();
         let decoded: Directory =
-            bincode::decode_from_slice(&encoded[..], bincode_config).unwrap().0;
+            bincode::decode_from_slice(&encoded[..], bincode_config)
+                .unwrap()
+                .0;
 
         assert!(d == decoded);
     }
