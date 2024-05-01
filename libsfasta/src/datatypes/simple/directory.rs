@@ -9,12 +9,14 @@ pub struct DirectoryOnDisk
 {
     pub index_loc: u64,
     pub ids_loc: u64,
-    pub block_index_loc: u64,
     pub seqlocs_loc: u64,
     pub scores_loc: u64,
     pub masking_loc: u64,
     pub headers_loc: u64,
     pub sequences_loc: u64,
+    pub flags_loc: u64,
+    pub modifications_loc: u64,
+    pub signals_loc: u64,
 }
 
 impl From<Directory> for DirectoryOnDisk
@@ -27,10 +29,6 @@ impl From<Directory> for DirectoryOnDisk
                 None => 0,
             },
             ids_loc: match dir.ids_loc {
-                Some(loc) => loc.get(),
-                None => 0,
-            },
-            block_index_loc: match dir.block_index_loc {
                 Some(loc) => loc.get(),
                 None => 0,
             },
@@ -54,6 +52,18 @@ impl From<Directory> for DirectoryOnDisk
                 Some(loc) => loc.get(),
                 None => 0,
             },
+            flags_loc: match dir.flags_loc {
+                Some(loc) => loc.get(),
+                None => 0,
+            },
+            modifications_loc: match dir.modifications_loc {
+                Some(loc) => loc.get(),
+                None => 0,
+            },
+            signals_loc: match dir.signals_loc {
+                Some(loc) => loc.get(),
+                None => 0,
+            },
         }
     }
 }
@@ -62,15 +72,16 @@ impl DirectoryOnDisk
 {
     pub fn sanity_check(&self, buffer_length: u64) -> Result<(), String>
     {
-        let values: [u64; 8] = [
+        let values: [u64; 9] = [
             self.index_loc,
             self.ids_loc,
-            self.block_index_loc,
             self.seqlocs_loc,
             self.scores_loc,
             self.masking_loc,
             self.headers_loc,
-            0,
+            self.sequences_loc,
+            self.flags_loc,
+            self.modifications_loc,
         ];
 
         let arch = Arch::new();
@@ -102,7 +113,7 @@ pub struct Directory
     pub sequences_loc: Option<NonZeroU64>,
     pub flags_loc: Option<NonZeroU64>,
     pub signals_loc: Option<NonZeroU64>,
-    pub mods_loc: Option<NonZeroU64>,
+    pub modifications_loc: Option<NonZeroU64>,
 }
 
 impl From<DirectoryOnDisk> for Directory
@@ -118,8 +129,8 @@ impl From<DirectoryOnDisk> for Directory
             headers_loc: NonZeroU64::new(dir.headers_loc),
             sequences_loc: NonZeroU64::new(dir.sequences_loc),
             flags_loc: NonZeroU64::new(dir.flags_loc),
-            mods_loc: NonZeroU64::new(dir.mods_lob),
-            signals_loc: NonZeroU64::new(dir.signals_loc)
+            signals_loc: NonZeroU64::new(dir.signals_loc),
+            modifications_loc: NonZeroU64::new(dir.modifications_loc),
         }
     }
 }
@@ -231,7 +242,7 @@ mod tests
             masking_loc: None,
             headers_loc: None,
             sequences_loc: None,
-            mods_loc: None,
+            modifications_loc: None,
             signals_loc: None,
             flags_loc: None,
         };
@@ -289,12 +300,15 @@ mod tests
         let d = DirectoryOnDisk {
             index_loc: 0,
             ids_loc: 0,
-            block_index_loc: 0,
             seqlocs_loc: 0,
             scores_loc: 0,
             masking_loc: 0,
             headers_loc: 0,
             sequences_loc: 0,
+            modifications_loc: 0,
+            flags_loc: 0,
+            signals_loc: 0,
+
         };
 
         assert!(d.sanity_check(0).is_ok());
@@ -302,12 +316,14 @@ mod tests
         let d = DirectoryOnDisk {
             index_loc: 1,
             ids_loc: 1,
-            block_index_loc: 1,
             seqlocs_loc: 1,
             scores_loc: 1,
             masking_loc: 1,
             headers_loc: 1,
             sequences_loc: 1,
+            modifications_loc: 1,
+            flags_loc: 1,
+            signals_loc: 1,
         };
 
         assert!(d.sanity_check(1).is_ok());
@@ -315,12 +331,14 @@ mod tests
         let d = DirectoryOnDisk {
             index_loc: 1,
             ids_loc: 1,
-            block_index_loc: 1,
             seqlocs_loc: 1,
             scores_loc: 1,
             masking_loc: 1,
             headers_loc: 1,
             sequences_loc: 1,
+            modifications_loc: 1,
+            flags_loc: 1,
+            signals_loc: 1,
         };
 
         assert!(d.sanity_check(0).is_err());

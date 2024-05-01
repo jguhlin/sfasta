@@ -6,8 +6,6 @@ use crate::*;
     bincode::Encode,
     bincode::Decode,
     Default,
-    Serialize,
-    Deserialize,
 )]
 pub struct Metadata
 {

@@ -39,6 +39,8 @@ ratatui = "0.26.2"
 page_size = "0.6.0"
 serde = "1.0.199"
 serde_yml = "0.0.4"
+xxhash-rust = { version = "0.8.10", features = ["xxh3"], optional = true}
+
 
 # [target.'cfg(not(target_env = "msvc"))'.dependencies]
 # tikv-jemallocator = { version = "0.5.4", optional = true}
@@ -56,10 +58,7 @@ version = "4.5"
 features = [ "suggestions", "derive", "cargo", "color", "wrap_help"]
 
 [features]
-# default = ["lz4", "zstd", "xz", "zlib", "snap", "brotli"]
-default = ["viewer"]
+default = ["viewer", "faidx-all"]
 viewer = []
-#default = ["mimalloc"]
-#mimalloc = ["dep:mimalloc"]
-#jemalloc = ["dep:tikv-jemallocator"]
 nightly = []
+faidx-all = ["xxhash-rust"]

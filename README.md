@@ -257,38 +257,25 @@ Uncompressed: 2.7G
 | `zstd -k reads.fastq -f -T16` | 8.423 ± 0.303 | 7.915 | 8.889 | 1.00 |
 | `crabz -f bgzf -p 16 reads.fastq -o reads.fastq.gz` | 22.176 ± 3.802 | 17.889 | 26.813 | 2.63 ± 0.46 |
 
-### Genome Size 
+### File size
 Uncompressed: 2.7G
 
 | Compression Type | Size |
 |---|--|
 | NAF (no index) | 1.9Gb |
 | sfasta (incl index) | 2.5Gb |
-| bgzip (excl index) | 635M |
-| Zstd (no index) | 663M |
-
+| bgzip (excl index) | 2.4Gb (+ 2.8Gb index ) |
+| Zstd (no index) | 2.5Gb |
 
 # Future Plans
 ## Implement NAF-like algorithm
-[NAF](https://github.com/KirillKryukov/naf) has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some SIMD support for 2bit and 4bit DNA/RNA encoding.
+[NAF](https://github.com/KirillKryukov/naf) has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some [SIMD support](https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides) for 2bit and 4bit DNA/RNA encoding.
 
 ## Subsequence support for faidx CLI
 Only open the block(s) that contain the subsequence. The index is already set up to support this and I've had it working before in the python bindings.
 
 ## Additional Speed-ups
 There is plenty of room for speed improvements, including adding more threads for specific tasks, CPU affinities, native compilation, and maybe more Cow.
-
-## Additional Compression
-There is likely room to decrease size as well without hurting speed.
-
-## Command-line interface
-As I've refactored much of the library, the CLI code withered and decayed. Need to fix this.
-
-## Quality Scores
-To support FASTQ files
-
-## Adjust compression level and compression method
-For other applications (such as long term storage)
 
 ## C and Python bindings
 To make it easier to use in other programs and in python/jupyter

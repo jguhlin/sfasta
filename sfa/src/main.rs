@@ -30,6 +30,10 @@ use indicatif::{ProgressBar, ProgressStyle};
 
 use libsfasta::prelude::*;
 
+#[cfg(feature = "faidx-all")]
+mod faidx_all;
+use faidx_all::*;
+
 // const GIT_VERSION: &str = git_version!();
 
 fn style_pb(pb: ProgressBar) -> ProgressBar
@@ -68,6 +72,10 @@ enum Commands
     },
     List
     {
+        input: String
+    },
+    #[cfg(feature = "faidx-all")]
+    FaidxIndex {
         input: String
     },
     Faidx
@@ -201,6 +209,7 @@ fn main()
         Commands::View { input } => view(&input),
         Commands::List { input } => list(&input),
         Commands::Faidx { input, ids } => faidx(&input, &ids),
+        Commands::FaidxAll { input } => faidx_all(&input),
         Commands::Convert {
             input,
             threads,
