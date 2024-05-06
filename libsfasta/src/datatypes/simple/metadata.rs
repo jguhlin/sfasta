@@ -1,12 +1,6 @@
 use crate::*;
 
-#[derive(
-    Debug,
-    Clone,
-    bincode::Encode,
-    bincode::Decode,
-    Default,
-)]
+#[derive(Debug, Clone, bincode::Encode, bincode::Decode, Default)]
 pub struct Metadata
 {
     pub created_by: Option<String>,

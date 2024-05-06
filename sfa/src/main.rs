@@ -75,7 +75,8 @@ enum Commands
         input: String
     },
     #[cfg(feature = "faidx-all")]
-    FaidxIndex {
+    FaidxIndex
+    {
         input: String
     },
     Faidx

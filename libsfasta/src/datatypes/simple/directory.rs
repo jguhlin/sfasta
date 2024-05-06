@@ -308,7 +308,6 @@ mod tests
             modifications_loc: 0,
             flags_loc: 0,
             signals_loc: 0,
-
         };
 
         assert!(d.sanity_check(0).is_ok());
