@@ -61,7 +61,7 @@ version = "4.5"
 features = [ "suggestions", "derive", "cargo", "color", "wrap_help"]
 
 [features]
-default = ["viewer", "faidx-all"]
+default = ["viewer"] #, "faidx-all"]
 viewer = []
 nightly = []
 faidx-all = ["xxhash-rust"]

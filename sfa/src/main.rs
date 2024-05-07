@@ -210,6 +210,7 @@ fn main()
         Commands::View { input } => view(&input),
         Commands::List { input } => list(&input),
         Commands::Faidx { input, ids } => faidx(&input, &ids),
+        #[cfg(feature = "faidx-all")]
         Commands::FaidxIndex { input } => create_index(&input),
         Commands::Convert {
             input,
