@@ -95,18 +95,10 @@ pub struct GzFile
 
 impl GzFile
 {
-    pub fn new(path: &str, mode: &str) -> Self
-    {
-        Self {
-            buffer: Vec::new(),
-            position: 0,
-            is_open: true,
-            mode: mode.to_string(),
-        }
-    }
-
     pub fn open(path: *const c_char, mode: *const c_char) -> *mut Self
     {
+
+
         // File type dependent (sfasta is RA, everything else is sequential)
         #[cfg(unix)]
         nix::fcntl::posix_fadvise(

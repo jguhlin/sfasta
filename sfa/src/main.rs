@@ -32,6 +32,8 @@ use libsfasta::prelude::*;
 
 #[cfg(feature = "faidx-all")]
 mod faidx_all;
+
+#[cfg(feature = "faidx-all")]
 use faidx_all::*;
 
 // const GIT_VERSION: &str = git_version!();
