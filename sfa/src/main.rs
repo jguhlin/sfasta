@@ -210,7 +210,7 @@ fn main()
         Commands::View { input } => view(&input),
         Commands::List { input } => list(&input),
         Commands::Faidx { input, ids } => faidx(&input, &ids),
-        Commands::FaidxAll { input } => faidx_all(&input),
+        Commands::FaidxIndex { input } => create_index(&input),
         Commands::Convert {
             input,
             threads,
