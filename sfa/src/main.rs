@@ -32,6 +32,8 @@ use libsfasta::prelude::*;
 
 #[cfg(feature = "faidx-all")]
 mod faidx_all;
+
+#[cfg(feature = "faidx-all")]
 use faidx_all::*;
 
 // const GIT_VERSION: &str = git_version!();
@@ -210,7 +212,8 @@ fn main()
         Commands::View { input } => view(&input),
         Commands::List { input } => list(&input),
         Commands::Faidx { input, ids } => faidx(&input, &ids),
-        Commands::FaidxAll { input } => faidx_all(&input),
+        #[cfg(feature = "faidx-all")]
+        Commands::FaidxIndex { input } => create_index(&input),
         Commands::Convert {
             input,
             threads,

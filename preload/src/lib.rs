@@ -6,7 +6,7 @@ static GLOBAL: MiMalloc = MiMalloc;
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 
-use std::io::Read;
+use std::io::{Read, Seek};
 
 use libc::{c_char, c_int, c_long, c_uchar, c_uint, c_ulong, c_void};
 
@@ -30,6 +30,8 @@ fn get_file_compression_type(
     // Read the first few bytes of the file
     let mut buffer = [0; 8];
     let bytes_read = file.read(&mut buffer).expect("Read failed");
+    file.rewind().expect("Rewind failed");
+    
     if bytes_read == 0 {
         // File is empty, return an error
         return Err(std::io::Error::new(
@@ -39,7 +41,9 @@ fn get_file_compression_type(
     }
 
     // Check for magic numbers
-    if buffer.starts_with(&[0x1f, 0x8b]) {
+    if buffer.starts_with(b"SFASTA") {
+        return Ok(FileCompressionType::Sfasta);
+    } else if buffer.starts_with(&[0x1f, 0x8b]) {
         return Ok(FileCompressionType::Gz);
     } else if buffer.starts_with(&[0x42, 0x5a]) {
         return Ok(FileCompressionType::Bz2);
@@ -53,9 +57,6 @@ fn get_file_compression_type(
         return Ok(FileCompressionType::Lz4);
     } else if buffer.starts_with(&[0xff, 0x06, 0x00, 0x00, 0x00]) {
         return Ok(FileCompressionType::Snappy);
-    }
-    if buffer.starts_with(b"SFASTA") {
-        return Ok(FileCompressionType::Sfasta);
     } else {
         return Ok(FileCompressionType::Plaintext);
     }
@@ -65,6 +66,7 @@ enum FileType
 {
     FASTA,
     FASTQ,
+    SFASTA,
 }
 
 // Read the first few bytes (after decompression, if applicable) to
@@ -95,35 +97,77 @@ pub struct GzFile
 
 impl GzFile
 {
-    pub fn new(path: &str, mode: &str) -> Self
-    {
-        Self {
-            buffer: Vec::new(),
-            position: 0,
-            is_open: true,
-            mode: mode.to_string(),
-        }
-    }
-
     pub fn open(path: *const c_char, mode: *const c_char) -> *mut Self
     {
-        // File type dependent (sfasta is RA, everything else is sequential)
-        #[cfg(unix)]
-        nix::fcntl::posix_fadvise(
-            file.as_raw_fd(),
-            0,
-            0,
-            nix::fcntl::PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
-            // or nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-        )
-        .expect("Fadvise Failed");
-
-        let path_str =
-            unsafe { std::ffi::CStr::from_ptr(path).to_str().unwrap() };
+        // If mode is write, panic as we don't support writing(yet)
         let mode_str =
             unsafe { std::ffi::CStr::from_ptr(mode).to_str().unwrap() };
-        // Allocate and return a new GzFile instance
-        Box::into_raw(Box::new(Self::new(path_str, mode_str)))
+
+        if mode_str.contains("w") {
+            unimplemented!("Writing is not supported yet");
+        }
+
+        // If file ends with ".sfasta" or ".sfa", set file type to SFASTA
+        let path_str =
+            unsafe { std::ffi::CStr::from_ptr(path).to_str().unwrap() };
+
+        // todo if the file is called .gz and does not exist, but .sfasta does
+        // exist, then open the .sfasta file rather than complaining about
+        // file not found
+
+        let file = std::fs::File::open(path_str).expect("File not found");
+
+        let compression_type = match path_str {
+            _ if path_str.ends_with(".sfasta")
+                || path_str.ends_with(".sfa") =>
+            {
+                FileCompressionType::Sfasta
+            }
+            _ => {
+                // Determine the compression type
+                get_file_compression_type(&file)
+                    .expect("Unknown compression type")
+            }
+        };
+
+        // File type dependent (sfasta is RA, everything else is sequential)
+        #[cfg(unix)]
+        match compression_type {
+            FileCompressionType::Sfasta => {
+                nix::fcntl::posix_fadvise(
+                    file.as_raw_fd(),
+                    0,
+                    0,
+                    nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
+                )
+                .expect("Fadvise Failed");
+            }
+            _ => {
+                nix::fcntl::posix_fadvise(
+                    file.as_raw_fd(),
+                    0,
+                    0,
+                    nix::fcntl::PosixFadviseAdvice::POSIX_FADV_SEQUENTIAL,
+                )
+                .expect("Fadvise Failed");
+            }
+        }
+
+        let mut buffer = Vec::new();
+        let mut position = 0;
+        let is_open = true;
+
+        let mut gzfile = GzFile {
+            file_type: FileType::FASTA,
+            buffer,
+            position,
+            is_open,
+            file_handle: file,
+        };
+
+        let gzfile_ptr = Box::into_raw(Box::new(gzfile));
+        gzfile_ptr
+        
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> c_int
