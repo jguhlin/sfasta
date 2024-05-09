@@ -9,7 +9,7 @@ use xxhash_rust::xxh3::xxh3_64;
 // create an index file (add .frai to extension)
 pub fn create_index(file: &str)
 {
-    let output_file = format!("{}.fai", file);
+    let output_file = format!("{}.frai", file);
     let mut file_reader = BufReader::new(std::fs::File::open(file).unwrap());
     let mut writer =
         BufWriter::new(std::fs::File::create(output_file).unwrap());
