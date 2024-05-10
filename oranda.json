@@ -1,0 +1,23 @@
+{
+    "project": {
+        "name": "SFASTA",
+        "version": "0.4.0",
+        "description": "Smaller genomic and protein sequence files with fast random access",
+        "homepage": "https://jguhlin.github.io/sfasta",
+        "repository": "https://github.com/jguhlin/sfasta"
+    },
+    "build": {
+      "path_prefix": "sfasta"
+    },
+    "styles": {
+      "theme": "dark"
+    },
+    "marketing": {
+      "social": {
+        "twitter_account": "@josephguhlin"
+      }
+    },
+    "components": {
+      "changelog": true
+    }
+  }

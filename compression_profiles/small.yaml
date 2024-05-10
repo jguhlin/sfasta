@@ -1,0 +1,51 @@
+block_size: 2048
+data:
+  ids:
+    compression_type: ZSTD
+    compression_level: 22
+  headers:
+    compression_type: ZSTD
+    compression_level: 22
+  sequence:
+    compression_type: ZSTD
+    compression_level: 22
+  masking:
+    compression_type: ZSTD
+    compression_level: 22
+  quality:
+    compression_type: ZSTD
+    compression_level: 22
+  signals:
+    compression_type: ZSTD
+    compression_level: 22
+  modifications:
+    compression_type: ZSTD
+    compression_level: 22
+index:
+  ids:
+    compression_type: ZSTD
+    compression_level: 22
+  headers:
+    compression_type: ZSTD
+    compression_level: 22
+  sequence:
+    compression_type: ZSTD
+    compression_level: 22
+  masking:
+    compression_type: ZSTD
+    compression_level: 22
+  quality:
+    compression_type: ZSTD
+    compression_level: 22
+  signals:
+    compression_type: ZSTD
+    compression_level: 22
+  modifications:
+    compression_type: ZSTD
+    compression_level: 22
+seqlocs:
+  compression_type: ZSTD
+  compression_level: 22
+id_index:
+  compression_type: ZSTD
+  compression_level: 22

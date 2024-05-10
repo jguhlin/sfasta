@@ -1,17 +1,11 @@
 # SFASTA File Format Definition
-Version 0.0.2
+Version 0.0.3
 
 ## Rasoning / Need
 FASTA/Q format is slow for random access, even with an index provided by samtools.
 
 ## Pros/Cons
 By concatenating all of the sequences into successive blocks, it becomes more difficult to add or remove sequences at a whim. However, many large sequence files are rarely changed (NT, UniProt, nr, reads, etc).
-
-## Warning
-This is a format still in heavy development, backwards compatability is incredibly unlikely and not desirable at this stage.
-
-## File Format
-Bincoded, using serde.
 
 ### Overview
 * Directory struct
@@ -23,7 +17,33 @@ Bincoded, using serde.
 * Index struct
 * Order Struct
 
-# TODO: Add masking stream...
+## Header
+| Data Type | Name | Description |
+| ---:|:--- |:--- |
+| [u8; 6] | b"sfasta" | Indicates an sfasta file |
+| u64 | Version | Version of the SFASTA file (currently set to 1) |
+| struct | [Directory](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/directory.rs#L53) | Directory of the file; u64 bytes pointing to indices, sequence blocks, etc... |
+| struct | [Parameters](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/parameters.rs#L5) | Parameters used to create the file |
+| struct | [Metadata](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/metadata.rs#L3) | unused |
+| structs | [SequenceBlock](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs#L11) | Sequences, split into block_size chunks, and compressed on disk (see: [SequenceBlockCompressed](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs#L154)) |
+| Vec<u64> | Sequence Block Offsets | Location of each sequence block, in bytes, from the start of the file. Stored on disk as bitpacked u32. |
+| [Header](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/header.rs) Region ||
+| enum | [CompressionType](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/structs.rs#L23) | Type of compression used for the Headers. |
+| u64 | Block Locations Position | Position of the header blocks locations |
+| [u8] | Header Block | Header (everything after the sequence ID in a FASTA file) stored as blocks of u8 on disk, zstd compressed. |
+| [u64] | Header Block Offsets | Location of each header block, in bytes, from the start of the file. |
+| [IDs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/id.rs) Region ||
+| enum | [CompressionType](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/structs.rs#L23) | Type of compression used for the IDs. |
+| u64 | Block Locations Position | Position of the ID blocks locations |
+| [u8] | ID Block | IDs (everything after the sequence ID in a FASTA file) stored as blocks of u8 on disk, zstd compressed. |
+| [u64] | ID Block Offsets | Location of each header block, in bytes, from the start of the file. |
+| [Masking](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/masking.rs) Region ||
+| u64 | bitpack_len | Length of each bitpacked block |
+| u8 | num_bits| Number of bits used to bitpack each integer |
+| [Packed] | BitPacked Masking Instructions | Bitpacked masking instructions. [See here](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/masking/ml32bit.rs) |
+| [struct] | [SeqLocs](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/data_types/sequence_block.rs) | Sequence locations, stored as a vector of u64. |
+| Special | [Dual Index](https://github.com/jguhlin/sfasta/blob/main/libsfasta/src/dual_level_index/dual_index.rs) | See file for more description. Rest of this table TBD |
+
 
 ### Directory
 ```

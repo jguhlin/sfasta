@@ -21,38 +21,47 @@ path = "src/main.rs"
 
 [dependencies]
 libsfasta = { path = "../libsfasta" }
-# libsfasta = "0.3.4"
-crossbeam = "0.8.2"
+fractaltree = { path = "../fractaltree" }
+compression = { path = "../compression"}
+
+crossbeam = "0.8.4"
 sigpipe = "0.1.3"
 rand = "0.8.5"
 rand_core = "0.6.4"
 rand_chacha = "0.3.1"
-log = "0.4.19"
+log = "0.4.21"
 simdutf8 = "0.1.4"
-git-version = "0.3.5" # TODO: Print this out in the library in a version call
-mimalloc = { version = "0.1.37", default-features = false, optional = true}
-env_logger = "0.10.0"
+git-version = "0.3.9" # TODO: Print this out in the library in a version call
+env_logger = "0.11.3"
+indicatif = "0.17.8"
 
-# Compression algorithms
-lz4_flex = "0.11.1"
-zstd = { version="0.13", default-features = false, features=["arrays", "experimental"] } # { git = "https://github.com/gyscos/zstd-rs", features = [ "experimental" ] }
-xz = "0.1.0"
-flate2 = { version = "1.0.26", features = ["zlib-ng"], default-features = false }
-snap = "1.1.0"
-brotli = "3.3.4"
-bitpacking = { version = "0.8.4", features = ["bitpacker8x"] }
-indicatif = "0.17.5"
+# Compression stuff:
+flate2 = {version = "1.0.28", features = ["zlib-ng"], default-features = false}
+snap = "1.1.1"
+ratatui = "0.26.2"
+page_size = "0.6.0"
+serde = "1.0.199"
+serde_yml = "0.0.4"
+xxhash-rust = { version = "0.8.10", features = ["xxh3"], optional = true}
 
-[target.'cfg(not(target_env = "msvc"))'.dependencies]
-tikv-jemallocator = { version = "0.5.4", optional = true}
+
+# [target.'cfg(not(target_env = "msvc"))'.dependencies]
+# tikv-jemallocator = { version = "0.5.4", optional = true}
+
+# When not windows, enable mimalloc
+# [target.'cfg(not(target_env = "msvc"))'.dependencies]
+# mimalloc = { version = "0.1.39", default-features = false, optional = true}
+
+# Unix only
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.28.0", features = ["fs"] }
 
 [dependencies.clap]
-version = "4.3.19"
+version = "4.5"
 features = [ "suggestions", "derive", "cargo", "color", "wrap_help"]
 
 [features]
-# default = ["lz4", "zstd", "xz", "zlib", "snap", "brotli", "bitpacking"]
-default = ["mimalloc"]
-mimalloc = ["dep:mimalloc"]
-jemalloc = ["dep:tikv-jemallocator"]
+default = ["viewer"] #, "faidx-all"]
+viewer = []
 nightly = []
+faidx-all = ["xxhash-rust"]

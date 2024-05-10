@@ -2,17 +2,22 @@
 resolver = "2"
 members = [
 	"libsfasta",
-	"sfa"
+	"sfa",
+	"fractaltree",
+	"compression", 
+	"preload",
 ]
 
-# [profile.release]
+[profile.release]
 # opt-level = 3
-# lto = "fat"
+lto = "fat"
 # codegen-units  = 1
-# debug = 1
+debug = 1
+
 
 [profile.dev]
 debug = true
 
 [profile.dev.package."*"]
 opt-level = 3
+
