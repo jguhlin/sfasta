@@ -31,7 +31,7 @@ fn get_file_compression_type(
     let mut buffer = [0; 8];
     let bytes_read = file.read(&mut buffer).expect("Read failed");
     file.rewind().expect("Rewind failed");
-    
+
     if bytes_read == 0 {
         // File is empty, return an error
         return Err(std::io::Error::new(
@@ -167,7 +167,6 @@ impl GzFile
 
         let gzfile_ptr = Box::into_raw(Box::new(gzfile));
         gzfile_ptr
-        
     }
 
     pub fn read(&mut self, buf: &mut [u8]) -> c_int
