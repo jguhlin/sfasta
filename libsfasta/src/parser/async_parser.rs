@@ -129,8 +129,6 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         };
         Ok(index)
     });
-
-    /*
     
     let file_name = Arc::clone(&file);
     let sequenceblocks = tokio::spawn(async move {
@@ -239,6 +237,7 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
     let masking = masking.unwrap();
     let sequenceblocks = sequenceblocks.unwrap();
 
+    /*
     Ok(Sfasta {
         version,
         directory,
