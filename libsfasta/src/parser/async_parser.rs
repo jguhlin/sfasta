@@ -8,6 +8,7 @@ use crate::{datatypes::*, formats::*};
 
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
+// todo add the hints back in for random access
 
 const SFASTA_MARKER: &[u8; 6] = b"SFASTA";
 const FULL_HEADER_SIZE: usize =
@@ -17,7 +18,7 @@ const FULL_HEADER_SIZE: usize =
 ///
 /// Multiple threads are used to read the file.
 #[tokio::main(flavor = "multi_thread")]
-pub async fn open_from_file<'sfa>(file: &str) -> Result<Sfasta<'sfa>, String>
+pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, String>
 {
     let bincode_config_fixed = crate::BINCODE_CONFIG
         .with_fixed_int_encoding()

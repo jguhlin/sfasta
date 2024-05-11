@@ -435,9 +435,10 @@ fn faidx(input: &str, ids: &Vec<String>)
     )
     .expect("Fadvise Failed");
 
-    let in_buf = BufReader::new(in_buf);
+    // let in_buf = BufReader::new(in_buf);
 
-    let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
+    // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
+    let mut sfasta = open_with_buffer(in_buf).unwrap();
 
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
