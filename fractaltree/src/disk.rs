@@ -207,7 +207,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
-        let mut tree: FractalTreeDisk<K, V> = match bincode_decode_from_buffer_async_with_size_hint(in_buf, bincode_config, 32 * 1024).await {
+        let mut tree: FractalTreeDisk<K, V> = match bincode_decode_from_buffer_async_with_size_hint(in_buf, bincode_config, 4 * 1024).await {
             Ok(x) => x,
             Err(_) => return Result::Err("Failed to decode FractalTreeDisk"),
         };
@@ -669,16 +669,15 @@ where
 
 // todo curry size_hint as const
 #[cfg(feature = "async")]
-pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<T, C>(
+pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<T, C, const SIZE_HINT: usize>(
     in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     bincode_config: C,
-    size_hint: usize,
 ) -> Result<T, String>
 where
     T: bincode::Decode,
     C: bincode::config::Config,
 {
-    let mut buf = vec![0; size_hint];
+    let mut buf = vec![0; SIZE_HINT];
     let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
 
     loop {
