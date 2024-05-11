@@ -14,6 +14,7 @@ use std::os::fd::AsRawFd;
 
 // note: this is SLOWER than the sequential version
 // 22ms vs 15ms
+// but 14ms using single thread mode
 const SFASTA_MARKER: &[u8; 6] = b"sfasta";
 const FULL_HEADER_SIZE: usize =
     6 + std::mem::size_of::<u64>() + std::mem::size_of::<DirectoryOnDisk>();
@@ -23,14 +24,31 @@ const FULL_HEADER_SIZE: usize =
 /// Multiple threads are used to read the file.
 pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, String>
 {
-    log::debug!("Opening file: {file}");
-    let bincode_config_fixed = crate::BINCODE_CONFIG
-        .with_fixed_int_encoding()
-        .with_limit::<{ 2 * 1024 * 1024 }>();
-
     // Create shareable string for the filename
     let file = file.to_string();
     let file = std::sync::Arc::new(file);
+
+    let file_name: Arc<String> = Arc::clone(&file);
+    // Open up 6 file handles (one per task)
+    let mut file_handles = tokio::spawn(async move {
+        let mut file_handles = Vec::new();
+        for _ in 0..6 {
+            let file = tokio::fs::File::open(file_name.as_str()).await.unwrap();
+
+            // todo posix unix advise
+
+            let file = tokio::io::BufReader::with_capacity(64 * 1024, file);
+
+            file_handles.push(file);
+        }
+
+        file_handles
+    });
+
+    log::debug!("Opening file: {file}");
+    let bincode_config_fixed = crate::BINCODE_CONFIG
+        .with_fixed_int_encoding()
+        .with_limit::<{ 512 * 1024 }>();
 
     let mut in_buf = match std::fs::File::open(&(*file)) {
         Ok(x) => x,
@@ -85,13 +103,16 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
 
     let directory: Directory = directory.into();
 
+    let mut file_handles = file_handles.await.unwrap();
+
     // Preload the seqlocs and index
 
     // Now that the main checks are out of the way, switch to async mode
-    let file_name = Arc::clone(&file);
+    let fh = file_handles.pop().unwrap();
     let seqlocs = tokio::spawn(async move {
-        let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
-        let mut in_buf = tokio::io::BufReader::new(in_buf);
+        //let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
+        // let mut in_buf = tokio::io::BufReader::new(in_buf);
+        let mut in_buf = fh;
         let seqlocs: Option<SeqLocsStore> = match SeqLocsStore::from_existing_async(
             directory.seqlocs_loc.unwrap().get(),
             &mut in_buf,

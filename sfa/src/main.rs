@@ -428,12 +428,12 @@ fn faidx(input: &str, ids: &Vec<String>)
     // let mut sfasta = open_with_buffer(in_buf).unwrap();
 
     // let runtime = tokio::runtime::Runtime::new().unwrap();
-    //let runtime = tokio::runtime::Builder::new_multi_thread()
-        //.worker_threads(8)
-        //.enable_all()
-        //.build()
-        //.unwrap();
-    let runtime = tokio::runtime::Builder::new_current_thread().build().expect("Unable to build runtime");
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(8) // todo set from cli
+        .enable_all()
+        .build()
+        .unwrap();
+    //let runtime = tokio::runtime::Builder::new_current_thread().build().expect("Unable to build runtime");
 
     let sfasta_filename = input;
     let mut sfasta = runtime.block_on(async move {
