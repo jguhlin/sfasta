@@ -207,7 +207,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
-        let mut tree: FractalTreeDisk<K, V> = match bincode_decode_from_buffer_async_with_size_hint(in_buf, bincode_config, 8 * 1024).await {
+        let mut tree: FractalTreeDisk<K, V> = match bincode_decode_from_buffer_async_with_size_hint(in_buf, bincode_config, 32 * 1024).await {
             Ok(x) => x,
             Err(_) => return Result::Err("Failed to decode FractalTreeDisk"),
         };
