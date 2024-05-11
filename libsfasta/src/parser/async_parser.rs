@@ -12,6 +12,8 @@ use crate::{datatypes::*, formats::*};
 use std::os::fd::AsRawFd;
 // todo add the hints back in for random access
 
+// note: this is SLOWER than the sequential version
+
 const SFASTA_MARKER: &[u8; 6] = b"sfasta";
 const FULL_HEADER_SIZE: usize =
     6 + std::mem::size_of::<u64>() + std::mem::size_of::<DirectoryOnDisk>();
