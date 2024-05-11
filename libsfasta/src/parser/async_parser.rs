@@ -20,6 +20,7 @@ const FULL_HEADER_SIZE: usize =
 #[tokio::main(flavor = "multi_thread")]
 pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, String>
 {
+    log::debug!("Opening file: {file}");
     let bincode_config_fixed = crate::BINCODE_CONFIG
         .with_fixed_int_encoding()
         .with_limit::<{ 2 * 1024 * 1024 }>();
