@@ -258,7 +258,8 @@ where
 {
     let mut buf = vec![0; 8 * 1024];
     let decoded: Option<T> = None;
-    in_buf.read_exact(&mut buf).await.unwrap();
+    let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
+    // buf.shrink_to(bytes_read);
 
     while decoded.is_none() {
         match bincode::decode_from_slice(&buf, bincode_config) {
@@ -271,7 +272,8 @@ where
 
                 buf.resize(doubled, 0);
 
-                in_buf.read_exact(&mut buf[orig_length..]).await.unwrap();                
+                bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();                
+                // buf.shrink_to(bytes_read);
             }
         }
     }
@@ -290,7 +292,7 @@ where
 {
     let mut buf = vec![0; size_hint];
     let decoded: Option<T> = None;
-    in_buf.read_exact(&mut buf).await.unwrap();
+    let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
 
     while decoded.is_none() {
         match bincode::decode_from_slice(&buf, bincode_config) {
@@ -303,7 +305,7 @@ where
 
                 buf.resize(doubled, 0);
 
-                in_buf.read_exact(&mut buf[orig_length..]).await.unwrap();                
+                bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();                
             }
         }
     }

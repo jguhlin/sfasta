@@ -210,7 +210,10 @@ where
 
         // Read in 8kb
         let mut buf = vec![0; 8 * 1024];
-        in_buf.read_exact(&mut buf).await.unwrap();
+        let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
+
+        // buf.shrink_to(bytes_read);
+
 
         let mut tree: Option<FractalTreeDisk<K, V>> = None;
 
@@ -224,7 +227,8 @@ where
                     let doubled = buf.len() * 2;
 
                     buf.resize(doubled, 0);
-                    in_buf.read_exact(&mut buf[orig_length..]).await.unwrap();
+                    bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();
+                    // buf.shrink_to(orig_length + bytes_read);
                 }
             }
         }
