@@ -42,7 +42,7 @@ page_size = "0.6.0"
 serde = "1.0.199"
 serde_yml = "0.0.4"
 xxhash-rust = { version = "0.8.10", features = ["xxh3"], optional = true}
-tokio = "1.37.0"
+tokio = { version = "1.37.0", features = ["full"] }
 
 
 # [target.'cfg(not(target_env = "msvc"))'.dependencies]
