@@ -257,11 +257,10 @@ where
     T: bincode::Decode,
 {
     let mut buf = vec![0; 8 * 1024];
-    let decoded: Option<T> = None;
     let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
     // buf.shrink_to(bytes_read);
 
-    while decoded.is_none() {
+    loop {
         match bincode::decode_from_slice(&buf, bincode_config) {
             Ok(x) => {
                 return Ok(x.0);
@@ -274,13 +273,16 @@ where
 
                 bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();                
                 // buf.shrink_to(bytes_read);
+
+                if doubled > 16 * 1024 * 1024 {
+                    return Result::Err("Failed to decode bincode".to_string());
+                }
             }
         }
     }
-
-    Ok(decoded.unwrap())
 }
 
+// todo curry size_hint as const
 pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<T, C>(
     in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     bincode_config: C,
@@ -291,10 +293,9 @@ where
     C: bincode::config::Config,
 {
     let mut buf = vec![0; size_hint];
-    let decoded: Option<T> = None;
     let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
 
-    while decoded.is_none() {
+    loop {
         match bincode::decode_from_slice(&buf, bincode_config) {
             Ok(x) => {
                 return Ok(x.0);
@@ -305,10 +306,12 @@ where
 
                 buf.resize(doubled, 0);
 
-                bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();                
+                bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();
+
+                if doubled > 16 * 1024 * 1024 {
+                    return Result::Err("Failed to decode bincode".to_string());
+                }
             }
         }
     }
-
-    Ok(decoded.unwrap())
 }
