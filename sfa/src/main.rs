@@ -431,11 +431,13 @@ fn faidx(input: &str, ids: &Vec<String>)
     // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
     // let mut sfasta = open_with_buffer(in_buf).unwrap();
 
-    let runtime = tokio::runtime::Runtime::new().unwrap();
+    // let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let sfasta = runtime.block_on(async move {
-        open_with_buffer(BufReader::new(File::open(sfasta_filename).unwrap()))
-    }).expect("Unable to open file");
+    // let sfasta = runtime.block_on(async move {
+        // open_with_buffer(BufReader::new(File::open(sfasta_filename).unwrap()))
+    // }).expect("Unable to open file");
+
+    let sfasta = Sfasta::default();
 
     log::debug!("File opened: {}", sfasta_filename);
 
