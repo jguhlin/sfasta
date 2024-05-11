@@ -1,3 +1,5 @@
+// todo scores
+
 use std::io::{BufReader, Read, Seek};
 use std::sync::Arc;
 
@@ -241,7 +243,7 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         headers,
         ids,
         masking,
-        sequenceblocks,
+        sequences: sequenceblocks,
         file: Some(file.to_string()),
         ..Default::default()
     }) 

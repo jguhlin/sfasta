@@ -30,11 +30,12 @@ pub struct Sfasta<'sfa>
     pub metadata: Option<Metadata>,
     pub index: Option<FractalTreeDisk<u32, u32>>,
     pub buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
-    pub sequenceblocks: Option<BytesBlockStore>,
+    pub sequences: Option<BytesBlockStore>,
     pub seqlocs: Option<SeqLocsStore>,
     pub headers: Option<StringBlockStore>,
     pub ids: Option<StringBlockStore>,
     pub masking: Option<Masking>,
+    pub scores: Option<BytesBlockStore>,
     pub file: Option<String>,
 }
 
@@ -48,12 +49,13 @@ impl<'sfa> Default for Sfasta<'sfa>
             metadata: None,
             index: None,
             buf: None,
-            sequenceblocks: None,
+            sequences: None,
             seqlocs: None,
             headers: None,
             ids: None,
             masking: None,
             file: None,
+            scores: None,
         }
     }
 }
@@ -82,7 +84,7 @@ impl<'sfa> Sfasta<'sfa>
         range: std::ops::Range<u32>,
     ) -> Vec<Loc>
     {
-        let block_size = self.sequenceblocks.as_ref().unwrap().block_size;
+        let block_size = self.sequences.as_ref().unwrap().block_size;
 
         seqloc.seq_slice(block_size, range)
     }
@@ -277,7 +279,7 @@ impl<'sfa> Sfasta<'sfa>
 
         seqloc.iter().for_each(|l| {
             let seqblock = self
-                .sequenceblocks
+                .sequences
                 .as_mut()
                 .unwrap()
                 .get_block(&mut *buf, l.block);
@@ -308,12 +310,12 @@ impl<'sfa> Sfasta<'sfa>
 
         let mut buffer = vec![
             0u8;
-            self.sequenceblocks.as_ref().unwrap().block_size
+            self.sequences.as_ref().unwrap().block_size
                 as usize
         ];
 
         locs.iter().for_each(|l| {
-            self.sequenceblocks.as_mut().unwrap().get_block_uncached(
+            self.sequences.as_mut().unwrap().get_block_uncached(
                 &mut *buf,
                 l.block,
                 &mut buffer,
@@ -345,7 +347,7 @@ impl<'sfa> Sfasta<'sfa>
         // Once stabilized, use write_all_vectored
         for l in locs.iter().map(|x| x) {
             let seqblock = self
-                .sequenceblocks
+                .sequences
                 .as_mut()
                 .unwrap()
                 .get_block(&mut *buf, l.block);
@@ -367,10 +369,10 @@ impl<'sfa> Sfasta<'sfa>
 
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let mut buffer =
-            vec![0u8; self.sequenceblocks.as_ref().unwrap().block_size()];
+            vec![0u8; self.sequences.as_ref().unwrap().block_size()];
 
         locs.iter().for_each(|l| {
-            self.sequenceblocks.as_mut().unwrap().get_block_uncached(
+            self.sequences.as_mut().unwrap().get_block_uncached(
                 &mut *buf,
                 l.block,
                 &mut buffer,
@@ -639,7 +641,7 @@ impl<'sfa> SfastaParser<'sfa>
             ));
         }
 
-        sfasta.sequenceblocks = Some(sequenceblocks.unwrap());
+        sfasta.sequences = Some(sequenceblocks.unwrap());
 
         log::info!("Opening Headers");
         if sfasta.directory.headers_loc.is_some() {

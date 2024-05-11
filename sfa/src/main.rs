@@ -426,21 +426,6 @@ fn faidx(input: &str, ids: &Vec<String>)
 {
     let sfasta_filename = input;
 
-    log::debug!("Opening file: {}", sfasta_filename);
-
-    // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
-    // let mut sfasta = open_with_buffer(in_buf).unwrap();
-
-    // let runtime = tokio::runtime::Runtime::new().unwrap();
-
-    // let sfasta = runtime.block_on(async move {
-        // open_with_buffer(BufReader::new(File::open(sfasta_filename).unwrap()))
-    // }).expect("Unable to open file");
-
-    let sfasta = Sfasta::default();
-
-    log::debug!("File opened: {}", sfasta_filename);
-
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
 
     #[cfg(unix)]
@@ -452,10 +437,19 @@ fn faidx(input: &str, ids: &Vec<String>)
     )
     .expect("Fadvise Failed");
 
-    let in_buf = BufReader::new(in_buf);
+    // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
+    let mut sfasta = open_with_buffer(in_buf).unwrap();
 
-    let mut sfasta = sfasta.with_buffer(BufReader::new(in_buf));
+    // let runtime = tokio::runtime::Runtime::new().unwrap();
 
+    // let sfasta = runtime.block_on(async move {
+        // open_with_buffer(BufReader::new(File::open(sfasta_filename).unwrap()))
+    // }).expect("Unable to open file");
+
+    // log::debug!("File opened: {}", sfasta_filename);
+
+    // let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+    
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 

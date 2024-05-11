@@ -23,7 +23,7 @@ where
     };
 
     let buf_size = get_reasonable_buffer_size(
-        sfasta.sequenceblocks.as_ref().unwrap().block_size(),
+        sfasta.sequences.as_ref().unwrap().block_size(),
     );
 
     let in_buf = BufReader::with_capacity(buf_size, in_buf);
@@ -134,6 +134,22 @@ where
         None
     };
 
+    let scores = if directory.scores_loc.is_some() {
+        match BytesBlockStore::from_buffer(
+            &mut in_buf,
+            directory.scores_loc.unwrap().get(),
+        ) {
+            Ok(x) => Some(x),
+            Err(x) => {
+                return Result::Err(format!(
+                    "Invalid buffer. Failed to read scores. {x}"
+                ))
+            }
+        }
+    } else {
+        None
+    };
+
     let sequenceblocks = if directory.sequences_loc.is_some() {
         match BytesBlockStore::from_buffer(
             &mut in_buf,
@@ -209,7 +225,8 @@ where
         headers,
         ids,
         masking,
-        sequenceblocks,
+        sequences: sequenceblocks,
+        scores,
         ..Default::default()
     })
 }
