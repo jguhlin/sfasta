@@ -45,7 +45,9 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
 
     if sfasta_header[0..6] != *SFASTA_MARKER {
         return Result::Err(
-            "Invalid buffer. SFASTA marker is missing.".to_string(),
+            format!("Invalid buffer. SFASTA marker is missing. Found: {} Expected: {}",
+                std::str::from_utf8(&sfasta_header[0..6]).unwrap(),
+                std::str::from_utf8(SFASTA_MARKER).unwrap())
         );
     }
 
