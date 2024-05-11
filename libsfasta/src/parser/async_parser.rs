@@ -291,16 +291,15 @@ where
 }
 
 // todo curry size_hint as const
-pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<T, C>(
+pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<const SIZE_HINT: usize, T, C>(
     in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     bincode_config: C,
-    size_hint: usize,
 ) -> Result<T, String>
 where
     T: bincode::Decode,
     C: bincode::config::Config,
 {
-    let mut buf = vec![0; size_hint];
+    let mut buf = vec![0; SIZE_HINT];
     let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
 
     loop {
