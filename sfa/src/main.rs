@@ -433,6 +433,7 @@ fn faidx(input: &str, ids: &Vec<String>)
 
     let runtime = tokio::runtime::Runtime::new().unwrap();
 
+    /*
     let sfasta = runtime.block_on(async move {
         open_with_buffer(BufReader::new(File::open(sfasta_filename).unwrap()))
     }).expect("Unable to open file");
@@ -484,6 +485,7 @@ fn faidx(input: &str, ids: &Vec<String>)
         print_sequence(&mut stdout, &sequence, 60);
         stdout.flush();
     }
+    */
 }
 
 // TODO: Line length as an argument
