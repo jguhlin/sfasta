@@ -8,7 +8,6 @@ use std::{
     sync::RwLock,
 };
 
-use libcompression::*;
 use libfractaltree::FractalTreeDisk;
 
 use rand::prelude::*;
@@ -37,6 +36,10 @@ pub struct Sfasta<'sfa>
     pub masking: Option<Masking>,
     pub scores: Option<BytesBlockStore>,
     pub file: Option<String>,
+
+    // For async mode we have shared file handles
+    #[cfg(feature = "async")]
+    pub file_handles: Option<Vec<tokio::sync::Mutex<tokio::io::BufReader<tokio::fs::File>>>>,
 }
 
 impl<'sfa> Default for Sfasta<'sfa>
@@ -56,6 +59,9 @@ impl<'sfa> Default for Sfasta<'sfa>
             masking: None,
             file: None,
             scores: None,
+
+            #[cfg(feature = "async")]
+            file_handles: None,
         }
     }
 }

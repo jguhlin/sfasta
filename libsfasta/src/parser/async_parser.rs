@@ -15,6 +15,7 @@ use std::os::fd::AsRawFd;
 // note: this is SLOWER than the sequential version
 // 22ms vs 15ms
 // but 14ms using single thread mode
+// UPDATE: Down to 14-15ms by loading the filehandles earlier...
 const SFASTA_MARKER: &[u8; 6] = b"sfasta";
 const FULL_HEADER_SIZE: usize =
     6 + std::mem::size_of::<u64>() + std::mem::size_of::<DirectoryOnDisk>();
