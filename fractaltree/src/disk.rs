@@ -678,7 +678,10 @@ where
     C: bincode::config::Config,
 {
     let mut buf = vec![0; SIZE_HINT];
-    let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
+    match in_buf.read(&mut buf).await {
+        Ok(_) => (),
+        Err(_) => return Result::Err("Failed to read buffer".to_string()),
+    }
 
     loop {
         match bincode::decode_from_slice(&buf, bincode_config) {
@@ -688,11 +691,13 @@ where
             Err(_) => {
                 let orig_length = buf.len();
                 let doubled = buf.len() * 2;
-                log::debug!("Doubling buffer size for index: {}", doubled);
 
                 buf.resize(doubled, 0);
 
-                bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();
+                match in_buf.read(&mut buf[orig_length..]).await {
+                    Ok(_) => (),
+                    Err(_) => return Result::Err("Failed to read buffer".to_string()),
+                }
 
                 if doubled > 16 * 1024 * 1024 {
                     return Result::Err("Failed to decode bincode".to_string());
