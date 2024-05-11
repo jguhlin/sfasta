@@ -90,7 +90,6 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
     // Now that the main checks are out of the way, switch to async mode
     let file_name = Arc::clone(&file);
     let seqlocs = tokio::spawn(async move {
-        log::debug!("SeqLocs");
         let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
         let mut in_buf = tokio::io::BufReader::new(in_buf);
         let seqlocs: Option<SeqLocsStore> = match SeqLocsStore::from_existing_async(
@@ -104,7 +103,6 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
                 ))
             }
         };
-        log::debug!("Got SeqLocs");
         Ok(seqlocs)
     });
     
@@ -237,7 +235,7 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
     let masking = masking.unwrap();
     let sequenceblocks = sequenceblocks.unwrap();
 
-    /*
+
     Ok(Sfasta {
         version,
         directory,
@@ -249,9 +247,9 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         sequences: sequenceblocks,
         file: Some(file.to_string()),
         ..Default::default()
-    }) */
+    })
 
-    Ok(Sfasta::default())
+    // Ok(Sfasta::default())
 
 }
 

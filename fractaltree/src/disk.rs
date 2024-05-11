@@ -4,7 +4,7 @@ use std::{
 };
 
 #[cfg(feature = "async")]
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncSeekExt};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt};
 
 use bincode::{BorrowDecode, Decode, Encode};
 use pulp::Arch;
@@ -200,7 +200,6 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
         pos: u64,
     ) -> Result<Self, &'static str>
-where
     {
         use tokio::io::AsyncReadExt;
 
@@ -208,30 +207,12 @@ where
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
-        // Read in 8kb
-        let mut buf = vec![0; 8 * 1024];
-        let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
+        let mut tree: FractalTreeDisk<K, V> = match bincode_decode_from_buffer_async_with_size_hint(in_buf, bincode_config, 8 * 1024).await {
+            Ok(x) => x,
+            Err(_) => return Result::Err("Failed to decode FractalTreeDisk"),
+        };
+        Ok(tree)
 
-        // buf.shrink_to(bytes_read);
-
-        let mut tree: Option<FractalTreeDisk<K, V>> = None;
-
-        // todo: is unsafe faster for the vec allocations?
-        while tree.is_none() {
-            match bincode::decode_from_slice(&buf, bincode_config) {
-                Ok(x) => tree = x.0,
-                Err(_e) => {
-                    // Read additional bytes to the end of buf
-                    let orig_length = buf.len();
-                    let doubled = buf.len() * 2;
-
-                    buf.resize(doubled, 0);
-                    bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();
-                    // buf.shrink_to(orig_length + bytes_read);
-                }
-            }
-        }
-        Ok(tree.unwrap())
     }
 }
 
@@ -685,6 +666,43 @@ where
     });
 }
 
+
+// todo curry size_hint as const
+#[cfg(feature = "async")]
+pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<T, C>(
+    in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+    bincode_config: C,
+    size_hint: usize,
+) -> Result<T, String>
+where
+    T: bincode::Decode,
+    C: bincode::config::Config,
+{
+    let mut buf = vec![0; size_hint];
+    let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
+
+    loop {
+        match bincode::decode_from_slice(&buf, bincode_config) {
+            Ok(x) => {
+                return Ok(x.0);
+            }
+            Err(_) => {
+                let orig_length = buf.len();
+                let doubled = buf.len() * 2;
+
+                buf.resize(doubled, 0);
+
+                bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();
+
+                if doubled > 16 * 1024 * 1024 {
+                    return Result::Err("Failed to decode bincode".to_string());
+                }
+            }
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod tests
 {
@@ -958,3 +976,4 @@ mod tests
         panic!();
     }
 }
+
