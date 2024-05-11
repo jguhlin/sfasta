@@ -431,9 +431,8 @@ fn faidx(input: &str, ids: &Vec<String>)
     // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
     // let mut sfasta = open_with_buffer(in_buf).unwrap();
 
-    // let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    /*
     let sfasta = runtime.block_on(async move {
         open_with_buffer(BufReader::new(File::open(sfasta_filename).unwrap()))
     }).expect("Unable to open file");
@@ -485,7 +484,6 @@ fn faidx(input: &str, ids: &Vec<String>)
         print_sequence(&mut stdout, &sequence, 60);
         stdout.flush();
     }
-    */
 }
 
 // TODO: Line length as an argument
