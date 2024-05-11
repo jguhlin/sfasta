@@ -4,7 +4,8 @@ use libfractaltree::FractalTreeDisk;
 
 use crate::{datatypes::*, formats::*};
 
-const SFASTA_MARKER: &[u8; 6] = b"SFASTA";
+// todo redundant as this is also in the async_parser.rs
+const SFASTA_MARKER: &[u8; 6] = b"sfasta";
 const FULL_HEADER_SIZE: usize =
     6 + std::mem::size_of::<u64>() + std::mem::size_of::<DirectoryOnDisk>();
 
