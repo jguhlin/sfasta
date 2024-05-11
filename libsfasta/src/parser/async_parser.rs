@@ -85,6 +85,8 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
 
     // Now that the main checks are out of the way, switch to async mode
 
+    /*
+
     // Put this into an async block
     let file_name = Arc::clone(&file);
     let seqlocs = tokio::spawn(async move {
@@ -246,7 +248,9 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         sequenceblocks,
         file: Some(file.to_string()),
         ..Default::default()
-    })
+    }) */
+
+    Ok(Sfasta::default())
 }
 
 // Bincode hack
