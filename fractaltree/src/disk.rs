@@ -66,7 +66,7 @@ impl<K: Key, V: Value> Decode for FractalTreeDisk<K, V>
             bincode::Decode::decode(decoder)?;
         let start: u64 = bincode::Decode::decode(decoder)?;
         let root: NodeDisk<K, V> = if compression.is_some() {
-            let compressed: Vec<u8> = bincode::Decode::decode(decoder).unwrap();
+            let compressed: Vec<u8> = bincode::Decode::decode(decoder)?;
             let decompressed = compression
                 .as_ref()
                 .unwrap()
