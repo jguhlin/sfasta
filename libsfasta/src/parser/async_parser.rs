@@ -108,8 +108,6 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         Ok(seqlocs)
     });
     
-    /*
-
     let file_name = Arc::clone(&file);
     let index = tokio::spawn(async move {
         let index: Option<FractalTreeDisk<u32, u32>> = if directory.index_loc.is_some() {
@@ -131,6 +129,8 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         };
         Ok(index)
     });
+
+    /*
     
     let file_name = Arc::clone(&file);
     let sequenceblocks = tokio::spawn(async move {
