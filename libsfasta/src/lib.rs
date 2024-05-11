@@ -5,6 +5,7 @@ pub mod datastructures;
 pub mod datatypes;
 mod formats;
 pub mod io;
+pub mod parser;
 pub mod utils;
 
 pub mod prelude;

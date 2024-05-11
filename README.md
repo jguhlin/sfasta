@@ -114,8 +114,9 @@ The same rule applies for FASTQ.
 | Flags | Planned |
 | Nanopore Signals | Planned |
 | Base Modifications | Planned |
+| Sequence and Whole Genome Alignments | Planned |
 | Pangenome Graph | Maybe |
-| Alignments | Not Planned. CRAM fulfills this role. |
+| Read Alignments | Not Planned. CRAM fulfills this role. |
 | Variants | Too different, another solution needed. |
 
 

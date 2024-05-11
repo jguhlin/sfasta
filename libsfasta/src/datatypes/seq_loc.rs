@@ -567,6 +567,27 @@ impl SeqLocsStore
         Ok(store)
     }
 
+    /// Get SeqLoc object from a file (buffer)
+    #[cfg(feature = "async")]
+    pub async fn from_existing_async(
+        pos: u64,
+        in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+    ) -> Result<Self, String>
+    {
+        let tree = match FractalTreeDisk::from_buffer_async(in_buf, pos).await {
+            Ok(tree) => tree,
+            Err(e) => return Err(e.to_string()),
+        };
+
+        let store = SeqLocsStore {
+            location: pos,
+            preloaded: false,
+            tree,
+        };
+
+        Ok(store)
+    }
+
     /// Load up all SeqLocs from a file
     pub fn get_all_seqlocs<R>(
         &mut self,

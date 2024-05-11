@@ -3,6 +3,9 @@ use std::{
     ops::SubAssign,
 };
 
+#[cfg(feature = "async")]
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncSeek, AsyncSeekExt};
+
 use bincode::{BorrowDecode, Decode, Encode};
 use pulp::Arch;
 
@@ -190,6 +193,42 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
             bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
 
         Ok(tree)
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn from_buffer_async(
+        in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+        pos: u64,
+    ) -> Result<Self, &'static str>
+where
+    {
+        use tokio::io::AsyncReadExt;
+
+        in_buf.seek(SeekFrom::Start(pos)).await.unwrap();
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
+
+        // Read in 8kb
+        let mut buf = vec![0; 8 * 1024];
+        in_buf.read_exact(&mut buf).await.unwrap();
+
+        let mut tree: Option<FractalTreeDisk<K, V>> = None;
+
+        // todo: is unsafe faster for the vec allocations?
+        while tree.is_none() {
+            match bincode::decode_from_slice(&buf, bincode_config) {
+                Ok(x) => tree = x.0,
+                Err(_e) => {
+                    // Read additional bytes to the end of buf
+                    let orig_length = buf.len();
+                    let doubled = buf.len() * 2;
+
+                    buf.resize(doubled, 0);
+                    in_buf.read_exact(&mut buf[orig_length..]).await.unwrap();
+                }
+            }
+        }
+        Ok(tree.unwrap())
     }
 }
 

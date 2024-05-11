@@ -31,6 +31,7 @@ log = "0.4"
 rayon = "1.10.0"
 num = { version = "0.4.1", features = ["alloc", "libm"] }
 zstd = { version="0.13", default-features = false, features=["arrays", "zdict_builder", "experimental"] }
+tokio = { version = "1.37", default-features = false, features = ["fs", "io-util"], optional = true }
 
 [dev-dependencies]
 criterion = "0.5.1"
@@ -41,3 +42,7 @@ bitpacking = "0.9.2"
 wide = "0.7.16"
 pco = "0.2.3"
 stream-vbyte = "0.4.1"
+
+[features]
+default = ["async"]
+async = ["tokio"]

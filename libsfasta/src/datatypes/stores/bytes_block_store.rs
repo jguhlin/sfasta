@@ -15,6 +15,9 @@ use crate::datatypes::Loc;
 use libcompression::*;
 use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
 
+#[cfg(feature = "async")]
+use crate::parser::async_parser::{bincode_decode_from_buffer_async, bincode_decode_from_buffer_async_with_size_hint};
+
 // Implement some custom errors to return
 #[derive(Debug)]
 pub enum BlockStoreError
@@ -636,6 +639,57 @@ impl BytesBlockStore
         let block_locations: FractalTreeDisk<u32, u64> =
             FractalTreeDisk::from_buffer(&mut in_buf, block_locations_pos)
                 .unwrap();
+
+        Ok(BytesBlockStore {
+            block_locations,
+            block_locations_pos,
+            block_size,
+            data: None,
+            cache: None,
+            compression_config,
+        })
+    }
+
+    /// Read header from a buffer into a BytesBlockStore
+    #[cfg(feature = "async")]
+    pub async fn from_buffer_async(
+        mut in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+        starting_pos: u64,
+    ) -> Result<Self, String>
+    {
+        use tokio::io::AsyncSeekExt;
+
+        const SIZE_HINT: usize = std::mem::size_of::<CompressionConfig>()
+            + std::mem::size_of::<u64>()
+            + std::mem::size_of::<u32>();
+
+        let bincode_config = bincode::config::standard()
+            .with_variable_int_encoding()
+            .with_limit::<SIZE_HINT>();
+
+        in_buf.seek(SeekFrom::Start(starting_pos)).await.expect("Seek failed");        
+
+        let (compression_config, block_locations_pos, block_size) =
+            match bincode_decode_from_buffer_async_with_size_hint(
+                &mut in_buf,
+                bincode_config,
+                SIZE_HINT,
+            )
+            .await
+        {
+            Ok(x) => x,
+            Err(e) => {
+                return Err(format!("Error decoding block store: {e}"))
+            }
+        };
+
+        let block_locations: FractalTreeDisk<u32, u64> =
+            match FractalTreeDisk::from_buffer_async(&mut in_buf, block_locations_pos).await {
+                Ok(x) => x,
+                Err(e) => {
+                    return Err(format!("Error decoding block store: {e}"))
+                }
+            };
 
         Ok(BytesBlockStore {
             block_locations,

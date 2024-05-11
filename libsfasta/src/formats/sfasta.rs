@@ -8,7 +8,6 @@ use std::{
     sync::RwLock,
 };
 
-use bytes::Bytes;
 use libcompression::*;
 use libfractaltree::FractalTreeDisk;
 
@@ -23,17 +22,20 @@ pub struct Sfasta<'sfa>
 {
     pub version: u64, /* I'm going to regret this, but
                        * 18,446,744,073,709,551,615 versions should be
-                       * enough for anybody. */
+                       * enough for anybody.
+                       *
+                       * todo u128 is stable now
+                       */
     pub directory: Directory,
-    pub parameters: Option<Parameters>,
     pub metadata: Option<Metadata>,
     pub index: Option<FractalTreeDisk<u32, u32>>,
-    buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
+    pub buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequenceblocks: Option<BytesBlockStore>,
     pub seqlocs: Option<SeqLocsStore>,
     pub headers: Option<StringBlockStore>,
     pub ids: Option<StringBlockStore>,
     pub masking: Option<Masking>,
+    pub file: Option<String>,
 }
 
 impl<'sfa> Default for Sfasta<'sfa>
@@ -43,7 +45,6 @@ impl<'sfa> Default for Sfasta<'sfa>
         Sfasta {
             version: 1,
             directory: Directory::default(),
-            parameters: None,
             metadata: None,
             index: None,
             buf: None,
@@ -52,6 +53,7 @@ impl<'sfa> Default for Sfasta<'sfa>
             headers: None,
             ids: None,
             masking: None,
+            file: None,
         }
     }
 }
@@ -60,7 +62,6 @@ impl<'sfa> Sfasta<'sfa>
 {
     pub fn conversion(mut self) -> Self
     {
-        self.parameters = Some(Parameters::default());
         self.metadata = Some(Metadata::default());
         self
     }
@@ -75,24 +76,13 @@ impl<'sfa> Sfasta<'sfa>
         self
     }
 
-    pub fn block_size(mut self, block_size: u32) -> Self
-    {
-        self.parameters.as_mut().unwrap().block_size = block_size;
-        self
-    }
-
-    pub fn get_block_size(&self) -> u32
-    {
-        self.parameters.as_ref().unwrap().block_size * 1024
-    }
-
     pub fn seq_slice(
         &mut self,
         seqloc: &SeqLoc,
         range: std::ops::Range<u32>,
     ) -> Vec<Loc>
     {
-        let block_size = self.get_block_size();
+        let block_size = self.sequenceblocks.as_ref().unwrap().block_size;
 
         seqloc.seq_slice(block_size, range)
     }
@@ -316,7 +306,11 @@ impl<'sfa> Sfasta<'sfa>
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let locs = seqloc.get_sequence();
 
-        let mut buffer = vec![0u8; self.get_block_size() as usize];
+        let mut buffer = vec![
+            0u8;
+            self.sequenceblocks.as_ref().unwrap().block_size
+                as usize
+        ];
 
         locs.iter().for_each(|l| {
             self.sequenceblocks.as_mut().unwrap().get_block_uncached(
@@ -528,15 +522,12 @@ impl<'sfa> SfastaParser<'sfa>
             panic!("Unable to open file: {}", path.as_ref().display())
         });
         let in_buf = std::io::BufReader::new(in_buf);
-        SfastaParser::open_from_buffer(in_buf, false)
+        SfastaParser::open_from_buffer(in_buf)
     }
 
     // TODO: Can probably multithread parts of this...
     // Prefetch should probably be another name...
-    pub fn open_from_buffer<R>(
-        mut in_buf: R,
-        prefetch: bool,
-    ) -> Result<Sfasta<'sfa>, String>
+    pub fn open_from_buffer<R>(mut in_buf: R) -> Result<Sfasta<'sfa>, String>
     where
         R: 'sfa + Read + Seek + Send + Sync + BufRead,
     {
@@ -560,8 +551,6 @@ impl<'sfa> SfastaParser<'sfa>
             Ok(_) => (),
             Err(x) => return Result::Err(format!("Invalid file. {x}")),
         };
-
-        log::info!("Sfasta marker present");
 
         if sfasta_marker != "sfasta".as_bytes() {
             return Result::Err(format!(
@@ -609,13 +598,6 @@ impl<'sfa> SfastaParser<'sfa>
             }
         };
 
-        match dir.sanity_check(buffer_length) {
-            Ok(_) => (),
-            Err(x) => {
-                return Result::Err(format!("Invalid SFASTA directory: {x}"))
-            }
-        }
-
         sfasta.directory = dir.into();
 
         log::info!("Loading Index");
@@ -631,10 +613,6 @@ impl<'sfa> SfastaParser<'sfa>
         }
 
         log::info!("SeqLocs");
-        in_buf
-            .seek(SeekFrom::Start(sfasta.directory.seqlocs_loc.unwrap().get()))
-            .expect("Unable to work with seek API");
-
         if sfasta.directory.seqlocs_loc.is_some() {
             let seqlocs_loc = sfasta.directory.seqlocs_loc.unwrap().get();
             let seqlocs =
@@ -967,8 +945,7 @@ mod tests
 
         println!("3...");
 
-        let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf, false).unwrap();
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
         println!("4...");
         sfasta.index_load().expect("Unable to load index");
         println!("5...");
@@ -1015,8 +992,7 @@ mod tests
         };
 
         // TODO: Test this with prefecth both true and false...
-        let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf, false).unwrap();
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
         sfasta.index_load().expect("Unable to load index");
         assert!(sfasta.index_len() == Ok(10));
 
@@ -1076,8 +1052,7 @@ mod tests
             panic!("Unable to seek to start of file, {x:#?}")
         };
 
-        let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf, false).unwrap();
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
         sfasta.index_load().expect("Unable to load index");
         println!("Index len: {:#?}", sfasta.index_len());
         assert!(sfasta.index_len() == Ok(10));

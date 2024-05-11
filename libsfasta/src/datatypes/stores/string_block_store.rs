@@ -11,6 +11,9 @@ use crate::datatypes::{
 };
 use libcompression::*;
 
+#[cfg(feature = "async")]
+use crate::parser::async_parser::{bincode_decode_from_buffer_async, bincode_decode_from_buffer_async_with_size_hint};
+
 pub struct StringBlockStoreBuilder
 {
     inner: BytesBlockStoreBuilder,
@@ -152,6 +155,22 @@ impl StringBlockStore
     {
         let inner =
             match BytesBlockStore::from_buffer(&mut in_buf, starting_pos) {
+                Ok(inner) => inner,
+                Err(e) => return Err(e),
+            };
+
+        let store = StringBlockStore { inner };
+        Ok(store)
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn from_buffer_async(
+        mut in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+        starting_pos: u64,
+    ) -> Result<Self, String>
+    {
+        let inner =
+            match BytesBlockStore::from_buffer_async(&mut in_buf, starting_pos).await {
                 Ok(inner) => inner,
                 Err(e) => return Err(e),
             };

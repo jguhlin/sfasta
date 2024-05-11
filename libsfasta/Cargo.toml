@@ -36,6 +36,8 @@ itertools = "0.12.1"
 # needletail = "0.5.1"
 needletail = { git = "https://github.com/jguhlin/needletail" }
 
+tokio = { version = "1.37", default-features = false, features = ["rt-multi-thread", "io-util", "macros", "fs"], optional = true }
+
 bumpalo = "3.16"
 flume = "0.11.0"
 
@@ -50,8 +52,9 @@ strum = "0.26.2"
 strum_macros = "0.26.2"
 core_affinity = "0.8.1"
 humansize = "2.1.3"
-serde_yml = "0.0.4"
+serde_yml = "0.0.5"
 serde = { version = "1.0.199", features = ["derive", "serde_derive"] }
+pulp = "0.18.10"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 wasm-bindgen = "0.2"
@@ -59,14 +62,15 @@ flate2 = { version = "1.0.28", features = ["rust_backend"], default-features = t
 zstd = { version = "0.13.1", features = ["wasm"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-# Comment flate2 out for testing wasm build
 flate2 = {version = "1.0.28", features = ["zlib-ng"], default-features = false}
-pulp = "0.18.10"
 zstd = { version = "0.13.1" }
-# syncmers = "0.1.5"
 
 [dev-dependencies]
 criterion = "0.5.1"
 generic-array = "1.0.0"
 numeric-array = "0.5.2"
 num-traits = "0.2.18"
+
+[features]
+default = ["async"]
+async = ["dep:tokio", "fractaltree/async"]

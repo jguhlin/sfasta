@@ -189,21 +189,15 @@ impl Converter
         bincode::encode_into_std_write(dir, &mut out_fh, bincode_config)
             .expect("Unable to write directory to file");
 
-        // Write the parameters
-        bincode::encode_into_std_write(
-            &sfasta.parameters.as_ref().unwrap(),
-            &mut out_fh,
-            bincode_config,
-        )
-        .expect("Unable to write Parameters to file");
-
+        // todo impl metadata with from_buffer and to_buffer
         // Write the metadata
-        bincode::encode_into_std_write(
-            sfasta.metadata.as_ref().unwrap(),
-            &mut out_fh,
-            bincode_config,
-        )
-        .expect("Unable to write Metadata to file");
+        // bincode::encode_into_std_write(
+        // sfasta.metadata.as_ref().unwrap(),
+        // &mut out_fh,
+        // bincode_config,
+        // )
+        // .expect("Unable to write Metadata to file");
+        //
 
         loc
     }
@@ -221,17 +215,12 @@ impl Converter
         // Track how much space each individual element takes up
         let mut debug_size: Vec<(String, usize)> = Vec::new();
 
-        let mut sfasta = Sfasta::default()
-            .conversion()
-            .block_size(self.compression_profile.block_size);
+        let mut sfasta = Sfasta::default().conversion();
 
         // Store masks as series of 0s and 1s... Vec<bool>
         // Compression seems to take care of the size. bitvec! and vec! seem
         // to have similar performance and on-disk storage
         // requirements
-
-        sfasta.parameters.as_mut().unwrap().block_size =
-            self.compression_profile.block_size as u32;
 
         // Set dummy values for the directory
         sfasta.directory.dummy();
@@ -807,16 +796,10 @@ mod tests
 
         let _dir = directory;
 
-        let parameters: Parameters =
-            bincode::decode_from_std_read(&mut out_buf, bincode_config)
-                .unwrap();
-
-        println!("{:?}", parameters);
-        assert!(parameters.block_size == 8);
-
-        let _metadata: Metadata =
-            bincode::decode_from_std_read(&mut out_buf, bincode_config)
-                .unwrap();
+        // let _metadata: Metadata =
+        // bincode::decode_from_std_read(&mut out_buf, bincode_config)
+        // .unwrap();
+        //
 
         // TODO: Add more tests
     }

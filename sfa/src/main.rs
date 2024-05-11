@@ -437,7 +437,7 @@ fn faidx(input: &str, ids: &Vec<String>)
 
     let in_buf = BufReader::new(in_buf);
 
-    let mut sfasta = SfastaParser::open_from_buffer(in_buf, false).unwrap();
+    let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
 
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
@@ -488,7 +488,7 @@ fn view(input: &str)
     .expect("Fadvise Failed");
 
     let mut sfasta =
-        SfastaParser::open_from_buffer(BufReader::new(in_buf), true).unwrap();
+        SfastaParser::open_from_buffer(BufReader::new(in_buf)).unwrap();
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty or corrupt");
@@ -571,7 +571,7 @@ fn list(input: &str)
     .expect("Fadvise Failed");
 
     let in_buf = BufReader::new(in_buf);
-    let mut sfasta = SfastaParser::open_from_buffer(in_buf, false).unwrap();
+    let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty of corrupt");
