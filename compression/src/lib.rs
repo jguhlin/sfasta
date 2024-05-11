@@ -509,7 +509,7 @@ impl CompressionWorker
 
         let mut core_ids = core_affinity::get_core_ids().unwrap();
 
-        if self.threads as usize <= core_ids.len() {
+        if self.threads as usize >= core_ids.len() {
             log::debug!(
                 "Detected {} Physical Cores. Setting threads to {}",
                 core_ids.len(),
