@@ -670,10 +670,9 @@ impl BytesBlockStore
         in_buf.seek(SeekFrom::Start(starting_pos)).await.expect("Seek failed");        
 
         let (compression_config, block_locations_pos, block_size) =
-            match bincode_decode_from_buffer_async_with_size_hint(
+            match bincode_decode_from_buffer_async_with_size_hint::<SIZE_HINT, _, _>(
                 &mut in_buf,
                 bincode_config,
-                SIZE_HINT,
             )
             .await
         {
