@@ -438,7 +438,11 @@ fn faidx(input: &str, ids: &Vec<String>)
     // let in_buf = BufReader::new(in_buf);
 
     // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
-    let mut sfasta = open_with_buffer(in_buf).unwrap();
+    // let mut sfasta = open_with_buffer(in_buf).unwrap();
+    let sfasta = open_from_file_async(sfasta_filename)
+        .expect("Unable to open file");
+
+    let mut sfasta = sfasta.with_buffer(BufReader::new(in_buf));
 
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
