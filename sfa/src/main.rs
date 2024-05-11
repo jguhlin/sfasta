@@ -482,7 +482,7 @@ fn faidx(input: &str, ids: &Vec<String>)
             .expect("Unable to fetch sequence");
 
         print_sequence(&mut stdout, &sequence, 60);
-        stdout.flush();
+        stdout.flush().expect("Unable to flush stdout buffer");
     }
 }
 
