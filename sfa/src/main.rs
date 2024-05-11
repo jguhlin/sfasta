@@ -426,6 +426,22 @@ fn faidx(input: &str, ids: &Vec<String>)
 {
     let sfasta_filename = input;
 
+    // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
+    // let mut sfasta = open_with_buffer(in_buf).unwrap();
+
+    // let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(4)
+        .enable_io()
+        .build()
+        .unwrap();
+    // let runtime = tokio::runtime::Builder::new_current_thread().build().expect("Unable to build runtime");
+
+    let mut sfasta = runtime.block_on(async {
+        open_from_file_async(input).await
+    }).expect("Unable to open file");
+
+
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
 
     #[cfg(unix)]
@@ -437,25 +453,9 @@ fn faidx(input: &str, ids: &Vec<String>)
     )
     .expect("Fadvise Failed");
 
-    // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
-    // let mut sfasta = open_with_buffer(in_buf).unwrap();
+    log::debug!("File opened: {}", sfasta_filename);
 
-    // let runtime = tokio::runtime::Runtime::new().unwrap();
-    /*let runtime = tokio::runtime::Builder::new_multi_thread()
-        .worker_threads(4)
-        .enable_io()
-        .build()
-        .unwrap();
-    */
-    let runtime = tokio::runtime::Builder::new_current_thread().build().expect("Unable to build runtime");
-
-    let mut sfasta = runtime.block_on(async {
-        open_from_file_async(input).await
-    }).expect("Unable to open file");
-
-    // log::debug!("File opened: {}", sfasta_filename);
-
-    // let in_buf = File::open(sfasta_filename).expect("Unable to open file");
+    let in_buf = File::open(sfasta_filename).expect("Unable to open file");
     
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
