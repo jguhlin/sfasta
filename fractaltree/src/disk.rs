@@ -689,6 +689,7 @@ where
             Err(_) => {
                 let orig_length = buf.len();
                 let doubled = buf.len() * 2;
+                log::debug!("Doubling buffer size for index: {}", doubled);
 
                 buf.resize(doubled, 0);
 
