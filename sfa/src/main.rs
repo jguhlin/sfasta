@@ -424,6 +424,15 @@ fn faidx(input: &str, ids: &Vec<String>)
 {
     let sfasta_filename = input;
 
+    log::debug!("Opening file: {}", sfasta_filename);
+
+    // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
+    // let mut sfasta = open_with_buffer(in_buf).unwrap();
+    let sfasta = open_from_file_async(sfasta_filename)
+        .expect("Unable to open file");
+
+    log::debug!("File opened: {}", sfasta_filename);
+
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
 
     #[cfg(unix)]
@@ -435,12 +444,7 @@ fn faidx(input: &str, ids: &Vec<String>)
     )
     .expect("Fadvise Failed");
 
-    // let in_buf = BufReader::new(in_buf);
-
-    // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
-    // let mut sfasta = open_with_buffer(in_buf).unwrap();
-    let sfasta = open_from_file_async(sfasta_filename)
-        .expect("Unable to open file");
+    let in_buf = BufReader::new(in_buf);
 
     let mut sfasta = sfasta.with_buffer(BufReader::new(in_buf));
 
