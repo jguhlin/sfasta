@@ -110,8 +110,6 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
     // Now that the main checks are out of the way, switch to async mode
     let fh = file_handles.pop().unwrap();
     let seqlocs = tokio::spawn(async move {
-        //let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
-        // let mut in_buf = tokio::io::BufReader::new(in_buf);
         let mut in_buf = fh;
         let seqlocs: Option<SeqLocsStore> = match SeqLocsStore::from_existing_async(
             directory.seqlocs_loc.unwrap().get(),
@@ -127,11 +125,10 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         Ok(seqlocs)
     });
     
-    let file_name = Arc::clone(&file);
+    let fh = file_handles.pop().unwrap();
     let index = tokio::spawn(async move {
         let index: Option<FractalTreeDisk<u32, u32>> = if directory.index_loc.is_some() {
-            let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
-            let mut in_buf = tokio::io::BufReader::new(in_buf);
+            let mut in_buf = fh;
             match FractalTreeDisk::from_buffer_async(
                 &mut in_buf,
                 directory.index_loc.unwrap().get(),
@@ -149,11 +146,10 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         Ok(index)
     });
     
-    let file_name = Arc::clone(&file);
+    let fh = file_handles.pop().unwrap();
     let sequenceblocks = tokio::spawn(async move {
         let sequenceblocks = if directory.sequences_loc.is_some() {
-            let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
-            let mut in_buf = tokio::io::BufReader::new(in_buf);
+            let mut in_buf = fh;
             match BytesBlockStore::from_buffer_async(
                 &mut in_buf,
                 directory.sequences_loc.unwrap().get(),
@@ -171,11 +167,10 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         Ok(sequenceblocks)
     });
 
-    let file_name = Arc::clone(&file);
+    let fh = file_handles.pop().unwrap();
     let ids = tokio::spawn(async move {
         let ids = if directory.ids_loc.is_some() {
-            let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
-            let mut in_buf = tokio::io::BufReader::new(in_buf);
+            let mut in_buf = fh;
             match StringBlockStore::from_buffer_async(
                 &mut in_buf,
                 directory.ids_loc.unwrap().get(),
@@ -193,11 +188,10 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         Ok(ids)
     });
 
-    let file_name = Arc::clone(&file);
+    let fh = file_handles.pop().unwrap();
     let headers = tokio::spawn(async move {
         let headers = if directory.headers_loc.is_some() {
-            let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
-            let mut in_buf = tokio::io::BufReader::new(in_buf);
+            let mut in_buf = fh;
             match StringBlockStore::from_buffer_async(
                 &mut in_buf,
                 directory.headers_loc.unwrap().get(),
@@ -215,11 +209,10 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         Ok(headers)
     });
 
-    let file_name = Arc::clone(&file);
+    let fh = file_handles.pop().unwrap();
     let masking = tokio::spawn(async move {
         let masking = if directory.masking_loc.is_some() {
-            let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
-            let mut in_buf = tokio::io::BufReader::new(in_buf);
+            let mut in_buf = fh;
             match Masking::from_buffer_async(
                 &mut in_buf,
                 directory.masking_loc.unwrap().get(),
