@@ -438,13 +438,18 @@ fn faidx(input: &str, ids: &Vec<String>)
     .expect("Fadvise Failed");
 
     // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
-    let mut sfasta = open_with_buffer(in_buf).unwrap();
+    // let mut sfasta = open_with_buffer(in_buf).unwrap();
 
     // let runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(8)
+        .enable_all()
+        .build()
+        .unwrap();
 
-    // let sfasta = runtime.block_on(async move {
-        // open_with_buffer(BufReader::new(File::open(sfasta_filename).unwrap()))
-    // }).expect("Unable to open file");
+    let mut sfasta = runtime.block_on(async move {
+        open_from_file_async(input).await
+    }).expect("Unable to open file");
 
     // log::debug!("File opened: {}", sfasta_filename);
 
