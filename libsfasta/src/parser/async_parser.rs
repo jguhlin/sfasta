@@ -33,6 +33,8 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
         Err(x) => return Result::Err(format!("Failed to open file: {x}")),
     };
 
+    log::debug!("Header Size: {FULL_HEADER_SIZE}");
+
     let mut sfasta_header: [u8; FULL_HEADER_SIZE] = [0; FULL_HEADER_SIZE];
     match in_buf.read_exact(&mut sfasta_header) {
         Ok(_) => (),
@@ -86,6 +88,7 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
     // Put this into an async block
     let file_name = Arc::clone(&file);
     let seqlocs = tokio::spawn(async move {
+        log::debug!("SeqLocs");
         let in_buf = tokio::fs::File::open(file_name.as_str()).await.unwrap();
         let mut in_buf = tokio::io::BufReader::new(in_buf);
         let seqlocs: Option<SeqLocsStore> = match SeqLocsStore::from_existing_async(
@@ -99,6 +102,7 @@ pub async fn open_from_file_async<'sfa>(file: &str) -> Result<Sfasta<'sfa>, Stri
                 ))
             }
         };
+        log::debug!("Got SeqLocs");
         Ok(seqlocs)
     });
     

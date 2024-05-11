@@ -214,7 +214,6 @@ where
 
         // buf.shrink_to(bytes_read);
 
-
         let mut tree: Option<FractalTreeDisk<K, V>> = None;
 
         // todo: is unsafe faster for the vec allocations?
