@@ -40,7 +40,7 @@ snap = "1.1.1"
 ratatui = "0.26.2"
 page_size = "0.6.0"
 serde = "1.0.199"
-serde_yml = "0.0.4"
+serde_yml = "0.0.5"
 xxhash-rust = { version = "0.8.10", features = ["xxh3"], optional = true}
 tokio = { version = "1.37.0", features = ["full"] }
 
