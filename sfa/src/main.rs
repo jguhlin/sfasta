@@ -208,6 +208,8 @@ fn main()
 
     let cli = Cli::parse();
 
+    println!("SFASTA v{}", clap::crate_version!());
+
     match cli.command {
         Commands::View { input } => view(&input),
         Commands::List { input } => list(&input),
@@ -429,9 +431,9 @@ fn faidx(input: &str, ids: &Vec<String>)
     // let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
     // let mut sfasta = open_with_buffer(in_buf).unwrap();
 
-    let mut runtime = tokio::runtime::Runtime::new().unwrap();
+    let runtime = tokio::runtime::Runtime::new().unwrap();
 
-    let sfasta = runtime.block_on(async {
+    let sfasta = runtime.block_on(async move {
         open_with_buffer(BufReader::new(File::open(sfasta_filename).unwrap()))
     }).expect("Unable to open file");
 
