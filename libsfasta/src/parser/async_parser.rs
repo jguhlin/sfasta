@@ -298,6 +298,8 @@ where
         }
     }
 
+    log::info!("Did not work, trying again with larger buffer");
+
     // We know we need more data, so create a new buffer that is larger than the
     // current buffer
     let mut buf = vec![0; in_buf.buffer().len() + 16 * 1024];
@@ -353,6 +355,8 @@ where
         }
     }
 
+    log::info!("Did not work, trying again with larger buffer");
+
     let mut buf = vec![0; in_buf.buffer().len() + SIZE_HINT];
     in_buf.read(&mut buf).await.unwrap();
 
@@ -370,7 +374,7 @@ where
                 in_buf.read(&mut buf[orig_length..]).await.unwrap();
 
                 if doubled > 16 * 1024 * 1024 {
-                    return Result::Err("Failed to decode bincode".to_string());
+                    return Result::Err("Failed to decode bincode - Max size reached".to_string());
                 }
             }
         }
