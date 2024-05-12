@@ -3,7 +3,7 @@
 use std::io::{BufReader, Read, Seek};
 use std::sync::Arc;
 
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt};
+use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt};
 
 use libfractaltree::FractalTreeDisk;
 use crate::{datatypes::*, formats::*};
@@ -279,8 +279,29 @@ pub(crate) async fn bincode_decode_from_buffer_async<T>(
 where
     T: bincode::Decode,
 {
-    let mut buf = vec![0; 8 * 1024];
-    let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
+    // Try to read without creating a new buffer
+    match in_buf.fill_buf().await {
+        Ok(x) => {
+            if x.len() == 0 {
+                return Result::Err("Failed to decode from buffer - Is empty".to_string());
+            } else {
+                match bincode::decode_from_slice(&x, bincode_config) {
+                    Ok(x) => {
+                        return Ok(x.0);
+                    }
+                    Err(_) => (), // Need more space...
+                }
+            }
+        }
+        Err(x) => {
+            return Result::Err(format!("Failed to read from reader. {x}"));
+        }
+    }
+
+    // We know we need more data, so create a new buffer that is larger than the
+    // current buffer
+    let mut buf = vec![0; in_buf.buffer().len() + 16 * 1024];
+    in_buf.read(&mut buf).await.unwrap();
     // buf.shrink_to(bytes_read);
 
     loop {
@@ -294,8 +315,7 @@ where
 
                 buf.resize(doubled, 0);
 
-                bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();                
-                // buf.shrink_to(bytes_read);
+                in_buf.read(&mut buf[orig_length..]).await.unwrap();                
 
                 if doubled > 16 * 1024 * 1024 {
                     return Result::Err("Failed to decode bincode".to_string());
@@ -314,8 +334,27 @@ where
     T: bincode::Decode,
     C: bincode::config::Config,
 {
-    let mut buf = vec![0; SIZE_HINT];
-    let mut bytes_read = in_buf.read(&mut buf).await.unwrap();
+
+    match in_buf.fill_buf().await {
+        Ok(x) => {
+            if x.len() == 0 {
+                return Result::Err("Failed to decode from buffer - Is empty".to_string());
+            } else {
+                match bincode::decode_from_slice(&x, bincode_config) {
+                    Ok(x) => {
+                        return Ok(x.0);
+                    }
+                    Err(_) => (),
+                }
+            }
+        }
+        Err(x) => {
+            return Result::Err(format!("Failed to read from reader. {x}"));
+        }
+    }
+
+    let mut buf = vec![0; in_buf.buffer().len() + SIZE_HINT];
+    in_buf.read(&mut buf).await.unwrap();
 
     loop {
         match bincode::decode_from_slice(&buf, bincode_config) {
@@ -328,7 +367,7 @@ where
 
                 buf.resize(doubled, 0);
 
-                bytes_read = in_buf.read(&mut buf[orig_length..]).await.unwrap();
+                in_buf.read(&mut buf[orig_length..]).await.unwrap();
 
                 if doubled > 16 * 1024 * 1024 {
                     return Result::Err("Failed to decode bincode".to_string());
