@@ -279,29 +279,8 @@ pub(crate) async fn bincode_decode_from_buffer_async<T>(
 where
     T: bincode::Decode,
 {
-    // Try to read without creating a new buffer
-    match in_buf.fill_buf().await {
-        Ok(x) => {
-            if x.len() == 0 {
-                return Result::Err("Failed to decode from buffer - Is empty".to_string());
-            } else {
-                match bincode::decode_from_slice(&x, bincode_config) {
-                    Ok(x) => {
-                        return Ok(x.0);
-                    }
-                    Err(_) => (), // Need more space...
-                }
-            }
-        }
-        Err(x) => {
-            return Result::Err(format!("Failed to read from reader. {x}"));
-        }
-    }
+    // Try to read without creating a new buffer - was not faster
 
-    log::info!("Did not work, trying again with larger buffer");
-
-    // We know we need more data, so create a new buffer that is larger than the
-    // current buffer
     let mut buf = vec![0; in_buf.buffer().len() + 16 * 1024];
     in_buf.read(&mut buf).await.unwrap();
     // buf.shrink_to(bytes_read);
@@ -336,28 +315,7 @@ where
     T: bincode::Decode,
     C: bincode::config::Config,
 {
-
-    match in_buf.fill_buf().await {
-        Ok(x) => {
-            if x.len() == 0 {
-                return Result::Err("Failed to decode from buffer - Is empty".to_string());
-            } else {
-                match bincode::decode_from_slice(&x, bincode_config) {
-                    Ok(x) => {
-                        return Ok(x.0);
-                    }
-                    Err(_) => (),
-                }
-            }
-        }
-        Err(x) => {
-            return Result::Err(format!("Failed to read from reader. {x}"));
-        }
-    }
-
-    log::info!("Did not work, trying again with larger buffer");
-
-    let mut buf = vec![0; in_buf.buffer().len() + SIZE_HINT];
+    let mut buf = vec![0; SIZE_HINT];
     in_buf.read(&mut buf).await.unwrap();
 
     loop {
