@@ -4,13 +4,24 @@ use std::{
 };
 
 #[cfg(feature = "async")]
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt};
+use tokio::io::{
+    AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt,
+};
+
+#[cfg(feature = "async")]
+use futures::future::{BoxFuture, FutureExt};
 
 use bincode::{BorrowDecode, Decode, Encode};
 use pulp::Arch;
 
 use crate::*;
 use libcompression::*;
+
+// todo
+// make async
+// really hard to make async when recursion and needs mutable access to itself!
+// make need to be a whole new type
+// maybe make it a buffer type system? a channel or something?
 
 // todo: load_all use decompression
 // todo: in bytes block store and seqlocs make this into a different
@@ -207,12 +218,20 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
-        let mut tree: FractalTreeDisk<K, V> = match bincode_decode_from_buffer_async_with_size_hint::<{4 * 1024}, _, _>(in_buf, bincode_config).await {
-            Ok(x) => x,
-            Err(_) => return Result::Err("Failed to decode FractalTreeDisk"),
-        };
+        let mut tree: FractalTreeDisk<K, V> =
+            match bincode_decode_from_buffer_async_with_size_hint::<
+                { 4 * 1024 },
+                _,
+                _,
+            >(in_buf, bincode_config)
+            .await
+            {
+                Ok(x) => x,
+                Err(_) => {
+                    return Result::Err("Failed to decode FractalTreeDisk")
+                }
+            };
         Ok(tree)
-
     }
 }
 
@@ -666,10 +685,13 @@ where
     });
 }
 
-
 // todo curry size_hint as const
 #[cfg(feature = "async")]
-pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<const SIZE_HINT: usize, T, C>(
+pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<
+    const SIZE_HINT: usize,
+    T,
+    C,
+>(
     in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     bincode_config: C,
 ) -> Result<T, String>
@@ -696,7 +718,9 @@ where
 
                 match in_buf.read(&mut buf[orig_length..]).await {
                     Ok(_) => (),
-                    Err(_) => return Result::Err("Failed to read buffer".to_string()),
+                    Err(_) => {
+                        return Result::Err("Failed to read buffer".to_string())
+                    }
                 }
 
                 if doubled > 16 * 1024 * 1024 {
@@ -706,7 +730,6 @@ where
         }
     }
 }
-
 
 #[cfg(test)]
 mod tests
@@ -981,4 +1004,3 @@ mod tests
         panic!();
     }
 }
-

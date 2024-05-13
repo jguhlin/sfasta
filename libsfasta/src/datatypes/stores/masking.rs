@@ -14,7 +14,10 @@ use crate::datatypes::{
 use libcompression::*;
 
 #[cfg(feature = "async")]
-use crate::parser::async_parser::{bincode_decode_from_buffer_async, bincode_decode_from_buffer_async_with_size_hint};
+use crate::parser::async_parser::{
+    bincode_decode_from_buffer_async,
+    bincode_decode_from_buffer_async_with_size_hint,
+};
 
 use pulp::Arch;
 
@@ -175,7 +178,9 @@ impl Masking
     ) -> Result<Self, String>
     {
         let inner =
-            match BytesBlockStore::from_buffer_async(&mut in_buf, starting_pos).await {
+            match BytesBlockStore::from_buffer_async(&mut in_buf, starting_pos)
+                .await
+            {
                 Ok(inner) => inner,
                 Err(e) => return Err(e),
             };

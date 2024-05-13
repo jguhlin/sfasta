@@ -433,12 +433,14 @@ fn faidx(input: &str, ids: &Vec<String>)
         .enable_all()
         .build()
         .unwrap();
-    //let runtime = tokio::runtime::Builder::new_current_thread().build().expect("Unable to build runtime");
+    // let runtime =
+    // tokio::runtime::Builder::new_current_thread().build().expect("
+    // Unable to build runtime");
 
     let sfasta_filename = input;
-    let mut sfasta = runtime.block_on(async move {
-        open_from_file_async(sfasta_filename).await
-    }).expect("Unable to open file");
+    let mut sfasta = runtime
+        .block_on(async move { open_from_file_async(sfasta_filename).await })
+        .expect("Unable to open file");
 
     let sfasta_filename = input;
 
@@ -455,9 +457,11 @@ fn faidx(input: &str, ids: &Vec<String>)
 
     log::debug!("File opened: {}", sfasta_filename);
 
-    // let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-    let mut sfasta = sfasta.with_buffer(BufReader::with_capacity(64 * 1024, in_buf));
-    
+    // let in_buf = File::open(sfasta_filename).expect("Unable to open
+    // file");
+    let mut sfasta =
+        sfasta.with_buffer(BufReader::with_capacity(64 * 1024, in_buf));
+
     let stdout = std::io::stdout();
     let mut stdout = stdout.lock();
 

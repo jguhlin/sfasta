@@ -12,7 +12,8 @@ const FULL_HEADER_SIZE: usize =
 /// Open a SFASTA file from a buffer.
 /// This gives ownership of the buffer to the SFASTA struct.
 // this is ~ 3ms slower than the previous version (SfastaParser)
-// not sure why.... but it does have more checking, so probably acceptable...
+// not sure why.... but it does have more checking, so probably
+// acceptable...
 pub fn open_with_buffer<'sfa, R>(mut in_buf: R) -> Result<Sfasta<'sfa>, String>
 where
     R: 'sfa + Read + Seek + Send + Sync,

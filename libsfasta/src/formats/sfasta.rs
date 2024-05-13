@@ -6,6 +6,7 @@
 use std::{
     io::{BufRead, Read, Seek, SeekFrom},
     sync::RwLock,
+    sync::Arc,
 };
 
 use libfractaltree::FractalTreeDisk;
@@ -39,7 +40,9 @@ pub struct Sfasta<'sfa>
 
     // For async mode we have shared file handles
     #[cfg(feature = "async")]
-    pub file_handles: Option<Vec<tokio::sync::Mutex<tokio::io::BufReader<tokio::fs::File>>>>,
+    pub file_handles: Option<
+        Arc<tokio::sync::RwLock<Vec<Arc<tokio::sync::RwLock<tokio::io::BufReader<tokio::fs::File>>>>>>,
+    >,
 }
 
 impl<'sfa> Default for Sfasta<'sfa>
@@ -314,11 +317,8 @@ impl<'sfa> Sfasta<'sfa>
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let locs = seqloc.get_sequence();
 
-        let mut buffer = vec![
-            0u8;
-            self.sequences.as_ref().unwrap().block_size
-                as usize
-        ];
+        let mut buffer =
+            vec![0u8; self.sequences.as_ref().unwrap().block_size as usize];
 
         locs.iter().for_each(|l| {
             self.sequences.as_mut().unwrap().get_block_uncached(
@@ -444,18 +444,6 @@ impl<'sfa> Sfasta<'sfa>
         seqloc.len()
     }
 
-    // Get length from SeqLoc (only for sequence)
-    // Immutable for preloaded datasets
-    // TODO
-    // pub fn seqloc_len_loaded(&self, seqloc: &SeqLoc) -> usize {
-    // let seqlocs = self.seqlocs.as_ref().unwrap();
-    // seqloc.len_loaded(seqlocs, self.parameters.block_size)
-    // }
-    //
-    // pub fn is_empty(&self) -> bool {
-    // self.len() == 0
-    // }
-
     /// Get the ith seqloc in the file
     pub fn get_seqloc(
         &mut self,
@@ -497,6 +485,66 @@ impl<'sfa> Sfasta<'sfa>
     {
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.index.as_mut().unwrap().load_tree(buf)
+    }
+}
+
+#[cfg(feature = "async")]
+impl<'sfa> Sfasta<'sfa> {
+    pub async fn get_filehandle(&self) -> tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>> {
+        let file_handles = Arc::clone(self.file_handles.as_ref().unwrap());
+
+        loop {
+            let file_handles_read = file_handles.read().await;
+
+            // Loop through each until we find one that is not locked
+            for file_handle in file_handles_read.iter() {
+                let file_handle = Arc::clone(file_handle);
+                let file_handle = file_handle.try_write_owned();
+                if let Ok(file_handle) = file_handle {
+                    return file_handle;
+                }
+            }
+
+            if file_handles_read.len() < 256 {
+                // There are no available file handles, so we need to create a new one
+                // and the number isn't crazy (yet)
+                break;
+            }
+
+            drop(file_handles_read);
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+        }
+
+        // Otherwise, create one and add it to the list
+        let file = tokio::fs::File::open(self.file.as_ref().unwrap()).await.unwrap();
+        let file_handle = std::sync::Arc::new(tokio::sync::RwLock::new(tokio::io::BufReader::new(file)));
+
+        let mut write_lock = file_handles.write().await;
+
+        write_lock.push(Arc::clone(&file_handle));
+
+        file_handle.try_write_owned().unwrap()       
+    }
+
+    pub async fn find_asnyc(&mut self, x: &str) -> Result<Option<SeqLoc>, &str> {
+        assert!(self.index.is_some(), "Sfasta index not present");
+
+        let mut buf = self.get_filehandle().await;
+        let idx = self.index.as_mut().unwrap();
+        let key = xxh3_64(x.as_bytes());
+        let found = idx.search(&mut buf, &(key as u32)).await;
+        let seqlocs = self.seqlocs.as_mut().unwrap();
+
+        if found.is_none() {
+            return Ok(None);
+        }
+
+        // todo return multiple matches
+        log::debug!("Getting seqloc");
+        log::debug!("Found seqloc: {:?}", found.unwrap());
+        unimplemented!();
+        // seqlocs.get_seqloc_async(&mut buf, found.unwrap())
     }
 }
 

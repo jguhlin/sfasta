@@ -16,7 +16,10 @@ use libcompression::*;
 use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
 
 #[cfg(feature = "async")]
-use crate::parser::async_parser::{bincode_decode_from_buffer_async, bincode_decode_from_buffer_async_with_size_hint};
+use crate::parser::async_parser::{
+    bincode_decode_from_buffer_async,
+    bincode_decode_from_buffer_async_with_size_hint,
+};
 
 // Implement some custom errors to return
 #[derive(Debug)]
@@ -667,23 +670,32 @@ impl BytesBlockStore
             .with_variable_int_encoding()
             .with_limit::<SIZE_HINT>();
 
-        in_buf.seek(SeekFrom::Start(starting_pos)).await.expect("Seek failed");        
+        in_buf
+            .seek(SeekFrom::Start(starting_pos))
+            .await
+            .expect("Seek failed");
 
         let (compression_config, block_locations_pos, block_size) =
-            match bincode_decode_from_buffer_async_with_size_hint::<SIZE_HINT, _, _>(
-                &mut in_buf,
-                bincode_config,
-            )
+            match bincode_decode_from_buffer_async_with_size_hint::<
+                SIZE_HINT,
+                _,
+                _,
+            >(&mut in_buf, bincode_config)
             .await
-        {
-            Ok(x) => x,
-            Err(e) => {
-                return Err(format!("Error decoding block store: {e}"))
-            }
-        };
+            {
+                Ok(x) => x,
+                Err(e) => {
+                    return Err(format!("Error decoding block store: {e}"))
+                }
+            };
 
         let block_locations: FractalTreeDisk<u32, u64> =
-            match FractalTreeDisk::from_buffer_async(&mut in_buf, block_locations_pos).await {
+            match FractalTreeDisk::from_buffer_async(
+                &mut in_buf,
+                block_locations_pos,
+            )
+            .await
+            {
                 Ok(x) => x,
                 Err(e) => {
                     return Err(format!("Error decoding block store: {e}"))
