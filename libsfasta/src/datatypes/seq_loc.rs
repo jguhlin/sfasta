@@ -33,7 +33,7 @@ use flate2::Compression;
 use rand::seq;
 
 use libcompression::*;
-use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
+use libfractaltree::{FractalTreeBuild, FractalTreeDisk, FractalTreeDiskAsync};
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each
@@ -524,11 +524,17 @@ pub struct SeqLocsStore
 {
     preloaded: bool,
     location: u64,
+
+    #[cfg(not(feature = "async"))]
     tree: FractalTreeDisk<u32, SeqLoc>,
+
+    #[cfg(feature = "async")]
+    tree: FractalTreeDiskAsync<u32, SeqLoc>,
 }
 
 impl SeqLocsStore
 {
+    #[cfg(not(feature = "async"))]
     /// Prefetch the SeqLocs index into memory. Speeds up successive
     /// access, but can be a hefty one-time cost for large files.
     pub fn prefetch<R>(&mut self, in_buf: &mut R)
@@ -541,6 +547,25 @@ impl SeqLocsStore
         log::info!("Prefetched {} seqlocs", self.tree.len().unwrap());
     }
 
+    #[cfg(feature = "async")]
+    /// Prefetch the SeqLocs index into memory. Speeds up successive
+    /// access, but can be a hefty one-time cost for large files.
+    pub async fn prefetch(
+        &self,
+        in_buf: &mut tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>,
+    )
+    {
+        self.get_all_seqlocs(in_buf)
+            .await
+            .expect("Unable to Prefetch All SeqLocs");
+
+        log::info!(
+            "Prefetched {} seqlocs",
+            self.tree.len().await.unwrap()
+        );
+    }
+
+    #[cfg(not(feature = "async"))]
     pub fn len<R>(&mut self, in_buf: &mut R) -> usize
     where
         R: Read + Seek + BufRead,
@@ -553,6 +578,22 @@ impl SeqLocsStore
         self.tree.len().unwrap()
     }
 
+    #[cfg(feature = "async")]
+    pub async fn len(
+        &self,
+        in_buf: &mut tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>,
+    ) -> usize
+    {
+        if !self.preloaded {
+            self.get_all_seqlocs(in_buf)
+                .await
+                .expect("Unable to get all SeqLocs");
+        }
+
+        self.tree.len().await.unwrap()
+    }
+
+    #[cfg(not(feature = "async"))]
     /// Get SeqLoc object from a file (buffer)
     pub fn from_existing<R>(pos: u64, in_buf: &mut R) -> Result<Self, String>
     where
@@ -569,12 +610,12 @@ impl SeqLocsStore
 
     /// Get SeqLoc object from a file (buffer)
     #[cfg(feature = "async")]
-    pub async fn from_existing_async(
+    pub async fn from_existing(
         pos: u64,
         in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     ) -> Result<Self, String>
     {
-        let tree = match FractalTreeDisk::from_buffer_async(in_buf, pos).await {
+        let tree = match FractalTreeDiskAsync::from_buffer_async(in_buf, pos).await {
             Ok(tree) => tree,
             Err(e) => return Err(e.to_string()),
         };
@@ -588,6 +629,7 @@ impl SeqLocsStore
         Ok(store)
     }
 
+    #[cfg(not(feature = "async"))]
     /// Load up all SeqLocs from a file
     pub fn get_all_seqlocs<R>(
         &mut self,
@@ -601,6 +643,19 @@ impl SeqLocsStore
         self.tree.load_tree(in_buf)
     }
 
+    #[cfg(feature = "async")]
+    /// Load up all SeqLocs from a file
+    pub async fn get_all_seqlocs(
+        &self,
+        in_buf: &mut tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>,
+    ) -> Result<(), &'static str>
+    {
+        log::info!("Prefetching SeqLocs");
+
+        self.tree.load_tree(in_buf).await
+    }
+
+    #[cfg(not(feature = "async"))]
     /// Get a particular SeqLoc from the store
     pub fn get_seqloc<R>(
         &mut self,
@@ -618,6 +673,17 @@ impl SeqLocsStore
         // u64)).unwrap(); let seqloc: SeqLoc =
         // bincode::decode_from_std_read(in_buf,
         // bincode_config).unwrap(); Ok(Some(seqloc))
+    }
+
+    #[cfg(feature = "async")]
+    /// Get a particular SeqLoc from the store
+    pub async fn get_seqloc(
+        &self,
+        in_buf: &mut tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>,
+        loc: u32,
+    ) -> Result<Option<SeqLoc>, &'static str>
+    {
+        Ok(self.tree.search(in_buf, &loc).await.clone())
     }
 }
 
@@ -778,6 +844,7 @@ mod tests
         assert_eq!(seqloc, decoded);
     }
 
+    #[cfg(not(feature = "async"))]
     #[test]
     pub fn encode_decode_seqlocstore()
     {

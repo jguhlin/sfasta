@@ -312,6 +312,70 @@ impl CompressionConfig
             }
         }
     }
+
+    #[cfg(feature = "async")]
+    pub async fn decompress_async(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error>
+    {
+        match self.compression_type {
+            CompressionType::ZSTD => {
+                ZSTD_DECOMPRESSOR.with_borrow_mut(|zstd_decompressor| {
+                    zstd_decompressor.decompress(bytes, MAX_DECOMPRESS_SIZE)
+                })
+            }
+            CompressionType::LZ4 => {
+                Ok(decompress_size_prepended(bytes).unwrap())
+            }
+            CompressionType::NONE => {
+                log::debug!("Decompress called for none, which involes copying bytes. Prefer not to use it!");
+                Ok(bytes.to_vec())
+            }
+            CompressionType::BROTLI => {
+                let mut output = Vec::with_capacity(bytes.len());
+                let mut decompressor =
+                    brotli::Decompressor::new(bytes, bytes.len());
+                decompressor
+                    .read_to_end(&mut output)
+                    .expect("Unable to decompress with Brotli");
+                Ok(output)
+            }
+            CompressionType::XZ => {
+                let mut output = Vec::with_capacity(bytes.len());
+                let mut decompressor = XzDecoder::new(bytes);
+                decompressor
+                    .read_to_end(&mut output)
+                    .expect("Unable to decompress with XZ");
+                Ok(output)
+            }
+            CompressionType::SNAPPY => {
+                let mut output = Vec::with_capacity(bytes.len());
+                let mut decompressor = snap::read::FrameDecoder::new(bytes);
+                decompressor
+                    .read_to_end(&mut output)
+                    .expect("Unable to decompress with Snappy");
+                Ok(output)
+            }
+            CompressionType::GZIP => {
+                let mut output = Vec::with_capacity(bytes.len());
+                let mut decompressor = flate2::read::GzDecoder::new(bytes);
+                decompressor
+                    .read_to_end(&mut output)
+                    .expect("Unable to decompress with GZIP");
+                Ok(output)
+            }
+            CompressionType::BZIP2 => {
+                let mut decompressor = bzip2::Decompress::new(false);
+                let mut output = Vec::with_capacity(bytes.len() * 8);
+                decompressor.decompress(bytes, &mut output).unwrap();
+                Ok(output)
+            }
+            _ => {
+                panic!(
+                    "Unsupported compression type: {:?}",
+                    self.compression_type
+                );
+            }
+        }
+    }
 }
 
 impl CompressionType

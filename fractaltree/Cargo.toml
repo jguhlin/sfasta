@@ -46,4 +46,4 @@ stream-vbyte = "0.4.1"
 
 [features]
 default = ["async"]
-async = ["tokio", "futures"]
+async = ["tokio", "futures", "compression/async"]

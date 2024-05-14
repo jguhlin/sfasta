@@ -17,6 +17,16 @@ use crate::parser::async_parser::{
     bincode_decode_from_buffer_async_with_size_hint,
 };
 
+#[cfg(feature = "async")]
+use bytes::{Bytes, BytesMut, BufMut};
+
+#[cfg(feature = "async")]
+use tokio::{
+    fs::File,
+    io::{AsyncSeekExt, BufReader},
+    sync::{OwnedRwLockWriteGuard, RwLock},
+};
+
 pub struct StringBlockStoreBuilder
 {
     inner: BytesBlockStoreBuilder,
@@ -149,6 +159,7 @@ pub struct StringBlockStore
 
 impl StringBlockStore
 {
+    #[cfg(not(feature = "async"))]
     pub fn from_buffer<R>(
         mut in_buf: &mut R,
         starting_pos: u64,
@@ -167,14 +178,13 @@ impl StringBlockStore
     }
 
     #[cfg(feature = "async")]
-    pub async fn from_buffer_async(
+    pub async fn from_buffer(
         mut in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
         starting_pos: u64,
     ) -> Result<Self, String>
     {
         let inner =
-            match BytesBlockStore::from_buffer_async(&mut in_buf, starting_pos)
-                .await
+            match BytesBlockStore::from_buffer(&mut in_buf, starting_pos).await
             {
                 Ok(inner) => inner,
                 Err(e) => return Err(e),
@@ -184,6 +194,7 @@ impl StringBlockStore
         Ok(store)
     }
 
+    #[cfg(not(feature = "async"))]
     // TODO: Needed?
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
     where
@@ -192,7 +203,17 @@ impl StringBlockStore
         self.inner.get_block(in_buf, block)
     }
 
-    // TODO: Needed?
+    #[cfg(feature = "async")]
+    pub async fn get_block(
+        &self,
+        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
+        block: u32,
+    ) -> Bytes
+    {
+        self.inner.get_block(in_buf, block).await
+    }
+
+    #[cfg(not(feature = "async"))]
     pub fn get_block_uncached<R>(
         &mut self,
         mut in_buf: &mut R,
@@ -204,12 +225,24 @@ impl StringBlockStore
         self.inner.get_block_uncached(&mut in_buf, block, buffer)
     }
 
-    // TODO: Should be fallible...
+    #[cfg(not(feature = "async"))]
+    // todo should be falliable
     pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
     where
         R: Read + Seek + Send + Sync,
     {
         let string_as_bytes = self.inner.get(in_buf, loc);
+        from_utf8(&string_as_bytes).unwrap().to_string()
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn get(
+        &self,
+        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
+        loc: &[Loc],
+    ) -> String
+    {
+        let string_as_bytes = self.inner.get(in_buf, loc).await;
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 

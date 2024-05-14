@@ -16,9 +16,10 @@ extern crate indicatif;
 extern crate rand;
 extern crate rand_chacha;
 
+use core::panic;
 use std::{
     fs::{self, File},
-    io::{BufReader, Read, Write},
+    io::{BufReader, Read, Write, IoSlice},
     path::Path,
 };
 
@@ -29,6 +30,8 @@ use clap::{Parser, Subcommand};
 use indicatif::{ProgressBar, ProgressStyle};
 
 use libsfasta::prelude::*;
+
+use std::collections::VecDeque;
 
 #[cfg(feature = "faidx-all")]
 mod faidx_all;
@@ -316,12 +319,8 @@ fn main()
     //
     // let in_buf = File::open(sfasta_filename).expect("Unable to open
     // file"); let sfasta =
-    // SfastaParser::open_from_buffer(BufReader::with_capacity(4 *
-    // 1024 * 1024, in_buf));
-    //
-    // let ids = matches.values_of("ids").unwrap();
-    // for i in ids {
-    // let results = sfasta
+    // SfastaParser::open_from_buffstdout.write_all(b">").unwrap();
+
     // .find(i)
     // .expect(&format!("Unable to find {} in file {}", i,
     // sfasta_filename)) .unwrap();
@@ -404,11 +403,11 @@ fn main()
 }
 
 #[inline]
-fn print_sequence(
-    stdout: &mut std::io::StdoutLock,
+fn print_sequence<W>(
+    stdout: &mut W,
     seq: &[u8],
     line_length: usize,
-)
+) where W: Write
 {
     let iter = seq.chunks_exact(line_length);
     let seq = iter.remainder();
@@ -421,6 +420,31 @@ fn print_sequence(
     stdout.write_all(b"\n").expect("Unable to write to stdout");
 }
 
+#[inline]
+fn ioslice_sequence(
+    seq: &[u8],
+    line_length: usize,
+) -> Vec<IoSlice<'_>> {
+    let mut slices = Vec::new();
+    let iter = seq.chunks_exact(line_length);
+    let remainder = iter.remainder();
+
+    for chunk in iter {
+        slices.push(IoSlice::new(chunk));
+        slices.push(IoSlice::new(b"\n"));
+    }
+
+    if !remainder.is_empty() {
+        slices.push(IoSlice::new(remainder));
+        slices.push(IoSlice::new(b"\n"));
+    }
+
+    slices
+}
+
+// time sfa faidx Vgerm.assembly.sfasta Chr1 Chr2 Chr3 Chr4 >
+// /dev/null is ~720-750ms (750ms most common)
+// with async down to 630-650ms
 // TODO: Subsequence support
 fn faidx(input: &str, ids: &Vec<String>)
 {
@@ -438,90 +462,139 @@ fn faidx(input: &str, ids: &Vec<String>)
     // Unable to build runtime");
 
     let sfasta_filename = input;
-    let mut sfasta = runtime
+    let sfasta = runtime
         .block_on(async move { open_from_file_async(sfasta_filename).await })
         .expect("Unable to open file");
 
-    let sfasta_filename = input;
-
-    let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-
-    #[cfg(unix)]
-    nix::fcntl::posix_fadvise(
-        in_buf.as_raw_fd(),
-        0,
-        0,
-        nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-    )
-    .expect("Fadvise Failed");
-
-    log::debug!("File opened: {}", sfasta_filename);
-
-    // let in_buf = File::open(sfasta_filename).expect("Unable to open
-    // file");
-    let mut sfasta =
-        sfasta.with_buffer(BufReader::with_capacity(64 * 1024, in_buf));
+    let sfasta = std::sync::Arc::new(sfasta);
+    let ids = std::sync::Arc::new(ids.clone());
 
     let stdout = std::io::stdout();
-    let mut stdout = stdout.lock();
+    let stdout = stdout.lock();
+    let mut stdout = std::io::BufWriter::new(stdout);
 
-    for i in ids {
-        let result = match sfasta.find(i) {
-            Ok(Some(x)) => x,
-            Ok(None) => panic!("No SeqLoc found"),
-            Err(_) => panic!("Unable to fetch seqloc"),
-        };
+    let mut results = Vec::with_capacity(ids.len());
 
-        let headers = result.get_headers();
-        let header = if result.has_headers() {
-            format!(
-                " {}",
-                sfasta.get_header(&headers).expect("Unable to fetch header")
-            )
-        } else {
-            "".to_string()
-        };
+    for i in 0..ids.len() {
+        let ids_clone = std::sync::Arc::clone(&ids);
+        let sfasta_clone = std::sync::Arc::clone(&sfasta);
 
-        write!(stdout, ">{}{}\n", i, header)
+        // Spawn the async task, ensuring that only the cloned Arc is used
+        let result = runtime.spawn(async move {
+            // Here, you only use the cloned Arc, which should be fine
+            let result = match sfasta_clone.find(&ids_clone[i]).await {
+                Ok(x) => x.expect("Unable to open SeqLoc"),
+                Err(_) => panic!("Unable to find sequence") // todo handle more gracefully
+            };
+
+            let headers = result.get_headers();
+            let header = if result.has_headers() {
+                let headers = headers.to_vec();
+                let sfasta_clone = std::sync::Arc::clone(&sfasta_clone);
+                Some(tokio::spawn(async move { sfasta_clone.get_header(&headers).await }))
+            } else {
+                None
+            };
+
+
+            let sequence = {
+                let sfasta_clone = std::sync::Arc::clone(&sfasta_clone);
+                tokio::spawn(async move {sfasta_clone.get_sequence(result.get_sequence(), result.get_masking()).await } )
+            };
+    
+
+            let header = match header {
+                Some(x) => x.await.unwrap().unwrap(),
+                None => String::new(),
+            };
+
+            (ids_clone[i].to_string(), header, sequence.await.unwrap().unwrap())
+        });
+        results.push(result);
+    }
+
+    for result in results.into_iter() {
+        let result = runtime.block_on(result).unwrap();
+
+        write!(stdout, ">{}{}\n", result.0, result.1)
             .expect("Unable to write to stdout");
 
-        let sequence = sfasta
-            .get_sequence(result.get_sequence(), result.get_masking())
-            .expect("Unable to fetch sequence");
-
-        print_sequence(&mut stdout, &sequence, 60);
+        print_sequence(&mut stdout, &result.2, 60);
         stdout.flush().expect("Unable to flush stdout buffer");
     }
 }
 
-// TODO: Line length as an argument
+// todo Line length as an argument
+// # threads as argument
+// todo fastq output
 fn view(input: &str)
 {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(16) // todo set from cli
+        .enable_all()
+        .build()
+        .unwrap();
+
     let sfasta_filename = input;
-
-    let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-
-    #[cfg(unix)]
-    nix::fcntl::posix_fadvise(
-        in_buf.as_raw_fd(),
-        0,
-        0,
-        nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-    )
-    .expect("Fadvise Failed");
-
-    let mut sfasta =
-        SfastaParser::open_from_buffer(BufReader::new(in_buf)).unwrap();
+    let sfasta = runtime
+        .block_on(async move { open_from_file_async(sfasta_filename).await })
+        .expect("Unable to open file");
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty or corrupt");
     }
 
-    let line_length = 80;
-
+    let len = runtime.block_on(sfasta.len());
+    log::debug!("Number of sequences: {}", len);
+    
+    let sfasta = std::sync::Arc::new(sfasta);
+    
     let stdout = std::io::stdout().lock();
     let mut stdout = std::io::BufWriter::new(stdout);
-    let common = b"> \n";
+    
+    let mut futures = VecDeque::new();
+    
+    // Preload the first 10 sequences
+    for index in 0..10 {
+        let sfasta_clone = std::sync::Arc::clone(&sfasta);
+        futures.push_back(runtime.spawn(async move {
+            sfasta_clone.get_sequence_by_index(index).await
+        }));
+    }
+    
+    let mut i = 10; // Starting index for the next sequence preload
+    
+    let newline = IoSlice::new(b"\n");
+    let space = IoSlice::new(b" ");
+    let prefix = IoSlice::new(b">");
+
+    while let Ok(Some(result)) = runtime.block_on(futures.pop_front().unwrap()).unwrap() {
+        let id = result.id.unwrap();
+
+        let mut bufs: Vec<IoSlice> = vec![prefix.clone(), IoSlice::new(&id)];
+    
+        let header = result.header;
+        if header.is_some() {
+            bufs.push(space.clone());
+            bufs.push(IoSlice::new(header.as_ref().unwrap()));
+        }
+    
+        bufs.push(newline.clone());
+    
+        bufs.extend(ioslice_sequence(&result.sequence.as_ref().unwrap(), 60));
+    
+        stdout.write_vectored(&bufs).expect("Unable to write to stdout");
+    
+        // Load the next sequence in advance
+        let sfasta_clone = std::sync::Arc::clone(&sfasta);
+        futures.push_back(runtime.spawn(async move {
+            sfasta_clone.get_sequence_by_index(i).await
+        }));
+        i += 1;
+        if i >= len {
+            break;
+        }
+    }
 
     // let seqlocs = sfasta.get_seqlocs().unwrap().unwrap().to_vec();
 
@@ -580,34 +653,31 @@ fn view(input: &str)
 
 fn list(input: &str)
 {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .worker_threads(8) // todo set from cli
+        .enable_all()
+        .build()
+        .unwrap();
+
     let sfasta_filename = input;
-
-    let in_buf = File::open(sfasta_filename).expect("Unable to open file");
-
-    #[cfg(unix)]
-    nix::fcntl::posix_fadvise(
-        in_buf.as_raw_fd(),
-        0,
-        0,
-        nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-    )
-    .expect("Fadvise Failed");
-
-    let in_buf = BufReader::new(in_buf);
-    let mut sfasta = SfastaParser::open_from_buffer(in_buf).unwrap();
+    let mut sfasta = runtime
+        .block_on(async move { open_from_file_async(sfasta_filename).await })
+        .expect("Unable to open file");
 
     if sfasta.seqlocs.is_none() {
         panic!("File is empty of corrupt");
     }
 
-    for i in 0..sfasta.len() {
-        let seqloc = match sfasta.get_seqloc(i) {
+    let len = runtime.block_on(sfasta.len());
+
+    for i in 0..len {
+        let seqloc = match runtime.block_on(sfasta.get_seqloc(i)) {
             Ok(Some(x)) => x,
             Ok(None) => panic!("No SeqLoc found"),
             Err(_) => panic!("Unable to fetch seqloc"),
         }
         .clone();
-        let id = &sfasta.get_id(seqloc.get_ids()).unwrap();
+        let id = runtime.block_on(sfasta.get_id(seqloc.get_ids())).unwrap();
         println!("{}", id);
     }
 }

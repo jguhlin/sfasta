@@ -19,8 +19,8 @@ use libcompression::*;
 
 // todo
 // make async
-// really hard to make async when recursion and needs mutable access to itself!
-// make need to be a whole new type
+// really hard to make async when recursion and needs mutable access
+// to itself! make need to be a whole new type
 // maybe make it a buffer type system? a channel or something?
 
 // todo: load_all use decompression

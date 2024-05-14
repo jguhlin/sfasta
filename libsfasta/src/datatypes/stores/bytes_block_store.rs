@@ -8,17 +8,28 @@ use std::{
     },
 };
 
+#[cfg(feature = "async")]
+use tokio::{
+    fs::File,
+    io::{AsyncSeekExt, BufReader},
+    sync::{OwnedRwLockWriteGuard, RwLock},
+};
+
+#[cfg(feature = "async")]
+use bytes::{Bytes, BytesMut, BufMut};
+
 use crossbeam::utils::Backoff;
 
 use super::Builder;
 use crate::datatypes::Loc;
 use libcompression::*;
-use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
+use libfractaltree::{FractalTreeBuild, FractalTreeDisk, FractalTreeDiskAsync};
 
 #[cfg(feature = "async")]
 use crate::parser::async_parser::{
     bincode_decode_from_buffer_async,
     bincode_decode_from_buffer_async_with_size_hint,
+    bincode_decode_from_buffer_async_with_size_hint_nc
 };
 
 // Implement some custom errors to return
@@ -474,12 +485,15 @@ impl BytesBlockStoreBuilder
 }
 
 /// This struct is for reading (and once finalized, writing)
-#[derive(Debug)]
 pub struct BytesBlockStore
 {
     /// Locations of the blocks in the file
     // todo: fractal tree for all blocks across all datatypes...
+    #[cfg(not(feature = "async"))]
     pub block_locations: FractalTreeDisk<u32, u64>,
+
+    #[cfg(feature = "async")]
+    pub block_locations: FractalTreeDiskAsync<u32, u64>,
 
     /// Locations of the block index (Where the serialized
     /// block_locations is stored)
@@ -494,11 +508,16 @@ pub struct BytesBlockStore
     pub data: Option<Vec<u8>>, // Used for writing and reading...
 
     /// Cache of the last block to speed up accesses
+    #[cfg(not(feature = "async"))]
     cache: Option<(u32, Vec<u8>)>,
+
+    #[cfg(feature = "async")]
+    cache: Arc<AsyncLRU>,
 }
 
 impl BytesBlockStore
 {
+    #[cfg(not(feature = "async"))]
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
     where
         R: Read + Seek + Send + Sync,
@@ -518,6 +537,43 @@ impl BytesBlockStore
         }
     }
 
+    #[cfg(feature = "async")]
+    pub async fn get_block(
+        &self,
+        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
+        block: u32,
+    ) -> Bytes
+    {
+        if let Some(stored) = self.cache.get(block).await {
+            return stored;
+        }
+
+        let bincode_config_fixed = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 256 * 1024 * 1024 }>(); // 256 MB is max limit TODO: Enforce elsewhere too
+
+        let block_location =
+            self.block_locations.search(in_buf, &block).await.unwrap();
+
+        in_buf.seek(SeekFrom::Start(block_location)).await.unwrap();
+        let compressed_block: Vec<u8> =
+            bincode_decode_from_buffer_async_with_size_hint_nc(in_buf, bincode_config_fixed, self.block_size as usize)
+            .await
+            .unwrap();
+
+        // todo unnecessary allocations, also should be async
+        // Copy this Vec<u8> into the buffer
+        // Lengths may be different
+        let decompressed = self
+            .compression_config
+            .decompress_async(&compressed_block)
+            .await
+            .unwrap();
+
+        self.cache.add(block, decompressed.clone()).await
+    }
+
+    #[cfg(not(feature = "async"))]
     pub fn get_block_uncached<R>(
         &mut self,
         mut in_buf: &mut R,
@@ -549,6 +605,7 @@ impl BytesBlockStore
         buffer[..decompressed.len()].copy_from_slice(&decompressed);
     }
 
+    #[cfg(not(feature = "async"))]
     pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> Vec<u8>
     where
         R: Read + Seek + Send + Sync,
@@ -593,6 +650,29 @@ impl BytesBlockStore
         result
     }
 
+    #[cfg(feature = "async")]
+    pub async fn get(
+        &self,
+        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
+        loc: &[Loc],
+    ) -> Vec<u8>
+    {
+        let block_size = self.block_size as u32;
+
+        // Calculate length from Loc
+        let mut result = Vec::new();
+        for l in loc.iter().map(|x| x) {
+            let block = self.get_block(in_buf, l.block).await;
+
+            debug_assert!(l.start + l.len <= block_size);
+
+            let end = l.start as usize + l.len as usize;
+
+            result.extend_from_slice(&block[l.start as usize..end]);
+        }
+        result
+    }
+
     pub fn get_loaded(&self, loc: &[Loc]) -> Vec<u8>
     {
         let mut result = Vec::with_capacity(64);
@@ -616,6 +696,7 @@ impl BytesBlockStore
         result
     }
 
+    #[cfg(not(feature = "async"))]
     /// Read header from a buffer into a BytesBlockStore
     pub fn from_buffer<R>(
         mut in_buf: &mut R,
@@ -653,34 +734,24 @@ impl BytesBlockStore
         })
     }
 
-    /// Read header from a buffer into a BytesBlockStore
     #[cfg(feature = "async")]
-    pub async fn from_buffer_async(
-        mut in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+    /// Read header from a buffer into a BytesBlockStore
+    pub async fn from_buffer(
+        mut in_buf: &mut BufReader<File>,
         starting_pos: u64,
     ) -> Result<Self, String>
     {
-        use tokio::io::AsyncSeekExt;
-
-        const SIZE_HINT: usize = std::mem::size_of::<CompressionConfig>()
-            + std::mem::size_of::<u64>()
-            + std::mem::size_of::<u32>();
-
         let bincode_config = bincode::config::standard()
             .with_variable_int_encoding()
-            .with_limit::<SIZE_HINT>();
+            .with_limit::<8192>();
 
-        in_buf
-            .seek(SeekFrom::Start(starting_pos))
-            .await
-            .expect("Seek failed");
-
+        in_buf.seek(SeekFrom::Start(starting_pos)).await.unwrap();
         let (compression_config, block_locations_pos, block_size) =
             match bincode_decode_from_buffer_async_with_size_hint::<
-                SIZE_HINT,
+                { 64 * 1024 },
                 _,
                 _,
-            >(&mut in_buf, bincode_config)
+            >(in_buf, bincode_config)
             .await
             {
                 Ok(x) => x,
@@ -689,25 +760,19 @@ impl BytesBlockStore
                 }
             };
 
-        let block_locations: FractalTreeDisk<u32, u64> =
-            match FractalTreeDisk::from_buffer_async(
-                &mut in_buf,
-                block_locations_pos,
-            )
-            .await
-            {
-                Ok(x) => x,
-                Err(e) => {
-                    return Err(format!("Error decoding block store: {e}"))
-                }
-            };
+        // assert!(block_locations_pos > 0);
+
+        let block_locations: FractalTreeDiskAsync<u32, u64> =
+            FractalTreeDiskAsync::from_buffer(&mut in_buf, block_locations_pos)
+                .await
+                .unwrap();
 
         Ok(BytesBlockStore {
             block_locations,
             block_locations_pos,
             block_size,
             data: None,
-            cache: None,
+            cache: Arc::new(AsyncLRU::new(32)), // Small, because it's unlikely to reuse many blocks
             compression_config,
         })
     }
@@ -716,6 +781,100 @@ impl BytesBlockStore
     {
         self.block_size as usize
     }
+}
+
+#[cfg(feature = "async")]
+/// For storing blocks, based off of block number, so (block, Vec<u8>)
+/// 
+/// This is used for storing blocks in memory, so that we can
+/// quickly access them without having to read from disk each time.
+/// 
+/// This is used in the async version of BytesBlockStore.
+/// 
+/// When size is exceeded, removes the least recently used block.
+/// 
+/// Has RwLock for thread safety (assuming tokio async)
+struct AsyncLRU
+{
+    /// Maximum size of the LRU
+    max_size: usize,
+
+    /// The LRU itself, stored as vec so we can just iterate through...
+    lru: Arc<RwLock<Vec<(u32, Bytes)>>>,
+
+    /// The order of the LRU
+    order: Arc<RwLock<std::collections::VecDeque<u32>>>,
+}
+
+#[cfg(feature = "async")]
+impl AsyncLRU
+{
+    /// Create a new LRU with a maximum size
+    pub fn new(max_size: usize) -> Self
+    {
+        AsyncLRU {
+            max_size,
+            lru: Arc::new(RwLock::new(Vec::new())),
+            order: Arc::new(RwLock::new(std::collections::VecDeque::new())),
+        }
+    }
+
+    /// Get a block from the LRU
+    /// If not found, return None (another function handles adding to the cache)
+    pub async fn get(
+        &self,
+        block: u32,
+    ) -> Option<Bytes>
+    {
+        let lru = self.lru.read().await;
+
+        // Check if the block is in the LRU
+        for (b, data) in lru.iter() {
+            if *b == block {
+                // Move the block to the front of the LRU
+                let mut order = self.order.write().await;
+                order.retain(|x| *x != block);
+                order.push_front(block);
+
+                return Some(data.clone());
+            }
+        }
+
+        None
+    }
+
+    /// Add a block to the LRU
+    pub async fn add(
+        &self,
+        block: u32,
+        data: Vec<u8>,
+    ) -> Bytes
+    {
+        let mut lru = self.lru.write().await;
+        let mut order = self.order.write().await;
+
+        // If the block is already in the LRU, move it to the front
+        for (b, data) in lru.iter() {
+            if *b == block {
+                order.retain(|x| *x != block);
+                order.push_front(block);
+                return data.clone();
+            }
+        }
+
+        // If the LRU is full, remove the least recently used block
+        if lru.len() >= self.max_size {
+            let lru_block = order.pop_back().unwrap();
+            lru.retain(|x| x.0 != lru_block);
+        }
+
+        // Add the block to the LRU
+        let data = Bytes::from(data);
+        lru.push((block, data.clone()));
+        order.push_front(block);
+        data
+    }
+    
 }
 
 // TODO: More tests

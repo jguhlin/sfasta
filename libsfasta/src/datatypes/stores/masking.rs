@@ -19,6 +19,13 @@ use crate::parser::async_parser::{
     bincode_decode_from_buffer_async_with_size_hint,
 };
 
+#[cfg(feature = "async")]
+use tokio::{
+    fs::File,
+    io::{AsyncSeekExt, BufReader},
+    sync::{OwnedRwLockWriteGuard, RwLock},
+};
+
 use pulp::Arch;
 
 pub struct MaskingStoreBuilder
@@ -160,6 +167,7 @@ pub struct Masking
 
 impl Masking
 {
+    #[cfg(not(feature = "async"))]
     pub fn from_buffer<R>(
         mut in_buf: &mut R,
         starting_pos: u64,
@@ -172,23 +180,17 @@ impl Masking
     }
 
     #[cfg(feature = "async")]
-    pub async fn from_buffer_async(
-        mut in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+    pub async fn from_buffer(
+        in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
         starting_pos: u64,
     ) -> Result<Self, String>
     {
-        let inner =
-            match BytesBlockStore::from_buffer_async(&mut in_buf, starting_pos)
-                .await
-            {
-                Ok(inner) => inner,
-                Err(e) => return Err(e),
-            };
+        let inner = BytesBlockStore::from_buffer(in_buf, starting_pos).await?;
 
-        let store = Masking { inner };
-        Ok(store)
+        Ok(Masking { inner })
     }
 
+    #[cfg(not(feature = "async"))]
     /// Masks the sequence in place
     pub fn mask_sequence<R>(
         &mut self,
@@ -212,6 +214,30 @@ impl Masking
             }
         })
     }
+
+    #[cfg(feature = "async")]
+    /// Masks the sequence in place
+    pub async fn mask_sequence(
+        &self,
+        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
+        loc: &[Loc],
+        seq: &mut [u8],
+    )
+    {
+        let arch = Arch::new();
+
+        let mask_raw = self.inner.get(in_buf, loc).await;
+
+        arch.dispatch(|| {
+            for (i, m) in mask_raw.iter().enumerate() {
+                seq[i] = if *m == 1 {
+                    seq[i].to_ascii_lowercase()
+                } else {
+                    seq[i]
+                };
+            }
+        });
+    }
 }
 
 #[cfg(test)]
@@ -234,6 +260,7 @@ mod tests
         );
     }
 
+    #[cfg(not(feature = "async"))]
     #[test]
     fn test_masking()
     {

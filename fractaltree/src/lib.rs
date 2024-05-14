@@ -3,13 +3,20 @@
 
 pub mod build;
 pub mod conversion;
-pub mod disk;
 pub mod fractal;
 
-use std::ops::{AddAssign, SubAssign};
+pub mod disk;
+
+#[cfg(feature = "async")]
+pub mod disk_async;
+
+#[cfg(feature = "async")]
+pub use disk_async::*;
 
 pub use build::*;
 pub use disk::*;
+
+use std::ops::{AddAssign, SubAssign};
 
 use bincode::{Decode, Encode};
 

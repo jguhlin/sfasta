@@ -532,6 +532,7 @@ mod tests
         }
     }
 
+    #[cfg(not(feature = "async"))]
     #[test]
     fn search_noderead()
     {

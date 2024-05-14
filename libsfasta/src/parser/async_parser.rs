@@ -1,6 +1,4 @@
-// todo scores
-
-use std::{
+ use std::{
     io::{BufReader, Read, Seek},
     sync::Arc,
 };
@@ -11,13 +9,13 @@ use tokio::io::{
 };
 
 use crate::{datatypes::*, formats::*};
-use libfractaltree::FractalTreeDisk;
+use libfractaltree::FractalTreeDiskAsync;
 
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 
 // note: this is SLOWER than the sequential version
-// 22ms vs 15ms
+// 22ms vs 15msg
 // but 14ms using single thread mode
 // UPDATE: Down to 14-15ms by loading the filehandles earlier...
 const SFASTA_MARKER: &[u8; 6] = b"sfasta";
@@ -41,7 +39,8 @@ pub async fn open_from_file_async<'sfa>(
     let file_handles = tokio::spawn(async move {
         let mut file_handles = Vec::new();
         for _ in 0..6 {
-            let file = tokio::fs::File::open(file_name2.as_str()).await.unwrap();
+            let file =
+                tokio::fs::File::open(file_name2.as_str()).await.unwrap();
 
             #[cfg(unix)]
             {
@@ -128,29 +127,28 @@ pub async fn open_from_file_async<'sfa>(
     let fh = file_handles.pop().unwrap();
     let seqlocs = tokio::spawn(async move {
         let mut in_buf = fh;
-        let seqlocs: Option<SeqLocsStore> =
-            match SeqLocsStore::from_existing_async(
-                directory.seqlocs_loc.unwrap().get(),
-                &mut in_buf,
-            )
-            .await
-            {
-                Ok(x) => Some(x),
-                Err(x) => {
-                    return Result::Err(format!(
-                        "Invalid buffer. Failed to read seqlocs. {x}"
-                    ))
-                }
-            };
+        let seqlocs = match SeqLocsStore::from_existing(
+            directory.seqlocs_loc.unwrap().get(),
+            &mut in_buf,
+        )
+        .await
+        {
+            Ok(x) => Some(Arc::new(x)),
+            Err(x) => {
+                return Result::Err(format!(
+                    "Invalid buffer. Failed to read seqlocs. {x}"
+                ))
+            }
+        };
         Ok(seqlocs)
     });
 
     let fh = file_handles.pop().unwrap();
     let index = tokio::spawn(async move {
-        let index: Option<FractalTreeDisk<u32, u32>> =
+        let index: Option<FractalTreeDiskAsync<u32, u32>> =
             if directory.index_loc.is_some() {
                 let mut in_buf = fh;
-                match FractalTreeDisk::from_buffer_async(
+                match FractalTreeDiskAsync::from_buffer(
                     &mut in_buf,
                     directory.index_loc.unwrap().get(),
                 )
@@ -173,13 +171,13 @@ pub async fn open_from_file_async<'sfa>(
     let sequenceblocks = tokio::spawn(async move {
         let sequenceblocks = if directory.sequences_loc.is_some() {
             let mut in_buf = fh;
-            match BytesBlockStore::from_buffer_async(
+            match BytesBlockStore::from_buffer(
                 &mut in_buf,
                 directory.sequences_loc.unwrap().get(),
             )
             .await
             {
-                Ok(x) => Some(x),
+                Ok(x) => Some(Arc::new(x)),
                 Err(x) => {
                     return Result::Err(format!(
                         "Invalid buffer. Failed to read sequenceblocks. {x}"
@@ -196,13 +194,13 @@ pub async fn open_from_file_async<'sfa>(
     let ids = tokio::spawn(async move {
         let ids = if directory.ids_loc.is_some() {
             let mut in_buf = fh;
-            match StringBlockStore::from_buffer_async(
+            match StringBlockStore::from_buffer(
                 &mut in_buf,
                 directory.ids_loc.unwrap().get(),
             )
             .await
             {
-                Ok(x) => Some(x),
+                Ok(x) => Some(Arc::new(x)),
                 Err(x) => {
                     return Result::Err(format!(
                         "Invalid buffer. Failed to read ids. {x}"
@@ -219,13 +217,13 @@ pub async fn open_from_file_async<'sfa>(
     let headers = tokio::spawn(async move {
         let headers = if directory.headers_loc.is_some() {
             let mut in_buf = fh;
-            match StringBlockStore::from_buffer_async(
+            match StringBlockStore::from_buffer(
                 &mut in_buf,
                 directory.headers_loc.unwrap().get(),
             )
             .await
             {
-                Ok(x) => Some(x),
+                Ok(x) => Some(Arc::new(x)),
                 Err(x) => {
                     return Result::Err(format!(
                         "Invalid buffer. Failed to read headers. {x}"
@@ -242,13 +240,13 @@ pub async fn open_from_file_async<'sfa>(
     let masking = tokio::spawn(async move {
         let masking = if directory.masking_loc.is_some() {
             let mut in_buf = fh;
-            match Masking::from_buffer_async(
+            match Masking::from_buffer(
                 &mut in_buf,
                 directory.masking_loc.unwrap().get(),
             )
             .await
             {
-                Ok(x) => Some(x),
+                Ok(x) => Some(Arc::new(x)),
                 Err(x) => {
                     return Result::Err(format!(
                         "Invalid buffer. Failed to read masking. {x}"
@@ -269,7 +267,8 @@ pub async fn open_from_file_async<'sfa>(
     let file_handles = tokio::spawn(async move {
         let mut file_handles = Vec::new();
         for _ in 0..4 {
-            let file = tokio::fs::File::open(file_name2.as_str()).await.unwrap();
+            let file =
+                tokio::fs::File::open(file_name2.as_str()).await.unwrap();
 
             #[cfg(unix)]
             {
@@ -284,7 +283,8 @@ pub async fn open_from_file_async<'sfa>(
 
             let file = tokio::io::BufReader::with_capacity(64 * 1024, file);
 
-            file_handles.push(std::sync::Arc::new(tokio::sync::RwLock::new(file)));
+            file_handles
+                .push(std::sync::Arc::new(tokio::sync::RwLock::new(file)));
         }
 
         file_handles
@@ -311,7 +311,10 @@ pub async fn open_from_file_async<'sfa>(
         masking,
         sequences: sequenceblocks,
         file: Some(file.to_string()),
-        file_handles: Some(Arc::new(tokio::sync::RwLock::new(file_handles.await.unwrap()))),
+        file_handles: Arc::new(AsyncFileHandleManager {
+            file_handles: Some(Arc::new(tokio::sync::RwLock::new(file_handles.await.unwrap()))),
+            file_name: Some(file.to_string()),
+        }),
         ..Default::default()
     })
 
@@ -348,7 +351,7 @@ where
 
                 in_buf.read(&mut buf[orig_length..]).await.unwrap();
 
-                if doubled > 16 * 1024 * 1024 {
+                if doubled > 256 * 1024 * 1024 {
                     return Result::Err("Failed to decode bincode".to_string());
                 }
             }
@@ -356,7 +359,7 @@ where
     }
 }
 
-// todo curry size_hint as const
+// todo need a non-const version with size hint
 pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<
     const SIZE_HINT: usize,
     T,
@@ -385,7 +388,43 @@ where
 
                 in_buf.read(&mut buf[orig_length..]).await.unwrap();
 
-                if doubled > 16 * 1024 * 1024 {
+                if doubled > 256 * 1024 * 1024 {
+                    return Result::Err(
+                        "Failed to decode bincode - Max size reached"
+                            .to_string(),
+                    );
+                }
+            }
+        }
+    }
+}
+
+pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint_nc<T, C>(
+    in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+    bincode_config: C,
+    size_hint: usize,
+) -> Result<T, String>
+where
+    T: bincode::Decode,
+    C: bincode::config::Config,
+{
+    let mut buf = vec![0; size_hint];
+    in_buf.read(&mut buf).await.unwrap();
+
+    loop {
+        match bincode::decode_from_slice(&buf, bincode_config) {
+            Ok(x) => {
+                return Ok(x.0);
+            }
+            Err(_) => {
+                let orig_length = buf.len();
+                let doubled = buf.len() * 2;
+
+                buf.resize(doubled, 0);
+
+                in_buf.read(&mut buf[orig_length..]).await.unwrap();
+
+                if doubled > 256 * 1024 * 1024 {
                     return Result::Err(
                         "Failed to decode bincode - Max size reached"
                             .to_string(),
