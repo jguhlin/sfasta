@@ -220,9 +220,9 @@ impl SeqLoc
     }
 
     #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize
+    pub fn seq_len(&self) -> usize
     {
-        self.locs.iter().map(|loc| loc.len as usize).sum()
+        self.get_sequence().iter().map(|loc| loc.len as usize).sum()
     }
 
     // Convert Vec of Locs to the ranges of the sequence...
@@ -550,19 +550,19 @@ impl SeqLocsStore
     #[cfg(feature = "async")]
     /// Prefetch the SeqLocs index into memory. Speeds up successive
     /// access, but can be a hefty one-time cost for large files.
+    #[tracing::instrument(skip(self, in_buf))]
     pub async fn prefetch(
         &self,
-        in_buf: &mut tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>,
+        in_buf: &mut tokio::sync::OwnedMutexGuard<
+            tokio::io::BufReader<tokio::fs::File>,
+        >,
     )
     {
         self.get_all_seqlocs(in_buf)
             .await
             .expect("Unable to Prefetch All SeqLocs");
 
-        log::info!(
-            "Prefetched {} seqlocs",
-            self.tree.len().await.unwrap()
-        );
+        log::info!("Prefetched {} seqlocs", self.tree.len().await.unwrap());
     }
 
     #[cfg(not(feature = "async"))]
@@ -579,9 +579,12 @@ impl SeqLocsStore
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self, in_buf))]
     pub async fn len(
         &self,
-        in_buf: &mut tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>,
+        in_buf: &mut tokio::sync::OwnedMutexGuard<
+            tokio::io::BufReader<tokio::fs::File>,
+        >,
     ) -> usize
     {
         if !self.preloaded {
@@ -610,12 +613,14 @@ impl SeqLocsStore
 
     /// Get SeqLoc object from a file (buffer)
     #[cfg(feature = "async")]
+    #[tracing::instrument]
     pub async fn from_existing(
+        filename: String,
         pos: u64,
-        in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     ) -> Result<Self, String>
     {
-        let tree = match FractalTreeDiskAsync::from_buffer_async(in_buf, pos).await {
+        let tree = match FractalTreeDiskAsync::from_buffer(filename, pos).await
+        {
             Ok(tree) => tree,
             Err(e) => return Err(e.to_string()),
         };
@@ -645,14 +650,17 @@ impl SeqLocsStore
 
     #[cfg(feature = "async")]
     /// Load up all SeqLocs from a file
+    #[tracing::instrument(skip(self, in_buf))]
     pub async fn get_all_seqlocs(
         &self,
-        in_buf: &mut tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>,
+        in_buf: &mut tokio::sync::OwnedMutexGuard<
+            tokio::io::BufReader<tokio::fs::File>,
+        >,
     ) -> Result<(), &'static str>
     {
         log::info!("Prefetching SeqLocs");
 
-        self.tree.load_tree(in_buf).await
+        self.tree.load_tree().await
     }
 
     #[cfg(not(feature = "async"))]
@@ -677,13 +685,13 @@ impl SeqLocsStore
 
     #[cfg(feature = "async")]
     /// Get a particular SeqLoc from the store
+    #[tracing::instrument(skip(self))]
     pub async fn get_seqloc(
         &self,
-        in_buf: &mut tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>,
         loc: u32,
     ) -> Result<Option<SeqLoc>, &'static str>
     {
-        Ok(self.tree.search(in_buf, &loc).await.clone())
+        Ok(self.tree.search(&loc).await.clone())
     }
 }
 

@@ -34,9 +34,12 @@ pub trait Key = 'static
     + num::traits::Unsigned
     + Copy
     + SubAssign
-    + AddAssign;
+    + AddAssign
+    + Send
+    + Sync;
 
-pub trait Value = 'static + std::fmt::Debug + Encode + Decode + Clone;
+pub trait Value =
+    'static + std::fmt::Debug + Encode + Decode + Clone + Send + Sync;
 
 #[cfg(test)]
 mod test

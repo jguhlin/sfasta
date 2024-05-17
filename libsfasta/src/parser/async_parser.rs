@@ -1,4 +1,4 @@
- use std::{
+use std::{
     io::{BufReader, Read, Seek},
     sync::Arc,
 };
@@ -7,6 +7,8 @@ use tokio::io::{
     AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeek,
     AsyncSeekExt,
 };
+
+use tokio::task::spawn_blocking;
 
 use crate::{datatypes::*, formats::*};
 use libfractaltree::FractalTreeDiskAsync;
@@ -25,6 +27,7 @@ const FULL_HEADER_SIZE: usize =
 /// Open a SFASTA file from a filename.
 ///
 /// Multiple threads are used to read the file.
+#[tracing::instrument]
 pub async fn open_from_file_async<'sfa>(
     file: &str,
 ) -> Result<Sfasta<'sfa>, String>
@@ -33,7 +36,6 @@ pub async fn open_from_file_async<'sfa>(
     let file = file.to_string();
     let file = std::sync::Arc::new(file);
 
-    let file_name: Arc<String> = Arc::clone(&file);
     // Open up 6 file handles (one per task)
     let file_name2 = Arc::clone(&file);
     let file_handles = tokio::spawn(async move {
@@ -124,12 +126,11 @@ pub async fn open_from_file_async<'sfa>(
     // Preload the seqlocs and index
 
     // Now that the main checks are out of the way, switch to async mode
-    let fh = file_handles.pop().unwrap();
+    let filename = file.to_string();
     let seqlocs = tokio::spawn(async move {
-        let mut in_buf = fh;
         let seqlocs = match SeqLocsStore::from_existing(
+            filename,
             directory.seqlocs_loc.unwrap().get(),
-            &mut in_buf,
         )
         .await
         {
@@ -143,13 +144,12 @@ pub async fn open_from_file_async<'sfa>(
         Ok(seqlocs)
     });
 
-    let fh = file_handles.pop().unwrap();
+    let filename = file.to_string();
     let index = tokio::spawn(async move {
         let index: Option<FractalTreeDiskAsync<u32, u32>> =
             if directory.index_loc.is_some() {
-                let mut in_buf = fh;
                 match FractalTreeDiskAsync::from_buffer(
-                    &mut in_buf,
+                    filename,
                     directory.index_loc.unwrap().get(),
                 )
                 .await
@@ -167,12 +167,14 @@ pub async fn open_from_file_async<'sfa>(
         Ok(index)
     });
 
+    let filename = file.to_string();
     let fh = file_handles.pop().unwrap();
     let sequenceblocks = tokio::spawn(async move {
         let sequenceblocks = if directory.sequences_loc.is_some() {
             let mut in_buf = fh;
             match BytesBlockStore::from_buffer(
                 &mut in_buf,
+                filename,
                 directory.sequences_loc.unwrap().get(),
             )
             .await
@@ -190,12 +192,14 @@ pub async fn open_from_file_async<'sfa>(
         Ok(sequenceblocks)
     });
 
+    let filename = file.to_string();
     let fh = file_handles.pop().unwrap();
     let ids = tokio::spawn(async move {
         let ids = if directory.ids_loc.is_some() {
             let mut in_buf = fh;
             match StringBlockStore::from_buffer(
                 &mut in_buf,
+                filename,
                 directory.ids_loc.unwrap().get(),
             )
             .await
@@ -213,12 +217,14 @@ pub async fn open_from_file_async<'sfa>(
         Ok(ids)
     });
 
+    let filename = file.to_string();
     let fh = file_handles.pop().unwrap();
     let headers = tokio::spawn(async move {
         let headers = if directory.headers_loc.is_some() {
             let mut in_buf = fh;
             match StringBlockStore::from_buffer(
                 &mut in_buf,
+                filename,
                 directory.headers_loc.unwrap().get(),
             )
             .await
@@ -236,12 +242,14 @@ pub async fn open_from_file_async<'sfa>(
         Ok(headers)
     });
 
+    let filename = file.to_string();
     let fh = file_handles.pop().unwrap();
     let masking = tokio::spawn(async move {
         let masking = if directory.masking_loc.is_some() {
             let mut in_buf = fh;
             match Masking::from_buffer(
                 &mut in_buf,
+                filename,
                 directory.masking_loc.unwrap().get(),
             )
             .await
@@ -281,18 +289,22 @@ pub async fn open_from_file_async<'sfa>(
                 .expect("Fadvise Failed");
             }
 
-            let file = tokio::io::BufReader::with_capacity(64 * 1024, file);
+            let file = tokio::io::BufReader::with_capacity(128 * 1024, file);
 
             file_handles
-                .push(std::sync::Arc::new(tokio::sync::RwLock::new(file)));
+                .push(std::sync::Arc::new(tokio::sync::Mutex::new(file)));
         }
 
         file_handles
     });
 
+    log::trace!("Waiting for async tasks to finish");
+
     let (seqlocs, index, headers, ids, masking, sequenceblocks) =
         tokio::try_join!(seqlocs, index, headers, ids, masking, sequenceblocks)
             .expect("Failed to join async tasks");
+
+    log::trace!("Finished waiting for async tasks to finish");
 
     let seqlocs = seqlocs.unwrap();
     let index = index.unwrap();
@@ -300,6 +312,8 @@ pub async fn open_from_file_async<'sfa>(
     let ids = ids.unwrap();
     let masking = masking.unwrap();
     let sequenceblocks = sequenceblocks.unwrap();
+
+    log::trace!("Finished reading file: {file}");
 
     Ok(Sfasta {
         version,
@@ -312,7 +326,9 @@ pub async fn open_from_file_async<'sfa>(
         sequences: sequenceblocks,
         file: Some(file.to_string()),
         file_handles: Arc::new(AsyncFileHandleManager {
-            file_handles: Some(Arc::new(tokio::sync::RwLock::new(file_handles.await.unwrap()))),
+            file_handles: Some(Arc::new(tokio::sync::RwLock::new(
+                file_handles.await.unwrap(),
+            ))),
             file_name: Some(file.to_string()),
         }),
         ..Default::default()
@@ -325,6 +341,7 @@ pub async fn open_from_file_async<'sfa>(
 // Keep reading the buffer until we can do a proper decode
 // This is a hack to work around the fact that bincode doesn't support
 // tokio
+#[tracing::instrument(skip(bincode_config))]
 pub(crate) async fn bincode_decode_from_buffer_async<T>(
     in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     bincode_config: bincode::config::Configuration,
@@ -360,6 +377,7 @@ where
 }
 
 // todo need a non-const version with size hint
+#[tracing::instrument(skip(bincode_config))]
 pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<
     const SIZE_HINT: usize,
     T,
@@ -399,6 +417,7 @@ where
     }
 }
 
+#[tracing::instrument(skip(bincode_config))]
 pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint_nc<T, C>(
     in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     bincode_config: C,

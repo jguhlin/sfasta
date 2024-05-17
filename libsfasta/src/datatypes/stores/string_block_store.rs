@@ -7,7 +7,7 @@ use simdutf8::basic::from_utf8;
 
 use super::Builder;
 use crate::datatypes::{
-    BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc,
+    BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, DataOrLater, Loc,
 };
 use libcompression::*;
 
@@ -18,7 +18,7 @@ use crate::parser::async_parser::{
 };
 
 #[cfg(feature = "async")]
-use bytes::{Bytes, BytesMut, BufMut};
+use bytes::{BufMut, Bytes, BytesMut};
 
 #[cfg(feature = "async")]
 use tokio::{
@@ -178,17 +178,23 @@ impl StringBlockStore
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(in_buf))]
     pub async fn from_buffer(
         mut in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+        filename: String,
         starting_pos: u64,
     ) -> Result<Self, String>
     {
-        let inner =
-            match BytesBlockStore::from_buffer(&mut in_buf, starting_pos).await
-            {
-                Ok(inner) => inner,
-                Err(e) => return Err(e),
-            };
+        let inner = match BytesBlockStore::from_buffer(
+            &mut in_buf,
+            filename,
+            starting_pos,
+        )
+        .await
+        {
+            Ok(inner) => inner,
+            Err(e) => return Err(e),
+        };
 
         let store = StringBlockStore { inner };
         Ok(store)
@@ -204,13 +210,17 @@ impl StringBlockStore
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self, in_buf))]
     pub async fn get_block(
         &self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
+        in_buf: &mut tokio::sync::OwnedMutexGuard<BufReader<File>>,
         block: u32,
     ) -> Bytes
     {
-        self.inner.get_block(in_buf, block).await
+        match self.inner.get_block(in_buf, block).await {
+            DataOrLater::Data(data) => data,
+            DataOrLater::Later(data) => data.await.unwrap(),
+        }
     }
 
     #[cfg(not(feature = "async"))]
@@ -236,14 +246,16 @@ impl StringBlockStore
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self, in_buf))]
     pub async fn get(
         &self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
+        in_buf: &mut tokio::sync::OwnedMutexGuard<BufReader<File>>,
         loc: &[Loc],
-    ) -> String
+    ) -> Bytes
     {
-        let string_as_bytes = self.inner.get(in_buf, loc).await;
-        from_utf8(&string_as_bytes).unwrap().to_string()
+        self.inner.get(in_buf, loc).await
+        // string_as_bytes = self.inner.get(in_buf, loc).await
+        // from_utf8(&string_as_bytes).unwrap().to_string()
     }
 
     pub fn get_loaded(&self, loc: &[Loc]) -> String

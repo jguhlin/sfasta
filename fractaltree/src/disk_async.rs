@@ -12,8 +12,11 @@ use tokio::{
         AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt,
         BufReader, SeekFrom,
     },
-    sync::{OwnedRwLockWriteGuard, OwnedRwLockReadGuard, RwLock},
+    sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock, Mutex, OwnedMutexGuard},
 };
+
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
 
 use crate::*;
 use libcompression::*;
@@ -22,59 +25,16 @@ use libcompression::*;
 ///
 /// The root node is loaded with the fractal tree, but children are
 /// loaded on demand
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct FractalTreeDiskAsync<K: Key, V: Value>
 {
     pub root: Arc<RwLock<NodeDiskAsync<K, V>>>,
     pub start: u64, /* On disk position of the fractal tree, such that
                      * all locations are start + offset */
-    pub compression: Option<CompressionConfig>,
+    pub compression: Arc<Option<CompressionConfig>>,
     pub file_handles: Arc<RwLock<Vec<Arc<RwLock<BufReader<File>>>>>>,
     pub file: Option<String>,
-}
-
-impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
-{
-    pub async fn get_filehandle(&self)
-        -> OwnedRwLockWriteGuard<BufReader<File>>
-    {
-        let file_handles = Arc::clone(&self.file_handles);
-
-        loop {
-            let file_handles_read = file_handles.read().await;
-
-            // Loop through each until we find one that is not locked
-            for file_handle in file_handles_read.iter() {
-                let file_handle = Arc::clone(file_handle);
-                let file_handle = file_handle.try_write_owned();
-                if let Ok(file_handle) = file_handle {
-                    return file_handle;
-                }
-            }
-
-            if file_handles_read.len() < 128 {
-                // There are no available file handles, so we need to create a
-                // new one and the number isn't crazy (yet)
-                break;
-            }
-
-            drop(file_handles_read);
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
-        }
-
-        // Otherwise, create one and add it to the list
-        let file = tokio::fs::File::open(self.file.as_ref().unwrap())
-            .await
-            .unwrap();
-        let file_handle = Arc::new(RwLock::new(BufReader::new(file)));
-
-        let mut write_lock = file_handles.write().await;
-
-        write_lock.push(Arc::clone(&file_handle));
-
-        file_handle.try_write_owned().unwrap()
-    }
+    pub file_handle_manager: Arc<AsyncFileHandleManager>,
 }
 
 impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
@@ -102,12 +62,15 @@ impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
 
         root.is_root = true;
 
+        let compression = Arc::new(compression);
+
         Ok(FractalTreeDiskAsync {
-            root: Arc::new(RwLock::new(root)),
+            root: Arc::new(RwLock::with_max_readers(root, 128)),
             start,
             compression,
-            file_handles: Arc::new(RwLock::new(Vec::new())),
+            file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 16)),
             file: None,
+            file_handle_manager: Default::default(),
         })
     }
 }
@@ -117,35 +80,44 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
     fn default() -> Self
     {
         FractalTreeDiskAsync {
-            root: Arc::new(RwLock::new(NodeDiskAsync {
-                is_root: true,
-                state: NodeStateAsync::InMemory,
-                is_leaf: true,
-                keys: Vec::new(),
-                children: None,
-                values: None,
-                children_in_memory: false,
-            })),
+            root: Arc::new(RwLock::with_max_readers(
+                NodeDiskAsync {
+                    is_root: true,
+                    state: NodeStateAsync::InMemory,
+                    is_leaf: true,
+                    keys: Vec::new(),
+                    children: None,
+                    values: None,
+                    children_in_memory: false,
+                },
+                128,
+            )),
             start: 0,
-            compression: None, // Default to no compression
-            file_handles: Arc::new(RwLock::new(Vec::new())),
+            compression: Arc::new(None), // Default to no compression
+            file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 8)),
             file: None,
+            file_handle_manager: Default::default(),
         }
     }
 }
 
 impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 {
-    pub async fn load_tree(
-        &self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
-    ) -> Result<(), &'static str>
+    #[tracing::instrument(skip(self))]
+    pub async fn load_tree(&self) -> Result<(), &'static str>
     {
-        let mut root = self.root.write().await;
-        root.load_all(in_buf, &self.compression, self.start).await;
+        let root = Arc::clone(&self.root);
+        let mut root = root.write_owned().await;
+        root.load_all(
+            Arc::clone(&self.file_handle_manager),
+            Arc::clone(&self.compression),
+            self.start,
+        )
+        .await;
         Ok(())
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn len(&self) -> Result<usize, &'static str>
     {
         let root = self.root.read().await;
@@ -154,19 +126,25 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
     pub fn set_compression(&mut self, compression: CompressionConfig)
     {
-        self.compression = Some(compression);
+        self.compression = Arc::new(Some(compression));
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn search(
         &self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
         key: &K,
     ) -> Option<V>
-    {       
-
+    {
         if self.root.read().await.children_in_memory {
             let root = self.root.read().await;
-            return root.search_read(in_buf, &self.compression, self.start, key).await;
+            return root
+                .search_read(
+                    Arc::clone(&self.file_handle_manager),
+                    Arc::clone(&self.compression),
+                    self.start,
+                    key,
+                )
+                .await;
         } else {
             let mut root = self.root.write().await;
 
@@ -174,26 +152,34 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 root.children_in_memory = true;
             }
 
-            root.search(in_buf, &self.compression, self.start, key)
+            root.search(Arc::clone(&self.file_handle_manager), Arc::clone(&self.compression), self.start, key)
                 .await
         }
     }
 
+    #[tracing::instrument]
     pub async fn from_buffer(
-        in_buf: &mut BufReader<File>,
+        file: String,
         pos: u64,
     ) -> Result<Self, &'static str>
     {
+        let fhm = AsyncFileHandleManager {
+            file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 128)),
+            file_name: Some(file.clone()),
+        };
+
+        let mut in_buf = fhm.get_filehandle().await;
+
         in_buf.seek(SeekFrom::Start(pos)).await.unwrap();
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
-        let tree: FractalTreeDiskAsync<K, V> =
+        let mut tree: FractalTreeDiskAsync<K, V> =
             match bincode_decode_from_buffer_async_with_size_hint::<
                 { 64 * 1024 },
                 _,
                 _,
-            >(in_buf, bincode_config)
+            >(&mut in_buf, bincode_config)
             .await
             {
                 Ok(x) => x,
@@ -202,31 +188,9 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 }
             };
 
-        Ok(tree)
-    }
+        tree.file = Some(file);
+        tree.file_handle_manager = Arc::new(fhm);
 
-    pub async fn from_buffer_async(
-        in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
-        pos: u64,
-    ) -> Result<Self, &'static str>
-    {
-        in_buf.seek(SeekFrom::Start(pos)).await.unwrap();
-        let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
-
-        let tree: FractalTreeDiskAsync<K, V> =
-            match bincode_decode_from_buffer_async_with_size_hint::<
-                { 4 * 1024 },
-                _,
-                _,
-            >(in_buf, bincode_config)
-            .await
-            {
-                Ok(x) => x,
-                Err(_) => {
-                    return Result::Err("Failed to decode FractalTreeDisk")
-                }
-            };
         Ok(tree)
     }
 }
@@ -316,10 +280,13 @@ impl<K: Key, V: Value> Decode for NodeDiskAsync<K, V>
             let children: Vec<Arc<RwLock<NodeDiskAsync<K, V>>>> = locs
                 .iter()
                 .map(|x| {
-                    Arc::new(RwLock::new(NodeDiskAsync::<K, V>::from_loc(*x)))
+                    Arc::new(RwLock::with_max_readers(
+                        NodeDiskAsync::<K, V>::from_loc(*x),
+                        128,
+                    ))
                 })
                 .collect::<Vec<_>>();
-            Some(Arc::new(RwLock::new(children)))
+            Some(Arc::new(RwLock::with_max_readers(children, 128)))
         };
 
         Ok(NodeDiskAsync {
@@ -356,10 +323,13 @@ impl<K: Key, V: Value> BorrowDecode<'_> for NodeDiskAsync<K, V>
             let children: Vec<Arc<RwLock<NodeDiskAsync<K, V>>>> = locs
                 .iter()
                 .map(|x| {
-                    Arc::new(RwLock::new(NodeDiskAsync::<K, V>::from_loc(*x)))
+                    Arc::new(RwLock::with_max_readers(
+                        NodeDiskAsync::<K, V>::from_loc(*x),
+                        128,
+                    ))
                 })
                 .collect::<Vec<_>>();
-            Some(Arc::new(RwLock::new(children)))
+            Some(Arc::new(RwLock::with_max_readers(children, 128)))
         };
 
         Ok(NodeDiskAsync {
@@ -391,10 +361,11 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
 
     // todo move load logic to FractalTreeDisk so we don't have to pass a
     // file handle around
+    #[tracing::instrument(skip(self, in_buf))]
     pub async fn load(
         &mut self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
-        compression: &Option<CompressionConfig>,
+        in_buf: &mut OwnedMutexGuard<BufReader<File>>,
+        compression: &Arc<Option<CompressionConfig>>,
         start: u64,
     )
     {
@@ -416,11 +387,19 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
                 >(in_buf, config)
                 .await
                 .unwrap();
-            let decompressed = compression
-                .as_ref()
-                .unwrap()
-                .decompress_async(&compressed)
-                .await.unwrap();
+
+            let compression = Arc::clone(&compression);
+            let decompressed = tokio::task::spawn_blocking(move || {
+                compression
+                    .as_ref()
+                    .as_ref()
+                    .unwrap()
+                    .decompress(&compressed)
+                    .unwrap()
+            });
+
+            let decompressed = decompressed.await.unwrap();
+
             bincode::decode_from_slice(&decompressed, config).unwrap().0
         } else {
             bincode_decode_from_buffer_async_with_size_hint::<{64 * 1024}, _, _>(in_buf, config).await.unwrap()
@@ -430,39 +409,58 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
     }
 
     // todo: This doesn't work, need to account for compression better
-    pub async fn load_all(
-        &mut self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
-        compression: &Option<CompressionConfig>,
+    #[tracing::instrument]
+    pub fn load_all<'a>(
+        &'a mut self,
+        fhm: Arc<AsyncFileHandleManager>,
+        compression: Arc<Option<CompressionConfig>>,
         start: u64,
-    )
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>>
     {
-        if self.state.on_disk() {
-            self.load(in_buf, compression, start).await;
-        }
-
-        if !self.is_leaf {
-            let mut children = self.children.as_ref().unwrap().write().await;
-
-            for child in children.iter_mut() {
-                let mut child = child.write().await;
-                Box::pin(child.load_all(in_buf, &compression, start)).await;
+        Box::pin(async move {
+            if self.state.on_disk() {
+                let mut in_buf = fhm.get_filehandle().await;
+                self.load(&mut in_buf, &compression, start).await;
             }
-        }
 
-        self.state = NodeStateAsync::InMemory;
+            if !self.is_leaf {
+                let mut children =
+                    self.children.as_ref().unwrap().write().await;
+
+                let mut handles = Vec::new();
+
+                for child in children.iter_mut() {
+                    let child = Arc::clone(&child);
+                    let fhm = Arc::clone(&fhm);
+                    let compression = Arc::clone(&compression);
+                    handles.push(tokio::spawn(async move {
+                        let mut child = child.write_owned().await;
+                        child.load_all(fhm, compression, start).await;
+                    }));
+                }
+
+                for handle in handles {
+                    handle.await.unwrap();
+                }
+            }
+
+            self.state = NodeStateAsync::InMemory;
+        })
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn search(
         &mut self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
-        compression: &Option<CompressionConfig>,
+        fhm: Arc<AsyncFileHandleManager>,
+        compression: Arc<Option<CompressionConfig>>,
         start: u64,
         key: &K,
     ) -> Option<V>
     {
         if self.state.on_disk() {
-            self.load(in_buf, compression, start).await;
+            let compression = Arc::clone(&compression);
+            let mut in_buf = fhm.get_filehandle().await;
+            self.load(&mut in_buf, &compression, start).await;
         }
 
         // Optimization notes:
@@ -483,24 +481,37 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
                 Err(i) => i,
             };
 
-            let children = self.children.as_ref().expect("Not a leaf but children are empty").read().await;
+            let children = self
+                .children
+                .as_ref()
+                .expect("Not a leaf but children are empty")
+                .read()
+                .await;
 
             if children[i].read().await.children_in_memory {
                 let child = children[i].read().await;
-                return Box::pin(child.search_read(in_buf, compression, start, key)).await
+                let compression = Arc::clone(&compression);
+                return Box::pin(child.search_read(
+                    fhm,
+                    compression,
+                    start,
+                    key,
+                ))
+                .await;
             } else {
                 let mut child = children[i].write().await;
                 child.children_in_memory = child.children_loaded().await;
-
-                Box::pin(child.search(in_buf, compression, start, key)).await
+                let compression = Arc::clone(&compression);
+                Box::pin(child.search(fhm, compression, start, key)).await
             }
         }
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn search_read(
         &self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
-        compression: &Option<CompressionConfig>,
+        fhm: Arc<AsyncFileHandleManager>,
+        compression: Arc<Option<CompressionConfig>>,
         start: u64,
         key: &K,
     ) -> Option<V>
@@ -523,20 +534,32 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
                 Err(i) => i,
             };
 
-            let children = self.children.as_ref().expect("Not a leaf but children are empty").read().await;
+            let children = self
+                .children
+                .as_ref()
+                .expect("Not a leaf but children are empty")
+                .read()
+                .await;
 
             if children[i].read().await.children_in_memory {
                 let child = children[i].read().await;
-                return Box::pin(child.search_read(in_buf, compression, start, key)).await
+                return Box::pin(child.search_read(
+                    fhm,
+                    compression,
+                    start,
+                    key,
+                ))
+                .await;
             } else {
                 let mut child = children[i].write().await;
                 child.children_in_memory = child.children_loaded().await;
 
-                Box::pin(child.search(in_buf, compression, start, key)).await
+                Box::pin(child.search(fhm, compression, start, key)).await
             }
         }
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn children_stored_on_disk(&self) -> bool
     {
         if self.is_leaf {
@@ -552,6 +575,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         }
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn children_loaded(&self) -> bool
     {
         if self.is_leaf {
@@ -566,9 +590,10 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
                 }
             }
             true
-        }        
+        }
     }
 
+    #[tracing::instrument(skip(self))]
     pub async fn len(&self) -> Result<usize, &'static str>
     {
         if self.is_leaf {
@@ -590,7 +615,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
     }
 }
 
-// todo curry size_hint as const
+#[tracing::instrument(skip(bincode_config, in_buf))]
 pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<
     const SIZE_HINT: usize,
     T,
@@ -632,5 +657,90 @@ where
                 }
             }
         }
+    }
+}
+
+#[derive(Debug)]
+#[cfg(feature = "async")]
+pub struct AsyncFileHandleManager
+{
+    pub file_handles: Arc<RwLock<Vec<Arc<Mutex<BufReader<File>>>>>>,
+    pub file_name: Option<String>,
+}
+
+#[cfg(feature = "async")]
+impl Default for AsyncFileHandleManager
+{
+    fn default() -> Self
+    {
+        AsyncFileHandleManager {
+            file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 128)),
+            file_name: None,
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl AsyncFileHandleManager
+{
+    #[tracing::instrument(skip(self))]
+    pub async fn get_filehandle(
+        &self,
+    ) -> OwnedMutexGuard<BufReader<File>>
+    {
+        let file_handles = Arc::clone(&self.file_handles);
+
+        loop {
+            let file_handles_read = file_handles.read().await;
+
+            // Loop through each until we find one that is not locked
+            for file_handle in file_handles_read.iter() {
+                let file_handle = Arc::clone(file_handle);
+                let file_handle = file_handle.try_lock_owned();
+                if let Ok(file_handle) = file_handle {
+                    return file_handle;
+                }
+            }
+
+            if file_handles_read.len() < 256 {
+                // There are no available file handles, so we need to create a
+                // new one and the number isn't crazy (yet)
+                break;
+            }
+
+            drop(file_handles_read);
+
+            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
+        }
+
+        // Otherwise, create one and add it to the list
+        let file = tokio::fs::File::open(self.file_name.as_ref().unwrap())
+            .await
+            .unwrap();
+
+        #[cfg(unix)]
+        {
+            nix::fcntl::posix_fadvise(
+                file.as_raw_fd(),
+                0,
+                0,
+                nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
+            )
+            .expect("Fadvise Failed");
+        }
+
+        let file_handle = std::sync::Arc::new(Mutex::new(
+            tokio::io::BufReader::with_capacity(64 * 1024, file),
+            // tokio::io::BufReader::new(file),
+        ));
+
+        let mut write_lock = file_handles.write().await;
+
+        let cfh = Arc::clone(&file_handle);
+        let fh = file_handle.try_lock_owned().unwrap();
+
+        write_lock.push(cfh);
+
+        fh
     }
 }

@@ -1,6 +1,8 @@
-use std::{any::Any, io::prelude::*};
+use std::{any::Any, borrow::BorrowMut, io::prelude::*};
 
 use libcompression::*;
+
+use bytes::Bytes;
 
 // SuperTrait -- needed for pyO3
 pub trait ReadAndSeek: Read + Seek + BufRead {}
@@ -34,10 +36,10 @@ pub struct Header
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct Sequence
 {
-    pub sequence: Option<Vec<u8>>,
-    pub scores: Option<Vec<u8>>,
-    pub header: Option<Vec<u8>>,
-    pub id: Option<Vec<u8>>,
+    pub sequence: Option<Bytes>,
+    pub scores: Option<Bytes>,
+    pub header: Option<Bytes>,
+    pub id: Option<Bytes>,
     /// Primarily used downstream, but when used for random access
     /// this is the offset from the start of the sequence
     pub offset: usize,
@@ -47,12 +49,7 @@ impl Sequence
 {
     pub fn into_parts(
         self,
-    ) -> (
-        Option<Vec<u8>>,
-        Option<Vec<u8>>,
-        Option<Vec<u8>>,
-        Option<Vec<u8>>,
-    )
+    ) -> (Option<Bytes>, Option<Bytes>, Option<Bytes>, Option<Bytes>)
     {
         {
             (self.id, self.header, self.sequence, self.scores)
@@ -60,10 +57,10 @@ impl Sequence
     }
 
     pub fn new(
-        sequence: Option<Vec<u8>>,
-        id: Option<Vec<u8>>,
-        header: Option<Vec<u8>>,
-        scores: Option<Vec<u8>>,
+        sequence: Option<Bytes>,
+        id: Option<Bytes>,
+        header: Option<Bytes>,
+        scores: Option<Bytes>,
     ) -> Sequence
     {
         Sequence {
@@ -82,12 +79,18 @@ impl Sequence
 
     pub fn make_uppercase(&mut self)
     {
-        self.sequence.as_mut().unwrap().make_ascii_uppercase();
+        // Convert to Vec<u8>
+        let mut seq: Vec<u8> = self.sequence.take().unwrap().into();
+        seq.make_ascii_uppercase();
+        self.sequence = Some(Bytes::from(seq));
     }
 
     pub fn make_lowercase(&mut self)
     {
-        self.sequence.as_mut().unwrap().make_ascii_lowercase();
+        // Convert to Vec<u8>
+        let mut seq: Vec<u8> = self.sequence.take().unwrap().into();
+        seq.make_ascii_lowercase();
+        self.sequence = Some(Bytes::from(seq));
     }
 
     pub fn is_empty(&self) -> bool
@@ -99,6 +102,20 @@ impl Sequence
 impl From<Vec<u8>> for Sequence
 {
     fn from(seq: Vec<u8>) -> Sequence
+    {
+        Sequence {
+            sequence: Some(Bytes::from(seq)),
+            header: None,
+            id: None,
+            scores: None,
+            offset: 0,
+        }
+    }
+}
+
+impl From<Bytes> for Sequence
+{
+    fn from(seq: Bytes) -> Sequence
     {
         Sequence {
             sequence: Some(seq),
@@ -130,15 +147,15 @@ mod tests
         let (id, header, sequence, scores) = seq.into_parts();
         assert_eq!(id, None);
         assert_eq!(header, None);
-        assert_eq!(sequence, Some(vec![b'A', b'C', b'G', b'T']));
+        assert_eq!(sequence, Some(Bytes::from(vec![b'A', b'C', b'G', b'T'])));
         assert_eq!(scores, None);
 
         // Fuller test
         let seq = Sequence::new(
-            Some(vec![b'A', b'C', b'G', b'T']),
-            Some(vec![b'1', b'2', b'3']),
-            Some(vec![b'4', b'5', b'6']),
-            Some(vec![b'7', b'8', b'9']),
+            Some(Bytes::from(vec![b'A', b'C', b'G', b'T'])),
+            Some(Bytes::from(vec![b'1', b'2', b'3'])),
+            Some(Bytes::from(vec![b'4', b'5', b'6'])),
+            Some(Bytes::from(vec![b'7', b'8', b'9'])),
         );
 
         assert_eq!(
@@ -151,10 +168,10 @@ mod tests
 
         // Test into_parts
         let (id, header, sequence, scores) = seq.into_parts();
-        assert_eq!(id, Some(vec![b'1', b'2', b'3']));
-        assert_eq!(header, Some(vec![b'4', b'5', b'6']));
-        assert_eq!(sequence, Some(vec![b'A', b'C', b'G', b'T']));
-        assert_eq!(scores, Some(vec![b'7', b'8', b'9']));
+        assert_eq!(id, Some(Bytes::from(vec![b'1', b'2', b'3'])));
+        assert_eq!(header, Some(Bytes::from(vec![b'4', b'5', b'6'])));
+        assert_eq!(sequence, Some(Bytes::from(vec![b'A', b'C', b'G', b'T'])));
+        assert_eq!(scores, Some(Bytes::from(vec![b'7', b'8', b'9'])));
 
         // Test make_uppercase and make_lowercase
         let mut seq = Sequence::from(vec![b'a', b'c', b'g', b't']);

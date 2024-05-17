@@ -3,6 +3,18 @@
 //! This module contains the main methods of reading SFASTA files,
 //! including iterators to iterate over contained sequences.
 
+// dev NOTES
+// Only first word of header is returned now
+// Sometimes the next sequence is put out without a newline
+// example:
+// NNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNNTTGATT
+// AAACTAAATCTGGAATAATAATTTGTCCTTATAATAAATGGGAAGATCTTAATAAAGATC
+// AGAACTAAAAAGTCCGTAAAATAAAGATCACTTCGATGATGATACAATATAAAAAAGAAA>Chr2
+// TTCTTAAATCTTATAATCTTGTAAGACGTAATATAATGCTTTGAGCGtctctctctctct
+// ctctctctctctgctctgtctcATTCCCAACTCGACGATGCGTCCCTTTCGTAGCGAACA
+// GAGCCACCAACGTCCGACGCGACTAACTAACGACTCCGACAAGTCGATAAGGTCATAGTT
+// ATTTTTATTGTTGATTAGTTGGTAAGCGAAAGAAAGTCCGTATACGCGCGTTGTTTCGGT
+
 use std::{
     io::{BufRead, Read, Seek, SeekFrom},
     sync::Arc,
@@ -10,24 +22,21 @@ use std::{
 
 #[cfg(feature = "async")]
 use tokio::{
-    io::BufReader,
-    fs::File,
-    sync::RwLock
+    fs::File, io::BufReader, sync::Mutex, sync::OwnedMutexGuard, sync::RwLock,
 };
 
 #[cfg(not(feature = "async"))]
 use std::sync::RwLock;
 
+use crate::datatypes::*;
 use libfractaltree::{FractalTreeDisk, FractalTreeDiskAsync};
 
-use rand::prelude::*;
-use rand_chacha::ChaCha20Rng;
+use bumpalo::Bump;
+use bytes::Bytes;
 use xxhash_rust::xxh3::xxh3_64;
 
-#[cfg(feature = "async")]
-use tokio::task::JoinSet;
-
-use crate::datatypes::*;
+#[cfg(unix)]
+use std::os::fd::AsRawFd;
 
 #[cfg(not(feature = "async"))]
 /// Main Sfasta struct
@@ -77,7 +86,7 @@ pub struct Sfasta<'sfa>
     pub file: Option<String>,
 
     // For async mode we have shared file handles
-    pub file_handles: Arc<AsyncFileHandleManager>    
+    pub file_handles: Arc<AsyncFileHandleManager>,
 }
 
 impl<'sfa> Default for Sfasta<'sfa>
@@ -199,6 +208,7 @@ impl<'sfa> Sfasta<'sfa>
     /// Convenience function. Not optimized for speed. If you don't
     /// need the header, scores, or masking, it's better to call
     /// more performant functions.
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence_by_id(
         &self,
         id: &str,
@@ -212,7 +222,7 @@ impl<'sfa> Sfasta<'sfa>
         let matches = matches.unwrap().clone();
 
         let id = if matches.ids > 0 {
-            Some(self.get_id(matches.get_ids()).await.unwrap().into_bytes())
+            Some(self.get_id(matches.get_ids()).await.unwrap())
         // todo
         } else {
             None
@@ -274,6 +284,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence_by_index(
         &self,
         idx: usize,
@@ -283,12 +294,11 @@ impl<'sfa> Sfasta<'sfa>
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),
             Err(e) => return Err(e),
-        }
-        .clone();
+        };
 
         assert!(seqloc.sequence > 0);
 
-        self.get_sequence_by_seqloc(&seqloc).await
+        self.get_sequence_by_seqloc(seqloc).await
     }
 
     #[cfg(not(feature = "async"))]
@@ -337,18 +347,22 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence_by_seqloc(
         &self,
-        seqloc: &SeqLoc,
+        seqloc: SeqLoc,
     ) -> Result<Option<Sequence>, &'static str>
     {
+        let seqloc = Arc::new(seqloc);
 
         let id = if seqloc.ids > 0 {
             let mut buf = self.file_handles.get_filehandle().await;
             let ids = std::sync::Arc::clone(&self.ids.as_ref().unwrap());
-            let locs = seqloc.get_ids().to_vec();
+            let seqlocs = Arc::clone(&seqloc);
+
+            // let locs = seqloc.get_ids().to_vec();
             Some(tokio::spawn(async move {
-                ids.get(&mut buf, &locs).await
+                ids.get(&mut buf, seqlocs.get_ids()).await
             }))
         } else {
             None
@@ -356,16 +370,19 @@ impl<'sfa> Sfasta<'sfa>
 
         let header = if seqloc.headers > 0 {
             let mut buf = self.file_handles.get_filehandle().await;
-            let headers = std::sync::Arc::clone(&self.headers.as_ref().unwrap());
-            let locs = seqloc.get_headers().to_vec();
+            let headers =
+                std::sync::Arc::clone(&self.headers.as_ref().unwrap());
+            let seqlocs = Arc::clone(&seqloc);
+
             Some(tokio::spawn(async move {
-                headers.get(&mut buf, &locs).await
+                headers.get(&mut buf, seqlocs.get_headers()).await
             }))
         } else {
             None
         };
 
         let sequence = if seqloc.sequence > 0 {
+            let seqloc = Arc::clone(&seqloc);
             Some(
                 self.get_sequence(seqloc.get_sequence(), seqloc.get_masking())
                     .await
@@ -384,7 +401,7 @@ impl<'sfa> Sfasta<'sfa>
         // };
 
         let id = match id {
-            Some(x) => Some(x.await.unwrap().into_bytes()),
+            Some(x) => Some(x.await.unwrap()),
             None => None,
         };
 
@@ -435,6 +452,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence_only_by_seqloc(
         &self,
         seqloc: &SeqLoc,
@@ -490,6 +508,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence_only_by_locs(
         &self,
         locs: &[Loc],
@@ -552,61 +571,60 @@ impl<'sfa> Sfasta<'sfa>
     /// Gets the sequence specified with seqloc, and applies masking
     /// specified with maskingloc.. To have no masking just pass a
     /// blank slice.
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence(
         &self,
-        seqloc: &[Loc],
-        maskingloc: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
+        sequencelocs: &[Loc],
+        maskinglocs: &[Loc],
+    ) -> Result<Bytes, &'static str>
     {
-        let mut seq: Vec<u8> = Vec::new();
+        let mut seq = Vec::with_capacity(
+            sequencelocs.iter().map(|i| i.len).sum::<u32>() as usize,
+        );
 
-        let mut results = Vec::with_capacity(seqloc.len());
+        let mut results = Vec::with_capacity(sequencelocs.len());
 
-        for l in seqloc.into_iter() {
+        let mask = if !maskinglocs.is_empty() && self.masking.is_some() {
+            let masking = Arc::clone(self.masking.as_ref().unwrap());
+            let mut buf = self.file_handles.get_filehandle().await;
+            let maskinglocs_c = maskinglocs.to_vec();
+            Some(tokio::spawn(async move {
+                masking.get_mask(&mut buf, &maskinglocs_c).await
+            }))
+        } else {
+            None
+        };
+
+        for l in sequencelocs.iter() {
             let fhm = Arc::clone(&self.file_handles);
             let sequences = Arc::clone(self.sequences.as_ref().unwrap());
             let l = l.clone();
             let jh = tokio::spawn(async move {
                 let mut buf = fhm.get_filehandle().await;
-                let seqblock = sequences
-                .get_block(&mut buf, l.block)
-                .await;
 
-                seqblock[l.start as usize..(l.start + l.len) as usize].to_vec()
+                match sequences.get_block(&mut buf, l.block).await {
+                    DataOrLater::Data(data) => data,
+                    DataOrLater::Later(data) => data.await.unwrap(),
+                }
             });
 
             results.push(jh);
         }
 
-        for r in results {
-            seq.extend_from_slice(&r.await.unwrap());
-        }
+        for (i, r) in results.into_iter().enumerate() {
+            let seqblock = r.await.unwrap();
 
-        /*
-        let mut buf = self.get_filehandle().await;
-
-        // todo send all of these off at once, otherwise it's pretty close to
-        // linear...
-        for l in seqloc.iter() {
-            let seqblock = self
-                .sequences
-                .as_ref()
-                .unwrap()
-                .get_block(&mut buf, l.block)
-                .await;
+            let l = &sequencelocs[i];
             seq.extend_from_slice(
                 &seqblock[l.start as usize..(l.start + l.len) as usize],
             );
-        } 
-        */
-
-        let mut buf = self.file_handles.get_filehandle().await;
-        if !maskingloc.is_empty() && self.masking.is_some() {
-            let masking = self.masking.as_ref().unwrap();
-            masking.mask_sequence(&mut buf, maskingloc, &mut seq).await;
         }
 
-        Ok(seq)
+        if !maskinglocs.is_empty() && self.masking.is_some() && mask.is_some() {
+            mask_sequence(&mut seq, mask.unwrap().await.unwrap());
+        }
+
+        Ok(Bytes::from(seq))
     }
 
     #[cfg(not(feature = "async"))]
@@ -646,39 +664,54 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence_nocache(
         &self,
         seqloc: &SeqLoc,
-    ) -> Result<Vec<u8>, &'static str>
+    ) -> Result<Bytes, &'static str>
     {
-        let mut seq: Vec<u8> = Vec::new();
+        let mut seq: Vec<u8> = Vec::with_capacity(seqloc.seq_len());
 
         assert!(seqloc.sequence > 0);
 
         let mut buf = self.file_handles.get_filehandle().await;
         let locs = seqloc.get_sequence();
 
+        let mask = if seqloc.masking > 0 && self.masking.is_some() {
+            let masking = Arc::clone(self.masking.as_ref().unwrap());
+            let mut buf = self.file_handles.get_filehandle().await;
+            let maskinglocs_c = seqloc.get_masking().to_vec();
+            Some(tokio::spawn(async move {
+                masking.get_mask(&mut buf, &maskinglocs_c).await
+            }))
+        } else {
+            None
+        };
+
         // todo send all of these off at once, otherwise it's pretty close to
         // linear...
         for l in locs.iter() {
-            let seqblock = self
+            let seqblock = match self
                 .sequences
                 .as_ref()
                 .unwrap()
                 .get_block(&mut buf, l.block)
-                .await;
+                .await
+            {
+                DataOrLater::Data(data) => data,
+                DataOrLater::Later(data) => data.await.unwrap(),
+            };
+
             seq.extend_from_slice(
                 &seqblock[l.start as usize..(l.start + l.len) as usize],
             );
         }
 
-        if seqloc.masking > 0 && self.masking.is_some() {
-            let masking = self.masking.as_ref().unwrap();
-            let locs = seqloc.get_masking();
-            masking.mask_sequence(&mut buf, &locs, &mut seq).await;
+        if seqloc.masking > 0 && self.masking.is_some() && mask.is_some() {
+            mask_sequence(&mut seq, mask.unwrap().await.unwrap());
         }
 
-        Ok(seq)
+        Ok(Bytes::from(seq))
     }
 
     #[cfg(not(feature = "async"))]
@@ -708,29 +741,37 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence_by_locs(
         &self,
         locs: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
+    ) -> Result<Bytes, &'static str>
     {
-        let mut seq: Vec<u8> = Vec::with_capacity(1024);
+        let mut seq = Vec::with_capacity(
+            locs.iter().map(|i| i.len).sum::<u32>() as usize,
+        );
 
         let mut buf = self.file_handles.get_filehandle().await;
 
         // Once stabilized, use write_all_vectored
         for l in locs.iter().map(|x| x) {
-            let seqblock = self
+            let seqblock = match self
                 .sequences
                 .as_ref()
                 .unwrap()
                 .get_block(&mut buf, l.block)
-                .await;
+                .await
+            {
+                DataOrLater::Data(data) => data,
+                DataOrLater::Later(data) => data.await.unwrap(),
+            };
+
             seq.extend_from_slice(
                 &seqblock[l.start as usize..(l.start + l.len) as usize],
             );
         }
 
-        Ok(seq)
+        Ok(Bytes::from(seq))
     }
 
     #[cfg(not(feature = "async"))]
@@ -762,29 +803,36 @@ impl<'sfa> Sfasta<'sfa>
 
     #[cfg(feature = "async")]
     // No masking is possible here...
+    #[tracing::instrument(skip(self))]
     pub async fn get_sequence_by_locs_nocache(
         &self,
         locs: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
+    ) -> Result<Bytes, &'static str>
     {
-        let mut seq: Vec<u8> = Vec::with_capacity(256);
+        let mut seq = Vec::with_capacity(
+            locs.iter().map(|i| i.len).sum::<u32>() as usize,
+        );
 
         let mut buf = self.file_handles.get_filehandle().await;
 
         for l in locs.iter() {
-            let block = self
+            let block = match self
                 .sequences
                 .as_ref()
                 .unwrap()
                 .get_block(&mut buf, l.block)
-                .await;
+                .await
+            {
+                DataOrLater::Data(data) => data,
+                DataOrLater::Later(data) => data.await.unwrap(),
+            };
 
             seq.extend_from_slice(
                 &block[l.start as usize..(l.start + l.len) as usize],
             );
         }
 
-        Ok(seq)
+        Ok(Bytes::from(seq))
     }
 
     #[cfg(not(feature = "async"))]
@@ -811,6 +859,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn find(&self, x: &str) -> Result<Option<SeqLoc>, &'static str>
     {
         assert!(self.index.is_some(), "Sfasta index not present");
@@ -819,17 +868,16 @@ impl<'sfa> Sfasta<'sfa>
 
         let idx = self.index.as_ref().unwrap();
 
-        let mut buf = self.file_handles.get_filehandle().await;
-
-        let found = idx.search(&mut buf, &(key as u32)).await;
-        let seqlocs = self.seqlocs.as_ref().unwrap();
+        let found = idx.search(&(key as u32)).await;
 
         if found.is_none() {
             return Ok(None);
         }
 
+        let seqlocs = self.seqlocs.as_ref().unwrap();
+
         // todo Allow returning multiple if there are multiple matches...
-        seqlocs.get_seqloc(&mut buf, found.unwrap()).await
+        seqlocs.get_seqloc(found.unwrap()).await
     }
 
     #[cfg(not(feature = "async"))]
@@ -842,8 +890,9 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn get_header(&self, locs: &[Loc])
-        -> Result<String, &'static str>
+        -> Result<Bytes, &'static str>
     {
         let headers = self.headers.as_ref().unwrap();
         let mut buf = self.file_handles.get_filehandle().await;
@@ -860,7 +909,8 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
-    pub async fn get_id(&self, locs: &[Loc]) -> Result<String, &'static str>
+    #[tracing::instrument(skip(self))]
+    pub async fn get_id(&self, locs: &[Loc]) -> Result<Bytes, &'static str>
     {
         let mut buf = self.file_handles.get_filehandle().await;
         let ids = self.ids.as_ref().unwrap();
@@ -882,6 +932,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn len(&self) -> usize
     {
         let mut buf = self.file_handles.get_filehandle().await;
@@ -891,7 +942,7 @@ impl<'sfa> Sfasta<'sfa>
     // Get length from SeqLoc (only for sequence)
     pub fn seqloc_len(&mut self, seqloc: &SeqLoc) -> usize
     {
-        seqloc.len()
+        seqloc.seq_len()
     }
 
     #[cfg(not(feature = "async"))]
@@ -913,6 +964,7 @@ impl<'sfa> Sfasta<'sfa>
 
     #[cfg(feature = "async")]
     /// Get the ith seqloc in the file
+    #[tracing::instrument(skip(self))]
     pub async fn get_seqloc(
         &self,
         i: usize,
@@ -921,12 +973,7 @@ impl<'sfa> Sfasta<'sfa>
         // assert!(i < self.len().await, "Index out of bounds");
         assert!(i < std::u32::MAX as usize, "Index out of bounds");
 
-        let mut buf = self.file_handles.get_filehandle().await;
-        self.seqlocs
-            .as_ref()
-            .unwrap()
-            .get_seqloc(&mut buf, i as u32)
-            .await
+        self.seqlocs.as_ref().unwrap().get_seqloc(i as u32).await
     }
 
     #[cfg(not(feature = "async"))]
@@ -943,6 +990,7 @@ impl<'sfa> Sfasta<'sfa>
 
     #[cfg(feature = "async")]
     /// Get all seqlocs
+    #[tracing::instrument(skip(self))]
     pub async fn get_seqlocs(&self) -> Result<(), &'static str>
     {
         let mut buf = self.file_handles.get_filehandle().await;
@@ -969,6 +1017,7 @@ impl<'sfa> Sfasta<'sfa>
 
     #[cfg(feature = "async")]
     /// This is more expensive than getting it from the seqlocs
+    #[tracing::instrument(skip(self))]
     pub async fn index_len(&self) -> Result<usize, &'static str>
     {
         if self.index.is_none() {
@@ -986,10 +1035,140 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self))]
     pub async fn index_load(&self) -> Result<(), &'static str>
     {
-        let mut buf = self.file_handles.get_filehandle().await;
-        self.index.as_ref().unwrap().load_tree(&mut buf).await
+        self.index.as_ref().unwrap().load_tree().await
+    }
+}
+
+/// Sfasta is designed for random access, but sometimes it is still
+/// useful to iterate through the file in a linear fashion...
+///
+/// Because the access patterns are so different, this is a
+/// specialized implementation for speed.
+// todo make non-async version
+#[cfg(feature = "async")]
+pub struct SfastaIterator
+{
+    sfasta: Arc<Sfasta<'static>>,
+    current: usize,
+    runtime: tokio::runtime::Runtime,
+
+    next_seqloc: tokio::task::JoinHandle<Result<Option<SeqLoc>, &'static str>>,
+
+    seq_blocks_cache: Vec<(u32, Bytes)>,
+    masking_blocks_cache: Vec<(u32, Bytes)>,
+    ids_blocks_cache: Vec<(u32, Bytes)>,
+    headers_blocks_cache: Vec<(u32, Bytes)>,
+    // scores_blocks_cache: Vec<Bytes>,
+    // signals_blocks_cache: Vec<Bytes>,
+    // seq_cache: Bump,
+    // masking_cache: Bump,
+    // ids_cache: Bump,
+    // headers_cache: Bump,
+    // scores_cache: Bump,
+    // signals_cache: Bump,
+}
+
+#[cfg(feature = "async")]
+impl SfastaIterator
+{
+    pub fn new(mut sfasta: Sfasta<'static>) -> Self
+    {
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+        let sfasta = Arc::new(sfasta);
+        let sfasta_c = Arc::clone(&sfasta);
+        let next_seqloc: tokio::task::JoinHandle<Result<Option<SeqLoc>, &str>> = runtime.spawn(async move { sfasta_c.get_seqloc(0).await });
+
+        SfastaIterator {
+            sfasta,
+            current: 0,
+
+            next_seqloc,
+
+            seq_blocks_cache: Vec::new(),
+            masking_blocks_cache: Vec::new(),
+            ids_blocks_cache: Vec::new(),
+            headers_blocks_cache: Vec::new(),
+
+            // seq_cache: Bump::with_capacity(512 * 1024),
+            // masking_cache: Bump::with_capacity(512 * 1024),
+            // ids_cache: Bump::with_capacity(512 * 1024),
+            // headers_cache: Bump::with_capacity(512 * 1024),
+
+            runtime,
+        }
+    }
+}
+
+#[cfg(feature = "async")]
+impl Iterator for SfastaIterator
+{
+    type Item = Result<Sequence, &'static str>;
+
+    fn next(&mut self) -> Option<Self::Item>
+    {
+        let sfasta_c = Arc::clone(&self.sfasta);
+        let idx = self.current + 1;
+        let mut next_seqloc: tokio::task::JoinHandle<Result<Option<SeqLoc>, &str>> = self.runtime.spawn(async move { sfasta_c.get_seqloc(idx).await });
+
+        std::mem::swap(&mut self.next_seqloc, &mut next_seqloc);
+
+        let seqloc = self.runtime.block_on(next_seqloc).unwrap().unwrap();
+        let seqloc = match seqloc {
+            Some(s) => s,
+            None => return None,
+        };
+
+        // Get blocks for the sequence if not already loaded
+        let seq_locs = seqloc.get_sequence();
+        let seq_blocks = seq_locs.iter().map(|l| l.block).collect::<Vec<u32>>();
+
+        // Remove any blocks that aren't needed from the cache
+        self.seq_blocks_cache.retain(|(block, _)| seq_blocks.contains(block));
+
+        // Load any blocks that aren't in the cache for sequences
+        for block_idx in seq_blocks.iter() {
+            if self.seq_blocks_cache.iter().find(|(b, _)| b == block_idx).is_none() {
+                let sfasta_c = Arc::clone(&self.sfasta);
+                let idx = *block_idx as u32;
+                let block = self.runtime.block_on(async move {
+                    let mut buf = sfasta_c.file_handles.get_filehandle().await;
+                    sfasta_c.sequences.as_ref().unwrap().get_block(&mut buf, idx).await
+                });
+
+                let block = match block {
+                    DataOrLater::Data(data) => data,
+                    DataOrLater::Later(data) => self.runtime.block_on(data).unwrap(),
+                };
+
+                self.seq_blocks_cache.push((*block_idx, block));
+            }
+        }
+
+        let mut seq = Vec::with_capacity(seqloc.seq_len());
+        
+        // Build the sequence
+        for l in seq_locs.iter() {
+            let block = self.seq_blocks_cache.iter().find(|(b, _)| b == &l.block).unwrap().1.clone();
+            seq.extend_from_slice(&block[l.start as usize..(l.start + l.len) as usize]);
+        }
+
+        // Just testing right now, so no need for any of the other stuff...
+        return Some(Ok(Sequence {
+            sequence: Some(Bytes::from(seq)),
+            id: None,
+            header: None,
+            scores: None,
+            offset: 0,
+        }));
+
+
     }
 }
 
@@ -1009,14 +1188,17 @@ impl Default for SeqMode
 }
 
 #[cfg(feature = "async")]
-pub struct AsyncFileHandleManager {
-    pub file_handles: Option<Arc<RwLock<Vec<Arc<RwLock<BufReader<File>>>>>>>,
+pub struct AsyncFileHandleManager
+{
+    pub file_handles: Option<Arc<RwLock<Vec<Arc<Mutex<BufReader<File>>>>>>>,
     pub file_name: Option<String>,
 }
 
 #[cfg(feature = "async")]
-impl Default for AsyncFileHandleManager {
-    fn default() -> Self {
+impl Default for AsyncFileHandleManager
+{
+    fn default() -> Self
+    {
         AsyncFileHandleManager {
             file_handles: None,
             file_name: None,
@@ -1025,10 +1207,12 @@ impl Default for AsyncFileHandleManager {
 }
 
 #[cfg(feature = "async")]
-impl AsyncFileHandleManager {
+impl AsyncFileHandleManager
+{
+    #[tracing::instrument(skip(self))]
     pub async fn get_filehandle(
         &self,
-    ) -> tokio::sync::OwnedRwLockWriteGuard<tokio::io::BufReader<tokio::fs::File>>
+    ) -> OwnedMutexGuard<tokio::io::BufReader<tokio::fs::File>>
     {
         let file_handles = Arc::clone(self.file_handles.as_ref().unwrap());
 
@@ -1038,7 +1222,7 @@ impl AsyncFileHandleManager {
             // Loop through each until we find one that is not locked
             for file_handle in file_handles_read.iter() {
                 let file_handle = Arc::clone(file_handle);
-                let file_handle = file_handle.try_write_owned();
+                let file_handle = file_handle.try_lock_owned();
                 if let Ok(file_handle) = file_handle {
                     return file_handle;
                 }
@@ -1052,22 +1236,38 @@ impl AsyncFileHandleManager {
 
             drop(file_handles_read);
 
-            tokio::time::sleep(tokio::time::Duration::from_millis(10)).await;
+            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
         }
 
         // Otherwise, create one and add it to the list
         let file = tokio::fs::File::open(self.file_name.as_ref().unwrap())
             .await
             .unwrap();
-        let file_handle = std::sync::Arc::new(tokio::sync::RwLock::new(
-            tokio::io::BufReader::new(file),
+
+        #[cfg(unix)]
+        {
+            nix::fcntl::posix_fadvise(
+                file.as_raw_fd(),
+                0,
+                0,
+                nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
+            )
+            .expect("Fadvise Failed");
+        }
+
+        let file_handle = std::sync::Arc::new(tokio::sync::Mutex::new(
+            tokio::io::BufReader::with_capacity(64 * 1024, file),
+            // tokio::io::BufReader::new(file),
         ));
+
+        let cfh = Arc::clone(&file_handle);
+        let fh = file_handle.try_lock_owned().unwrap();
 
         let mut write_lock = file_handles.write().await;
 
-        write_lock.push(Arc::clone(&file_handle));
+        write_lock.push(cfh);
 
-        file_handle.try_write_owned().unwrap()
+        fh
     }
 }
 

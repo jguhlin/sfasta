@@ -180,12 +180,16 @@ impl Masking
     }
 
     #[cfg(feature = "async")]
+    #[tracing::instrument(skip(in_buf))]
     pub async fn from_buffer(
         in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
+        filename: String,
         starting_pos: u64,
     ) -> Result<Self, String>
     {
-        let inner = BytesBlockStore::from_buffer(in_buf, starting_pos).await?;
+        let inner =
+            BytesBlockStore::from_buffer(in_buf, filename, starting_pos)
+                .await?;
 
         Ok(Masking { inner })
     }
@@ -216,28 +220,33 @@ impl Masking
     }
 
     #[cfg(feature = "async")]
-    /// Masks the sequence in place
-    pub async fn mask_sequence(
+    /// preload the masking data from disk
+    pub async fn get_mask(
         &self,
-        in_buf: &mut OwnedRwLockWriteGuard<BufReader<File>>,
+        in_buf: &mut tokio::sync::OwnedMutexGuard<BufReader<File>>,
         loc: &[Loc],
-        seq: &mut [u8],
-    )
+    ) -> bytes::Bytes
     {
-        let arch = Arch::new();
-
-        let mask_raw = self.inner.get(in_buf, loc).await;
-
-        arch.dispatch(|| {
-            for (i, m) in mask_raw.iter().enumerate() {
-                seq[i] = if *m == 1 {
-                    seq[i].to_ascii_lowercase()
-                } else {
-                    seq[i]
-                };
-            }
-        });
+        self.inner.get(in_buf, loc).await
     }
+}
+
+#[cfg(feature = "async")]
+#[inline]
+/// Masks the sequence in place
+pub fn mask_sequence(seq: &mut [u8], mask_raw: bytes::Bytes)
+{
+    let arch = Arch::new();
+
+    arch.dispatch(|| {
+        for (i, m) in mask_raw.iter().enumerate() {
+            seq[i] = if *m == 1 {
+                seq[i].to_ascii_lowercase()
+            } else {
+                seq[i]
+            };
+        }
+    });
 }
 
 #[cfg(test)]
