@@ -29,7 +29,16 @@ use tokio::{
 use std::sync::RwLock;
 
 use crate::datatypes::*;
-use libfractaltree::{FractalTreeDisk, FractalTreeDiskAsync};
+use libfractaltree::FractalTreeDisk;
+
+#[cfg(feature = "async")]
+use libfractaltree::FractalTreeDiskAsync;
+
+#[cfg(feature = "async")]
+use crate::parser::async_parser::{
+    bincode_decode_from_buffer_async,
+    bincode_decode_from_buffer_async_with_size_hint,
+};
 
 use bumpalo::Bump;
 use bytes::Bytes;
@@ -161,8 +170,7 @@ impl<'sfa> Sfasta<'sfa>
         let matches = matches.unwrap().clone();
 
         let id = if matches.ids > 0 {
-            Some(self.get_id(matches.get_ids()).unwrap().into_bytes())
-        // todo
+            Some(self.get_id(matches.get_ids()).unwrap())
         } else {
             None
         };
@@ -308,7 +316,7 @@ impl<'sfa> Sfasta<'sfa>
     ) -> Result<Option<Sequence>, &'static str>
     {
         let id = if seqloc.ids > 0 {
-            Some(self.get_id(seqloc.get_ids()).unwrap().into_bytes()) // todo
+            Some(self.get_id(seqloc.get_ids()).unwrap()) // todo
         } else {
             None
         };
@@ -540,7 +548,7 @@ impl<'sfa> Sfasta<'sfa>
         &mut self,
         seqloc: &[Loc],
         maskingloc: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
+    ) -> Result<Bytes, &'static str>
     {
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
 
@@ -562,7 +570,7 @@ impl<'sfa> Sfasta<'sfa>
             masking.mask_sequence(&mut *buf, maskingloc, &mut seq);
         }
 
-        Ok(seq)
+        Ok(Bytes::from(seq))
     }
 
     #[cfg(feature = "async")]
@@ -631,7 +639,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_nocache(
         &mut self,
         seqloc: &SeqLoc,
-    ) -> Result<Vec<u8>, &'static str>
+    ) -> Result<Bytes, &'static str>
     {
         let mut seq: Vec<u8> = Vec::new();
 
@@ -660,7 +668,7 @@ impl<'sfa> Sfasta<'sfa>
             masking.mask_sequence(&mut *buf, &locs, &mut seq);
         }
 
-        Ok(seq)
+        Ok(Bytes::from(seq))
     }
 
     #[cfg(feature = "async")]
@@ -719,7 +727,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_by_locs(
         &mut self,
         locs: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
+    ) -> Result<Bytes, &'static str>
     {
         let mut seq: Vec<u8> = Vec::with_capacity(1024);
 
@@ -737,7 +745,7 @@ impl<'sfa> Sfasta<'sfa>
             );
         }
 
-        Ok(seq)
+        Ok(Bytes::from(seq))
     }
 
     #[cfg(feature = "async")]
@@ -779,7 +787,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_by_locs_nocache(
         &mut self,
         locs: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
+    ) -> Result<Bytes, &'static str>
     {
         let mut seq: Vec<u8> = Vec::with_capacity(256);
 
@@ -798,7 +806,7 @@ impl<'sfa> Sfasta<'sfa>
             );
         });
 
-        Ok(seq)
+        Ok(Bytes::from(seq))
     }
 
     #[cfg(feature = "async")]
@@ -881,7 +889,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(not(feature = "async"))]
-    pub fn get_header(&mut self, locs: &[Loc]) -> Result<String, &'static str>
+    pub fn get_header(&mut self, locs: &[Loc]) -> Result<Bytes, &'static str>
     {
         let headers = self.headers.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
@@ -901,7 +909,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     #[cfg(not(feature = "async"))]
-    pub fn get_id(&mut self, locs: &[Loc]) -> Result<String, &'static str>
+    pub fn get_id(&mut self, locs: &[Loc]) -> Result<Bytes, &'static str>
     {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let ids = self.ids.as_mut().unwrap();
@@ -1077,13 +1085,14 @@ impl SfastaIterator
     pub fn new(mut sfasta: Sfasta<'static>) -> Self
     {
         let runtime = tokio::runtime::Builder::new_multi_thread()
-        .enable_all()
-        .build()
-        .unwrap();
+            .enable_all()
+            .build()
+            .unwrap();
 
         let sfasta = Arc::new(sfasta);
         let sfasta_c = Arc::clone(&sfasta);
-        let next_seqloc: tokio::task::JoinHandle<Result<Option<SeqLoc>, &str>> = runtime.spawn(async move { sfasta_c.get_seqloc(0).await });
+        let next_seqloc: tokio::task::JoinHandle<Result<Option<SeqLoc>, &str>> =
+            runtime.spawn(async move { sfasta_c.get_seqloc(0).await });
 
         SfastaIterator {
             sfasta,
@@ -1100,7 +1109,6 @@ impl SfastaIterator
             // masking_cache: Bump::with_capacity(512 * 1024),
             // ids_cache: Bump::with_capacity(512 * 1024),
             // headers_cache: Bump::with_capacity(512 * 1024),
-
             runtime,
         }
     }
@@ -1115,7 +1123,11 @@ impl Iterator for SfastaIterator
     {
         let sfasta_c = Arc::clone(&self.sfasta);
         let idx = self.current + 1;
-        let mut next_seqloc: tokio::task::JoinHandle<Result<Option<SeqLoc>, &str>> = self.runtime.spawn(async move { sfasta_c.get_seqloc(idx).await });
+        let mut next_seqloc: tokio::task::JoinHandle<
+            Result<Option<SeqLoc>, &str>,
+        > = self
+            .runtime
+            .spawn(async move { sfasta_c.get_seqloc(idx).await });
 
         std::mem::swap(&mut self.next_seqloc, &mut next_seqloc);
 
@@ -1130,21 +1142,34 @@ impl Iterator for SfastaIterator
         let seq_blocks = seq_locs.iter().map(|l| l.block).collect::<Vec<u32>>();
 
         // Remove any blocks that aren't needed from the cache
-        self.seq_blocks_cache.retain(|(block, _)| seq_blocks.contains(block));
+        self.seq_blocks_cache
+            .retain(|(block, _)| seq_blocks.contains(block));
 
         // Load any blocks that aren't in the cache for sequences
         for block_idx in seq_blocks.iter() {
-            if self.seq_blocks_cache.iter().find(|(b, _)| b == block_idx).is_none() {
+            if self
+                .seq_blocks_cache
+                .iter()
+                .find(|(b, _)| b == block_idx)
+                .is_none()
+            {
                 let sfasta_c = Arc::clone(&self.sfasta);
                 let idx = *block_idx as u32;
                 let block = self.runtime.block_on(async move {
                     let mut buf = sfasta_c.file_handles.get_filehandle().await;
-                    sfasta_c.sequences.as_ref().unwrap().get_block(&mut buf, idx).await
+                    sfasta_c
+                        .sequences
+                        .as_ref()
+                        .unwrap()
+                        .get_block(&mut buf, idx)
+                        .await
                 });
 
                 let block = match block {
                     DataOrLater::Data(data) => data,
-                    DataOrLater::Later(data) => self.runtime.block_on(data).unwrap(),
+                    DataOrLater::Later(data) => {
+                        self.runtime.block_on(data).unwrap()
+                    }
                 };
 
                 self.seq_blocks_cache.push((*block_idx, block));
@@ -1152,11 +1177,19 @@ impl Iterator for SfastaIterator
         }
 
         let mut seq = Vec::with_capacity(seqloc.seq_len());
-        
+
         // Build the sequence
         for l in seq_locs.iter() {
-            let block = self.seq_blocks_cache.iter().find(|(b, _)| b == &l.block).unwrap().1.clone();
-            seq.extend_from_slice(&block[l.start as usize..(l.start + l.len) as usize]);
+            let block = self
+                .seq_blocks_cache
+                .iter()
+                .find(|(b, _)| b == &l.block)
+                .unwrap()
+                .1
+                .clone();
+            seq.extend_from_slice(
+                &block[l.start as usize..(l.start + l.len) as usize],
+            );
         }
 
         // Just testing right now, so no need for any of the other stuff...
@@ -1167,8 +1200,6 @@ impl Iterator for SfastaIterator
             scores: None,
             offset: 0,
         }));
-
-
     }
 }
 
@@ -1282,6 +1313,9 @@ mod tests
     };
 
     #[cfg(not(feature = "async"))]
+    use crate::parser::open_with_buffer;
+
+    #[cfg(not(feature = "async"))]
     #[test]
     pub fn test_sfasta_find_and_retrieve_sequence()
     {
@@ -1360,7 +1394,8 @@ mod tests
         };
 
         // TODO: Test this with prefecth both true and false...
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
+        // let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
+        let mut sfasta = open_with_buffer(out_buf).expect("Unable to open");
         sfasta.index_load().expect("Unable to load index");
         assert!(sfasta.index_len() == Ok(10));
 
@@ -1421,7 +1456,9 @@ mod tests
             panic!("Unable to seek to start of file, {x:#?}")
         };
 
-        let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
+        // let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
+        let mut sfasta = open_with_buffer(out_buf).expect("Unable to open");
+
         sfasta.index_load().expect("Unable to load index");
         println!("Index len: {:#?}", sfasta.index_len());
         assert!(sfasta.index_len() == Ok(10));

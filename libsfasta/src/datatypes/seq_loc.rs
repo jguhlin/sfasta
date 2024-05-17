@@ -33,7 +33,10 @@ use flate2::Compression;
 use rand::seq;
 
 use libcompression::*;
-use libfractaltree::{FractalTreeBuild, FractalTreeDisk, FractalTreeDiskAsync};
+use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
+
+#[cfg(feature = "async")]
+use libfractaltree::FractalTreeDiskAsync;
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each

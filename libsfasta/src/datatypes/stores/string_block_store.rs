@@ -7,9 +7,12 @@ use simdutf8::basic::from_utf8;
 
 use super::Builder;
 use crate::datatypes::{
-    BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, DataOrLater, Loc,
+    BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc,
 };
 use libcompression::*;
+
+#[cfg(feature = "async")]
+use crate::datatypes::DataOrLater;
 
 #[cfg(feature = "async")]
 use crate::parser::async_parser::{
@@ -237,12 +240,13 @@ impl StringBlockStore
 
     #[cfg(not(feature = "async"))]
     // todo should be falliable
-    pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> String
+    pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> bytes::Bytes
     where
         R: Read + Seek + Send + Sync,
     {
-        let string_as_bytes = self.inner.get(in_buf, loc);
-        from_utf8(&string_as_bytes).unwrap().to_string()
+        self.inner.get(in_buf, loc)
+        // let string_as_bytes = self.inner.get(in_buf, loc);
+        // from_utf8(&string_as_bytes).unwrap().to_string()
     }
 
     #[cfg(feature = "async")]

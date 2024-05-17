@@ -50,5 +50,5 @@ pco = "0.2.3"
 stream-vbyte = "0.4.1"
 
 [features]
-default = ["async"]
+default = []
 async = ["tokio", "futures", "compression/async"]

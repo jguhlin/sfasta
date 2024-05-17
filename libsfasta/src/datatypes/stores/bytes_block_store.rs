@@ -1,5 +1,3 @@
-// TODO: https://docs.rs/bytes/latest/bytes/
-
 use std::{
     io::{BufRead, Read, Seek, SeekFrom, Write},
     sync::{
@@ -37,7 +35,6 @@ use tokio::{
     sync::{oneshot, Mutex, OwnedRwLockWriteGuard, RwLock},
 };
 
-#[cfg(feature = "async")]
 use bytes::{BufMut, Bytes, BytesMut};
 
 use crossbeam::utils::Backoff;
@@ -45,7 +42,10 @@ use crossbeam::utils::Backoff;
 use super::Builder;
 use crate::datatypes::Loc;
 use libcompression::*;
-use libfractaltree::{FractalTreeBuild, FractalTreeDisk, FractalTreeDiskAsync};
+use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
+
+#[cfg(feature = "async")]
+use libfractaltree::FractalTreeDiskAsync;
 
 #[cfg(feature = "async")]
 use crate::parser::async_parser::{
@@ -548,7 +548,7 @@ pub struct BytesBlockStore
     #[cfg(not(feature = "async"))]
     cache: Option<(u32, Vec<u8>)>,
 
-    // #[cfg(feature = "async")]
+    #[cfg(feature = "async")]
     cache: Arc<AsyncLRU>,
 
     #[cfg(feature = "async")]
@@ -685,7 +685,7 @@ impl BytesBlockStore
     }
 
     #[cfg(not(feature = "async"))]
-    pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> Vec<u8>
+    pub fn get<R>(&mut self, in_buf: &mut R, loc: &[Loc]) -> bytes::Bytes
     where
         R: Read + Seek + Send + Sync,
     {
@@ -726,7 +726,7 @@ impl BytesBlockStore
             }
         }
 
-        result
+        Bytes::from(result)
     }
 
     #[cfg(feature = "async")]
