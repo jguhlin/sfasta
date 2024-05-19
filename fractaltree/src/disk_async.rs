@@ -702,7 +702,7 @@ impl AsyncFileHandleManager
                 }
             }
 
-            if file_handles_read.len() < 256 {
+            if file_handles_read.len() < 8 {
                 // There are no available file handles, so we need to create a
                 // new one and the number isn't crazy (yet)
                 break;
@@ -730,7 +730,7 @@ impl AsyncFileHandleManager
         }
 
         let file_handle = std::sync::Arc::new(Mutex::new(
-            tokio::io::BufReader::with_capacity(64 * 1024, file),
+            tokio::io::BufReader::with_capacity(32 * 1024, file),
             // tokio::io::BufReader::new(file),
         ));
 

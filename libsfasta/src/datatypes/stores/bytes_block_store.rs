@@ -4,6 +4,7 @@ use std::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
+    collections::HashMap,
 };
 
 #[cfg(feature = "async")]
@@ -889,7 +890,7 @@ struct AsyncLRU
 
     /// The LRU itself, stored as vec so we can just iterate
     /// through...
-    lru: Arc<RwLock<Vec<(u32, Bytes)>>>,
+    lru: Arc<RwLock<HashMap<u32, Bytes>>>,
 
     /// The order of the LRU
     order: Arc<RwLock<std::collections::VecDeque<u32>>>,
@@ -903,7 +904,7 @@ impl AsyncLRU
     {
         AsyncLRU {
             max_size,
-            lru: Arc::new(RwLock::new(Vec::new())),
+            lru: Arc::new(RwLock::new(HashMap::new())),
             order: Arc::new(RwLock::new(std::collections::VecDeque::new())),
         }
     }
@@ -914,19 +915,15 @@ impl AsyncLRU
     #[tracing::instrument(skip(self))]
     pub async fn get(&self, block: u32) -> Option<Bytes>
     {
-        let lru = self.lru.read().await;
+        let mut cache = self.lru.read().await;
+	let mut order = self.order.write().await;
 
-        // Check if the block is in the LRU
-        for (b, data) in lru.iter() {
-            if *b == block {
-                // Move the block to the front of the LRU
-                let mut order = self.order.write().await;
-                order.retain(|x| *x != block);
-                order.push_front(block);
+	if let Some(data) = cache.get(&block) {
+		order.retain(|&x| x != block);
+		order.push_front(block);
 
-                return Some(data.clone());
-            }
-        }
+		return Some(data.clone());
+	}
 
         None
     }
@@ -935,29 +932,24 @@ impl AsyncLRU
     #[tracing::instrument(skip(self, data))]
     pub async fn add(&self, block: u32, data: Bytes) -> Bytes
     {
-        let mut lru = self.lru.write().await;
+        let mut cache = self.lru.write().await;
         let mut order = self.order.write().await;
 
         // If the block is already in the LRU, move it to the front
-        for (b, data) in lru.iter() {
-            if *b == block {
-                order.retain(|x| *x != block);
-                order.push_front(block);
-                return data.clone();
-            }
-        }
+	if cache.contains_key(&block) {
+		order.retain(|&x| x != block);
+	} else {
+		if cache.len() >= self.max_size {
+			if let Some(lru_block) = order.pop_back() {
+				cache.remove(&lru_block);
+			}
+		}
+	}
 
-        // If the LRU is full, remove the least recently used block
-        if lru.len() >= self.max_size {
-            let lru_block = order.pop_back().unwrap();
-            lru.retain(|x| x.0 != lru_block);
-        }
 
-        // Add the block to the LRU
-        let data = Bytes::from(data);
-        lru.push((block, data.clone()));
-        order.push_front(block);
-        data
+	order.push_front(block);
+	cache.insert(block, data.clone());
+	data
     }
 }
 

@@ -1,51 +1,51 @@
-block_size: 512
+block_size: 64
 data:
   ids:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   headers:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   sequence:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   masking:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   quality:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   signals:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   modifications:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
 index:
   ids:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   headers:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   sequence:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   masking:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   quality:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   signals:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
   modifications:
     compression_type: ZSTD
-    compression_level: 9
+    compression_level: 3
 seqlocs:
   compression_type: ZSTD
-  compression_level: 1
+  compression_level: -3
 id_index:
   compression_type: ZSTD
-  compression_level: 1
+  compression_level: -3

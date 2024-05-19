@@ -18,6 +18,7 @@
 use std::{
     io::{BufRead, Read, Seek, SeekFrom},
     sync::Arc,
+    time::Instant,
 };
 
 #[cfg(feature = "async")]
@@ -279,6 +280,8 @@ impl<'sfa> Sfasta<'sfa>
         idx: usize,
     ) -> Result<Option<Sequence>, &'static str>
     {
+	let start = Instant::now();
+	
         let seqloc = match self.get_seqloc(idx) {
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),
@@ -287,6 +290,9 @@ impl<'sfa> Sfasta<'sfa>
         .clone();
 
         assert!(seqloc.sequence > 0);
+
+	let duration = start.elapsed();
+	log::trace!("get_sequence_by_index took {:?}", duration);
 
         self.get_sequence_by_seqloc(&seqloc)
     }
@@ -298,6 +304,8 @@ impl<'sfa> Sfasta<'sfa>
         idx: usize,
     ) -> Result<Option<Sequence>, &'static str>
     {
+	let start = Instant::now();
+
         let seqloc = match self.get_seqloc(idx).await {
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),
@@ -305,6 +313,9 @@ impl<'sfa> Sfasta<'sfa>
         };
 
         assert!(seqloc.sequence > 0);
+
+	let duration = start.elapsed();
+	log::trace!("get_seq_by_index took {:?}", duration);
 
         self.get_sequence_by_seqloc(seqloc).await
     }
@@ -483,6 +494,7 @@ impl<'sfa> Sfasta<'sfa>
         } else {
             None
         };
+	
 
         Ok(Some(Sequence {
             sequence,
@@ -586,6 +598,7 @@ impl<'sfa> Sfasta<'sfa>
         maskinglocs: &[Loc],
     ) -> Result<Bytes, &'static str>
     {
+	let start = Instant::now();
         let mut seq = Vec::with_capacity(
             sequencelocs.iter().map(|i| i.len).sum::<u32>() as usize,
         );
@@ -631,6 +644,9 @@ impl<'sfa> Sfasta<'sfa>
         if !maskinglocs.is_empty() && self.masking.is_some() && mask.is_some() {
             mask_sequence(&mut seq, mask.unwrap().await.unwrap());
         }
+
+	let duration = start.elapsed();
+	log::trace!("Get sequence took {:?} starting with block {}", duration, sequencelocs[0].block);
 
         Ok(Bytes::from(seq))
     }
@@ -789,7 +805,7 @@ impl<'sfa> Sfasta<'sfa>
         locs: &[Loc],
     ) -> Result<Bytes, &'static str>
     {
-        let mut seq: Vec<u8> = Vec::with_capacity(256);
+        let mut seq: Vec<u8> = Vec::with_capacity(1024);
 
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let mut buffer =
@@ -1259,7 +1275,7 @@ impl AsyncFileHandleManager
                 }
             }
 
-            if file_handles_read.len() < 256 {
+            if file_handles_read.len() < 8 {
                 // There are no available file handles, so we need to create a
                 // new one and the number isn't crazy (yet)
                 break;
@@ -1287,7 +1303,7 @@ impl AsyncFileHandleManager
         }
 
         let file_handle = std::sync::Arc::new(tokio::sync::Mutex::new(
-            tokio::io::BufReader::with_capacity(64 * 1024, file),
+            tokio::io::BufReader::with_capacity(16 * 1024, file),
             // tokio::io::BufReader::new(file),
         ));
 

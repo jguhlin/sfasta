@@ -210,10 +210,10 @@ fn main()
 {
     sigpipe::reset();
 
-    #[cfg(tokio_unstable)]
-    console_subscriber::init();
+    // #[cfg(tokio_unstable)]
+    // console_subscriber::init();
 
-    #[cfg(not(tokio_unstable))]
+    // #[cfg(not(tokio_unstable))]
     env_logger::init();
 
     let cli = Cli::parse();
@@ -605,6 +605,7 @@ fn view(input: String)
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(16) // todo set from cli
         .enable_all()
+	.disable_lifo_slot()
         .build()
         .unwrap();
 
