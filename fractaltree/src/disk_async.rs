@@ -115,7 +115,7 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
 
 impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 {
-    #[tracing::instrument(skip(self))]
+    
     pub async fn load_tree(&self) -> Result<(), &'static str>
     {
         let root = Arc::clone(&self.root);
@@ -129,7 +129,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         Ok(())
     }
 
-    #[tracing::instrument(skip(self))]
+    
     pub async fn len(&self) -> Result<usize, &'static str>
     {
         let root = self.root.read().await;
@@ -141,7 +141,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         self.compression = Arc::new(Some(compression));
     }
 
-    #[tracing::instrument(skip(self))]
+    
     pub async fn search(&self, key: &K) -> Option<V>
     {
         if self.root.read().await.children_in_memory {
@@ -193,7 +193,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
     }
     */
 
-    #[tracing::instrument]
+    
     pub async fn from_buffer(
         file: String,
         pos: u64,
@@ -228,6 +228,50 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         tree.file_handle_manager = Arc::new(fhm);
 
         Ok(tree)
+    }
+
+    
+    pub async fn load_node(
+        &self,
+        fhm: Arc<AsyncFileHandleManager>,
+        compression: &Arc<Option<CompressionConfig>>,
+        loc: u64,
+    )
+    {
+        
+
+        let config = bincode::config::standard()
+            .with_variable_int_encoding()
+            .with_limit::<{ 8 * 1024 * 1024 }>();
+
+        *self = if compression.is_some() {
+            let compressed: Vec<u8> =
+                bincode_decode_from_buffer_async_with_size_hint::<
+                    { 64 * 1024 },
+                    _,
+                    _,
+                >(in_buf, config)
+                .await
+                .unwrap();
+
+            let compression = Arc::clone(&compression);
+            let decompressed = tokio::task::spawn_blocking(move || {
+                compression
+                    .as_ref()
+                    .as_ref()
+                    .unwrap()
+                    .decompress(&compressed)
+                    .unwrap()
+            });
+
+            let decompressed = decompressed.await.unwrap();
+
+            bincode::decode_from_slice(&decompressed, config).unwrap().0
+        } else {
+            bincode_decode_from_buffer_async_with_size_hint::<{64 * 1024}, _, _>(in_buf, config).await.unwrap()
+        };
+
+        delta_decode(&mut self.keys);
     }
 }
 
@@ -410,9 +454,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         }
     }
 
-    // todo move load logic to FractalTreeDisk so we don't have to pass a
-    // file handle around
-    #[tracing::instrument(skip(self, in_buf))]
+    
     pub async fn load(
         &mut self,
         in_buf: &mut OwnedMutexGuard<BufReader<File>>,
@@ -460,7 +502,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
     }
 
     // todo: This doesn't work, need to account for compression better
-    #[tracing::instrument]
+    
     pub fn load_all<'a>(
         &'a mut self,
         fhm: Arc<AsyncFileHandleManager>,
@@ -499,7 +541,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         })
     }
 
-    #[tracing::instrument(skip(self))]
+    
     pub async fn search(
         &mut self,
         fhm: Arc<AsyncFileHandleManager>,
@@ -558,7 +600,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         }
     }
 
-    #[tracing::instrument(skip(self))]
+    
     pub async fn search_read(
         &self,
         fhm: Arc<AsyncFileHandleManager>,
@@ -610,7 +652,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         }
     }
 
-    #[tracing::instrument(skip(self))]
+    
     pub async fn children_stored_on_disk(&self) -> bool
     {
         if self.is_leaf {
@@ -626,7 +668,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         }
     }
 
-    #[tracing::instrument(skip(self))]
+    
     pub async fn children_loaded(&self) -> bool
     {
         if self.is_leaf {
@@ -644,7 +686,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         }
     }
 
-    #[tracing::instrument(skip(self))]
+    
     pub async fn len(&self) -> Result<usize, &'static str>
     {
         if self.is_leaf {
@@ -666,7 +708,6 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
     }
 }
 
-#[tracing::instrument(skip(bincode_config, in_buf))]
 pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<
     const SIZE_HINT: usize,
     T,
@@ -734,7 +775,7 @@ impl Default for AsyncFileHandleManager
 #[cfg(feature = "async")]
 impl AsyncFileHandleManager
 {
-    #[tracing::instrument(skip(self))]
+    
     pub async fn get_filehandle(&self) -> OwnedMutexGuard<BufReader<File>>
     {
         let file_handles = Arc::clone(&self.file_handles);

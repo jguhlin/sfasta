@@ -33,8 +33,6 @@ num = { version = "0.4.1", features = ["alloc", "libm"] }
 zstd = { version="0.13", default-features = false, features=["arrays", "zdict_builder", "experimental"] }
 tokio = { version = "1.37", default-features = false, features = ["fs", "io-util"], optional = true }
 futures = { version = "0.3.30", optional = true }
-tracing = "0.1"
-tracing-subscriber = "0.3"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.28.0", features = ["fs"] }
