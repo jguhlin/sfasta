@@ -1,18 +1,21 @@
 // This whole file is behind the async flag, so we don't need to worry
 // about
 
-use std::{ops::SubAssign, sync::Arc};
+use std::{
+    async_iter::AsyncIterator,
+    pin::Pin,
+    sync::Arc,
+    task::{Context, Poll},
+    collections::BTreeMap,
+};
 
-use bincode::{BorrowDecode, Decode, Encode};
-use futures::future::{BoxFuture, FutureExt};
-use pulp::Arch;
+use bincode::{BorrowDecode, Decode};
 use tokio::{
     fs::File,
-    io::{
-        AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt,
-        BufReader, SeekFrom,
+    io::{AsyncReadExt, BufReader, AsyncSeekExt, SeekFrom},
+    sync::{
+        Mutex, OwnedMutexGuard, RwLock,
     },
-    sync::{OwnedRwLockReadGuard, OwnedRwLockWriteGuard, RwLock, Mutex, OwnedMutexGuard},
 };
 
 #[cfg(unix)]
@@ -35,6 +38,10 @@ pub struct FractalTreeDiskAsync<K: Key, V: Value>
     pub file_handles: Arc<RwLock<Vec<Arc<RwLock<BufReader<File>>>>>>,
     pub file: Option<String>,
     pub file_handle_manager: Arc<AsyncFileHandleManager>,
+
+    // Which nodes have been opened, in case they haven't been placed on the tree yet
+    // such as from a DFS search and "right" thing
+    pub opened: BTreeMap<u64, Arc<RwLock<NodeDiskAsync<K, V>>>>,
 }
 
 impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
@@ -71,6 +78,7 @@ impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
             file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 16)),
             file: None,
             file_handle_manager: Default::default(),
+            opened: BTreeMap::new(),
         })
     }
 }
@@ -89,6 +97,9 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
                     children: None,
                     values: None,
                     children_in_memory: false,
+                    left: None,
+                    right: None,
+                    loc: 0,
                 },
                 128,
             )),
@@ -97,6 +108,7 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
             file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 8)),
             file: None,
             file_handle_manager: Default::default(),
+            opened: BTreeMap::new(),
         }
     }
 }
@@ -130,10 +142,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
     }
 
     #[tracing::instrument(skip(self))]
-    pub async fn search(
-        &self,
-        key: &K,
-    ) -> Option<V>
+    pub async fn search(&self, key: &K) -> Option<V>
     {
         if self.root.read().await.children_in_memory {
             let root = self.root.read().await;
@@ -152,10 +161,37 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 root.children_in_memory = true;
             }
 
-            root.search(Arc::clone(&self.file_handle_manager), Arc::clone(&self.compression), self.start, key)
-                .await
+            root.search(
+                Arc::clone(&self.file_handle_manager),
+                Arc::clone(&self.compression),
+                self.start,
+                key,
+            )
+            .await
         }
     }
+
+    /*
+    /// Find the first leaf of the node
+    pub async fn first_leaf(
+        &self,
+    ) -> Arc<RwLock<NodeDiskAsync<K, V>>>
+    {
+        let root = self.root.read().await;
+        let mut current_leaf = root;
+        while !current_leaf.is_leaf {
+            // Load node if it's not in memory
+            if current_leaf.state.on_disk() {
+                let mut in_buf = self.file_handle_manager.get_filehandle().await;
+                current_leaf.load(&mut in_buf, &self.compression, self.start).await;
+            }
+            let children = current_leaf.children.as_ref().unwrap().read().await;
+            current_leaf = children[0].read().await;
+        }
+
+        current_leaf
+    }
+    */
 
     #[tracing::instrument]
     pub async fn from_buffer(
@@ -256,6 +292,12 @@ pub struct NodeDiskAsync<K, V>
     pub children: Option<Arc<RwLock<Vec<Arc<RwLock<NodeDiskAsync<K, V>>>>>>>,
     pub values: Option<Vec<V>>,
     pub children_in_memory: bool,
+
+
+    // These are not stored, but are populated dynamically after the tree is loaded
+    pub left: Option<Arc<RwLock<NodeDiskAsync<K, V>>>>,
+    pub right: Option<Arc<RwLock<NodeDiskAsync<K, V>>>>,
+    pub loc: u64,
 }
 
 impl<K: Key, V: Value> Decode for NodeDiskAsync<K, V>
@@ -297,6 +339,9 @@ impl<K: Key, V: Value> Decode for NodeDiskAsync<K, V>
             children,
             values,
             children_in_memory: false,
+            left: None,
+            right: None,
+            loc: 0,
         })
     }
 }
@@ -340,6 +385,9 @@ impl<K: Key, V: Value> BorrowDecode<'_> for NodeDiskAsync<K, V>
             children,
             values,
             children_in_memory: false,
+            left: None,
+            right: None,
+            loc: 0,
         })
     }
 }
@@ -356,6 +404,9 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
             children: None,
             values: None,
             children_in_memory: false,
+            left: None,
+            right: None,
+            loc: 0,
         }
     }
 
@@ -684,9 +735,7 @@ impl Default for AsyncFileHandleManager
 impl AsyncFileHandleManager
 {
     #[tracing::instrument(skip(self))]
-    pub async fn get_filehandle(
-        &self,
-    ) -> OwnedMutexGuard<BufReader<File>>
+    pub async fn get_filehandle(&self) -> OwnedMutexGuard<BufReader<File>>
     {
         let file_handles = Arc::clone(&self.file_handles);
 
@@ -744,3 +793,45 @@ impl AsyncFileHandleManager
         fh
     }
 }
+
+/*
+
+pub struct FractalTreeDiskAsyncIterator<K: Key, V: Value>
+{
+    tree: Arc<FractalTreeDiskAsync<K, V>>,
+    current: usize,
+    current_leaf: Option<Arc<RwLock<NodeDiskAsync<K, V>>>>,
+}
+
+impl<K: Key, V: Value> FractalTreeDiskAsyncIterator<K, V>
+{
+    pub async fn new(tree: Arc<FractalTreeDiskAsync<K, V>>) -> Self
+    {
+
+        // Get the first leaf node
+        let root = tree.root.read().await;
+        let mut current_leaf = root;
+        while !current_leaf.is_leaf {
+            let children = current_leaf.children.as_ref().unwrap().read().unwrap();
+            current_leaf = children[0].read().unwrap();
+        }
+
+
+        FractalTreeDiskAsyncIterator { tree, current: 0 }
+    }
+}
+
+impl<K: Key, V: Value> AsyncIterator for FractalTreeDiskAsyncIterator<K, V>
+{
+    type Item = (K, V);
+
+    fn poll_next(
+        mut self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+    ) -> Poll<Option<Self::Item>>
+    {
+
+    }
+}
+
+*/

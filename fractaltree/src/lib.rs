@@ -1,3 +1,4 @@
+#![feature(async_iterator)]
 #![feature(is_sorted)]
 #![feature(trait_alias)]
 
