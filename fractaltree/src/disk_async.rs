@@ -41,7 +41,7 @@ pub struct FractalTreeDiskAsync<K: Key, V: Value>
 
     // Which nodes have been opened, in case they haven't been placed on the tree yet
     // such as from a DFS search and "right" thing
-    pub opened: BTreeMap<u64, Arc<RwLock<NodeDiskAsync<K, V>>>>,
+    pub opened: Arc<RwLock<BTreeMap<u64, Arc<RwLock<NodeDiskAsync<K, V>>>>>>,
 }
 
 impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
@@ -78,7 +78,7 @@ impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
             file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 16)),
             file: None,
             file_handle_manager: Default::default(),
-            opened: BTreeMap::new(),
+            opened: Arc::new(RwLock::new(BTreeMap::new())),
         })
     }
 }
@@ -108,7 +108,7 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
             file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 8)),
             file: None,
             file_handle_manager: Default::default(),
-            opened: BTreeMap::new(),
+            opened: Arc::new(RwLock::new(BTreeMap::new())),
         }
     }
 }
@@ -229,28 +229,29 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
         Ok(tree)
     }
-
     
     pub async fn load_node(
         &self,
         fhm: Arc<AsyncFileHandleManager>,
         compression: &Arc<Option<CompressionConfig>>,
         loc: u64,
+        node: Arc<RwLock<NodeDiskAsync<K, V>>>,
     )
     {
-        
+        let mut node_write = node.write().await;
+        let mut in_buf = fhm.get_filehandle().await;
 
         let config = bincode::config::standard()
             .with_variable_int_encoding()
             .with_limit::<{ 8 * 1024 * 1024 }>();
 
-        *self = if compression.is_some() {
+        let mut loaded_node: NodeDiskAsync<K, V> = if compression.is_some() {
             let compressed: Vec<u8> =
                 bincode_decode_from_buffer_async_with_size_hint::<
                     { 64 * 1024 },
                     _,
                     _,
-                >(in_buf, config)
+                >(&mut in_buf, config)
                 .await
                 .unwrap();
 
@@ -268,10 +269,18 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
             bincode::decode_from_slice(&decompressed, config).unwrap().0
         } else {
-            bincode_decode_from_buffer_async_with_size_hint::<{64 * 1024}, _, _>(in_buf, config).await.unwrap()
+            bincode_decode_from_buffer_async_with_size_hint::<{32 * 1024}, _, _>(&mut in_buf, config).await.unwrap()
         };
 
-        delta_decode(&mut self.keys);
+        delta_decode(&mut loaded_node.keys);
+        loaded_node.loc = loc;
+        *node_write = loaded_node;
+
+        // Release the lock
+        drop(node_write);
+
+        let mut opened = self.opened.write().await;
+        opened.insert(loc, Arc::clone(&node));
     }
 }
 
