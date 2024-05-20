@@ -605,7 +605,7 @@ fn view(input: String)
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(16) // todo set from cli
         .enable_all()
-	.disable_lifo_slot()
+        .disable_lifo_slot()
         .build()
         .unwrap();
 

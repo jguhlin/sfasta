@@ -1,10 +1,10 @@
 use std::{
+    collections::HashMap,
     io::{BufRead, Read, Seek, SeekFrom, Write},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
-    collections::HashMap,
 };
 
 #[cfg(feature = "async")]
@@ -916,14 +916,14 @@ impl AsyncLRU
     pub async fn get(&self, block: u32) -> Option<Bytes>
     {
         let mut cache = self.lru.read().await;
-	let mut order = self.order.write().await;
+        let mut order = self.order.write().await;
 
-	if let Some(data) = cache.get(&block) {
-		order.retain(|&x| x != block);
-		order.push_front(block);
+        if let Some(data) = cache.get(&block) {
+            order.retain(|&x| x != block);
+            order.push_front(block);
 
-		return Some(data.clone());
-	}
+            return Some(data.clone());
+        }
 
         None
     }
@@ -936,20 +936,19 @@ impl AsyncLRU
         let mut order = self.order.write().await;
 
         // If the block is already in the LRU, move it to the front
-	if cache.contains_key(&block) {
-		order.retain(|&x| x != block);
-	} else {
-		if cache.len() >= self.max_size {
-			if let Some(lru_block) = order.pop_back() {
-				cache.remove(&lru_block);
-			}
-		}
-	}
+        if cache.contains_key(&block) {
+            order.retain(|&x| x != block);
+        } else {
+            if cache.len() >= self.max_size {
+                if let Some(lru_block) = order.pop_back() {
+                    cache.remove(&lru_block);
+                }
+            }
+        }
 
-
-	order.push_front(block);
-	cache.insert(block, data.clone());
-	data
+        order.push_front(block);
+        cache.insert(block, data.clone());
+        data
     }
 }
 

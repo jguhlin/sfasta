@@ -280,8 +280,8 @@ impl<'sfa> Sfasta<'sfa>
         idx: usize,
     ) -> Result<Option<Sequence>, &'static str>
     {
-	let start = Instant::now();
-	
+        let start = Instant::now();
+
         let seqloc = match self.get_seqloc(idx) {
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),
@@ -291,8 +291,8 @@ impl<'sfa> Sfasta<'sfa>
 
         assert!(seqloc.sequence > 0);
 
-	let duration = start.elapsed();
-	log::trace!("get_sequence_by_index took {:?}", duration);
+        let duration = start.elapsed();
+        log::trace!("get_sequence_by_index took {:?}", duration);
 
         self.get_sequence_by_seqloc(&seqloc)
     }
@@ -304,7 +304,7 @@ impl<'sfa> Sfasta<'sfa>
         idx: usize,
     ) -> Result<Option<Sequence>, &'static str>
     {
-	let start = Instant::now();
+        let start = Instant::now();
 
         let seqloc = match self.get_seqloc(idx).await {
             Ok(Some(s)) => s,
@@ -314,8 +314,8 @@ impl<'sfa> Sfasta<'sfa>
 
         assert!(seqloc.sequence > 0);
 
-	let duration = start.elapsed();
-	log::trace!("get_seq_by_index took {:?}", duration);
+        let duration = start.elapsed();
+        log::trace!("get_seq_by_index took {:?}", duration);
 
         self.get_sequence_by_seqloc(seqloc).await
     }
@@ -494,7 +494,6 @@ impl<'sfa> Sfasta<'sfa>
         } else {
             None
         };
-	
 
         Ok(Some(Sequence {
             sequence,
@@ -598,7 +597,7 @@ impl<'sfa> Sfasta<'sfa>
         maskinglocs: &[Loc],
     ) -> Result<Bytes, &'static str>
     {
-	let start = Instant::now();
+        let start = Instant::now();
         let mut seq = Vec::with_capacity(
             sequencelocs.iter().map(|i| i.len).sum::<u32>() as usize,
         );
@@ -645,8 +644,12 @@ impl<'sfa> Sfasta<'sfa>
             mask_sequence(&mut seq, mask.unwrap().await.unwrap());
         }
 
-	let duration = start.elapsed();
-	log::trace!("Get sequence took {:?} starting with block {}", duration, sequencelocs[0].block);
+        let duration = start.elapsed();
+        log::trace!(
+            "Get sequence took {:?} starting with block {}",
+            duration,
+            sequencelocs[0].block
+        );
 
         Ok(Bytes::from(seq))
     }
