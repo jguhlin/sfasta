@@ -149,6 +149,14 @@ impl MaskingStoreBuilder
         let masked: Vec<u8> =
             seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
 
+        // RLE - while zstd does it, this can reduce some of the blocks to fit into a single block
+        let masked = rle_encode(&masked);
+
+        let bincode_config = bincode::config::standard()
+            .with_variable_int_encoding();
+
+        let masked = bincode::encode_to_vec(&masked, bincode_config).unwrap();
+        
         self.inner
             .add(masked)
             .expect("Failed to add masking to block store")
@@ -159,6 +167,40 @@ impl MaskingStoreBuilder
         self.inner.finalize()
     }
 }
+
+fn rle_encode(data: &[u8]) -> Vec<(u64, u8)>
+{
+    let mut rle = Vec::new();
+    let mut count = 0;
+    let mut last = data[0];
+
+    for x in data.iter() {
+        if *x == last {
+            count += 1;
+        } else {
+            rle.push((count, last));
+            count = 1;
+            last = *x;
+        }
+    }
+
+    rle.push((count, last));
+    rle
+}
+
+fn rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
+{
+    let mut data = Vec::new();
+
+    for (count, value) in rle.iter() {
+        for _ in 0..*count {
+            data.push(*value);
+        }
+    }
+
+    data
+}
+
 
 pub struct Masking
 {
@@ -208,6 +250,14 @@ impl Masking
 
         let mask_raw = self.inner.get(in_buf, loc);
 
+        let bincode_config = bincode::config::standard()
+            .with_variable_int_encoding();
+
+        let mask_raw: Vec<(u64, u8)> = bincode::decode_from_slice(&mask_raw, bincode_config)
+            .expect("Failed to decode mask").0;
+
+        let mask_raw = rle_decode(&mask_raw);
+
         arch.dispatch(|| {
             for (i, m) in mask_raw.iter().enumerate() {
                 seq[i] = if *m == 1 {
@@ -227,7 +277,15 @@ impl Masking
         loc: &[Loc],
     ) -> bytes::Bytes
     {
-        self.inner.get(in_buf, loc).await
+        let mask = self.inner.get(in_buf, loc).await;
+
+        let bincode_config = bincode::config::standard()
+            .with_variable_int_encoding();
+
+        let mask: Vec<(u64, u8)> = bincode::decode_from_slice(&mask, bincode_config)
+            .expect("Failed to decode mask").0;
+
+        bytes::Bytes::from(rle_decode(&mask))
     }
 }
 

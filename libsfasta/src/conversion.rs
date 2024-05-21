@@ -293,7 +293,7 @@ impl Converter
 
         // Build the index in another thread...
         thread::scope(|s| {
-            let mut indexer = libfractaltree::FractalTreeBuild::new(1024, 2048);
+            let mut indexer = libfractaltree::FractalTreeBuild::new(512, 8192);
 
             let index_handle = Some(s.spawn(|_| {
                 for (id, loc) in ids_to_locs.into_iter() {
@@ -310,6 +310,7 @@ impl Converter
 
             let start = out_buffer_thread.stream_position().unwrap();
 
+            log::trace!("Storing seqlocs");
             seqlocs_location =
                 seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
 
@@ -623,6 +624,8 @@ impl Converter
 
         let start = out_buffer.stream_position().unwrap();
 
+        log::trace!("Writing headers");
+
         let mut headers = match headers.write_block_locations(&mut *out_buffer)
         {
             Ok(_) => Some(headers),
@@ -634,6 +637,8 @@ impl Converter
 
         let end = out_buffer.stream_position().unwrap();
         log::info!("Headers Fractal Tree Size: {}", formatter(end - start));
+
+        log::trace!("Writing IDs");
 
         let start = out_buffer.stream_position().unwrap();
         let mut ids = match ids.write_block_locations(&mut *out_buffer) {
@@ -726,6 +731,8 @@ impl Converter
         } else {
             scores_location = None;
         }
+
+        log::debug!("Conversion Process function complete");
 
         // let seqlocs = seqlocs.join().unwrap();
 

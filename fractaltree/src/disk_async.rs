@@ -50,9 +50,9 @@ impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
         decoder: &mut D,
     ) -> core::result::Result<Self, bincode::error::DecodeError>
     {
+        let start: u64 = bincode::Decode::decode(decoder)?;
         let compression: Option<CompressionConfig> =
             bincode::Decode::decode(decoder)?;
-        let start: u64 = bincode::Decode::decode(decoder)?;
         let mut root: NodeDiskAsync<K, V> = if compression.is_some() {
             let compressed: Vec<u8> = bincode::Decode::decode(decoder)?;
             let decompressed = compression
@@ -138,18 +138,65 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 drop(child_r);
                 self.load_children(child.clone()).await?;
             }
-
         }
-
-
-
 
         Ok(())
     }
 
-    pub async fn load_children(self: &Arc<Self>, node: ArcNodeDiskAsync<K, V>) -> Result<(), &'static str>
-    {
+    // todo integrate this into sfa fn view
+    // seqlocs iterator? or all of the stores?
+    
+    pub async fn load_all_leaves(
+        self: &Arc<Self>,
+    ) -> Result<(), &'static str> {
+        // Get filehandle
+        let mut in_buf = self.file_handle_manager.get_filehandle().await;
 
+        in_buf.seek(SeekFrom::Start(self.start)).await.unwrap();
+
+        let mut node: Arc<RwLock<NodeDiskAsync<K, V>>> = Arc::new(RwLock::new(NodeDiskAsync::from_loc(0)));
+
+        Arc::clone(&self).load_node(node).await;
+
+        let borrowed_self = Arc::clone(&self);
+
+        // Get lock on self.opened
+        let mut opened = borrowed_self.opened.write().await;
+
+        // Clear the opened nodes, just to prevent any funkiness if anyone keeps it open a long time (shouldn't happen)
+        opened.clear();
+
+        let pos = in_buf.seek(SeekFrom::Current(0)).await.unwrap();
+        node = Arc::new(RwLock::with_max_readers(
+            NodeDiskAsync::<K, V>::from_loc(pos as u32 - self.start as u32),
+            128,
+        ));
+
+        while node.read().await.is_leaf {
+            // Read the next one
+            let pos = in_buf.seek(SeekFrom::Current(0)).await.unwrap();
+            node = Arc::new(RwLock::with_max_readers(
+                NodeDiskAsync::<K, V>::from_loc(pos as u32 - self.start as u32),
+                128,
+            ));
+
+            let borrowed_self = Arc::clone(&self);
+            let borrowed_node = Arc::clone(&node);
+            borrowed_self.load_node(borrowed_node).await;
+
+            let node_clone = Arc::clone(&node);
+            let node_clone: ArcNodeDiskAsync<K, V> = node_clone.into(); 
+            opened.insert(pos, node_clone);
+        }
+
+        Ok(())
+    }
+
+    pub async fn load_children(
+        self: &Arc<Self>,
+        node: ArcNodeDiskAsync<K, V>,
+    ) -> Result<(), &'static str>
+    {
         let node_read = node.read().await;
 
         if node_read.children_loaded().await {
@@ -163,7 +210,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         for child in children.iter() {
             let child = Arc::clone(child.into());
             let tree = Arc::clone(self);
-            handles.push(tokio::spawn(async move { 
+            handles.push(tokio::spawn(async move {
                 tree.load_node(child.into()).await
             }));
         }
@@ -199,7 +246,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 }
             }
         }
-        
+
         Ok(())
     }
 
@@ -273,7 +320,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             {
                 Ok(x) => x,
                 Err(_) => {
-                    return Result::Err("Failed to decode FractalTreeDisk")
+                    return Result::Err("Failed to decode FractalTreeDiskAsync")
                 }
             };
 
@@ -307,7 +354,8 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             .with_variable_int_encoding()
             .with_limit::<{ 8 * 1024 * 1024 }>();
 
-        let mut loaded_node: NodeDiskAsync<K, V> = if self.compression.is_some() {
+        let mut loaded_node: NodeDiskAsync<K, V> = if self.compression.is_some()
+        {
             let compressed: Vec<u8> =
                 bincode_decode_from_buffer_async_with_size_hint::<
                     { 32 * 1024 },
@@ -436,11 +484,14 @@ impl<K: Key, V: Value> Decode for NodeDiskAsync<K, V>
             let children: Vec<ArcNodeDiskAsync<K, V>> = locs
                 .iter()
                 .map(|x| {
-                    Arc::new(RwLock::with_max_readers(
-                        NodeDiskAsync::<K, V>::from_loc(*x),
-                        128,
-                    ))
-                }.into())
+                    {
+                        Arc::new(RwLock::with_max_readers(
+                            NodeDiskAsync::<K, V>::from_loc(*x),
+                            128,
+                        ))
+                    }
+                    .into()
+                })
                 .collect::<Vec<ArcNodeDiskAsync<K, V>>>();
             Some(Arc::new(RwLock::with_max_readers(children, 128)))
         };
@@ -484,11 +535,14 @@ impl<K: Key, V: Value> BorrowDecode<'_> for NodeDiskAsync<K, V>
             let children: Vec<ArcNodeDiskAsync<K, V>> = locs
                 .iter()
                 .map(|x| {
-                    Arc::new(RwLock::with_max_readers(
-                        NodeDiskAsync::<K, V>::from_loc(*x),
-                        128,
-                    ))
-                }.into())
+                    {
+                        Arc::new(RwLock::with_max_readers(
+                            NodeDiskAsync::<K, V>::from_loc(*x),
+                            128,
+                        ))
+                    }
+                    .into()
+                })
                 .collect::<Vec<_>>();
             Some(Arc::new(RwLock::with_max_readers(children, 128)))
         };
@@ -597,12 +651,12 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
 
                 let mut handles = Vec::new();
 
-                for child in children.iter_mut() {
-                    let child = Arc::clone(&child);
+                for child in children.iter() {
+                    let child = child.clone();
                     let fhm = Arc::clone(&fhm);
                     let compression = Arc::clone(&compression);
                     handles.push(tokio::spawn(async move {
-                        let mut child = child.write_owned().await;
+                        let mut child = child.0.write_owned().await;
                         child.load_all(fhm, compression, start).await;
                     }));
                 }
@@ -968,7 +1022,8 @@ impl<K: Key, V: Value> ArcNodeDiskAsync<K, V>
         Arc::clone(&self.0)
     }
 
-    pub fn arc_sugar(&self) -> ArcNodeDiskAsync<K, V> {
+    pub fn arc_sugar(&self) -> ArcNodeDiskAsync<K, V>
+    {
         ArcNodeDiskAsync(Arc::clone(&self.0))
     }
 

@@ -468,7 +468,7 @@ impl BytesBlockStoreBuilder
         W: Write + Seek,
     {
         if !self.finalized {
-            self.finalize();
+            self.finalize().expect("Error finalizing block store");
         }
 
         self.check_complete();
@@ -479,7 +479,7 @@ impl BytesBlockStoreBuilder
         }
 
         let mut block_locations_tree: FractalTreeBuild<u32, u64> =
-            FractalTreeBuild::new(2048, 8192);
+            FractalTreeBuild::new(512, 8192);
 
         let block_locations: Vec<u64> = self
             .block_locations
@@ -491,6 +491,7 @@ impl BytesBlockStoreBuilder
             block_locations_tree.insert(i as u32, *x);
         });
 
+        log::trace!("Storing BytesBlockStore Fractal Tree");
         let mut block_locations_tree: FractalTreeDisk<_, _> =
             block_locations_tree.into();
         block_locations_tree

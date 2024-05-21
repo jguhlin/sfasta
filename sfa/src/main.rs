@@ -605,7 +605,7 @@ fn view(input: String)
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(16) // todo set from cli
         .enable_all()
-        .disable_lifo_slot()
+        // .disable_lifo_slot()
         .build()
         .unwrap();
 
@@ -627,6 +627,7 @@ fn view(input: String)
 
         let stdout = std::io::stdout().lock();
         let mut stdout = std::io::BufWriter::new(stdout);
+        // integrate the new load_all_leaves
 
         let mut futures = VecDeque::new();
 
@@ -967,7 +968,14 @@ fn convert(
 
     let mut in_buf = BufReader::new(buf);
 
-    let out_fh = Box::new(std::io::BufWriter::new(output));
+    // 8mbp took forever
+    // No buf writer took 193.29 secs
+    // Buf writer default capacity took 204.98
+    // Buf writer with 2mb took 192.89 secs
+    
+    let out_fh = Box::new(std::io::BufWriter::with_capacity(2 * 1024 * 1024, output));
+    // let out_fh = Box::new(std::io::BufWriter::new(output));
+    // let out_fh = Box::new(output);
 
     let _out_fh = converter.convert(&mut in_buf, out_fh);
 }

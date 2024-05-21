@@ -394,7 +394,7 @@ impl Default for SeqLocsStoreBuilder
     {
         SeqLocsStoreBuilder {
             location: 0,
-            tree: FractalTreeBuild::new(2048, 8192),
+            tree: FractalTreeBuild::new(512, 8192),
             compression: CompressionConfig {
                 compression_type: CompressionType::ZSTD,
                 compression_level: 1,
@@ -446,12 +446,13 @@ impl SeqLocsStoreBuilder
     where
         W: Write + Seek,
     {
+        log::trace!("Storing SeqLoc Fractal Tree");
         self.location = out_buf.stream_position().unwrap();
 
         let mut tree: FractalTreeDisk<u32, SeqLoc> = self.tree.into();
         tree.set_compression(CompressionConfig {
             compression_type: CompressionType::ZSTD,
-            compression_level: 1,
+            compression_level: -3,
             compression_dict: None,
         });
         tree.write_to_buffer(&mut out_buf)
@@ -532,7 +533,7 @@ pub struct SeqLocsStore
     tree: FractalTreeDisk<u32, SeqLoc>,
 
     #[cfg(feature = "async")]
-    tree: FractalTreeDiskAsync<u32, SeqLoc>,
+    tree: Arc<FractalTreeDiskAsync<u32, SeqLoc>>,
 }
 
 impl SeqLocsStore
@@ -624,7 +625,7 @@ impl SeqLocsStore
     {
         let tree = match FractalTreeDiskAsync::from_buffer(filename, pos).await
         {
-            Ok(tree) => tree,
+            Ok(tree) => Arc::new(tree),
             Err(e) => return Err(e.to_string()),
         };
 
@@ -663,7 +664,7 @@ impl SeqLocsStore
     {
         log::info!("Prefetching SeqLocs");
 
-        self.tree.load_tree().await
+        Arc::clone(&self.tree).load_tree().await
     }
 
     #[cfg(not(feature = "async"))]

@@ -85,7 +85,7 @@ pub struct Sfasta<'sfa>
                        */
     pub directory: Directory,
     pub metadata: Option<Metadata>,
-    pub index: Option<FractalTreeDiskAsync<u32, u32>>,
+    pub index: Option<Arc<FractalTreeDiskAsync<u32, u32>>>,
     pub buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
     pub sequences: Option<Arc<BytesBlockStore>>,
     pub seqlocs: Option<Arc<SeqLocsStore>>,
@@ -1065,7 +1065,7 @@ impl<'sfa> Sfasta<'sfa>
     #[tracing::instrument(skip(self))]
     pub async fn index_load(&self) -> Result<(), &'static str>
     {
-        self.index.as_ref().unwrap().load_tree().await
+        Arc::clone(self.index.as_ref().unwrap()).load_tree().await
     }
 }
 

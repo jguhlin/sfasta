@@ -3,14 +3,6 @@ use std::{
     ops::SubAssign,
 };
 
-#[cfg(feature = "async")]
-use tokio::io::{
-    AsyncBufRead, AsyncRead, AsyncReadExt, AsyncSeek, AsyncSeekExt,
-};
-
-#[cfg(feature = "async")]
-use futures::future::{BoxFuture, FutureExt};
-
 use bincode::{BorrowDecode, Decode, Encode};
 use pulp::Arch;
 
@@ -18,11 +10,6 @@ use crate::*;
 use libcompression::*;
 
 // todo
-// make async
-// really hard to make async when recursion and needs mutable access
-// to itself! make need to be a whole new type
-// maybe make it a buffer type system? a channel or something?
-
 // todo: load_all use decompression
 // todo: in bytes block store and seqlocs make this into a different
 // thread (not a here todo, but elsewhere) todo: speed would come here
@@ -31,15 +18,15 @@ use libcompression::*;
 
 /// This is the on-disk version of the FractalTree
 ///
-/// The root node is loaded with the fractal tree, but children are
+/// The root node is loaded with the fractal tree; children are
 /// loaded on demand
 #[derive(Debug, Clone)]
 pub struct FractalTreeDisk<K: Key, V: Value>
 {
     pub root: NodeDisk<K, V>,
+    pub compression: Option<CompressionConfig>,
     pub start: u64, /* On disk position of the fractal tree, such that
                      * all locations are start + offset */
-    pub compression: Option<CompressionConfig>,
 }
 
 impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V>
@@ -49,8 +36,8 @@ impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V>
         encoder: &mut E,
     ) -> core::result::Result<(), bincode::error::EncodeError>
     {
-        bincode::Encode::encode(&self.compression, encoder)?;
         bincode::Encode::encode(&self.start, encoder)?;
+        bincode::Encode::encode(&self.compression, encoder)?;
         if self.compression.is_some() {
             let encoded =
                 bincode::encode_to_vec(&self.root, *encoder.config()).unwrap();
@@ -73,9 +60,10 @@ impl<K: Key, V: Value> Decode for FractalTreeDisk<K, V>
         decoder: &mut D,
     ) -> core::result::Result<Self, bincode::error::DecodeError>
     {
+        let start: u64 = bincode::Decode::decode(decoder)?;
+        // let first_leaf: u32 = bincode::Decode::decode(decoder)?;
         let compression: Option<CompressionConfig> =
             bincode::Decode::decode(decoder)?;
-        let start: u64 = bincode::Decode::decode(decoder)?;
         let root: NodeDisk<K, V> = if compression.is_some() {
             let compressed: Vec<u8> = bincode::Decode::decode(decoder)?;
             let decompressed = compression
@@ -93,6 +81,7 @@ impl<K: Key, V: Value> Decode for FractalTreeDisk<K, V>
             root,
             start,
             compression,
+            // first_leaf,
         })
     }
 }
@@ -103,15 +92,11 @@ impl<K: Key, V: Value> Default for FractalTreeDisk<K, V>
     {
         FractalTreeDisk {
             root: NodeDisk {
-                is_root: true,
-                state: NodeState::InMemory,
-                is_leaf: true,
-                keys: Vec::new(),
-                children: None,
-                values: None,
+                ..Default::default()
             },
             start: 0,
-            compression: None, // Default to no compression
+            compression: None, /* Default to no compression
+                                * first_leaf: 0, */
         }
     }
 }
@@ -181,7 +166,8 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         let start_pos = out_buf.seek(SeekFrom::Current(0)).unwrap();
         self.start = start_pos;
 
-        self.root.store(&mut out_buf, &self.compression, start_pos);
+        // self.root.store(&mut out_buf, &self.compression, start_pos);
+        self.store_by_layer(&mut out_buf, start_pos)?;
 
         let tree_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let bincode_config =
@@ -190,6 +176,110 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
             .unwrap();
 
         Ok(tree_location)
+    }
+
+    pub fn store_by_layer<W>(
+        &mut self,
+        mut out_buf: W,
+        start: u64, // Start position of the tree being stored
+    ) -> Result<(), &'static str>
+    where
+        W: Write + Seek,
+    {
+        // Store the leaves first, then come back up
+        // Root node is stored with the tree struct
+        // Given the layer number, go down to that layer and begin storing
+
+        // Not writing the root here... but if the root is as deep as we go,
+        // we are done...
+        if self.root.is_leaf {
+            log::debug!("Tree root is a leaf, nothing to store");
+            return Ok(());
+        }
+
+        // (layer, node)
+        let mut working_stack = Vec::new();
+
+        // (layer, node)
+        let mut accounted_for = Vec::new();
+
+        // todo paths can be one vec and then stored as slices
+        // probs not worth the effort tho
+
+        for (i, _child) in
+            self.root.children.as_ref().unwrap().into_iter().enumerate()
+        {
+            working_stack.push((1, vec![i]));
+        }
+
+        while !working_stack.is_empty() {
+            let (layer, path) = working_stack.pop().unwrap();
+
+            // Get node via path
+            let mut node = &self.root.children.as_ref().unwrap()[path[0]];
+            for i in &path[1..] {
+                assert!(!node.is_leaf);
+                node = &node.children.as_ref().unwrap()[*i];
+            }
+
+            if !node.is_leaf {
+                // Otherwise, get the children and add them to the working stack
+                for (i, _child) in
+                    node.children.as_ref().unwrap().into_iter().enumerate()
+                {
+                    let mut new_path = path.clone();
+                    new_path.push(i);
+                    working_stack.push((layer + 1, new_path));
+                }
+            }
+
+            accounted_for.push((layer, path));
+        }
+
+        // Ok, now we have (convoluted) which layer, and the path to get to
+        // each node, let's start storing them, left to right, leaves first
+        // That way we can decompress the leaves first, and stop when is_leaf
+        // == false if we want to do a linear search... This beats the
+        // borrow checker
+
+        // Get the max layer number
+        let max_layer = accounted_for.iter().map(|x| x.0).max().unwrap();
+        log::debug!("Tree has {} layers", max_layer);
+
+        for layer in (1..=max_layer).rev() {
+            // Get all the nodes at this layer
+            let nodes = accounted_for.iter().filter(|x| x.0 == layer);
+
+            // Debugging stuff
+            // Make sure the keys are ordered properly for leaves...
+            let mut nodes: Vec<&(i32, Vec<usize>)> = nodes.collect();
+
+            log::trace!("Storing layer {} - {} nodes", layer, nodes.len());
+
+            // Sort by the first key, lowest to highest
+            nodes.sort_by(|a, b| {
+                let a = &self.root.children.as_ref().unwrap()[a.1[0]];
+                let b = &self.root.children.as_ref().unwrap()[b.1[0]];
+                a.keys[0].cmp(&b.keys[0])
+            });
+
+            for (_layer, path) in nodes {
+                let mut node =
+                    &mut self.root.children.as_mut().unwrap()[path[0]];
+                
+                for i in &path[1..] {
+                    assert!(!node.is_leaf);
+                    node = &mut node.children.as_mut().unwrap()[*i];
+                }
+
+                if !node.is_leaf {
+                    assert!(node.children_stored_on_disk());
+                }
+
+                node.store(&mut out_buf, &self.compression, start);
+            }
+        }
+        Ok(())
     }
 
     pub fn from_buffer<R>(mut in_buf: R, pos: u64) -> Result<Self, &'static str>
@@ -205,39 +295,12 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
 
         Ok(tree)
     }
-
-    #[cfg(feature = "async")]
-    pub async fn from_buffer_async(
-        in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
-        pos: u64,
-    ) -> Result<Self, &'static str>
-    {
-        use tokio::io::AsyncReadExt;
-
-        in_buf.seek(SeekFrom::Start(pos)).await.unwrap();
-        let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
-
-        let mut tree: FractalTreeDisk<K, V> =
-            match bincode_decode_from_buffer_async_with_size_hint::<
-                { 4 * 1024 },
-                _,
-                _,
-            >(in_buf, bincode_config)
-            .await
-            {
-                Ok(x) => x,
-                Err(_) => {
-                    return Result::Err("Failed to decode FractalTreeDisk")
-                }
-            };
-        Ok(tree)
-    }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub enum NodeState
 {
+    #[default]
     InMemory,
     Compressed(Vec<u8>),
     OnDisk(u32),
@@ -286,7 +349,7 @@ impl NodeState
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct NodeDisk<K, V>
 {
     pub is_root: bool,
@@ -320,6 +383,14 @@ impl<K: Key, V: Value> Encode for NodeDisk<K, V>
 
             bincode::Encode::encode(&locs, encoder)?;
         }
+
+        // debug_assert!(self.right.is_none() || self.is_leaf &&
+        // self.right.is_some());
+
+        // if self.is_leaf {
+        // bincode::Encode::encode(&self.right.unwrap(), encoder)?;
+        // }
+
         Ok(())
     }
 }
@@ -350,6 +421,13 @@ impl<K: Key, V: Value> Decode for NodeDisk<K, V>
             Some(children)
         };
 
+        // let right = if is_leaf {
+        // let right: u32 = bincode::Decode::decode(decoder)?;
+        // Some(right)
+        // } else {
+        // None
+        // };
+
         Ok(NodeDisk {
             is_root: false,
             is_leaf,
@@ -357,6 +435,7 @@ impl<K: Key, V: Value> Decode for NodeDisk<K, V>
             keys,
             children,
             values,
+            // right,
         })
     }
 }
@@ -387,6 +466,13 @@ impl<K: Key, V: Value> BorrowDecode<'_> for NodeDisk<K, V>
             Some(children)
         };
 
+        // let right = if is_leaf {
+        // let right: u32 = bincode::Decode::decode(decoder)?;
+        // Some(right)
+        // } else {
+        // None
+        // };
+
         Ok(NodeDisk {
             is_root: false,
             is_leaf,
@@ -394,6 +480,7 @@ impl<K: Key, V: Value> BorrowDecode<'_> for NodeDisk<K, V>
             keys: keys.to_vec(),
             children,
             values,
+            // right,
         })
     }
 }
@@ -403,12 +490,8 @@ impl<K: Key, V: Value> NodeDisk<K, V>
     pub fn from_loc(loc: u32) -> Self
     {
         NodeDisk {
-            is_root: false,
-            is_leaf: false,
             state: NodeState::OnDisk(loc),
-            keys: Vec::new(),
-            children: None,
-            values: None,
+            ..Default::default()
         }
     }
 
@@ -469,6 +552,8 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         self.state = NodeState::InMemory;
     }
 
+    /// Stores the node to the buffer, and returns the size of the
+    /// node. Useful for creating dictionaries...
     pub fn store_dummy<W>(
         &mut self,
         out_buf: &mut W,
@@ -535,6 +620,22 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 let config = bincode::config::standard()
                     .with_variable_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
+
+                /*
+                log::trace!(
+                    "Node has {} keys: {} {}",
+                    self.keys.len(),
+                    self.is_leaf,
+                    self.is_root,
+                );
+
+                // First 5 keys are:
+                log::trace!("Keys: {:?}", &self.keys[..5]);
+
+                // todo remove
+                assert!(self.keys.len() <= 256);
+
+                */
 
                 delta_encode(&mut self.keys);
                 let uncompressed: Vec<u8> =
@@ -685,52 +786,6 @@ where
     });
 }
 
-// todo curry size_hint as const
-#[cfg(feature = "async")]
-pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<
-    const SIZE_HINT: usize,
-    T,
-    C,
->(
-    in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
-    bincode_config: C,
-) -> Result<T, String>
-where
-    T: bincode::Decode,
-    C: bincode::config::Config,
-{
-    let mut buf = vec![0; SIZE_HINT];
-    match in_buf.read(&mut buf).await {
-        Ok(_) => (),
-        Err(_) => return Result::Err("Failed to read buffer".to_string()),
-    }
-
-    loop {
-        match bincode::decode_from_slice(&buf, bincode_config) {
-            Ok(x) => {
-                return Ok(x.0);
-            }
-            Err(_) => {
-                let orig_length = buf.len();
-                let doubled = buf.len() * 2;
-
-                buf.resize(doubled, 0);
-
-                match in_buf.read(&mut buf[orig_length..]).await {
-                    Ok(_) => (),
-                    Err(_) => {
-                        return Result::Err("Failed to read buffer".to_string())
-                    }
-                }
-
-                if doubled > 16 * 1024 * 1024 {
-                    return Result::Err("Failed to decode bincode".to_string());
-                }
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests
 {
@@ -800,7 +855,7 @@ mod tests
     {
         let mut rng = thread_rng();
 
-        let mut tree = FractalTreeBuild::new(2048, 8192);
+        let mut tree = FractalTreeBuild::new(256, 8192);
 
         // Generate 1024 * 1024 random key value pairs
 

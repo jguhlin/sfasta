@@ -129,8 +129,8 @@ fn worker<W>(
                 .unwrap();
             });
 
-            output_buffer.clear();
             output_locs.clear();
+            output_buffer.clear();
         }
 
         if shutdown_flag.load(Ordering::Relaxed) {

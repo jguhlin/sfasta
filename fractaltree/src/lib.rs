@@ -37,10 +37,11 @@ pub trait Key = 'static
     + SubAssign
     + AddAssign
     + Send
-    + Sync;
+    + Sync
+    + Default;
 
 pub trait Value =
-    'static + std::fmt::Debug + Encode + Decode + Clone + Send + Sync;
+    'static + std::fmt::Debug + Encode + Decode + Clone + Send + Sync + Default;
 
 #[cfg(test)]
 mod test

@@ -4,6 +4,9 @@ use sorted_vec::SortedVec;
 /// This is an insertion-only B+ tree, deletions are not supported
 /// Meant for a write-many, write-once to disk, read-only-and-many
 /// database
+///
+/// first_leaf is the stored location of the first leaf, which itself
+/// has the address to the node to the right
 #[derive(Debug)]
 pub struct FractalTreeBuild<K: Key, V: Value>
 {
@@ -51,6 +54,8 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
             self.root.children.as_mut().unwrap().push(old_root);
             self.root.children.as_mut().unwrap().push(new_node);
         }
+
+        self.root.flush(self.order, self.buffer_size, all);
     }
 
     pub fn flush_all(&mut self)
@@ -90,14 +95,6 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
         }
         count
     }
-}
-
-// Must use
-#[must_use]
-pub enum InsertionAction<K: Key, V: Value>
-{
-    Success,
-    NodeSplit(K, Box<NodeBuild<K, V>>),
 }
 
 #[derive(Debug)]
@@ -204,18 +201,28 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         }
 
         if !self.is_leaf {
-            for child_i in 0..self.children.as_ref().unwrap().len() {
-                while self.children.as_mut().unwrap()[child_i]
-                    .needs_split(order)
-                {
-                    let (new_key, new_node) = self.children.as_mut().unwrap()
-                        [child_i]
-                        .split(order, buffer_size);
-                    let i = self.keys.insert(new_key) + 1;
-                    if i >= self.children.as_ref().unwrap().len() {
-                        self.children.as_mut().unwrap().push(new_node);
-                    } else {
-                        self.children.as_mut().unwrap().insert(i, new_node);
+            // While any children need to be split...
+
+            while self
+                .children
+                .as_ref()
+                .unwrap()
+                .iter()
+                .any(|child| child.needs_split(order))
+            {
+                for child_i in 0..self.children.as_ref().unwrap().len() {
+                    while self.children.as_mut().unwrap()[child_i]
+                        .needs_split(order)
+                    {
+                        let (new_key, new_node) =
+                            self.children.as_mut().unwrap()[child_i]
+                                .split(order, buffer_size);
+                        let i = self.keys.insert(new_key) + 1;
+                        if i >= self.children.as_ref().unwrap().len() {
+                            self.children.as_mut().unwrap().push(new_node);
+                        } else {
+                            self.children.as_mut().unwrap().insert(i, new_node);
+                        }
                     }
                 }
             }
@@ -300,7 +307,8 @@ impl<K: Key, V: Value> NodeBuild<K, V>
 
     pub fn needs_split(&self, order: usize) -> bool
     {
-        self.keys.len() >= (order * 2)
+        // >= because buffering
+        self.keys.len() >= order
     }
 }
 

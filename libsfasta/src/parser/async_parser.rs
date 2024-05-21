@@ -146,7 +146,7 @@ pub async fn open_from_file_async<'sfa>(
 
     let filename = file.to_string();
     let index = tokio::spawn(async move {
-        let index: Option<FractalTreeDiskAsync<u32, u32>> =
+        let index: Option<Arc<FractalTreeDiskAsync<u32, u32>>> =
             if directory.index_loc.is_some() {
                 match FractalTreeDiskAsync::from_buffer(
                     filename,
@@ -154,7 +154,7 @@ pub async fn open_from_file_async<'sfa>(
                 )
                 .await
                 {
-                    Ok(x) => Some(x),
+                    Ok(x) => Some(Arc::new(x)),
                     Err(x) => {
                         return Result::Err(format!(
                             "Invalid buffer. Failed to read index. {x}"

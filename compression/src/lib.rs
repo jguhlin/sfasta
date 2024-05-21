@@ -756,7 +756,7 @@ fn compression_worker(
 
                 let mut x = output_queue.try_send(output_block);
                 while let Err(y) = x {
-                    log::debug!("Output queue is full");
+                    log::trace!("Output queue is full");
                     backoff.snooze();
                     match y {
                         flume::TrySendError::Full(y) => {
