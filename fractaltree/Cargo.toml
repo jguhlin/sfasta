@@ -33,6 +33,11 @@ num = { version = "0.4.1", features = ["alloc", "libm"] }
 zstd = { version="0.13", default-features = false, features=["arrays", "zdict_builder", "experimental"] }
 tokio = { version = "1.37", default-features = false, features = ["fs", "io-util"], optional = true }
 futures = { version = "0.3.30", optional = true }
+async-gen = "0.2.3"
+tokio-stream = "0.1.15"
+async-stream = "0.3.5"
+futures-core = "0.3.30"
+futures-util = "0.3.30"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.28.0", features = ["fs"] }

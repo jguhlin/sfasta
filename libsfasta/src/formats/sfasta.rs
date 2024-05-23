@@ -29,6 +29,15 @@ use tokio::{
 #[cfg(not(feature = "async"))]
 use std::sync::RwLock;
 
+#[cfg(feature = "async")]
+use async_stream::stream;
+
+#[cfg(feature = "async")]
+use tokio_stream::Stream;
+
+#[cfg(feature = "async")]
+use tokio_stream::StreamExt;
+
 use crate::datatypes::*;
 use libfractaltree::FractalTreeDisk;
 
@@ -125,6 +134,66 @@ impl<'sfa> Default for Sfasta<'sfa>
 
 impl<'sfa> Sfasta<'sfa>
 {
+    /// Right now ignores scores, but add that in soon...
+    #[cfg(feature = "async")]
+    pub fn stream(self: Arc<Self>) -> impl Stream<Item = Sequence> + 'sfa
+    {
+        let sfasta = Arc::clone(&self);
+        let fhm = Arc::clone(&self.file_handles);
+
+        let gen = stream! {
+            // Get the generators
+            let seqlocs = Arc::clone(&sfasta.seqlocs.as_ref().unwrap()).stream();
+            let seqs = Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm));
+            // let ids = Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm));
+            // let headers = Arc::clone(&sfasta.headers.as_ref().unwrap()).stream(Arc::clone(&fhm));
+
+            // let masking = Arc::clone(&sfasta.masking.as_ref().unwrap()).stream(Arc::clone(&fhm));
+
+            // todo scores
+            // todo signals
+            // todo mods
+            // todo flags
+
+            tokio::pin!(seqlocs);
+            tokio::pin!(seqs);
+            // tokio::pin!(ids);
+            // tokio::pin!(headers);
+            // tokio::pin!(masking);
+
+            loop {
+                let seqloc = seqlocs.next().await;
+                let seq = seqs.next().await;
+                // let id = ids.next().await;
+                // let header = headers.next().await;
+                // let mask = masking.next().await;
+
+                // Is seqloc none?
+                if seqloc.is_none() {
+                    log::debug!("Seqloc is none");
+                }
+
+                if seqloc.is_none() {
+                    break;
+                }
+
+                // This doesn't get the object of desire, but the raw blocks of data 
+                // (and the seqloc to put it all together)
+
+                let seqloc = seqloc.unwrap();
+
+                println!("{:#?}", seqloc);
+                println!("Yo");
+                
+                yield Sequence::default();
+
+            }
+
+        };
+
+        gen
+    }
+
     pub fn conversion(mut self) -> Self
     {
         self.metadata = Some(Metadata::default());

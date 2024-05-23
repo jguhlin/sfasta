@@ -44,6 +44,7 @@ serde_yml = "0.0.7"
 xxhash-rust = { version = "0.8.10", features = ["xxh3"], optional = true}
 tokio = { version = "1.37.0", features = ["full", "tracing"], optional = true }
 bytes = "1.6.0"
+tokio-stream = "0.1.15"
 
 # [target.'cfg(not(target_env = "msvc"))'.dependencies]
 # tikv-jemallocator = { version = "0.5.4", optional = true}

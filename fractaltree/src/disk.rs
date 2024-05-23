@@ -266,7 +266,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
             for (_layer, path) in nodes {
                 let mut node =
                     &mut self.root.children.as_mut().unwrap()[path[0]];
-                
+
                 for i in &path[1..] {
                     assert!(!node.is_leaf);
                     node = &mut node.children.as_mut().unwrap()[*i];
@@ -276,7 +276,9 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
                     assert!(node.children_stored_on_disk());
                 }
 
+                log::trace!("Node stored at {}", out_buf.stream_position().unwrap());
                 node.store(&mut out_buf, &self.compression, start);
+                
             }
         }
         Ok(())

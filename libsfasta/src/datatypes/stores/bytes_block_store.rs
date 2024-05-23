@@ -1,11 +1,18 @@
 use std::{
-    collections::HashMap,
     io::{BufRead, Read, Seek, SeekFrom, Write},
     sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
     },
 };
+
+use hashbrown::HashMap;
+
+#[cfg(feature = "async")]
+use async_stream::stream;
+
+#[cfg(feature = "async")]
+use tokio_stream::Stream;
 
 #[cfg(feature = "async")]
 pub enum DataOrLater
@@ -54,6 +61,9 @@ use crate::parser::async_parser::{
     bincode_decode_from_buffer_async_with_size_hint,
     bincode_decode_from_buffer_async_with_size_hint_nc,
 };
+
+#[cfg(feature = "async")]
+use tokio_stream::StreamExt;
 
 // Implement some custom errors to return
 #[derive(Debug)]
@@ -532,7 +542,7 @@ pub struct BytesBlockStore
     pub block_locations: FractalTreeDisk<u32, u64>,
 
     #[cfg(feature = "async")]
-    pub block_locations: FractalTreeDiskAsync<u32, u64>,
+    pub block_locations: Arc<FractalTreeDiskAsync<u32, u64>>,
 
     /// Locations of the block index (Where the serialized
     /// block_locations is stored)
@@ -652,6 +662,80 @@ impl BytesBlockStore
 
         DataOrLater::Data(self.cache.add(block, decompressed.clone()).await)
         // DataOrLater::Data(decompressed)
+    }
+
+    /// Bypasses the block_locations lookup
+    #[cfg(feature = "async")]
+    #[tracing::instrument(skip(self, in_buf))]
+    pub async fn get_block_pos_known(
+        &self,
+        in_buf: &mut tokio::sync::OwnedMutexGuard<BufReader<File>>,
+        block: u32,
+        block_location: u64,
+    ) -> DataOrLater
+    {
+        // If it's cached, return immediately...
+        if let Some(stored) = self.cache.get(block).await {
+            return DataOrLater::Data(stored);
+        }
+
+        // If not cached, see if anyone else is fetching this block
+        let mut block_jobs = self.block_jobs.lock().await;
+        for (b, senders) in block_jobs.iter_mut() {
+            if *b == block {
+                let (sender, receiver) = oneshot::channel();
+                senders.push(sender);
+                return DataOrLater::Later(receiver);
+            }
+        }
+
+        // If no one is fetching this block, start fetching it
+        block_jobs.push((block, Vec::new()));
+
+        // Drop the lock
+        drop(block_jobs);
+
+        let bincode_config_fixed = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 256 * 1024 * 1024 }>(); // 256 MB is max limit TODO: Enforce elsewhere too
+
+        in_buf.seek(SeekFrom::Start(block_location)).await.unwrap();
+        let compressed_block: Vec<u8> =
+            bincode_decode_from_buffer_async_with_size_hint_nc(
+                in_buf,
+                bincode_config_fixed,
+                self.block_size as usize,
+            )
+            .await
+            .unwrap();
+
+        // todo unnecessary allocations, also should be async
+        // Copy this Vec<u8> into the buffer
+        // Lengths may be different
+        let compression = self.compression_config.clone();
+        let decompressed = tokio::task::spawn_blocking(move || {
+            Bytes::from(compression.decompress(&compressed_block).unwrap())
+        });
+
+        let decompressed = decompressed.await.unwrap();
+
+        // Grab the block_jobs again
+        let mut block_jobs = self.block_jobs.lock().await;
+
+        // Send the block to all the waiting tasks
+        for (b, senders) in block_jobs.iter_mut() {
+            if *b == block {
+                for sender in senders.drain(..) {
+                    sender.send(decompressed.clone()).unwrap();
+                }
+                break;
+            }
+        }
+
+        block_jobs.retain(|x| x.0 != block);
+        drop(block_jobs);
+
+        DataOrLater::Data(self.cache.add(block, decompressed.clone()).await)
     }
 
     #[cfg(not(feature = "async"))]
@@ -849,10 +933,11 @@ impl BytesBlockStore
 
         // assert!(block_locations_pos > 0);
 
-        let block_locations: FractalTreeDiskAsync<u32, u64> =
+        let block_locations: Arc<FractalTreeDiskAsync<u32, u64>> = Arc::new(
             FractalTreeDiskAsync::from_buffer(filename, block_locations_pos)
                 .await
-                .unwrap();
+                .unwrap(),
+        );
 
         Ok(BytesBlockStore {
             block_locations,
@@ -870,6 +955,38 @@ impl BytesBlockStore
     pub fn block_size(&self) -> usize
     {
         self.block_size as usize
+    }
+
+    // todo iterator/generator for non-async version
+    #[cfg(feature = "async")]
+    pub fn stream(
+        self: Arc<Self>,
+        fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
+    ) -> impl Stream<Item = (u32, Bytes)>
+    {
+
+        log::debug!("Bytes Compression: {:?}", self.compression_config);
+
+        let gen = stream! {
+            let block_locs = Arc::clone(&self.block_locations).stream();
+            tokio::pin!(block_locs);
+
+            // It's ok to hold the lock the entire time...
+            let mut in_buf = fhm.get_filehandle().await;
+
+            while let Some(loc) = block_locs.next().await {
+
+                log::trace!("Opening block {} at {}", loc.0, loc.1);
+
+                let block = self.get_block_pos_known(&mut in_buf, loc.0, loc.1).await;
+                yield match block {
+                    DataOrLater::Data(data) => (loc.0, data),
+                    DataOrLater::Later(data) => (loc.0, data.await.unwrap()),
+                };
+            }
+        };
+
+        gen
     }
 }
 
@@ -916,7 +1033,7 @@ impl AsyncLRU
     #[tracing::instrument(skip(self))]
     pub async fn get(&self, block: u32) -> Option<Bytes>
     {
-        let mut cache = self.lru.read().await;
+        let cache = self.lru.read().await;
         let mut order = self.order.write().await;
 
         if let Some(data) = cache.get(&block) {

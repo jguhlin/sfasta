@@ -1,3 +1,6 @@
+// todo don't know if I can justify this anymore, maybe just use
+// BytesBlockStore direct now?
+
 use std::{
     io::{BufRead, Read, Seek, Write},
     sync::Arc,
@@ -29,6 +32,15 @@ use tokio::{
     io::{AsyncSeekExt, BufReader},
     sync::{OwnedRwLockWriteGuard, RwLock},
 };
+
+#[cfg(feature = "async")]
+use tokio_stream::StreamExt;
+
+#[cfg(feature = "async")]
+use async_stream::stream;
+
+#[cfg(feature = "async")]
+use tokio_stream::Stream;
 
 pub struct StringBlockStoreBuilder
 {
@@ -157,6 +169,10 @@ impl StringBlockStoreBuilder
 
 pub struct StringBlockStore
 {
+    #[cfg(feature = "async")]
+    inner: Arc<BytesBlockStore>,
+
+    #[cfg(not(feature = "async"))]
     inner: BytesBlockStore,
 }
 
@@ -181,6 +197,15 @@ impl StringBlockStore
     }
 
     #[cfg(feature = "async")]
+    pub fn stream(
+        self: Arc<Self>,
+        fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
+    ) -> impl Stream<Item = (u32, Bytes)>
+    {
+        Arc::clone(&self.inner).stream(fhm)
+    }
+
+    #[cfg(feature = "async")]
     #[tracing::instrument(skip(in_buf))]
     pub async fn from_buffer(
         mut in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
@@ -199,7 +224,9 @@ impl StringBlockStore
             Err(e) => return Err(e),
         };
 
-        let store = StringBlockStore { inner };
+        let store = StringBlockStore {
+            inner: Arc::new(inner),
+        };
         Ok(store)
     }
 

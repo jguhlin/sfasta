@@ -36,6 +36,15 @@ use libcompression::*;
 use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
 
 #[cfg(feature = "async")]
+use async_stream::stream;
+
+#[cfg(feature = "async")]
+use tokio_stream::Stream;
+
+#[cfg(feature = "async")]
+use tokio_stream::StreamExt;
+
+#[cfg(feature = "async")]
 use libfractaltree::FractalTreeDiskAsync;
 
 // So each SeqLoc is:
@@ -696,6 +705,14 @@ impl SeqLocsStore
     ) -> Result<Option<SeqLoc>, &'static str>
     {
         Ok(self.tree.search(&loc).await.clone())
+    }
+
+    #[cfg(feature = "async")]
+    /// Stream all SeqLocs from the store
+    pub fn stream(self: Arc<Self>) -> impl Stream<Item = (u32, SeqLoc)>
+    {
+        let tree = Arc::clone(&self.tree);
+        tree.stream()
     }
 }
 

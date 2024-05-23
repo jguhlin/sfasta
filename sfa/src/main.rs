@@ -41,6 +41,9 @@ mod faidx_all;
 #[cfg(feature = "faidx-all")]
 use faidx_all::*;
 
+#[cfg(feature = "async")]
+use tokio_stream::StreamExt;
+
 // const GIT_VERSION: &str = git_version!();
 
 fn style_pb(pb: ProgressBar) -> ProgressBar
@@ -627,7 +630,18 @@ fn view(input: String)
 
         let stdout = std::io::stdout().lock();
         let mut stdout = std::io::BufWriter::new(stdout);
-        // integrate the new load_all_leaves
+
+        let stream = std::sync::Arc::clone(&sfasta).stream();
+
+        tokio::pin!(stream);
+
+        while let Some(seq) = stream.next().await {
+            println!("{:#?}", seq);
+        }
+
+
+
+        /*
 
         let mut futures = VecDeque::new();
 
@@ -669,7 +683,7 @@ fn view(input: String)
                 .expect("Unable to write to stdout");
 
             i += 1;
-        }
+        } */
     });
 }
 
@@ -972,8 +986,9 @@ fn convert(
     // No buf writer took 193.29 secs
     // Buf writer default capacity took 204.98
     // Buf writer with 2mb took 192.89 secs
-    
-    let out_fh = Box::new(std::io::BufWriter::with_capacity(2 * 1024 * 1024, output));
+
+    let out_fh =
+        Box::new(std::io::BufWriter::with_capacity(2 * 1024 * 1024, output));
     // let out_fh = Box::new(std::io::BufWriter::new(output));
     // let out_fh = Box::new(output);
 

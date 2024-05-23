@@ -7,6 +7,12 @@ use std::{
     sync::Arc,
 };
 
+#[cfg(feature = "async")]
+use async_stream::stream;
+
+#[cfg(feature = "async")]
+use tokio_stream::Stream;
+
 use super::Builder;
 use crate::datatypes::{
     BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc,
@@ -149,14 +155,15 @@ impl MaskingStoreBuilder
         let masked: Vec<u8> =
             seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
 
-        // RLE - while zstd does it, this can reduce some of the blocks to fit into a single block
+        // RLE - while zstd does it, this can reduce some of the blocks to fit
+        // into a single block
         let masked = rle_encode(&masked);
 
-        let bincode_config = bincode::config::standard()
-            .with_variable_int_encoding();
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
 
         let masked = bincode::encode_to_vec(&masked, bincode_config).unwrap();
-        
+
         self.inner
             .add(masked)
             .expect("Failed to add masking to block store")
@@ -201,9 +208,12 @@ fn rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
     data
 }
 
-
 pub struct Masking
 {
+    #[cfg(feature = "async")]
+    inner: Arc<BytesBlockStore>,
+
+    #[cfg(not(feature = "async"))]
     inner: BytesBlockStore,
 }
 
@@ -233,7 +243,29 @@ impl Masking
             BytesBlockStore::from_buffer(in_buf, filename, starting_pos)
                 .await?;
 
-        Ok(Masking { inner })
+        Ok(Masking {
+            inner: Arc::new(inner),
+        })
+    }
+
+    #[cfg(feature = "async")]
+    pub fn stream(
+        self: Arc<Self>,
+        fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
+    ) -> impl Stream<Item = (u32, bytes::Bytes)>
+    {
+        use tokio_stream::StreamExt;
+
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
+
+        Arc::clone(&self.inner).stream(fhm).map(move |x| {
+            let mask: Vec<(u64, u8)> =
+                bincode::decode_from_slice(&x.1, bincode_config)
+                    .expect("Failed to decode mask")
+                    .0;
+            (x.0, bytes::Bytes::from(rle_decode(&mask)))
+        })
     }
 
     #[cfg(not(feature = "async"))]
@@ -250,11 +282,13 @@ impl Masking
 
         let mask_raw = self.inner.get(in_buf, loc);
 
-        let bincode_config = bincode::config::standard()
-            .with_variable_int_encoding();
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
 
-        let mask_raw: Vec<(u64, u8)> = bincode::decode_from_slice(&mask_raw, bincode_config)
-            .expect("Failed to decode mask").0;
+        let mask_raw: Vec<(u64, u8)> =
+            bincode::decode_from_slice(&mask_raw, bincode_config)
+                .expect("Failed to decode mask")
+                .0;
 
         let mask_raw = rle_decode(&mask_raw);
 
@@ -279,11 +313,13 @@ impl Masking
     {
         let mask = self.inner.get(in_buf, loc).await;
 
-        let bincode_config = bincode::config::standard()
-            .with_variable_int_encoding();
+        let bincode_config =
+            bincode::config::standard().with_variable_int_encoding();
 
-        let mask: Vec<(u64, u8)> = bincode::decode_from_slice(&mask, bincode_config)
-            .expect("Failed to decode mask").0;
+        let mask: Vec<(u64, u8)> =
+            bincode::decode_from_slice(&mask, bincode_config)
+                .expect("Failed to decode mask")
+                .0;
 
         bytes::Bytes::from(rle_decode(&mask))
     }

@@ -1,3 +1,4 @@
+#![feature(async_iterator)]
 #![feature(allocator_api)]
 // #![feature(byte_slice_trim_ascii)]
 

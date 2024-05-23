@@ -16,6 +16,9 @@ use tokio::{
     sync::{Mutex, OwnedMutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
+use async_stream::stream;
+use tokio_stream::Stream;
+
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 
@@ -113,6 +116,48 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
 
 impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 {
+    /// Iterator through all leaves, in key order
+    pub fn stream(self: Arc<Self>) -> impl Stream<Item = (K, V)>
+    {
+        let gen = stream! {
+            let mut current_leaf_idx = 0;
+            self.load_all_leaves().await.unwrap();
+
+            let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
+
+            if self.root.read().await.is_leaf {
+                let root = self.root.read().await;
+                for i in 0..root.keys.len() {
+                    yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
+                }
+                return;
+            }
+
+            log::trace!("Current Index: {} / Keys Len: {}", current_leaf_idx, keys.len());
+
+            while current_leaf_idx < keys.len() {
+                let key = keys[current_leaf_idx].clone();
+                let read_handle = self.opened.read().await;
+                let node = read_handle.get(&key).unwrap().read().await;
+
+                // Confirm node is a leaf, if not, iterator is done
+                if !node.is_leaf {
+                    break;
+                }
+
+                for i in 0..node.keys.len() {
+                    log::trace!("Yielding key: {:?}", node.keys[i]);
+                    yield (node.keys[i].clone(), node.values.as_ref().unwrap()[i].clone());
+                }
+
+                current_leaf_idx += 1;
+            }
+        };
+
+        gen
+
+    }
+
     /// Loads the entire tree into memory
     pub async fn load_tree(self: Arc<Self>) -> Result<(), &'static str>
     {
@@ -145,50 +190,74 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
     // todo integrate this into sfa fn view
     // seqlocs iterator? or all of the stores?
-    
-    pub async fn load_all_leaves(
-        self: &Arc<Self>,
-    ) -> Result<(), &'static str> {
+
+    pub async fn load_all_leaves(self: &Arc<Self>) -> Result<(), &'static str>
+    {
+
+        if self.root.read().await.is_leaf {
+            return Ok(());
+        }
+
+        // Get lock on self.opened
+        let mut opened = self.opened.write().await;
+
+        // Clear the opened nodes, just to prevent any funkiness if anyone
+        // keeps it open a long time (shouldn't happen)
+        opened.clear();
+        drop(opened);
+
         // Get filehandle
         let mut in_buf = self.file_handle_manager.get_filehandle().await;
 
         in_buf.seek(SeekFrom::Start(self.start)).await.unwrap();
 
-        let mut node: Arc<RwLock<NodeDiskAsync<K, V>>> = Arc::new(RwLock::new(NodeDiskAsync::from_loc(0)));
+        log::debug!("Opening first node");
 
-        Arc::clone(&self).load_node(node).await;
+        let mut node: Arc<RwLock<NodeDiskAsync<K, V>>> =
+            Arc::new(RwLock::new(NodeDiskAsync::from_loc(0)));
 
-        let borrowed_self = Arc::clone(&self);
+        let result = Arc::clone(&self).load_node_next_fh(node.clone(), &mut in_buf).await;
 
-        // Get lock on self.opened
-        let mut opened = borrowed_self.opened.write().await;
+        match result {
+            Ok(_) => (),
+            Err(_) => return Err("Failed to load first node"),
+        }
 
-        // Clear the opened nodes, just to prevent any funkiness if anyone keeps it open a long time (shouldn't happen)
-        opened.clear();
-
-        let pos = in_buf.seek(SeekFrom::Current(0)).await.unwrap();
-        node = Arc::new(RwLock::with_max_readers(
-            NodeDiskAsync::<K, V>::from_loc(pos as u32 - self.start as u32),
-            128,
-        ));
+        log::debug!("First node opened");
 
         while node.read().await.is_leaf {
+            let num_keys = node.read().await.keys.len();
+            log::trace!("Is leaf, reading next one - this one has {} keys", num_keys);
             // Read the next one
-            let pos = in_buf.seek(SeekFrom::Current(0)).await.unwrap();
+            let pos = in_buf.stream_position().await.unwrap();
+            log::trace!("Current position: {:?}", pos);
             node = Arc::new(RwLock::with_max_readers(
-                NodeDiskAsync::<K, V>::from_loc(pos as u32 - self.start as u32),
+                NodeDiskAsync::<K, V>::from_loc(0), // Doesn't matter
                 128,
             ));
 
             let borrowed_self = Arc::clone(&self);
             let borrowed_node = Arc::clone(&node);
-            borrowed_self.load_node(borrowed_node).await;
+            let result = borrowed_self.load_node_next_fh(borrowed_node, &mut in_buf).await;
 
-            let node_clone = Arc::clone(&node);
-            let node_clone: ArcNodeDiskAsync<K, V> = node_clone.into(); 
-            opened.insert(pos, node_clone);
+            match result {
+                Ok(_) => (),
+                Err(_) => {
+                    // If we loaded some nodes, this isn't an error
+                    if self.opened.read().await.len() > 0 {
+                        return Ok(());
+                    } else {
+                        return Err("Failed to load next node");
+                    }
+                },
+            }
+
+            // let node_clone = Arc::clone(&node);
+            // let node_clone: ArcNodeDiskAsync<K, V> = node_clone.into();
+            // opened.insert(pos, node_clone);
         }
 
+        log::trace!("No longer reading leaves");
         Ok(())
     }
 
@@ -312,7 +381,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
         let mut tree: FractalTreeDiskAsync<K, V> =
             match bincode_decode_from_buffer_async_with_size_hint::<
-                { 64 * 1024 },
+                { 8 * 1024 },
                 _,
                 _,
             >(&mut in_buf, bincode_config)
@@ -358,12 +427,82 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         {
             let compressed: Vec<u8> =
                 bincode_decode_from_buffer_async_with_size_hint::<
-                    { 32 * 1024 },
+                    { 8 * 1024 },
                     _,
                     _,
                 >(&mut in_buf, config)
                 .await
                 .unwrap();
+
+            let compression = Arc::clone(&self.compression);
+            let decompressed = tokio::task::spawn_blocking(move || {
+                compression
+                    .as_ref()
+                    .as_ref()
+                    .unwrap()
+                    .decompress(&compressed)
+                    .unwrap()
+            });
+
+            let decompressed = decompressed.await.unwrap();
+
+            bincode::decode_from_slice(&decompressed, config).unwrap().0
+        } else {
+            bincode_decode_from_buffer_async_with_size_hint::<{8 * 1024}, _, _>(&mut in_buf, config).await.unwrap()
+        };
+
+        delta_decode(&mut loaded_node.keys);
+        loaded_node.loc = loc;
+        *node_write = loaded_node;
+
+        // Release the lock
+        drop(node_write);
+
+        let mut opened = self.opened.write().await;
+
+        log::trace!("Inserting node into opened: {:?}", loc);
+
+        opened.insert(loc, Arc::clone(&node).into());
+    }
+
+    pub async fn load_node_next_fh(
+        self: Arc<Self>,
+        node: Arc<RwLock<NodeDiskAsync<K, V>>>,
+        mut in_buf: &mut OwnedMutexGuard<BufReader<File>>,
+    ) -> Result<(), &'static str>
+    {
+        let mut node_write = node.write().await;
+
+        if !node_write.state.on_disk() {
+            return Ok(());
+        }
+
+        let loc = in_buf.stream_position().await.unwrap();
+        log::trace!("Loading node at: {:?}", loc);
+
+        let config = bincode::config::standard()
+            .with_variable_int_encoding()
+            .with_limit::<{ 1024 * 1024 }>();
+
+        let mut loaded_node: NodeDiskAsync<K, V> = if self.compression.is_some()
+        {
+            let compressed: Vec<u8> =
+                match bincode_decode_from_buffer_async_with_size_hint::<
+                    { 32 * 1024 },
+                    _,
+                    _,
+                >(&mut in_buf, config)
+                .await {
+                    Ok(x) => x,
+                    Err(_) => {
+                        return Err("Failed to decode compressed node");
+                    }
+                };
+                
+
+            log::trace!("Compressed Node: {:?}", compressed.len());
+
+            log::trace!("Stream position now at {:?}", in_buf.stream_position().await.unwrap());
 
             let compression = Arc::clone(&self.compression);
             let decompressed = tokio::task::spawn_blocking(move || {
@@ -390,7 +529,13 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         drop(node_write);
 
         let mut opened = self.opened.write().await;
+
+        log::trace!("Inserting node into opened: {:?}", loc);
+
         opened.insert(loc, Arc::clone(&node).into());
+        
+        Ok(())
+
     }
 }
 
@@ -844,6 +989,9 @@ where
     T: bincode::Decode,
     C: bincode::config::Config,
 {
+
+    let start_pos = in_buf.stream_position().await.unwrap();
+
     let mut buf = vec![0; SIZE_HINT];
     match in_buf.read(&mut buf).await {
         Ok(_) => (),
@@ -852,26 +1000,33 @@ where
 
     loop {
         match bincode::decode_from_slice(&buf, bincode_config) {
-            Ok(x) => {
-                return Ok(x.0);
+            Ok((_, 0)) => (),
+            Ok((x, size)) => {
+
+                log::trace!("Decoded: {} bytes", size);
+                in_buf.seek(SeekFrom::Start(start_pos + size as u64)).await.unwrap();
+                log::trace!("Seeking back to {:?}", start_pos + size as u64);
+
+                
+                return Ok(x);
             }
+            Err(_) => (),
+        };
+
+        let orig_length = buf.len();
+        let doubled = buf.len() * 2;
+
+        buf.resize(doubled, 0);
+
+        match in_buf.read(&mut buf[orig_length..]).await {
+            Ok(_) => (),
             Err(_) => {
-                let orig_length = buf.len();
-                let doubled = buf.len() * 2;
-
-                buf.resize(doubled, 0);
-
-                match in_buf.read(&mut buf[orig_length..]).await {
-                    Ok(_) => (),
-                    Err(_) => {
-                        return Result::Err("Failed to read buffer".to_string())
-                    }
-                }
-
-                if doubled > 16 * 1024 * 1024 {
-                    return Result::Err("Failed to decode bincode".to_string());
-                }
+                return Result::Err("Failed to read buffer".to_string())
             }
+        }
+
+        if doubled > 16 * 1024 * 1024 {
+            return Result::Err("Failed to decode bincode".to_string());
         }
     }
 }
