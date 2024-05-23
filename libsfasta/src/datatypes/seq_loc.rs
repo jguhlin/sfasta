@@ -709,10 +709,10 @@ impl SeqLocsStore
 
     #[cfg(feature = "async")]
     /// Stream all SeqLocs from the store
-    pub fn stream(self: Arc<Self>) -> impl Stream<Item = (u32, SeqLoc)>
+    pub async fn stream(self: Arc<Self>) -> impl Stream<Item = (u32, SeqLoc)>
     {
         let tree = Arc::clone(&self.tree);
-        tree.stream()
+        tree.stream().await
     }
 }
 

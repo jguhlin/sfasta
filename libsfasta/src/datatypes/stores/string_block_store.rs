@@ -197,12 +197,12 @@ impl StringBlockStore
     }
 
     #[cfg(feature = "async")]
-    pub fn stream(
+    pub async fn stream(
         self: Arc<Self>,
         fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, Bytes)>
     {
-        Arc::clone(&self.inner).stream(fhm)
+        Arc::clone(&self.inner).stream(fhm).await
     }
 
     #[cfg(feature = "async")]

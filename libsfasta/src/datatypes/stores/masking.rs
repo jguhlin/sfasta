@@ -249,7 +249,7 @@ impl Masking
     }
 
     #[cfg(feature = "async")]
-    pub fn stream(
+    pub async fn stream(
         self: Arc<Self>,
         fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, bytes::Bytes)>
@@ -259,7 +259,7 @@ impl Masking
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
-        Arc::clone(&self.inner).stream(fhm).map(move |x| {
+        Arc::clone(&self.inner).stream(fhm).await.map(move |x| {
             let mask: Vec<(u64, u8)> =
                 bincode::decode_from_slice(&x.1, bincode_config)
                     .expect("Failed to decode mask")

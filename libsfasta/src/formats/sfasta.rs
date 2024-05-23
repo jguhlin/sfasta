@@ -143,10 +143,10 @@ impl<'sfa> Sfasta<'sfa>
 
         let gen = stream! {
             // Get the generators
-            let seqlocs = Arc::clone(&sfasta.seqlocs.as_ref().unwrap()).stream();
-            let seqs = Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm));
-            // let ids = Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm));
-            // let headers = Arc::clone(&sfasta.headers.as_ref().unwrap()).stream(Arc::clone(&fhm));
+            let seqlocs = tokio::spawn(Arc::clone(&sfasta.seqlocs.as_ref().unwrap()).stream());
+            let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
+            let ids = tokio::spawn(Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm)));
+            let headers = tokio::spawn(Arc::clone(&sfasta.headers.as_ref().unwrap()).stream(Arc::clone(&fhm)));
 
             // let masking = Arc::clone(&sfasta.masking.as_ref().unwrap()).stream(Arc::clone(&fhm));
 
@@ -155,17 +155,22 @@ impl<'sfa> Sfasta<'sfa>
             // todo mods
             // todo flags
 
+            let seqlocs = seqlocs.await.unwrap();
+            let seqs = seqs.await.unwrap();
+            let ids = ids.await.unwrap();
+            let headers = headers.await.unwrap();
+
             tokio::pin!(seqlocs);
             tokio::pin!(seqs);
-            // tokio::pin!(ids);
-            // tokio::pin!(headers);
+            tokio::pin!(ids);
+            tokio::pin!(headers);
             // tokio::pin!(masking);
 
             loop {
                 let seqloc = seqlocs.next().await;
                 let seq = seqs.next().await;
-                // let id = ids.next().await;
-                // let header = headers.next().await;
+                let id = ids.next().await;
+                let header = headers.next().await;
                 // let mask = masking.next().await;
 
                 // Is seqloc none?

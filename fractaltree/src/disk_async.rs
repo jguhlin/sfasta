@@ -117,7 +117,7 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
 impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 {
     /// Iterator through all leaves, in key order
-    pub fn stream(self: Arc<Self>) -> impl Stream<Item = (K, V)>
+    pub async fn stream(self: Arc<Self>) -> impl Stream<Item = (K, V)>
     {
         let gen = stream! {
             let mut current_leaf_idx = 0;
@@ -188,9 +188,8 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         Ok(())
     }
 
-    // todo integrate this into sfa fn view
-    // seqlocs iterator? or all of the stores?
-
+    // todo this should run async in the background, i.e., once one is loaded should start displaying
+    // data / sequence!!!
     pub async fn load_all_leaves(self: &Arc<Self>) -> Result<(), &'static str>
     {
 

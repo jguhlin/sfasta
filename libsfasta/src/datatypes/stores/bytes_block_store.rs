@@ -959,7 +959,7 @@ impl BytesBlockStore
 
     // todo iterator/generator for non-async version
     #[cfg(feature = "async")]
-    pub fn stream(
+    pub async fn stream(
         self: Arc<Self>,
         fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, Bytes)>
@@ -968,7 +968,7 @@ impl BytesBlockStore
         log::debug!("Bytes Compression: {:?}", self.compression_config);
 
         let gen = stream! {
-            let block_locs = Arc::clone(&self.block_locations).stream();
+            let block_locs = Arc::clone(&self.block_locations).stream().await;
             tokio::pin!(block_locs);
 
             // It's ok to hold the lock the entire time...
