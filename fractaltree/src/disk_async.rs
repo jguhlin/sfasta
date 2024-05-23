@@ -142,7 +142,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
             // log::trace!("Current Index: {} / Keys Len: {}", current_leaf_idx, keys.len());
 
-            while current_leaf_idx < self.opened.read().await.len() && !lal_is_finished.load(std::sync::atomic::Ordering::SeqCst) {
+            while current_leaf_idx < self.opened.read().await.len() || !lal_is_finished.load(std::sync::atomic::Ordering::SeqCst) {
                 let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
                 let key = keys[current_leaf_idx].clone();
                 drop(keys);
@@ -1021,6 +1021,8 @@ where
                     .seek(SeekFrom::Start(start_pos + size as u64))
                     .await
                     .unwrap();
+
+                // todo read from borrowed buffer, then advance that far, rather than seeking back
                 log::trace!("Seeking back to {:?}", start_pos + size as u64);
 
                 return Ok(x);
