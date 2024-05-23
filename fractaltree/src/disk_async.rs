@@ -12,7 +12,7 @@ use std::{
 use bincode::{BorrowDecode, Decode};
 use tokio::{
     fs::File,
-    io::{AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom},
+    io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom},
     sync::{Mutex, OwnedMutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard},
 };
 
@@ -1008,6 +1008,27 @@ where
 {
     let start_pos = in_buf.stream_position().await.unwrap();
 
+    let current_buffer = in_buf.fill_buf().await.unwrap();
+    if current_buffer.len() == 0 {
+        return Result::Err("Failed to read buffer".to_string());
+    }
+
+    // If we can get it direct from the buffer, do so...
+    match bincode::decode_from_slice(&current_buffer, bincode_config) {
+        Ok((_, 0)) => (),
+        Ok((x, size)) => {
+            log::trace!("Decoded: {} bytes", size);
+            in_buf.consume(size);
+            in_buf
+                .seek(SeekFrom::Start(start_pos + size as u64))
+                .await
+                .unwrap();
+
+            return Ok(x);
+        }
+        Err(_) => (),
+    };
+
     let mut buf = vec![0; SIZE_HINT];
     match in_buf.read(&mut buf).await {
         Ok(_) => (),
@@ -1025,6 +1046,8 @@ where
                     .unwrap();
 
                 // todo read from borrowed buffer, then advance that far, rather than seeking back
+                // see: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html#method.fill_buf
+                // fill buf and consume
                 log::trace!("Seeking back to {:?}", start_pos + size as u64);
 
                 return Ok(x);
