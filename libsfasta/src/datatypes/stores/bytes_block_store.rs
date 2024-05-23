@@ -964,7 +964,6 @@ impl BytesBlockStore
         fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, Bytes)>
     {
-
         log::debug!("Bytes Compression: {:?}", self.compression_config);
 
         let gen = stream! {

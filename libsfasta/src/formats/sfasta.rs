@@ -182,14 +182,14 @@ impl<'sfa> Sfasta<'sfa>
                     break;
                 }
 
-                // This doesn't get the object of desire, but the raw blocks of data 
+                // This doesn't get the object of desire, but the raw blocks of data
                 // (and the seqloc to put it all together)
 
                 let seqloc = seqloc.unwrap();
 
                 println!("{:#?}", seqloc);
                 println!("Yo");
-                
+
                 yield Sequence::default();
 
             }

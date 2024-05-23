@@ -276,9 +276,11 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
                     assert!(node.children_stored_on_disk());
                 }
 
-                log::trace!("Node stored at {}", out_buf.stream_position().unwrap());
+                log::trace!(
+                    "Node stored at {}",
+                    out_buf.stream_position().unwrap()
+                );
                 node.store(&mut out_buf, &self.compression, start);
-                
             }
         }
         Ok(())
