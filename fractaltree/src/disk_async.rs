@@ -142,24 +142,26 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
             // log::trace!("Current Index: {} / Keys Len: {}", current_leaf_idx, keys.len());
 
-            while current_leaf_idx < self.opened.read().await.len() || !lal_is_finished.load(std::sync::atomic::Ordering::SeqCst) {
-                let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
-                let key = keys[current_leaf_idx].clone();
-                drop(keys);
-                let read_handle = self.opened.read().await;
-                let node = read_handle.get(&key).unwrap().read().await;
+            while !lal_is_finished.load(std::sync::atomic::Ordering::SeqCst) {
+                while current_leaf_idx < self.opened.read().await.len() {
+                    let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
+                    let key = keys[current_leaf_idx].clone();
+                    drop(keys);
+                    let read_handle = self.opened.read().await;
+                    let node = read_handle.get(&key).unwrap().read().await;
 
-                // Confirm node is a leaf, if not, iterator is done
-                if !node.is_leaf {
-                    break;
+                    // Confirm node is a leaf, if not, iterator is done
+                    if !node.is_leaf {
+                        break;
+                    }
+
+                    for i in 0..node.keys.len() {
+                        log::trace!("Yielding key: {:?}", node.keys[i]);
+                        yield (node.keys[i].clone(), node.values.as_ref().unwrap()[i].clone());
+                    }
+
+                    current_leaf_idx += 1;
                 }
-
-                for i in 0..node.keys.len() {
-                    log::trace!("Yielding key: {:?}", node.keys[i]);
-                    yield (node.keys[i].clone(), node.values.as_ref().unwrap()[i].clone());
-                }
-
-                current_leaf_idx += 1;
             }
         };
 
