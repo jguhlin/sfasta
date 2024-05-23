@@ -5,7 +5,7 @@ use std::{
     async_iter::AsyncIterator,
     collections::BTreeMap,
     pin::Pin,
-    sync::{AtomicBool, Arc},
+    sync::{atomic::AtomicBool, Arc},
     task::{Context, Poll},
 };
 
@@ -122,11 +122,15 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         let gen = stream! {
             let mut current_leaf_idx = 0;
 
-            let lal = tokio::spawn(self.load_all_leaves()); // .await.unwrap();
+            let lal_is_finished = Arc::new(AtomicBool::new(false));
 
-            let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
+            let self_borrowed = Arc::clone(&self);
 
-            if self.root.read().await.is_leaf {
+            let is_finished = Arc::clone(&lal_is_finished);
+
+            let lal = tokio::spawn(self_borrowed.load_all_leaves(is_finished)); // .await.unwrap();
+
+            if self.root.read().await.is_leaf  {
                 let root = self.root.read().await;
                 for i in 0..root.keys.len() {
                     yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
@@ -134,10 +138,14 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 return;
             }
 
-            log::trace!("Current Index: {} / Keys Len: {}", current_leaf_idx, keys.len());
+            // let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
 
-            while current_leaf_idx < keys.len() {
+            // log::trace!("Current Index: {} / Keys Len: {}", current_leaf_idx, keys.len());
+
+            while current_leaf_idx < self.opened.read().await.len() && !lal_is_finished.load(std::sync::atomic::Ordering::SeqCst) {
+                let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
                 let key = keys[current_leaf_idx].clone();
+                drop(keys);
                 let read_handle = self.opened.read().await;
                 let node = read_handle.get(&key).unwrap().read().await;
 
@@ -190,19 +198,12 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
     // todo this should run async in the background, i.e., once one is
     // loaded should start displaying data / sequence!!!
-    pub async fn load_all_leaves(self: &Arc<Self>) -> Result<(), &'static str>
+    pub async fn load_all_leaves(self: Arc<Self>, is_finished: Arc<AtomicBool>) -> Result<(), &'static str>
     {
         if self.root.read().await.is_leaf {
+            is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
             return Ok(());
         }
-
-        // Get lock on self.opened
-        let mut opened = self.opened.write().await;
-
-        // Clear the opened nodes, just to prevent any funkiness if anyone
-        // keeps it open a long time (shouldn't happen)
-        opened.clear();
-        drop(opened);
 
         // Get filehandle
         let mut in_buf = self.file_handle_manager.get_filehandle().await;
@@ -220,7 +221,11 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
         match result {
             Ok(_) => (),
-            Err(_) => return Err("Failed to load first node"),
+            Err(_) => {
+                is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
+                return Err("Failed to load first node")
+            }
+
         }
 
         log::debug!("First node opened");
@@ -250,8 +255,10 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 Err(_) => {
                     // If we loaded some nodes, this isn't an error
                     if self.opened.read().await.len() > 0 {
+                        is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
                         return Ok(());
                     } else {
+                        is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
                         return Err("Failed to load next node");
                     }
                 }
