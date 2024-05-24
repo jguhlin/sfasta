@@ -431,8 +431,6 @@ impl SeqLocsStoreBuilder
     /// Add a SeqLoc to the store
     pub fn add_to_index(&mut self, seqloc: SeqLoc) -> u32
     {
-        // let location = Arc::new(AtomicU32::new(0));
-        // self.data.push((seqloc, Arc::clone(&location)));
         self.tree.insert(self.count as u32, seqloc);
         self.count += 1;
         assert!(self.count < u32::MAX as usize, "Too many SeqLocs");
