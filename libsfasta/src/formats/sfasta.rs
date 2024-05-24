@@ -173,13 +173,14 @@ impl<'sfa> Sfasta<'sfa>
             // tokio::pin!(headers);
             // tokio::pin!(masking);
 
+            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+
             loop {
                 let seqloc = seqlocs.next().await.expect("SeqLocs empty");
                 // let seq = seqs.next().await;
                 // let id = ids.next().await;
                 // let  header = headers.next().await;
                 // let mask = masking.next().await;
-
 
                 // This doesn't get the object of desire, but the raw blocks of data
                 // (and the seqloc to put it all together)
