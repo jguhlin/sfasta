@@ -1101,7 +1101,7 @@ impl BytesBlockStoreSeqLocReader {
             let loc = &locs[0];
             let block = loc.block;
 
-            debug_assert!(block >= self.cached_block.0);
+            debug_assert!(block >= self.cached_block.0, "Block: {} Cached: {}", block, self.cached_block.0);
 
             if block == self.cached_block.0 {
                 let start = loc.start as usize;

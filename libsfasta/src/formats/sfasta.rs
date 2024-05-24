@@ -149,7 +149,7 @@ impl<'sfa> Sfasta<'sfa>
                 BytesBlockStoreSeqLocReader::new(
                     Arc::clone(&sfasta.sequences.as_ref().unwrap()),
                     Arc::clone(&sfasta.file_handles),
-            )});            
+            )});
 
             // let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
             let ids = tokio::spawn(Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm)));
