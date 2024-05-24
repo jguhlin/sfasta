@@ -189,6 +189,7 @@ impl<'sfa> Sfasta<'sfa>
 
                 println!("{:#?}", seqloc);
                 println!("Yo");
+                println!("{:#?}", seqloc.get_sequence());
 
                 let seq = seqs.next(seqloc.1.get_sequence()).await;
 
