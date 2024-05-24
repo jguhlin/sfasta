@@ -192,7 +192,7 @@ impl<'sfa> Sfasta<'sfa>
 
                 let seq = seqs.next(seqloc.1.get_sequence()).await;
 
-                println!("{:#?}", seq);
+                println!("{:#?}", seq.unwrap());
 
                 yield Sequence::default();
 
