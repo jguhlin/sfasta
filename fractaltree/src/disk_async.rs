@@ -144,7 +144,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
             while !lal_is_finished.load(std::sync::atomic::Ordering::SeqCst) {
                 while current_leaf_idx < self.opened.read().await.len() {
-                    tokio::debug!("Current leaf: {}", current_leaf_idx);
+                    log::debug!("Current leaf: {}", current_leaf_idx);
                     let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
                     let key = keys[current_leaf_idx].clone();
                     drop(keys);
