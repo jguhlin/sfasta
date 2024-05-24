@@ -254,7 +254,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
             // Make sure the keys are ordered properly for leaves...
             let mut nodes: Vec<&(i32, Vec<usize>)> = nodes.collect();
 
-            log::trace!("Storing layer {} - {} nodes", layer, nodes.len());
+            // log::trace!("Storing layer {} - {} nodes", layer, nodes.len());
 
             // Sort by the first key, lowest to highest
             nodes.sort_by(|a, b| {

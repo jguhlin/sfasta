@@ -157,7 +157,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                     }
 
                     for i in 0..node.keys.len() {
-                        log::debug!("Yielding key: {:?}", node.keys[i]);
+                        // log::debug!("Yielding key: {:?}", node.keys[i]);
                         yield (node.keys[i].clone(), node.values.as_ref().unwrap()[i].clone());
                     }
 
