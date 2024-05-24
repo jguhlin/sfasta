@@ -1,9 +1,8 @@
 use std::{
-    io::{BufRead, Read, Seek, SeekFrom, Write},
-    sync::{
+    io::{BufRead, Read, Seek, SeekFrom, Write}, pin::{self, Pin}, sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
-    },
+    }
 };
 
 use hashbrown::HashMap;
@@ -43,7 +42,7 @@ use tokio::{
     sync::{oneshot, Mutex, OwnedRwLockWriteGuard, RwLock},
 };
 
-use bytes::{BufMut, Bytes, BytesMut};
+use bytes::{BufMut, Bytes, BytesMut, Buf};
 
 use crossbeam::utils::Backoff;
 
@@ -827,7 +826,7 @@ impl BytesBlockStore
 
         // Calculate length from Loc
         let mut result = Vec::with_capacity(loc.len());
-        for l in loc.iter().map(|x| x) {
+        for l in loc.iter() {
             let block = match self.get_block(in_buf, l.block).await {
                 DataOrLater::Data(data) => data,
                 DataOrLater::Later(data) => data.await.unwrap(),
@@ -1067,6 +1066,67 @@ impl AsyncLRU
         cache.insert(block, data.clone());
         data
     }
+}
+
+#[cfg(feature = "async")]
+pub struct BytesBlockStoreSeqLocReader
+{
+    active: Option<Pin<Box<(dyn Stream<Item = (u32, Bytes)> + Send)>>>,
+    cached_block: (u32, Bytes),
+}
+
+#[cfg(feature = "async")]
+impl BytesBlockStoreSeqLocReader {
+    pub async fn new(block_store: Arc<BytesBlockStore>,
+        fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
+    ) -> Self {
+
+        let store = Arc::clone(&block_store);
+        let stream = store.stream(fhm).await;
+
+        let mut boxed = Box::pin(stream);
+        let cached_block = boxed.next().await.unwrap();
+
+        BytesBlockStoreSeqLocReader {
+            active: Some(boxed),
+            cached_block,           
+        }
+    }
+    
+    pub async fn next(&mut self, loc: &[Loc]) -> Option<Bytes> {
+        let mut locs = &loc[..];
+        let mut results = Vec::new();
+
+        while !locs.is_empty() {
+            let loc = &locs[0];
+            let block = loc.block;
+
+            debug_assert!(block >= self.cached_block.0);
+
+            if block == self.cached_block.0 {
+                let start = loc.start as usize;
+                let end = (loc.start + loc.len) as usize;
+                let j = self.cached_block.1.slice(start..end);
+                results.push(j);
+                locs = &locs[1..];
+            } else {
+                let block = self.active.as_mut().unwrap().next().await.unwrap();
+                self.cached_block = block;
+            }
+        }
+
+        if results.is_empty() {
+            return None;
+        }
+
+        let mut result = BytesMut::new();
+        for r in results {
+            result.put(r);
+        }
+
+        Some(result.freeze())
+    }
+
 }
 
 // TODO: More tests

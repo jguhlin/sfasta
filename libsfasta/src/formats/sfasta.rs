@@ -144,7 +144,14 @@ impl<'sfa> Sfasta<'sfa>
         let gen = stream! {
             // Get the generators
             let seqlocs = tokio::spawn(Arc::clone(&sfasta.seqlocs.as_ref().unwrap()).stream());
-            let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
+            
+            let seqs = tokio::spawn( {
+                BytesBlockStoreSeqLocReader::new(
+                    Arc::clone(&sfasta.sequences.as_ref().unwrap()),
+                    Arc::clone(&sfasta.file_handles),
+            )});            
+
+            // let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
             let ids = tokio::spawn(Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm)));
             let headers = tokio::spawn(Arc::clone(&sfasta.headers.as_ref().unwrap()).stream(Arc::clone(&fhm)));
 
@@ -156,39 +163,35 @@ impl<'sfa> Sfasta<'sfa>
             // todo flags
 
             let seqlocs = seqlocs.await.unwrap();
-            let seqs = seqs.await.unwrap();
-            let ids = ids.await.unwrap();
-            let headers = headers.await.unwrap();
+            let mut seqs = seqs.await.unwrap();
+            // let ids = ids.await.unwrap();
+            // let headers = headers.await.unwrap();
 
             tokio::pin!(seqlocs);
-            tokio::pin!(seqs);
-            tokio::pin!(ids);
-            tokio::pin!(headers);
+            // tokio::pin!(seqs);
+            // tokio::pin!(ids);
+            // tokio::pin!(headers);
             // tokio::pin!(masking);
 
             loop {
-                let seqloc = seqlocs.next().await;
-                let seq = seqs.next().await;
-                let id = ids.next().await;
-                let header = headers.next().await;
+                let seqloc = seqlocs.next().await.expect("SeqLocs empty");
+                // let seq = seqs.next().await;
+                // let id = ids.next().await;
+                // let  header = headers.next().await;
                 // let mask = masking.next().await;
 
-                // Is seqloc none?
-                if seqloc.is_none() {
-                    log::debug!("Seqloc is none");
-                }
-
-                if seqloc.is_none() {
-                    break;
-                }
 
                 // This doesn't get the object of desire, but the raw blocks of data
                 // (and the seqloc to put it all together)
 
-                let seqloc = seqloc.unwrap();
+                // Get the sequence
 
                 println!("{:#?}", seqloc);
                 println!("Yo");
+
+                let seq = seqs.next(seqloc.1.get_sequence()).await;
+
+                println!("{:#?}", seq);
 
                 yield Sequence::default();
 
