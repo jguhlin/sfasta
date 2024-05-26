@@ -61,6 +61,7 @@ async-gen = "0.2.3"
 async-stream = "0.3.5"
 tokio-stream = "0.1.15"
 hashbrown = "0.14.5"
+crossbeam-skiplist = "0.1.3"
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.28.0", features = ["fs"] }

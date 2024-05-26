@@ -1,15 +1,15 @@
 // This whole file is behind the async flag, so we don't need to worry
 // about
 
-use std::{
-    async_iter::AsyncIterator,
-    collections::BTreeMap,
-    pin::Pin,
-    sync::{atomic::AtomicBool, Arc},
-    task::{Context, Poll},
-};
+use std::sync::{atomic::AtomicBool, Arc};
+
+use crossbeam_skiplist::SkipMap;
+
+use crossbeam::utils::CachePadded;
+use dashmap::DashMap;
 
 use bincode::{BorrowDecode, Decode};
+
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom},
@@ -18,6 +18,9 @@ use tokio::{
 
 use async_stream::stream;
 use tokio_stream::Stream;
+
+#[cfg(windows)]
+use std::os::windows::io::AsRawHandle;
 
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
@@ -39,12 +42,13 @@ pub struct FractalTreeDiskAsync<K: Key, V: Value>
     pub start: u64, /* On disk position of the fractal tree, such that
                      * all locations are start + offset */
     pub compression: Arc<Option<CompressionConfig>>,
-    pub file: Option<String>,
     pub file_handle_manager: Arc<AsyncFileHandleManager>,
 
     // Which nodes have been opened, in case they haven't been placed on the
     // tree yet such as from a DFS search and "right" thing
-    pub opened: Arc<RwLock<BTreeMap<u64, ArcNodeDiskAsync<K, V>>>>,
+    pub opened: Arc<SkipMap<u64, ArcNodeDiskAsync<K, V>>>,
+
+    pub file: Option<String>,
 }
 
 impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
@@ -80,7 +84,7 @@ impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
             compression,
             file: None,
             file_handle_manager: Default::default(),
-            opened: Arc::new(RwLock::new(BTreeMap::new())),
+            opened: Arc::new(SkipMap::new()),
         })
     }
 }
@@ -109,7 +113,7 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
             compression: Arc::new(None), // Default to no compression
             file: None,
             file_handle_manager: Default::default(),
-            opened: Arc::new(RwLock::new(BTreeMap::new())),
+            opened: Arc::new(SkipMap::new()),
         }
     }
 }
@@ -117,6 +121,8 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
 impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 {
     /// Iterator through all leaves, in key order
+    // todo make load_all_leaves return a stream rather than the nastyness here
+    // thus don't fix any of this right now...
     pub async fn stream(self: Arc<Self>) -> impl Stream<Item = (K, V)>
     {
         let gen = stream! {
@@ -143,9 +149,9 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             // log::trace!("Current Index: {} / Keys Len: {}", current_leaf_idx, keys.len());
 
             while !lal_is_finished.load(std::sync::atomic::Ordering::SeqCst) {
-                while current_leaf_idx < self.opened.read().await.len() {
+                while current_leaf_idx < self.opened.len() {
                     log::debug!("Current leaf: {}", current_leaf_idx);
-                    let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
+                    let keys = self.opened.keys().cloned().collect::<Vec<u64>>();
                     let key = keys[current_leaf_idx].clone();
                     drop(keys);
                     let read_handle = self.opened.read().await;
@@ -199,9 +205,11 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         Ok(())
     }
 
-    // todo this should run async in the background, i.e., once one is
-    // loaded should start displaying data / sequence!!!
-    pub async fn load_all_leaves(self: Arc<Self>, is_finished: Arc<AtomicBool>) -> Result<(), &'static str>
+    // todo return this as a stream as well (make it optional? dunno)
+    pub async fn load_all_leaves(
+        self: Arc<Self>,
+        is_finished: Arc<AtomicBool>,
+    ) -> Result<(), &'static str>
     {
         if self.root.read().await.is_leaf {
             is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
@@ -226,9 +234,8 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             Ok(_) => (),
             Err(_) => {
                 is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
-                return Err("Failed to load first node")
+                return Err("Failed to load first node");
             }
-
         }
 
         log::debug!("First node opened");
@@ -257,11 +264,13 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 Ok(_) => (),
                 Err(_) => {
                     // If we loaded some nodes, this isn't an error
-                    if self.opened.read().await.len() > 0 {
-                        is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
+                    if self.opened.len() > 0 {
+                        is_finished
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
                         return Ok(());
                     } else {
-                        is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
+                        is_finished
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
                         return Err("Failed to load next node");
                     }
                 }
@@ -385,8 +394,8 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
     ) -> Result<Self, &'static str>
     {
         let fhm = AsyncFileHandleManager {
-            file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 128)),
             file_name: Some(file.clone()),
+            ..Default::default()
         };
 
         let mut in_buf = fhm.get_filehandle().await;
@@ -474,11 +483,9 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         // Release the lock
         drop(node_write);
 
-        let mut opened = self.opened.write().await;
-
         log::trace!("Inserting node into opened: {:?}", loc);
 
-        opened.insert(loc, Arc::clone(&node).into());
+        self.opened.insert(loc, Arc::clone(&node).into());
     }
 
     pub async fn load_node_next_fh(
@@ -547,11 +554,9 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         // Release the lock
         drop(node_write);
 
-        let mut opened = self.opened.write().await;
-
         log::trace!("Inserting node into opened: {:?}", loc);
 
-        opened.insert(loc, Arc::clone(&node).into());
+        self.opened.insert(loc, Arc::clone(&node).into());
 
         Ok(())
     }
@@ -613,9 +618,9 @@ pub struct NodeDiskAsync<K, V>
 {
     pub state: NodeStateAsync,
     pub keys: Vec<K>,
+    pub values: Option<Vec<V>>,
     pub parent: Option<ArcNodeDiskAsync<K, V>>,
     pub children: Option<Arc<RwLock<Vec<ArcNodeDiskAsync<K, V>>>>>,
-    pub values: Option<Vec<V>>,
     pub left: Option<ArcNodeDiskAsync<K, V>>,
     pub right: Option<ArcNodeDiskAsync<K, V>>,
     pub loc: u64,
@@ -809,7 +814,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
             }
 
             if !self.is_leaf {
-                let mut children =
+                let children =
                     self.children.as_ref().unwrap().write().await;
 
                 let mut handles = Vec::new();
@@ -1046,8 +1051,8 @@ where
                     .await
                     .unwrap();
 
-                // todo read from borrowed buffer, then advance that far, rather than seeking back
-                // see: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html#method.fill_buf
+                // todo read from borrowed buffer, then advance that far, rather
+                // than seeking back see: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html#method.fill_buf
                 // fill buf and consume
                 log::trace!("Seeking back to {:?}", start_pos + size as u64);
 
@@ -1076,8 +1081,9 @@ where
 #[cfg(feature = "async")]
 pub struct AsyncFileHandleManager
 {
-    pub file_handles: Arc<RwLock<Vec<Arc<Mutex<BufReader<File>>>>>>,
+    pub file_handles: Arc<DashMap<usize, Arc<Mutex<BufReader<File>>>>>,
     pub file_name: Option<String>,
+    pub max_filehandles: u8,
 }
 
 #[cfg(feature = "async")]
@@ -1086,8 +1092,9 @@ impl Default for AsyncFileHandleManager
     fn default() -> Self
     {
         AsyncFileHandleManager {
-            file_handles: Arc::new(RwLock::with_max_readers(Vec::new(), 128)),
+            file_handles: Arc::new(DashMap::new()),
             file_name: None,
+            max_filehandles: 8,
         }
     }
 }
@@ -1097,27 +1104,22 @@ impl AsyncFileHandleManager
 {
     pub async fn get_filehandle(&self) -> OwnedMutexGuard<BufReader<File>>
     {
-        let file_handles = Arc::clone(&self.file_handles);
-
         loop {
-            let file_handles_read = file_handles.read().await;
-
-            // Loop through each until we find one that is not locked
-            for file_handle in file_handles_read.iter() {
-                let file_handle = Arc::clone(file_handle);
-                let file_handle = file_handle.try_lock_owned();
-                if let Ok(file_handle) = file_handle {
-                    return file_handle;
+            // Try to get an existing unlocked file handle
+            for entry in self.file_handles.iter() {
+                let entry = Arc::clone(&entry).try_lock_owned();
+                match entry {
+                    Ok(entry) => {
+                        return entry;
+                    }
+                    Err(_) => (),
                 }
+                
             }
 
-            if file_handles_read.len() < 8 {
-                // There are no available file handles, so we need to create a
-                // new one and the number isn't crazy (yet)
+            if self.file_handles.len() < 8 {
                 break;
             }
-
-            drop(file_handles_read);
 
             tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
         }
@@ -1138,17 +1140,32 @@ impl AsyncFileHandleManager
             .expect("Fadvise Failed");
         }
 
+        #[cfg(unix)]
+        let raw_id = file.as_raw_fd() as usize;
+
+        #[cfg(windows)]
+        let raw_id = file.as_raw_handle() as usize;
+
+        #[cfg(not(any(unix, windows)))]
+        let raw_id = {
+            // Get the largest key from the hashmap and add 1, or 0 if there are no keys
+            let mut max = 0;
+            for key in self.file_handles.iter() {
+                if *key.key() > max {
+                    max = *key.key();
+                }
+            }
+            max + 1
+        };
+
         let file_handle = std::sync::Arc::new(Mutex::new(
             tokio::io::BufReader::with_capacity(32 * 1024, file),
-            // tokio::io::BufReader::new(file),
         ));
 
-        let mut write_lock = file_handles.write().await;
+        self.file_handles.insert(raw_id, Arc::clone(&file_handle));
 
-        let cfh = Arc::clone(&file_handle);
         let fh = file_handle.try_lock_owned().unwrap();
-
-        write_lock.push(cfh);
+        
 
         fh
     }
