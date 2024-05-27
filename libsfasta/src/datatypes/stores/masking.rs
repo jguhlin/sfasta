@@ -13,6 +13,9 @@ use async_stream::stream;
 #[cfg(feature = "async")]
 use tokio_stream::Stream;
 
+#[cfg(feature = "async")]
+use libfilehandlemanager::AsyncFileHandleManager;
+
 use super::Builder;
 use crate::datatypes::{
     BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc,
@@ -251,7 +254,7 @@ impl Masking
     #[cfg(feature = "async")]
     pub async fn stream(
         self: Arc<Self>,
-        fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
+        fhm: Arc<AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, bytes::Bytes)>
     {
         use tokio_stream::StreamExt;

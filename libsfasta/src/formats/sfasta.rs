@@ -32,14 +32,14 @@ use std::sync::RwLock;
 #[cfg(feature = "async")]
 mod async_deps
 {
-    use crate::parser::async_parser::{
+    pub(crate) use crate::parser::async_parser::{
         bincode_decode_from_buffer_async,
         bincode_decode_from_buffer_async_with_size_hint,
     };
-    use async_stream::stream;
-    use libfilehandlemanager::AsyncFileHandleManager;
-    use libfractaltree::FractalTreeDiskAsync;
-    use tokio_stream::{Stream, StreamExt};
+    pub use async_stream::stream;
+    pub use libfilehandlemanager::AsyncFileHandleManager;
+    pub use libfractaltree::FractalTreeDiskAsync;
+    pub use tokio_stream::{Stream, StreamExt};
 }
 
 #[cfg(feature = "async")]

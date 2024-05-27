@@ -15,6 +15,9 @@ use crate::datatypes::{
 use libcompression::*;
 
 #[cfg(feature = "async")]
+use libfilehandlemanager::AsyncFileHandleManager;
+
+#[cfg(feature = "async")]
 use crate::datatypes::DataOrLater;
 
 #[cfg(feature = "async")]
@@ -199,7 +202,7 @@ impl StringBlockStore
     #[cfg(feature = "async")]
     pub async fn stream(
         self: Arc<Self>,
-        fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
+        fhm: Arc<AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, Bytes)>
     {
         Arc::clone(&self.inner).stream(fhm).await

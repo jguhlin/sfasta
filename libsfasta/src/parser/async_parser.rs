@@ -13,6 +13,8 @@ use tokio::task::spawn_blocking;
 use crate::{datatypes::*, formats::*};
 use libfractaltree::FractalTreeDiskAsync;
 
+use libfilehandlemanager::AsyncFileHandleManager;
+
 #[cfg(unix)]
 use std::os::fd::AsRawFd;
 
@@ -325,12 +327,7 @@ pub async fn open_from_file_async<'sfa>(
         masking,
         sequences: sequenceblocks,
         file: Some(file.to_string()),
-        file_handles: Arc::new(AsyncFileHandleManager {
-            file_handles: Some(Arc::new(tokio::sync::RwLock::new(
-                file_handles.await.unwrap(),
-            ))),
-            file_name: Some(file.to_string()),
-        }),
+        file_handles: Arc::new(AsyncFileHandleManager::default()),
         ..Default::default()
     })
 

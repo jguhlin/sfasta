@@ -16,6 +16,9 @@ use async_stream::stream;
 use tokio_stream::Stream;
 
 #[cfg(feature = "async")]
+use libfilehandlemanager::AsyncFileHandleManager;
+
+#[cfg(feature = "async")]
 pub enum DataOrLater
 {
     Data(Bytes),
@@ -962,7 +965,7 @@ impl BytesBlockStore
     #[cfg(feature = "async")]
     pub async fn stream(
         self: Arc<Self>,
-        fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
+        fhm: Arc<AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, Bytes)>
     {
         log::debug!("Bytes Compression: {:?}", self.compression_config);
@@ -1082,7 +1085,7 @@ impl BytesBlockStoreSeqLocReader
 {
     pub async fn new(
         block_store: Arc<BytesBlockStore>,
-        fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
+        fhm: Arc<AsyncFileHandleManager>,
     ) -> Self
     {
         let store = Arc::clone(&block_store);
