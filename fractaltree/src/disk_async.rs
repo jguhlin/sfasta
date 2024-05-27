@@ -273,6 +273,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
         while node.read().await.is_leaf {
             if tx.is_some() {
+                log::debug!("Sending leaf");
                 let _ =
                     tx.as_mut().unwrap().send(Arc::clone(&node).into()).await;
             }
