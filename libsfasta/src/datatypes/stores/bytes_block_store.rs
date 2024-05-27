@@ -1128,11 +1128,11 @@ impl BytesBlockStoreBlockReader
 
     pub async fn next(&mut self, loc: &[Loc]) -> Option<BytesMut>
     {
-        let mut locs = &loc[..];
+        let locs = &loc[..];
         let mut results = Vec::new();
 
         let locs_len = locs.len();
-        let locs_idx = 0;
+        let mut locs_idx = 0;
 
         while locs_idx < locs_len {
             let loc = &locs[locs_idx];
