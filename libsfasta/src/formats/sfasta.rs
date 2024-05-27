@@ -171,7 +171,7 @@ impl<'sfa> Sfasta<'sfa>
                         Arc::clone(&sfasta.file_handles),
                 )})
             } else {
-                tokio::spawn( MaskingBlockReader::dummy())
+                tokio::spawn( MaskingBlockReader::dummy() )
             };
 
             // let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
@@ -211,10 +211,6 @@ impl<'sfa> Sfasta<'sfa>
                 // (and the seqloc to put it all together)
 
                 // Get the sequence
-
-                // println!("{:#?}", seqloc);
-                // println!("SeqLoc number: {:#?}", seqloc.0);
-                // println!("{:#?}", seqloc.1.get_sequence());
 
                 // todo this is sequential
                 let mut seq = seqs.next(seqloc.1.get_sequence()).await.unwrap();

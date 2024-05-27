@@ -242,7 +242,6 @@ impl Masking
     }
 
     #[cfg(feature = "async")]
-    #[tracing::instrument(skip(in_buf))]
     pub async fn from_buffer(
         in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
         filename: String,
