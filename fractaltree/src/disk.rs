@@ -253,17 +253,32 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
             // Debugging stuff
             // Make sure the keys are ordered properly for leaves...
             let mut nodes: Vec<&(i32, Vec<usize>)> = nodes.collect();
+            // i32 is the layer, Vec<usize> is the path to the node
 
             // log::trace!("Storing layer {} - {} nodes", layer, nodes.len());
 
             // Sort by the first key, lowest to highest
-            nodes.sort_by(|a, b| {
-                let a = &self.root.children.as_ref().unwrap()[a.1[0]];
-                let b = &self.root.children.as_ref().unwrap()[b.1[0]];
-                a.keys[0].cmp(&b.keys[0])
+            nodes.sort_by(|&a, &b| {
+                let mut node_a = &self.root.children.as_ref().unwrap()[a.1[0]];
+
+                for i in &a.1[1..] {
+                    node_a = &node_a.children.as_ref().unwrap()[*i];
+                }
+
+
+                let mut node_b = &self.root.children.as_ref().unwrap()[b.1[0]];
+
+                for i in &b.1[1..] {
+                    node_b = &node_b.children.as_ref().unwrap()[*i];
+                }
+
+                node_a.keys[0].cmp(&node_b.keys[0])
             });
 
+            let mut previous_key = K::default();
+
             for (_layer, path) in nodes {
+
                 let mut node =
                     &mut self.root.children.as_mut().unwrap()[path[0]];
 
@@ -275,6 +290,9 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
                 if !node.is_leaf {
                     assert!(node.children_stored_on_disk());
                 }
+
+                assert!(node.keys[0] >= previous_key);
+                previous_key = node.keys[node.keys.len() - 1];
 
                 log::trace!(
                     "Node stored at {}",
