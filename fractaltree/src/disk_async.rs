@@ -168,7 +168,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
     {
         stream! {
                 if self.root.read().await.is_leaf {
-                    log::debug!("Root is leaf");
                     self.all_leaves_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
                     let len = self.root.read().await.keys.len();
                     for i in 0..len {
@@ -176,7 +175,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                         yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
                     }
                 } else if self.all_leaves_loaded.load(std::sync::atomic::Ordering::SeqCst) {
-                    log::debug!("All leaves loaded");
                     let nodes: Vec<ArcNodeDiskAsync<K, V>> = self.opened.iter().map(|e| e.value().clone()).collect::<Vec<ArcNodeDiskAsync<K, V>>>();
 
                     for node in nodes.into_iter() {
@@ -191,7 +189,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                         }
                     }
                 } else {
-                    log::debug!("Loading all leaves");
                     let (tx, mut rx) = mpsc::channel(128);
 
                     let self_borrowed = Arc::clone(&self);
@@ -202,7 +199,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                     loop {
                         match rx.recv().await {
                             Some(node) => {
-                                log::debug!("Received node");
                                 let node: Arc<RwLock<NodeDiskAsync<K, V>>> = node.into();
                                 let len = node.read().await.keys.len();
                                 for i in 0..len {
@@ -213,7 +209,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                                 }
                             },
                             None => {
-                                log::trace!("Waiting for more nodes");
                                 if self.all_leaves_loaded.load(std::sync::atomic::Ordering::SeqCst) {
                                     break;
                                 }
@@ -232,14 +227,12 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         mut tx: Option<mpsc::Sender<ArcNodeDiskAsync<K, V>>>,
     ) -> Result<(), &'static str>
     {
-        log::debug!("Here in loading all leaves");
         // If the root is a leaf, we're done
         if self.root.read().await.is_leaf {
             self.all_leaves_loaded
                 .store(true, std::sync::atomic::Ordering::SeqCst);
 
             if tx.is_some() {
-                log::debug!("Sending root");
                 let root = self.root.clone();
                 let _ = tx.as_mut().unwrap().send(root).await;
             }
@@ -247,14 +240,10 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             return Ok(());
         }
 
-        log::debug!("Here in loading all leaves");
-
         // Get filehandle
         let mut in_buf = self.file_handle_manager.get_filehandle().await;
 
         in_buf.seek(SeekFrom::Start(self.start)).await.unwrap();
-
-        log::debug!("Opening first node");
 
         let mut node: Arc<RwLock<NodeDiskAsync<K, V>>> =
             Arc::new(RwLock::new(NodeDiskAsync::from_loc(0)));
@@ -274,20 +263,14 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
         while node.read().await.is_leaf {
             if tx.is_some() {
-                log::debug!("Sending leaf");
                 let _ =
                     tx.as_mut().unwrap().send(Arc::clone(&node).into()).await;
             }
 
             let num_keys = node.read().await.keys.len();
-            log::trace!(
-                "Is leaf, reading next one - this one has {} keys",
-                num_keys
-            );
 
             // Read the next one
             let pos = in_buf.stream_position().await.unwrap();
-            log::trace!("Current position: {:?}", pos);
             node = Arc::new(RwLock::with_max_readers(
                 NodeDiskAsync::<K, V>::from_loc(0), // Doesn't matter
                 128,
@@ -321,7 +304,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             // node_clone);
         }
 
-        log::trace!("No longer reading leaves - Finishing...");
         Ok(())
     }
 
@@ -522,7 +504,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         // Release the lock
         drop(node_write);
 
-        log::trace!("Inserting node into opened: {:?}", loc);
 
         self.opened.insert(loc, Arc::clone(&node).into());
     }
@@ -540,7 +521,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         }
 
         let loc = in_buf.stream_position().await.unwrap();
-        log::trace!("Loading node at: {:?}", loc);
 
         let config = bincode::config::standard()
             .with_variable_int_encoding()
@@ -561,13 +541,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                         return Err("Failed to decode compressed node");
                     }
                 };
-
-            log::trace!("Compressed Node: {:?}", compressed.len());
-
-            log::trace!(
-                "Stream position now at {:?}",
-                in_buf.stream_position().await.unwrap()
-            );
 
             let compression = Arc::clone(&self.compression);
             let decompressed = tokio::task::spawn_blocking(move || {
@@ -592,8 +565,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
         // Release the lock
         drop(node_write);
-
-        log::trace!("Inserting node into opened: {:?}", loc);
 
         self.opened.insert(loc, Arc::clone(&node).into());
 
@@ -1061,7 +1032,6 @@ where
     match bincode::decode_from_slice(&current_buffer, bincode_config) {
         Ok((_, 0)) => (),
         Ok((x, size)) => {
-            log::trace!("Decoded: {} bytes", size);
             in_buf.consume(size);
             in_buf
                 .seek(SeekFrom::Start(start_pos + size as u64))
@@ -1083,7 +1053,6 @@ where
         match bincode::decode_from_slice(&buf, bincode_config) {
             Ok((_, 0)) => (),
             Ok((x, size)) => {
-                log::trace!("Decoded: {} bytes", size);
                 in_buf
                     .seek(SeekFrom::Start(start_pos + size as u64))
                     .await
@@ -1092,7 +1061,6 @@ where
                 // todo read from borrowed buffer, then advance that far, rather
                 // than seeking back see: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html#method.fill_buf
                 // fill buf and consume
-                log::trace!("Seeking back to {:?}", start_pos + size as u64);
 
                 return Ok(x);
             }
