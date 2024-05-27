@@ -19,32 +19,10 @@ use tokio_stream::Stream;
 use libfilehandlemanager::AsyncFileHandleManager;
 
 #[cfg(feature = "async")]
-pub enum DataOrLater
-{
-    Data(Bytes),
-    Later(oneshot::Receiver<Bytes>),
-}
-
-#[cfg(feature = "async")]
-impl DataOrLater
-{
-    pub async fn await_data(self) -> Bytes
-    {
-        match self {
-            DataOrLater::Data(data) => data,
-            DataOrLater::Later(receiver) => match receiver.await {
-                Ok(data) => data,
-                Err(e) => panic!("Error receiving data: {}", e),
-            },
-        }
-    }
-}
-
-#[cfg(feature = "async")]
 use tokio::{
     fs::File,
     io::{AsyncSeekExt, BufReader},
-    sync::{oneshot, Mutex, OwnedRwLockWriteGuard, RwLock},
+    sync::{oneshot, Mutex, OwnedRwLockWriteGuard, RwLock, mpsc, mpsc::Sender, mpsc::Receiver},
 };
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -77,6 +55,28 @@ pub enum BlockStoreError
     Other(&'static str),
 }
 
+
+#[cfg(feature = "async")]
+pub enum DataOrLater
+{
+    Data(Bytes),
+    Later(oneshot::Receiver<Bytes>),
+}
+
+#[cfg(feature = "async")]
+impl DataOrLater
+{
+    pub async fn await_data(self) -> Bytes
+    {
+        match self {
+            DataOrLater::Data(data) => data,
+            DataOrLater::Later(receiver) => match receiver.await {
+                Ok(data) => data,
+                Err(e) => panic!("Error receiving data: {}", e),
+            },
+        }
+    }
+}
 /// This underlies most storage. It is a block store that stores bytes
 /// of any type and compresses them Typically not used directly, but
 /// used by sequence_block_store and string_block_store
@@ -963,6 +963,31 @@ impl BytesBlockStore
         self.block_size as usize
     }
 
+    // todo create a spsc channel to send the blocks in order, allowing for prefetching
+    #[cfg(feature = "async")]
+    pub async fn block_queue(
+        self: Arc<Self>,
+        fhm: Arc<AsyncFileHandleManager>,
+    ) -> Receiver<(u32, Bytes)>
+    {
+        // Number here is how many to prefetch
+        const PREFETCH: usize = 8;
+        let (tx, rx) = tokio::sync::mpsc::channel(PREFETCH);
+
+        tokio::spawn(async move {
+            let block_stream = self.stream(fhm).await;
+
+            tokio::pin!(block_stream);
+
+            while let Some((loc, block)) = block_stream.next().await {
+                tx.send((loc, block)).await.unwrap();
+            }
+            return ();
+       });
+
+        rx
+    }
+
     // todo iterator/generator for non-async version
     #[cfg(feature = "async")]
     pub async fn stream(
@@ -970,8 +995,6 @@ impl BytesBlockStore
         fhm: Arc<AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, Bytes)>
     {
-        log::debug!("Bytes Compression: {:?}", self.compression_config);
-
         let gen = stream! {
             let block_locs = Arc::clone(&self.block_locations).stream().await;
             tokio::pin!(block_locs);
@@ -1076,7 +1099,7 @@ impl AsyncLRU
 #[cfg(feature = "async")]
 pub struct BytesBlockStoreBlockReader
 {
-    active: Option<Pin<Box<(dyn Stream<Item = (u32, Bytes)> + Send)>>>,
+    active: Option<Receiver<(u32, Bytes)>>,
     current_block: (u32, Bytes),
 }
 
@@ -1088,14 +1111,17 @@ impl BytesBlockStoreBlockReader
         fhm: Arc<AsyncFileHandleManager>,
     ) -> Self
     {
-        let store = Arc::clone(&block_store);
-        let stream = store.stream(fhm).await;
+        // let store = Arc::clone(&block_store);
+        // let stream = store.stream(fhm).await;
+        let mut stream = block_store.block_queue(fhm).await;
 
-        let mut boxed = Box::pin(stream);
-        let current_block = boxed.next().await.unwrap();
+        // let mut boxed = Box::pin(stream);
+        // let current_block = boxed.next().await.unwrap();
+
+        let current_block = stream.recv().await.unwrap();
 
         BytesBlockStoreBlockReader {
-            active: Some(boxed),
+            active: Some(stream),
             current_block,
         }
     }
@@ -1123,7 +1149,8 @@ impl BytesBlockStoreBlockReader
                 results.push(j);
                 locs = &locs[1..];
             } else {
-                let block = self.active.as_mut().unwrap().next().await.unwrap();
+                // let block = self.active.as_mut().unwrap().next().await.unwrap();
+                let block = self.active.as_mut().unwrap().recv().await.unwrap();
                 self.current_block = block;
             }
         }
