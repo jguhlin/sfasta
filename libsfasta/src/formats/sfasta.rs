@@ -166,7 +166,7 @@ impl<'sfa> Sfasta<'sfa>
             // let headers = headers.await.unwrap();
 
             tokio::pin!(seqlocs);
-            // tokio::pin!(seqs);
+            tokio::pin!(seqs);
             // tokio::pin!(ids);
             // tokio::pin!(headers);
             // tokio::pin!(masking);
@@ -174,7 +174,10 @@ impl<'sfa> Sfasta<'sfa>
             tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
             loop {
-                let seqloc = seqlocs.next().await.expect("SeqLocs empty");
+                let seqloc = match seqlocs.next().await {
+                    Some(s) => s,
+                    None => break,
+                };
                 // let seq = seqs.next().await;
                 // let id = ids.next().await;
                 // let  header = headers.next().await;
@@ -193,7 +196,15 @@ impl<'sfa> Sfasta<'sfa>
 
                 // println!("{:#?}", seq.unwrap());
 
-                yield Sequence::default();
+                let sequence = Sequence {
+                    sequence: seq,
+                    id: None,
+                    header: None,
+                    scores: None,
+                    offset: 0,
+                };
+
+                yield sequence
 
             }
 
