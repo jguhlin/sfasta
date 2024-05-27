@@ -979,8 +979,6 @@ impl BytesBlockStore
 
             while let Some(loc) = block_locs.next().await {
 
-                log::trace!("Opening block {} at {}", loc.0, loc.1);
-
                 let block = self.get_block_pos_known(&mut in_buf, loc.0, loc.1).await;
                 yield match block {
                     DataOrLater::Data(data) => (loc.0, data),

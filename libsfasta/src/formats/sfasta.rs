@@ -220,7 +220,9 @@ impl<'sfa> Sfasta<'sfa>
                 if sfasta.masking.is_some() {
                     let mask = masking.next(seqloc.1.get_masking()).await;
 
-                    mask_sequence(&mut seq, mask.unwrap());
+                    if let Some(mask) = mask {
+                        mask_sequence(&mut seq, mask);
+                    }
                 }
 
                 // println!("{:#?}", seq.unwrap());
