@@ -841,6 +841,36 @@ pub fn from_2bit(bytes: &[u8]) -> Vec<u8> {
     output
 }
 
+// to 4 bit
+// includes N
+pub fn to_4bit(seq: &mut [u8]) {
+    for x in seq.iter_mut() {
+        match x {
+            b'A' | b'a' => *x = 0,
+            b'C' | b'c' => *x = 1,
+            b'G' | b'g' => *x = 2,
+            b'T' | b't' => *x = 3,
+            b'N' | b'n' => *x = 4,
+            _ => panic!("Invalid 4bit character"),
+        }
+    }
+}
+
+// from 4 bit
+pub fn from_4bit(seq: &mut [u8]) {
+    for x in seq.iter_mut() {
+        match x {
+            0 => *x = b'A',
+            1 => *x = b'C',
+            2 => *x = b'G',
+            3 => *x = b'T',
+            4 => *x = b'N',
+            _ => panic!("Invalid 4bit character"),
+        }
+    }
+}
+
+
 #[cfg(test)]
 mod tests
 {
