@@ -200,8 +200,8 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                     });
 
                     loop {
-                        match rx.try_recv() {
-                            Ok(node) => {
+                        match rx.recv().await {
+                            Some(node) => {
                                 let node: Arc<RwLock<NodeDiskAsync<K, V>>> = node.into();
                                 let len = node.read().await.keys.len();
                                 for i in 0..len {
@@ -211,7 +211,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                                     yield (key, value);
                                 }
                             },
-                            Err(_) => {
+                            None => {
                                 log::trace!("Waiting for more nodes");
                                 if self.all_leaves_loaded.load(std::sync::atomic::Ordering::SeqCst) {
                                     break;
