@@ -212,9 +212,12 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                                 }
                             },
                             Err(_) => {
+                                log::trace!("Waiting for more nodes");
                                 if self.all_leaves_loaded.load(std::sync::atomic::Ordering::SeqCst) {
                                     break;
                                 }
+
+                                tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
                             }
                     }
                 }
@@ -240,6 +243,8 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
             return Ok(());
         }
+
+        log::debug!("Here in loading all leaves");
 
         // Get filehandle
         let mut in_buf = self.file_handle_manager.get_filehandle().await;
