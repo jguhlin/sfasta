@@ -454,7 +454,7 @@ impl Converter
         // todo lots of clones below...
 
         let mut headers = StringBlockStoreBuilder::default()
-            .with_block_size(block_size as usize)
+            .with_block_size(block_size as usize * 4)
             .with_compression(self.compression_profile.data.headers.clone())
             .with_tree_compression(
                 self.compression_profile.index.headers.clone(),
@@ -464,7 +464,7 @@ impl Converter
         // let headers = ThreadBuilder::new(headers);
 
         let mut ids = StringBlockStoreBuilder::default()
-            .with_block_size(block_size as usize)
+            .with_block_size(block_size as usize * 4)
             .with_compression(self.compression_profile.data.ids.clone())
             .with_tree_compression(self.compression_profile.index.ids.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
