@@ -161,7 +161,7 @@ impl<'sfa> Sfasta<'sfa>
             // todo flags
 
             let seqlocs = seqlocs.await.unwrap();
-            let mut seqs = seqs.await.unwrap();
+            let seqs = seqs.await.unwrap();
             // let ids = ids.await.unwrap();
             // let headers = headers.await.unwrap();
 
@@ -171,7 +171,7 @@ impl<'sfa> Sfasta<'sfa>
             // tokio::pin!(headers);
             // tokio::pin!(masking);
 
-            tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
+            // tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
             loop {
                 let seqloc = match seqlocs.next().await {
