@@ -717,11 +717,13 @@ impl BytesBlockStore
         // Copy this Vec<u8> into the buffer
         // Lengths may be different
         let compression = self.compression_config.clone();
-        let decompressed = tokio::task::spawn_blocking(move || {
-            Bytes::from(compression.decompress(&compressed_block).unwrap())
-        });
+        // let decompressed = tokio::task::spawn_blocking(move || {
+            // Bytes::from(compression.decompress(&compressed_block).unwrap())
+        // });
 
-        let decompressed = decompressed.await.unwrap();
+        let decompressed = Bytes::from(compression.decompress(&compressed_block).unwrap());
+
+        // let decompressed = decompressed.await.unwrap();
 
         // Grab the block_jobs again
         let mut block_jobs = self.block_jobs.lock().await;

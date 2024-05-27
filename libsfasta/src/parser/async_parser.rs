@@ -458,64 +458,29 @@ where
     T: bincode::Decode,
     C: bincode::config::Config,
 {
-    let start_pos = in_buf.stream_position().await.unwrap();
-
-    let current_buffer = in_buf.fill_buf().await.unwrap();
-    if current_buffer.len() == 0 {
-        return Result::Err("Failed to read buffer".to_string());
-    }
-
-    // If we can get it direct from the buffer, do so...
-    match bincode::decode_from_slice(&current_buffer, bincode_config) {
-        Ok((_, 0)) => (),
-        Ok((x, size)) => {
-            in_buf.consume(size);
-            in_buf
-                .seek(SeekFrom::Start(start_pos + size as u64))
-                .await
-                .unwrap();
-
-            return Ok(x);
-        }
-        Err(_) => (),
-    };
-
     let mut buf = vec![0; size_hint];
-    match in_buf.read(&mut buf).await {
-        Ok(_) => (),
-        Err(_) => return Result::Err("Failed to read buffer".to_string()),
-    }
+    in_buf.read(&mut buf).await.unwrap();
 
     loop {
         match bincode::decode_from_slice(&buf, bincode_config) {
-            Ok((_, 0)) => (),
-            Ok((x, size)) => {
-                in_buf
-                    .seek(SeekFrom::Start(start_pos + size as u64))
-                    .await
-                    .unwrap();
-
-                // todo read from borrowed buffer, then advance that far, rather
-                // than seeking back see: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html#method.fill_buf
-                // fill buf and consume
-
-                return Ok(x);
+            Ok(x) => {
+                return Ok(x.0);
             }
-            Err(_) => (),
-        };
+            Err(_) => {
+                let orig_length = buf.len();
+                let doubled = buf.len() * 2;
 
-        let orig_length = buf.len();
-        let doubled = buf.len() * 2;
+                buf.resize(doubled, 0);
 
-        buf.resize(doubled, 0);
+                in_buf.read(&mut buf[orig_length..]).await.unwrap();
 
-        match in_buf.read(&mut buf[orig_length..]).await {
-            Ok(_) => (),
-            Err(_) => return Result::Err("Failed to read buffer".to_string()),
-        }
-
-        if doubled > 16 * 1024 * 1024 {
-            return Result::Err("Failed to decode bincode".to_string());
+                if doubled > 256 * 1024 * 1024 {
+                    return Result::Err(
+                        "Failed to decode bincode - Max size reached"
+                            .to_string(),
+                    );
+                }
+            }
         }
     }
 }
