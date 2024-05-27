@@ -325,6 +325,7 @@ impl Masking
     {
         let mask = self.inner.get(in_buf, loc).await;
 
+        /*
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
@@ -332,8 +333,9 @@ impl Masking
             bincode::decode_from_slice(&mask, bincode_config)
                 .expect("Failed to decode mask")
                 .0;
-
-        bytes::Bytes::from(rle_decode(&mask))
+        */
+        // bytes::Bytes::from(rle_decode(&mask))
+        mask
     }
 }
 
