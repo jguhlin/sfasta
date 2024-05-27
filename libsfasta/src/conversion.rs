@@ -551,13 +551,14 @@ impl Converter
                     let mut seq = seq.to_vec();
                     seq.make_ascii_uppercase();
 
+                    // testing - this brought it to 2.8Gb
                     // Can we store as 2bit
-                    if can_store_2bit(&seq) {
-                        to_2bit(&mut seq);
-                    } else {
-                        to_4bit(&mut seq)
-                    }
-                    
+                    // if can_store_2bit(&seq) {
+                        // to_2bit(&mut seq);
+                    // } else {
+                        // to_4bit(&mut seq)
+                    // }
+
                     let loc = sequences.add(seq);
                     let sequence_locs = loc.unwrap();
 
