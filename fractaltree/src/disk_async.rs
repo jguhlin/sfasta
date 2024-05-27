@@ -202,6 +202,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                     loop {
                         match rx.recv().await {
                             Some(node) => {
+                                log::debug!("Received node");
                                 let node: Arc<RwLock<NodeDiskAsync<K, V>>> = node.into();
                                 let len = node.read().await.keys.len();
                                 for i in 0..len {
@@ -283,6 +284,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 "Is leaf, reading next one - this one has {} keys",
                 num_keys
             );
+
             // Read the next one
             let pos = in_buf.stream_position().await.unwrap();
             log::trace!("Current position: {:?}", pos);
