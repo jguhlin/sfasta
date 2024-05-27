@@ -263,10 +263,12 @@ impl Masking
         fhm: Arc<AsyncFileHandleManager>,
     ) -> impl Stream<Item = (u32, bytes::Bytes)>
     {
-        use tokio_stream::StreamExt;
+        Arc::clone(&self.inner).stream(fhm).await
 
-        let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
+        // let bincode_config =
+            // bincode::config::standard().with_variable_int_encoding();
+
+        /*
 
         Arc::clone(&self.inner).stream(fhm).await.map(move |x| {
             log::trace!("Size of mask (still RLE): {}", x.1.len());
@@ -275,7 +277,7 @@ impl Masking
                     .expect("Failed to decode mask")
                     .0;
             (x.0, bytes::Bytes::from(rle_decode(&mask)))
-        })
+        }) */
     }
 
     #[cfg(not(feature = "async"))]
@@ -341,6 +343,12 @@ impl Masking
 pub fn mask_sequence(seq: &mut [u8], mask_raw: bytes::Bytes)
 {
     let arch = Arch::new();
+
+    let config = bincode::config::standard().with_variable_int_encoding();
+
+    let mask: Vec<(u64, u8)> = bincode::decode_from_slice(&mask_raw, config).unwrap().0;
+
+    let mask_raw = rle_decode(&mask);
 
     arch.dispatch(|| {
         for (i, m) in mask_raw.iter().enumerate() {
