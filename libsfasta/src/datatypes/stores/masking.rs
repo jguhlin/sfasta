@@ -269,6 +269,7 @@ impl Masking
             bincode::config::standard().with_variable_int_encoding();
 
         Arc::clone(&self.inner).stream(fhm).await.map(move |x| {
+            log::trace!("Size of mask (still RLE): {}", x.1.len());
             let mask: Vec<(u64, u8)> =
                 bincode::decode_from_slice(&x.1, bincode_config)
                     .expect("Failed to decode mask")
