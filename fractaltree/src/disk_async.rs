@@ -5,25 +5,18 @@ use std::sync::{atomic::AtomicBool, Arc};
 
 use crossbeam_skiplist::SkipMap;
 
-use crossbeam::utils::CachePadded;
-use dashmap::DashMap;
-
 use bincode::{BorrowDecode, Decode};
 
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom},
-    sync::{Mutex, OwnedMutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard},
+    sync::{Mutex, OwnedMutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, mpsc},
 };
 
 use async_stream::stream;
 use tokio_stream::Stream;
 
-#[cfg(windows)]
-use std::os::windows::io::AsRawHandle;
-
-#[cfg(unix)]
-use std::os::fd::AsRawFd;
+use libfilehandlemanager::AsyncFileHandleManager;
 
 use crate::*;
 use libcompression::*;
@@ -47,6 +40,7 @@ pub struct FractalTreeDiskAsync<K: Key, V: Value>
     // Which nodes have been opened, in case they haven't been placed on the
     // tree yet such as from a DFS search and "right" thing
     pub opened: Arc<SkipMap<u64, ArcNodeDiskAsync<K, V>>>,
+    pub all_leaves_loaded: Arc<AtomicBool>,
 
     pub file: Option<String>,
 }
@@ -114,6 +108,7 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
             file: None,
             file_handle_manager: Default::default(),
             opened: Arc::new(SkipMap::new()),
+            all_leaves_loaded: Arc::new(AtomicBool::new(false)),
         }
     }
 }
@@ -121,8 +116,8 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
 impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 {
     /// Iterator through all leaves, in key order
-    // todo make load_all_leaves return a stream rather than the nastyness here
-    // thus don't fix any of this right now...
+    // todo make load_all_leaves return a stream rather than the nastyness
+    // here thus don't fix any of this right now...
     pub async fn stream(self: Arc<Self>) -> impl Stream<Item = (K, V)>
     {
         let gen = stream! {
@@ -205,15 +200,111 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         Ok(())
     }
 
-    // todo return this as a stream as well (make it optional? dunno)
-    pub async fn load_all_leaves(
+    // Stream all leaves
+    // Loads up all leaves in the background, non-lazily
+    pub async fn get_all_leaves(
         self: Arc<Self>,
-        is_finished: Arc<AtomicBool>,
-    ) -> Result<(), &'static str>
+    ) -> impl Stream<Item = (K, V)>
     {
         if self.root.read().await.is_leaf {
-            is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
-            return Ok(());
+            self.all_leaves_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+            let gen = stream! {
+                let len = self.root.read().await.keys.len();
+                for i in 0..len {
+                    let root = self.root.read().await;
+                    yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
+                }
+            };
+
+            return gen;
+        }
+
+        // Get filehandle
+        let mut in_buf = self.file_handle_manager.get_filehandle().await;
+
+        in_buf.seek(SeekFrom::Start(self.start)).await.unwrap();
+
+        log::debug!("Opening first node");
+
+        let mut node: Arc<RwLock<NodeDiskAsync<K, V>>> =
+            Arc::new(RwLock::new(NodeDiskAsync::from_loc(0)));
+
+        let result = Arc::clone(&self)
+            .load_node_next_fh(node.clone(), &mut in_buf)
+            .await;
+
+        match result {
+            Ok(_) => (),
+            Err(_) => {
+                is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
+                return Err("Failed to load first node");
+            }
+        }
+
+        log::debug!("First node opened");
+
+        while node.read().await.is_leaf {
+            let num_keys = node.read().await.keys.len();
+            log::trace!(
+                "Is leaf, reading next one - this one has {} keys",
+                num_keys
+            );
+            // Read the next one
+            let pos = in_buf.stream_position().await.unwrap();
+            log::trace!("Current position: {:?}", pos);
+            node = Arc::new(RwLock::with_max_readers(
+                NodeDiskAsync::<K, V>::from_loc(0), // Doesn't matter
+                128,
+            ));
+
+            let borrowed_self = Arc::clone(&self);
+            let borrowed_node = Arc::clone(&node);
+            let result = borrowed_self
+                .load_node_next_fh(borrowed_node, &mut in_buf)
+                .await;
+
+            match result {
+                Ok(_) => (),
+                Err(_) => {
+                    // If we loaded some nodes, this isn't an error
+                    if self.opened.len() > 0 {
+                        is_finished
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                        return Ok(());
+                    } else {
+                        is_finished
+                            .store(true, std::sync::atomic::Ordering::SeqCst);
+                        return Err("Failed to load next node");
+                    }
+                }
+            }
+
+            // let node_clone = Arc::clone(&node);
+            // let node_clone: ArcNodeDiskAsync<K, V> =
+            // node_clone.into(); opened.insert(pos,
+            // node_clone);
+        }
+
+        log::trace!("No longer reading leaves");
+        Ok(())
+    }
+
+    // Non-lazy
+    pub async fn load_all_leaves(
+        self: Arc<Self>,
+    )
+    {
+        if self.root.read().await.is_leaf {
+            self.all_leaves_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+            let gen = stream! {
+                let len = self.root.read().await.keys.len();
+                for i in 0..len {
+                    let root = self.root.read().await;
+                    yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
+                }
+            };
+
+            return gen;
         }
 
         // Get filehandle
@@ -814,8 +905,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
             }
 
             if !self.is_leaf {
-                let children =
-                    self.children.as_ref().unwrap().write().await;
+                let children = self.children.as_ref().unwrap().write().await;
 
                 let mut handles = Vec::new();
 
@@ -1074,100 +1164,6 @@ where
         if doubled > 16 * 1024 * 1024 {
             return Result::Err("Failed to decode bincode".to_string());
         }
-    }
-}
-
-#[derive(Debug)]
-#[cfg(feature = "async")]
-pub struct AsyncFileHandleManager
-{
-    pub file_handles: Arc<DashMap<usize, Arc<Mutex<BufReader<File>>>>>,
-    pub file_name: Option<String>,
-    pub max_filehandles: u8,
-}
-
-#[cfg(feature = "async")]
-impl Default for AsyncFileHandleManager
-{
-    fn default() -> Self
-    {
-        AsyncFileHandleManager {
-            file_handles: Arc::new(DashMap::new()),
-            file_name: None,
-            max_filehandles: 8,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-impl AsyncFileHandleManager
-{
-    pub async fn get_filehandle(&self) -> OwnedMutexGuard<BufReader<File>>
-    {
-        loop {
-            // Try to get an existing unlocked file handle
-            for entry in self.file_handles.iter() {
-                let entry = Arc::clone(&entry).try_lock_owned();
-                match entry {
-                    Ok(entry) => {
-                        return entry;
-                    }
-                    Err(_) => (),
-                }
-                
-            }
-
-            if self.file_handles.len() < 8 {
-                break;
-            }
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-        }
-
-        // Otherwise, create one and add it to the list
-        let file = tokio::fs::File::open(self.file_name.as_ref().unwrap())
-            .await
-            .unwrap();
-
-        #[cfg(unix)]
-        {
-            nix::fcntl::posix_fadvise(
-                file.as_raw_fd(),
-                0,
-                0,
-                nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-            )
-            .expect("Fadvise Failed");
-        }
-
-        #[cfg(unix)]
-        let raw_id = file.as_raw_fd() as usize;
-
-        #[cfg(windows)]
-        let raw_id = file.as_raw_handle() as usize;
-
-        #[cfg(not(any(unix, windows)))]
-        let raw_id = {
-            // Get the largest key from the hashmap and add 1, or 0 if there are no keys
-            let mut max = 0;
-            for key in self.file_handles.iter() {
-                if *key.key() > max {
-                    max = *key.key();
-                }
-            }
-            max + 1
-        };
-
-        let file_handle = std::sync::Arc::new(Mutex::new(
-            tokio::io::BufReader::with_capacity(32 * 1024, file),
-        ));
-
-        self.file_handles.insert(raw_id, Arc::clone(&file_handle));
-
-        let fh = file_handle.try_lock_owned().unwrap();
-        
-
-        fh
     }
 }
 

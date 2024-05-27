@@ -1,8 +1,10 @@
 use std::{
-    io::{BufRead, Read, Seek, SeekFrom, Write}, pin::{self, Pin}, sync::{
+    io::{BufRead, Read, Seek, SeekFrom, Write},
+    pin::{self, Pin},
+    sync::{
         atomic::{AtomicU64, Ordering},
         Arc,
-    }
+    },
 };
 
 use hashbrown::HashMap;
@@ -42,7 +44,7 @@ use tokio::{
     sync::{oneshot, Mutex, OwnedRwLockWriteGuard, RwLock},
 };
 
-use bytes::{BufMut, Bytes, BytesMut, Buf};
+use bytes::{Buf, BufMut, Bytes, BytesMut};
 
 use crossbeam::utils::Backoff;
 
@@ -1076,11 +1078,13 @@ pub struct BytesBlockStoreSeqLocReader
 }
 
 #[cfg(feature = "async")]
-impl BytesBlockStoreSeqLocReader {
-    pub async fn new(block_store: Arc<BytesBlockStore>,
+impl BytesBlockStoreSeqLocReader
+{
+    pub async fn new(
+        block_store: Arc<BytesBlockStore>,
         fhm: Arc<crate::formats::sfasta::AsyncFileHandleManager>,
-    ) -> Self {
-
+    ) -> Self
+    {
         let store = Arc::clone(&block_store);
         let stream = store.stream(fhm).await;
 
@@ -1089,11 +1093,12 @@ impl BytesBlockStoreSeqLocReader {
 
         BytesBlockStoreSeqLocReader {
             active: Some(boxed),
-            cached_block,           
+            cached_block,
         }
     }
-    
-    pub async fn next(&mut self, loc: &[Loc]) -> Option<Bytes> {
+
+    pub async fn next(&mut self, loc: &[Loc]) -> Option<Bytes>
+    {
         let mut locs = &loc[..];
         let mut results = Vec::new();
 
@@ -1101,7 +1106,12 @@ impl BytesBlockStoreSeqLocReader {
             let loc = &locs[0];
             let block = loc.block;
 
-            debug_assert!(block >= self.cached_block.0, "Block: {} Cached: {}", block, self.cached_block.0);
+            debug_assert!(
+                block >= self.cached_block.0,
+                "Block: {} Cached: {}",
+                block,
+                self.cached_block.0
+            );
 
             if block == self.cached_block.0 {
                 let start = loc.start as usize;
@@ -1126,7 +1136,6 @@ impl BytesBlockStoreSeqLocReader {
 
         Some(result.freeze())
     }
-
 }
 
 // TODO: More tests

@@ -30,25 +30,23 @@ use tokio::{
 use std::sync::RwLock;
 
 #[cfg(feature = "async")]
-use async_stream::stream;
+mod async_deps
+{
+    use crate::parser::async_parser::{
+        bincode_decode_from_buffer_async,
+        bincode_decode_from_buffer_async_with_size_hint,
+    };
+    use async_stream::stream;
+    use libfilehandlemanager::AsyncFileHandleManager;
+    use libfractaltree::FractalTreeDiskAsync;
+    use tokio_stream::{Stream, StreamExt};
+}
 
 #[cfg(feature = "async")]
-use tokio_stream::Stream;
-
-#[cfg(feature = "async")]
-use tokio_stream::StreamExt;
+use async_deps::*;
 
 use crate::datatypes::*;
 use libfractaltree::FractalTreeDisk;
-
-#[cfg(feature = "async")]
-use libfractaltree::FractalTreeDiskAsync;
-
-#[cfg(feature = "async")]
-use crate::parser::async_parser::{
-    bincode_decode_from_buffer_async,
-    bincode_decode_from_buffer_async_with_size_hint,
-};
 
 use bumpalo::Bump;
 use bytes::Bytes;
@@ -144,7 +142,7 @@ impl<'sfa> Sfasta<'sfa>
         let gen = stream! {
             // Get the generators
             let seqlocs = tokio::spawn(Arc::clone(&sfasta.seqlocs.as_ref().unwrap()).stream());
-            
+
             let seqs = tokio::spawn( {
                 BytesBlockStoreSeqLocReader::new(
                     Arc::clone(&sfasta.sequences.as_ref().unwrap()),
@@ -1313,90 +1311,6 @@ impl Default for SeqMode
     fn default() -> Self
     {
         SeqMode::Linear
-    }
-}
-
-#[cfg(feature = "async")]
-pub struct AsyncFileHandleManager
-{
-    pub file_handles: Option<Arc<RwLock<Vec<Arc<Mutex<BufReader<File>>>>>>>,
-    pub file_name: Option<String>,
-}
-
-#[cfg(feature = "async")]
-impl Default for AsyncFileHandleManager
-{
-    fn default() -> Self
-    {
-        AsyncFileHandleManager {
-            file_handles: None,
-            file_name: None,
-        }
-    }
-}
-
-#[cfg(feature = "async")]
-impl AsyncFileHandleManager
-{
-    #[tracing::instrument(skip(self))]
-    pub async fn get_filehandle(
-        &self,
-    ) -> OwnedMutexGuard<tokio::io::BufReader<tokio::fs::File>>
-    {
-        let file_handles = Arc::clone(self.file_handles.as_ref().unwrap());
-
-        loop {
-            let file_handles_read = file_handles.read().await;
-
-            // Loop through each until we find one that is not locked
-            for file_handle in file_handles_read.iter() {
-                let file_handle = Arc::clone(file_handle);
-                let file_handle = file_handle.try_lock_owned();
-                if let Ok(file_handle) = file_handle {
-                    return file_handle;
-                }
-            }
-
-            if file_handles_read.len() < 8 {
-                // There are no available file handles, so we need to create a
-                // new one and the number isn't crazy (yet)
-                break;
-            }
-
-            drop(file_handles_read);
-
-            tokio::time::sleep(tokio::time::Duration::from_millis(1)).await;
-        }
-
-        // Otherwise, create one and add it to the list
-        let file = tokio::fs::File::open(self.file_name.as_ref().unwrap())
-            .await
-            .unwrap();
-
-        #[cfg(unix)]
-        {
-            nix::fcntl::posix_fadvise(
-                file.as_raw_fd(),
-                0,
-                0,
-                nix::fcntl::PosixFadviseAdvice::POSIX_FADV_RANDOM,
-            )
-            .expect("Fadvise Failed");
-        }
-
-        let file_handle = std::sync::Arc::new(tokio::sync::Mutex::new(
-            tokio::io::BufReader::with_capacity(16 * 1024, file),
-            // tokio::io::BufReader::new(file),
-        ));
-
-        let cfh = Arc::clone(&file_handle);
-        let fh = file_handle.try_lock_owned().unwrap();
-
-        let mut write_lock = file_handles.write().await;
-
-        write_lock.push(cfh);
-
-        fh
     }
 }
 
