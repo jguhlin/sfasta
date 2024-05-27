@@ -452,9 +452,9 @@ impl Converter
             seqlocs.with_compression(self.compression_profile.seqlocs.clone());
 
         // todo lots of clones below...
-
+        // todo customize block size in cfg file
         let mut headers = StringBlockStoreBuilder::default()
-            .with_block_size(block_size as usize * 4)
+            .with_block_size(block_size as usize)
             .with_compression(self.compression_profile.data.headers.clone())
             .with_tree_compression(
                 self.compression_profile.index.headers.clone(),
@@ -463,8 +463,9 @@ impl Converter
 
         // let headers = ThreadBuilder::new(headers);
 
+        // todo customize block size in cfg file
         let mut ids = StringBlockStoreBuilder::default()
-            .with_block_size(block_size as usize * 4)
+            .with_block_size(block_size as usize)
             .with_compression(self.compression_profile.data.ids.clone())
             .with_tree_compression(self.compression_profile.index.ids.clone())
             .with_compression_worker(Arc::clone(&compression_workers_thread));
