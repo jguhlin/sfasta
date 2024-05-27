@@ -550,6 +550,7 @@ impl Converter
                     // Capitalize and add to sequences
                     let mut seq = seq.to_vec();
                     seq.make_ascii_uppercase();
+                    to_2bit(&mut seq);
                     let loc = sequences.add(seq);
                     let sequence_locs = loc.unwrap();
 
