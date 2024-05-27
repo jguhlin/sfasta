@@ -29,7 +29,7 @@ impl Default for AsyncFileHandleManager
         AsyncFileHandleManager {
             file_handles: Arc::new(DashMap::new()),
             file_name: None,
-            max_filehandles: 8,
+            max_filehandles: 64,
         }
     }
 }
