@@ -351,6 +351,11 @@ impl Encode for SeqLoc
             .flatten()
             .collect::<Vec<u32>>();
 
+        // Subtract the lowest loc from all locs
+        // todo see if this works before implementing in decode
+        let min = locs.iter().min().unwrap();
+        let locs = locs.iter().map(|loc| loc - min).collect::<Vec<u32>>();
+
         bincode::Encode::encode(&values, encoder)?;
         bincode::Encode::encode(&locs, encoder)?;
         Ok(())
