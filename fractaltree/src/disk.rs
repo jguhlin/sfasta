@@ -294,10 +294,6 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
                 assert!(node.keys[0] >= previous_key);
                 previous_key = node.keys[node.keys.len() - 1];
 
-                log::trace!(
-                    "Node stored at {}",
-                    out_buf.stream_position().unwrap()
-                );
                 node.store(&mut out_buf, &self.compression, start);
             }
         }
