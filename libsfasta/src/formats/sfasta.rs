@@ -150,8 +150,8 @@ impl<'sfa> Sfasta<'sfa>
             )});
 
             // let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
-            let ids = tokio::spawn(Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm)));
-            let headers = tokio::spawn(Arc::clone(&sfasta.headers.as_ref().unwrap()).stream(Arc::clone(&fhm)));
+            // let ids = tokio::spawn(Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm)));
+            // let headers = tokio::spawn(Arc::clone(&sfasta.headers.as_ref().unwrap()).stream(Arc::clone(&fhm)));
 
             // let masking = Arc::clone(&sfasta.masking.as_ref().unwrap()).stream(Arc::clone(&fhm));
 
