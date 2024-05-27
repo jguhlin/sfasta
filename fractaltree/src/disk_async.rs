@@ -7,10 +7,14 @@ use crossbeam_skiplist::SkipMap;
 
 use bincode::{BorrowDecode, Decode};
 
+use crossbeam::utils::CachePadded;
+
 use tokio::{
     fs::File,
     io::{AsyncBufReadExt, AsyncReadExt, AsyncSeekExt, BufReader, SeekFrom},
-    sync::{Mutex, OwnedMutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard, mpsc},
+    sync::{
+        mpsc, Mutex, OwnedMutexGuard, RwLock, RwLockReadGuard, RwLockWriteGuard,
+    },
 };
 
 use async_stream::stream;
@@ -40,7 +44,7 @@ pub struct FractalTreeDiskAsync<K: Key, V: Value>
     // Which nodes have been opened, in case they haven't been placed on the
     // tree yet such as from a DFS search and "right" thing
     pub opened: Arc<SkipMap<u64, ArcNodeDiskAsync<K, V>>>,
-    pub all_leaves_loaded: Arc<AtomicBool>,
+    pub all_leaves_loaded: Arc<CachePadded<AtomicBool>>,
 
     pub file: Option<String>,
 }
@@ -79,6 +83,9 @@ impl<K: Key, V: Value> Decode for FractalTreeDiskAsync<K, V>
             file: None,
             file_handle_manager: Default::default(),
             opened: Arc::new(SkipMap::new()),
+            all_leaves_loaded: Arc::new(CachePadded::new(AtomicBool::new(
+                false,
+            ))),
         })
     }
 }
@@ -108,7 +115,9 @@ impl<K: Key, V: Value> Default for FractalTreeDiskAsync<K, V>
             file: None,
             file_handle_manager: Default::default(),
             opened: Arc::new(SkipMap::new()),
-            all_leaves_loaded: Arc::new(AtomicBool::new(false)),
+            all_leaves_loaded: Arc::new(CachePadded::new(AtomicBool::new(
+                false,
+            ))),
         }
     }
 }
@@ -120,54 +129,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
     // here thus don't fix any of this right now...
     pub async fn stream(self: Arc<Self>) -> impl Stream<Item = (K, V)>
     {
-        let gen = stream! {
-            let mut current_leaf_idx = 0;
-
-            let lal_is_finished = Arc::new(AtomicBool::new(false));
-
-            let self_borrowed = Arc::clone(&self);
-
-            let is_finished = Arc::clone(&lal_is_finished);
-
-            let lal = tokio::spawn(self_borrowed.load_all_leaves(is_finished)); // .await.unwrap();
-
-            if self.root.read().await.is_leaf  {
-                let root = self.root.read().await;
-                for i in 0..root.keys.len() {
-                    yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
-                }
-                return;
-            }
-
-            // let keys = self.opened.read().await.keys().cloned().collect::<Vec<u64>>();
-
-            // log::trace!("Current Index: {} / Keys Len: {}", current_leaf_idx, keys.len());
-
-            while !lal_is_finished.load(std::sync::atomic::Ordering::SeqCst) {
-                while current_leaf_idx < self.opened.len() {
-                    log::debug!("Current leaf: {}", current_leaf_idx);
-                    let keys = self.opened.keys().cloned().collect::<Vec<u64>>();
-                    let key = keys[current_leaf_idx].clone();
-                    drop(keys);
-                    let read_handle = self.opened.read().await;
-                    let node = read_handle.get(&key).unwrap().read().await;
-
-                    // Confirm node is a leaf, if not, iterator is done
-                    if !node.is_leaf {
-                        break;
-                    }
-
-                    for i in 0..node.keys.len() {
-                        // log::debug!("Yielding key: {:?}", node.keys[i]);
-                        yield (node.keys[i].clone(), node.values.as_ref().unwrap()[i].clone());
-                    }
-
-                    current_leaf_idx += 1;
-                }
-            }
-        };
-
-        gen
+        self.get_all_leaves().await
     }
 
     /// Loads the entire tree into memory
@@ -202,109 +164,78 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
     // Stream all leaves
     // Loads up all leaves in the background, non-lazily
-    pub async fn get_all_leaves(
-        self: Arc<Self>,
-    ) -> impl Stream<Item = (K, V)>
+    pub async fn get_all_leaves(self: Arc<Self>) -> impl Stream<Item = (K, V)>
     {
-        if self.root.read().await.is_leaf {
-            self.all_leaves_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
-            let gen = stream! {
-                let len = self.root.read().await.keys.len();
-                for i in 0..len {
-                    let root = self.root.read().await;
-                    yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
-                }
-            };
+        stream! {
+                if self.root.read().await.is_leaf {
+                    self.all_leaves_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
+                    let len = self.root.read().await.keys.len();
+                    for i in 0..len {
+                        let root = self.root.read().await;
+                        yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
+                    }
+                } else if self.all_leaves_loaded.load(std::sync::atomic::Ordering::SeqCst) {
+                    let nodes: Vec<ArcNodeDiskAsync<K, V>> = self.opened.iter().map(|e| e.value().clone()).collect::<Vec<ArcNodeDiskAsync<K, V>>>();
 
-            return gen;
-        }
+                    for node in nodes.into_iter() {
+                        let node: Arc<RwLock<NodeDiskAsync<K, V>>> = node.into();
+                        let len = node.read().await.keys.len();
 
-        // Get filehandle
-        let mut in_buf = self.file_handle_manager.get_filehandle().await;
+                        for i in 0..len {
+                            let node = node.read().await;
+                            let key: K = node.keys[i].clone();
+                            let value: V = node.values.as_ref().unwrap()[i].clone();
+                            yield (key, value);
+                        }
+                    }
+                } else {
+                    let (tx, mut rx) = mpsc::channel(128);
 
-        in_buf.seek(SeekFrom::Start(self.start)).await.unwrap();
+                    let self_borrowed = Arc::clone(&self);
+                    let _ = tokio::spawn(async move {
+                        let _ = self_borrowed.load_all_leaves(Some(tx)).await;
+                    });
 
-        log::debug!("Opening first node");
-
-        let mut node: Arc<RwLock<NodeDiskAsync<K, V>>> =
-            Arc::new(RwLock::new(NodeDiskAsync::from_loc(0)));
-
-        let result = Arc::clone(&self)
-            .load_node_next_fh(node.clone(), &mut in_buf)
-            .await;
-
-        match result {
-            Ok(_) => (),
-            Err(_) => {
-                is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
-                return Err("Failed to load first node");
-            }
-        }
-
-        log::debug!("First node opened");
-
-        while node.read().await.is_leaf {
-            let num_keys = node.read().await.keys.len();
-            log::trace!(
-                "Is leaf, reading next one - this one has {} keys",
-                num_keys
-            );
-            // Read the next one
-            let pos = in_buf.stream_position().await.unwrap();
-            log::trace!("Current position: {:?}", pos);
-            node = Arc::new(RwLock::with_max_readers(
-                NodeDiskAsync::<K, V>::from_loc(0), // Doesn't matter
-                128,
-            ));
-
-            let borrowed_self = Arc::clone(&self);
-            let borrowed_node = Arc::clone(&node);
-            let result = borrowed_self
-                .load_node_next_fh(borrowed_node, &mut in_buf)
-                .await;
-
-            match result {
-                Ok(_) => (),
-                Err(_) => {
-                    // If we loaded some nodes, this isn't an error
-                    if self.opened.len() > 0 {
-                        is_finished
-                            .store(true, std::sync::atomic::Ordering::SeqCst);
-                        return Ok(());
-                    } else {
-                        is_finished
-                            .store(true, std::sync::atomic::Ordering::SeqCst);
-                        return Err("Failed to load next node");
+                    loop {
+                        match rx.try_recv() {
+                            Ok(node) => {
+                                let node: Arc<RwLock<NodeDiskAsync<K, V>>> = node.into();
+                                let len = node.read().await.keys.len();
+                                for i in 0..len {
+                                    let node = node.read().await;
+                                    let key: K = node.keys[i].clone();
+                                    let value: V = node.values.as_ref().unwrap()[i].clone();
+                                    yield (key, value);
+                                }
+                            },
+                            Err(_) => {
+                                if self.all_leaves_loaded.load(std::sync::atomic::Ordering::SeqCst) {
+                                    break;
+                                }
+                            }
                     }
                 }
             }
-
-            // let node_clone = Arc::clone(&node);
-            // let node_clone: ArcNodeDiskAsync<K, V> =
-            // node_clone.into(); opened.insert(pos,
-            // node_clone);
         }
-
-        log::trace!("No longer reading leaves");
-        Ok(())
     }
 
     // Non-lazy
     pub async fn load_all_leaves(
         self: Arc<Self>,
-    )
+        mut tx: Option<mpsc::Sender<ArcNodeDiskAsync<K, V>>>,
+    ) -> Result<(), &'static str>
     {
+        // If the root is a leaf, we're done
         if self.root.read().await.is_leaf {
-            self.all_leaves_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
-            let gen = stream! {
-                let len = self.root.read().await.keys.len();
-                for i in 0..len {
-                    let root = self.root.read().await;
-                    yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
-                }
-            };
+            self.all_leaves_loaded
+                .store(true, std::sync::atomic::Ordering::SeqCst);
 
-            return gen;
+            if tx.is_some() {
+                let root = self.root.clone();
+                let _ = tx.as_mut().unwrap().send(root).await;
+            }
+
+            return Ok(());
         }
 
         // Get filehandle
@@ -324,14 +255,18 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         match result {
             Ok(_) => (),
             Err(_) => {
-                is_finished.store(true, std::sync::atomic::Ordering::SeqCst);
+                self.all_leaves_loaded
+                    .store(true, std::sync::atomic::Ordering::SeqCst);
                 return Err("Failed to load first node");
             }
         }
 
-        log::debug!("First node opened");
-
         while node.read().await.is_leaf {
+            if tx.is_some() {
+                let _ =
+                    tx.as_mut().unwrap().send(Arc::clone(&node).into()).await;
+            }
+
             let num_keys = node.read().await.keys.len();
             log::trace!(
                 "Is leaf, reading next one - this one has {} keys",
@@ -356,11 +291,11 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 Err(_) => {
                     // If we loaded some nodes, this isn't an error
                     if self.opened.len() > 0 {
-                        is_finished
+                        self.all_leaves_loaded
                             .store(true, std::sync::atomic::Ordering::SeqCst);
                         return Ok(());
                     } else {
-                        is_finished
+                        self.all_leaves_loaded
                             .store(true, std::sync::atomic::Ordering::SeqCst);
                         return Err("Failed to load next node");
                     }
@@ -373,7 +308,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             // node_clone);
         }
 
-        log::trace!("No longer reading leaves");
+        log::trace!("No longer reading leaves - Finishing...");
         Ok(())
     }
 
