@@ -164,11 +164,15 @@ impl<'sfa> Sfasta<'sfa>
                     Arc::clone(&sfasta.file_handles),
             )});
 
-            let masking = tokio::spawn( {
-                MaskingBlockReader::new(
-                    Arc::clone(&sfasta.masking.as_ref().unwrap()),
-                    Arc::clone(&sfasta.file_handles),
-            )});
+            let masking = if sfasta.masking.is_some() {
+                tokio::spawn( {
+                    MaskingBlockReader::new(
+                        Arc::clone(&sfasta.masking.as_ref().unwrap()),
+                        Arc::clone(&sfasta.file_handles),
+                )})
+            } else {
+                tokio::spawn( MaskingBlockReader::dummy())
+            };
 
             // let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
             // let ids = tokio::spawn(Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm)));
@@ -186,7 +190,7 @@ impl<'sfa> Sfasta<'sfa>
             let ids = ids.await.unwrap();
             let headers = headers.await.unwrap();
             let masking = masking.await.unwrap();
-
+            
             tokio::pin!(seqlocs);
             tokio::pin!(seqs);
             tokio::pin!(ids);
@@ -216,9 +220,12 @@ impl<'sfa> Sfasta<'sfa>
                 let mut seq = seqs.next(seqloc.1.get_sequence()).await.unwrap();
                 let id = ids.next(seqloc.1.get_ids()).await;
                 let header = headers.next(seqloc.1.get_headers()).await;
-                let mask = masking.next(seqloc.1.get_masking()).await;
 
-                mask_sequence(seq.borrow_mut(), mask.unwrap());
+                if sfasta.masking.is_some() {
+                    let mask = masking.next(seqloc.1.get_masking()).await;
+
+                    mask_sequence(&mut seq, mask.unwrap());
+                }
 
                 // println!("{:#?}", seq.unwrap());
 

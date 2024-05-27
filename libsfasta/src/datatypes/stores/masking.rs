@@ -380,6 +380,14 @@ impl MaskingBlockReader
         }
     }
 
+    /// Hack for when no masking is found
+    pub async fn dummy() -> Self {
+        MaskingBlockReader {
+            active: None,
+            cached_block: (0, Bytes::new()),
+        }
+    }
+
     pub async fn next(&mut self, loc: &[Loc]) -> Option<Bytes>
     {
         let mut locs = &loc[..];
