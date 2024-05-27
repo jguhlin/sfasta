@@ -96,9 +96,10 @@ impl AsyncFileHandleManager
             tokio::io::BufReader::with_capacity(32 * 1024, file),
         ));
 
-        self.file_handles.insert(raw_id, Arc::clone(&file_handle));
+        let cloned_fh = Arc::clone(&file_handle);
 
         let fh = file_handle.try_lock_owned().unwrap();
+        self.file_handles.insert(raw_id, cloned_fh);
 
         fh
     }
