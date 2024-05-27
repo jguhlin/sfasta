@@ -1131,8 +1131,11 @@ impl BytesBlockStoreBlockReader
         let mut locs = &loc[..];
         let mut results = Vec::new();
 
-        while !locs.is_empty() {
-            let loc = &locs[0];
+        let locs_len = locs.len();
+        let locs_idx = 0;
+
+        while locs_idx < locs_len {
+            let loc = &locs[locs_idx];
             let block = loc.block;
 
             debug_assert!(
@@ -1147,7 +1150,7 @@ impl BytesBlockStoreBlockReader
                 let end = (loc.start + loc.len) as usize;
                 let j = self.current_block.1.slice(start..end);
                 results.push(j);
-                locs = &locs[1..];
+                locs_idx += 1;
             } else {
                 // let block = self.active.as_mut().unwrap().next().await.unwrap();
                 let block = self.active.as_mut().unwrap().recv().await.unwrap();
