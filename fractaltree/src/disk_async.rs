@@ -231,12 +231,14 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         mut tx: Option<mpsc::Sender<ArcNodeDiskAsync<K, V>>>,
     ) -> Result<(), &'static str>
     {
+        log::debug!("Here in loading all leaves");
         // If the root is a leaf, we're done
         if self.root.read().await.is_leaf {
             self.all_leaves_loaded
                 .store(true, std::sync::atomic::Ordering::SeqCst);
 
             if tx.is_some() {
+                log::debug!("Sending root");
                 let root = self.root.clone();
                 let _ = tx.as_mut().unwrap().send(root).await;
             }
