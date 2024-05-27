@@ -150,14 +150,14 @@ impl<'sfa> Sfasta<'sfa>
             )});
 
             let ids = tokio::spawn( {
-                BytesBlockStoreSeqLocReader::new(
-                    Arc::clone(&sfasta.sequences.as_ref().unwrap()),
+                StringBlockStoreSeqLocReader::new(
+                    Arc::clone(&sfasta.ids.as_ref().unwrap()),
                     Arc::clone(&sfasta.file_handles),
             )});
 
             let headers = tokio::spawn( {
-                BytesBlockStoreSeqLocReader::new(
-                    Arc::clone(&sfasta.sequences.as_ref().unwrap()),
+                StringBlockStoreSeqLocReader::new(
+                    Arc::clone(&sfasta.headers.as_ref().unwrap()),
                     Arc::clone(&sfasta.file_handles),
             )});
 
