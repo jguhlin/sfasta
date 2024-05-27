@@ -168,6 +168,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
     {
         stream! {
                 if self.root.read().await.is_leaf {
+                    log::debug!("Root is leaf");
                     self.all_leaves_loaded.store(true, std::sync::atomic::Ordering::SeqCst);
                     let len = self.root.read().await.keys.len();
                     for i in 0..len {
@@ -175,6 +176,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                         yield (root.keys[i].clone(), root.values.as_ref().unwrap()[i].clone());
                     }
                 } else if self.all_leaves_loaded.load(std::sync::atomic::Ordering::SeqCst) {
+                    log::debug!("All leaves loaded");
                     let nodes: Vec<ArcNodeDiskAsync<K, V>> = self.opened.iter().map(|e| e.value().clone()).collect::<Vec<ArcNodeDiskAsync<K, V>>>();
 
                     for node in nodes.into_iter() {
@@ -189,6 +191,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                         }
                     }
                 } else {
+                    log::debug!("Loading all leaves");
                     let (tx, mut rx) = mpsc::channel(128);
 
                     let self_borrowed = Arc::clone(&self);
