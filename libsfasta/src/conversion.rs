@@ -529,7 +529,7 @@ impl Converter
             match x {
                 Ok(x) => {
                     let seq = x.seq();
-                    let mut id = x.id().split(|x| *x == b' ');
+                    let mut id = x.id().splitn(2, |x| *x == b' ');
                     // Split at first space
                     let seqid = id.next().unwrap();
                     let seqheader = id.next();

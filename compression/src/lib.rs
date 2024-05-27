@@ -777,6 +777,70 @@ fn compression_worker(
     }
 }
 
+// todo cute nucleotides is better
+pub fn can_store_2bit(bytes: &[u8]) -> bool {
+    // ACTG, but no N, and never protein
+    // can also be lower case (masking stored separately)
+    bytes.iter().all(|&x| {
+        x == b'A'
+            || x == b'C'
+            || x == b'G'
+            || x == b'T'
+            || x == b'a'
+            || x == b'c'
+            || x == b'g'
+            || x == b't'
+    })
+}
+
+// Convert to 2bit encoding
+pub fn to_2bit(bytes: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(bytes.len() / 4);
+    let mut buffer = 0_u8;
+    let mut shift = 6_u8;
+    for &x in bytes.iter() {
+        let val = match x {
+            b'A' | b'a' => 0,
+            b'C' | b'c' => 1,
+            b'G' | b'g' => 2,
+            b'T' | b't' => 3,
+            _ => panic!("Invalid 2bit character"),
+        };
+        buffer |= val << shift;
+        shift -= 2;
+        if shift == 0 {
+            output.push(buffer);
+            buffer = 0;
+            shift = 6;
+        }
+    }
+    if shift != 6 {
+        output.push(buffer);
+    }
+    output
+}
+
+// Convert from 2bit encoding
+pub fn from_2bit(bytes: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(bytes.len() * 4);
+    for &x in bytes.iter() {
+        let mut shift = 6;
+        while shift != 0 {
+            let val = (x >> shift) & 0b11;
+            let val = match val {
+                0 => b'A',
+                1 => b'C',
+                2 => b'G',
+                3 => b'T',
+                _ => panic!("Invalid 2bit character"),
+            };
+            output.push(val);
+            shift -= 2;
+        }
+    }
+    output
+}
+
 #[cfg(test)]
 mod tests
 {
