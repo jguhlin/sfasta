@@ -213,7 +213,7 @@ impl<'sfa> Sfasta<'sfa>
                 // Get the sequence
 
                 // println!("{:#?}", seqloc);
-                println!("SeqLoc number: {:#?}", seqloc.0);
+                // println!("SeqLoc number: {:#?}", seqloc.0);
                 // println!("{:#?}", seqloc.1.get_sequence());
 
                 // todo this is sequential
