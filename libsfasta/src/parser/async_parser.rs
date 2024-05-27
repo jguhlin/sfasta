@@ -327,7 +327,10 @@ pub async fn open_from_file_async<'sfa>(
         masking,
         sequences: sequenceblocks,
         file: Some(file.to_string()),
-        file_handles: Arc::new(AsyncFileHandleManager::default()),
+        file_handles: Arc::new(AsyncFileHandleManager {
+            file_name: Some(file.to_string()),
+            ..Default::default()
+        }),
         ..Default::default()
     })
 
