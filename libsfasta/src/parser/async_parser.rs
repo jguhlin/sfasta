@@ -5,7 +5,7 @@ use std::{
 
 use tokio::io::{
     AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeek,
-    AsyncSeekExt,
+    AsyncSeekExt, SeekFrom
 };
 
 use tokio::task::spawn_blocking;
@@ -341,7 +341,6 @@ pub async fn open_from_file_async<'sfa>(
 // Keep reading the buffer until we can do a proper decode
 // This is a hack to work around the fact that bincode doesn't support
 // tokio
-#[tracing::instrument(skip(bincode_config))]
 pub(crate) async fn bincode_decode_from_buffer_async<T>(
     in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     bincode_config: bincode::config::Configuration,
@@ -376,8 +375,6 @@ where
     }
 }
 
-// todo need a non-const version with size hint
-#[tracing::instrument(skip(bincode_config))]
 pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint<
     const SIZE_HINT: usize,
     T,
@@ -390,34 +387,68 @@ where
     T: bincode::Decode,
     C: bincode::config::Config,
 {
+    let start_pos = in_buf.stream_position().await.unwrap();
+
+    let current_buffer = in_buf.fill_buf().await.unwrap();
+    if current_buffer.len() == 0 {
+        return Result::Err("Failed to read buffer".to_string());
+    }
+
+    // If we can get it direct from the buffer, do so...
+    match bincode::decode_from_slice(&current_buffer, bincode_config) {
+        Ok((_, 0)) => (),
+        Ok((x, size)) => {
+            in_buf.consume(size);
+            in_buf
+                .seek(SeekFrom::Start(start_pos + size as u64))
+                .await
+                .unwrap();
+
+            return Ok(x);
+        }
+        Err(_) => (),
+    };
+
     let mut buf = vec![0; SIZE_HINT];
-    in_buf.read(&mut buf).await.unwrap();
+    match in_buf.read(&mut buf).await {
+        Ok(_) => (),
+        Err(_) => return Result::Err("Failed to read buffer".to_string()),
+    }
 
     loop {
         match bincode::decode_from_slice(&buf, bincode_config) {
-            Ok(x) => {
-                return Ok(x.0);
+            Ok((_, 0)) => (),
+            Ok((x, size)) => {
+                in_buf
+                    .seek(SeekFrom::Start(start_pos + size as u64))
+                    .await
+                    .unwrap();
+
+                // todo read from borrowed buffer, then advance that far, rather
+                // than seeking back see: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html#method.fill_buf
+                // fill buf and consume
+
+                return Ok(x);
             }
-            Err(_) => {
-                let orig_length = buf.len();
-                let doubled = buf.len() * 2;
+            Err(_) => (),
+        };
 
-                buf.resize(doubled, 0);
+        let orig_length = buf.len();
+        let doubled = buf.len() * 2;
 
-                in_buf.read(&mut buf[orig_length..]).await.unwrap();
+        buf.resize(doubled, 0);
 
-                if doubled > 256 * 1024 * 1024 {
-                    return Result::Err(
-                        "Failed to decode bincode - Max size reached"
-                            .to_string(),
-                    );
-                }
-            }
+        match in_buf.read(&mut buf[orig_length..]).await {
+            Ok(_) => (),
+            Err(_) => return Result::Err("Failed to read buffer".to_string()),
+        }
+
+        if doubled > 16 * 1024 * 1024 {
+            return Result::Err("Failed to decode bincode".to_string());
         }
     }
 }
 
-#[tracing::instrument(skip(bincode_config))]
 pub(crate) async fn bincode_decode_from_buffer_async_with_size_hint_nc<T, C>(
     in_buf: &mut tokio::io::BufReader<tokio::fs::File>,
     bincode_config: C,
@@ -427,29 +458,64 @@ where
     T: bincode::Decode,
     C: bincode::config::Config,
 {
+    let start_pos = in_buf.stream_position().await.unwrap();
+
+    let current_buffer = in_buf.fill_buf().await.unwrap();
+    if current_buffer.len() == 0 {
+        return Result::Err("Failed to read buffer".to_string());
+    }
+
+    // If we can get it direct from the buffer, do so...
+    match bincode::decode_from_slice(&current_buffer, bincode_config) {
+        Ok((_, 0)) => (),
+        Ok((x, size)) => {
+            in_buf.consume(size);
+            in_buf
+                .seek(SeekFrom::Start(start_pos + size as u64))
+                .await
+                .unwrap();
+
+            return Ok(x);
+        }
+        Err(_) => (),
+    };
+
     let mut buf = vec![0; size_hint];
-    in_buf.read(&mut buf).await.unwrap();
+    match in_buf.read(&mut buf).await {
+        Ok(_) => (),
+        Err(_) => return Result::Err("Failed to read buffer".to_string()),
+    }
 
     loop {
         match bincode::decode_from_slice(&buf, bincode_config) {
-            Ok(x) => {
-                return Ok(x.0);
+            Ok((_, 0)) => (),
+            Ok((x, size)) => {
+                in_buf
+                    .seek(SeekFrom::Start(start_pos + size as u64))
+                    .await
+                    .unwrap();
+
+                // todo read from borrowed buffer, then advance that far, rather
+                // than seeking back see: https://docs.rs/tokio/latest/tokio/io/trait.AsyncBufReadExt.html#method.fill_buf
+                // fill buf and consume
+
+                return Ok(x);
             }
-            Err(_) => {
-                let orig_length = buf.len();
-                let doubled = buf.len() * 2;
+            Err(_) => (),
+        };
 
-                buf.resize(doubled, 0);
+        let orig_length = buf.len();
+        let doubled = buf.len() * 2;
 
-                in_buf.read(&mut buf[orig_length..]).await.unwrap();
+        buf.resize(doubled, 0);
 
-                if doubled > 256 * 1024 * 1024 {
-                    return Result::Err(
-                        "Failed to decode bincode - Max size reached"
-                            .to_string(),
-                    );
-                }
-            }
+        match in_buf.read(&mut buf[orig_length..]).await {
+            Ok(_) => (),
+            Err(_) => return Result::Err("Failed to read buffer".to_string()),
+        }
+
+        if doubled > 16 * 1024 * 1024 {
+            return Result::Err("Failed to decode bincode".to_string());
         }
     }
 }

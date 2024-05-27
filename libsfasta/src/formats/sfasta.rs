@@ -134,6 +134,8 @@ impl<'sfa> Default for Sfasta<'sfa>
 impl<'sfa> Sfasta<'sfa>
 {
     /// Right now ignores scores, but add that in soon...
+    // todo channels would be better and let things work in parallel in the background
+    // but good enough for now
     #[cfg(feature = "async")]
     pub fn stream(self: Arc<Self>) -> impl Stream<Item = Sequence> + 'sfa
     {
@@ -190,7 +192,7 @@ impl<'sfa> Sfasta<'sfa>
             let ids = ids.await.unwrap();
             let headers = headers.await.unwrap();
             let masking = masking.await.unwrap();
-            
+
             tokio::pin!(seqlocs);
             tokio::pin!(seqs);
             tokio::pin!(ids);
@@ -202,13 +204,6 @@ impl<'sfa> Sfasta<'sfa>
                     Some(s) => s,
                     None => break,
                 };
-                // let seq = seqs.next().await;
-                // let id = ids.next().await;
-                // let  header = headers.next().await;
-                // let mask = masking.next().await;
-
-                // This doesn't get the object of desire, but the raw blocks of data
-                // (and the seqloc to put it all together)
 
                 // Get the sequence
 
@@ -240,9 +235,7 @@ impl<'sfa> Sfasta<'sfa>
                 };
 
                 yield sequence
-
             }
-
         };
 
         gen
