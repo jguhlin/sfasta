@@ -149,6 +149,18 @@ impl<'sfa> Sfasta<'sfa>
                     Arc::clone(&sfasta.file_handles),
             )});
 
+            let ids = tokio::spawn( {
+                BytesBlockStoreSeqLocReader::new(
+                    Arc::clone(&sfasta.sequences.as_ref().unwrap()),
+                    Arc::clone(&sfasta.file_handles),
+            )});
+
+            let headers = tokio::spawn( {
+                BytesBlockStoreSeqLocReader::new(
+                    Arc::clone(&sfasta.sequences.as_ref().unwrap()),
+                    Arc::clone(&sfasta.file_handles),
+            )});
+
             // let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
             // let ids = tokio::spawn(Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm)));
             // let headers = tokio::spawn(Arc::clone(&sfasta.headers.as_ref().unwrap()).stream(Arc::clone(&fhm)));
@@ -162,16 +174,14 @@ impl<'sfa> Sfasta<'sfa>
 
             let seqlocs = seqlocs.await.unwrap();
             let seqs = seqs.await.unwrap();
-            // let ids = ids.await.unwrap();
-            // let headers = headers.await.unwrap();
+            let ids = ids.await.unwrap();
+            let headers = headers.await.unwrap();
 
             tokio::pin!(seqlocs);
             tokio::pin!(seqs);
-            // tokio::pin!(ids);
-            // tokio::pin!(headers);
+            tokio::pin!(ids);
+            tokio::pin!(headers);
             // tokio::pin!(masking);
-
-            // tokio::time::sleep(tokio::time::Duration::from_secs(10)).await;
 
             loop {
                 let seqloc = match seqlocs.next().await {
@@ -193,13 +203,15 @@ impl<'sfa> Sfasta<'sfa>
                 // println!("{:#?}", seqloc.1.get_sequence());
 
                 let seq = seqs.next(seqloc.1.get_sequence()).await;
+                let id = ids.next(seqloc.1.get_ids()).await;
+                let header = headers.next(seqloc.1.get_headers()).await;
 
                 // println!("{:#?}", seq.unwrap());
 
                 let sequence = Sequence {
                     sequence: seq,
-                    id: None,
-                    header: None,
+                    id,
+                    header,
                     scores: None,
                     offset: 0,
                 };
