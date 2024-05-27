@@ -1101,7 +1101,7 @@ impl BytesBlockStoreSeqLocReader
         }
     }
 
-    pub async fn next(&mut self, loc: &[Loc]) -> Option<Bytes>
+    pub async fn next(&mut self, loc: &[Loc]) -> Option<BytesMut>
     {
         let mut locs = &loc[..];
         let mut results = Vec::new();
@@ -1138,7 +1138,7 @@ impl BytesBlockStoreSeqLocReader
             result.put(r);
         }
 
-        Some(result.freeze())
+        Some(result)
     }
 }
 

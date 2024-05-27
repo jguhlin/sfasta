@@ -19,6 +19,7 @@ use std::{
     io::{BufRead, Read, Seek, SeekFrom},
     sync::Arc,
     time::Instant,
+    borrow::BorrowMut,
 };
 
 #[cfg(feature = "async")]
@@ -136,6 +137,8 @@ impl<'sfa> Sfasta<'sfa>
     #[cfg(feature = "async")]
     pub fn stream(self: Arc<Self>) -> impl Stream<Item = Sequence> + 'sfa
     {
+        use bytes::BytesMut;
+
         let sfasta = Arc::clone(&self);
         let fhm = Arc::clone(&self.file_handles);
 
@@ -161,6 +164,12 @@ impl<'sfa> Sfasta<'sfa>
                     Arc::clone(&sfasta.file_handles),
             )});
 
+            let masking = tokio::spawn( {
+                MaskingBlockReader::new(
+                    Arc::clone(&sfasta.masking.as_ref().unwrap()),
+                    Arc::clone(&sfasta.file_handles),
+            )});
+
             // let seqs = tokio::spawn(Arc::clone(&sfasta.sequences.as_ref().unwrap()).stream(Arc::clone(&fhm)));
             // let ids = tokio::spawn(Arc::clone(&sfasta.ids.as_ref().unwrap()).stream(Arc::clone(&fhm)));
             // let headers = tokio::spawn(Arc::clone(&sfasta.headers.as_ref().unwrap()).stream(Arc::clone(&fhm)));
@@ -176,12 +185,13 @@ impl<'sfa> Sfasta<'sfa>
             let seqs = seqs.await.unwrap();
             let ids = ids.await.unwrap();
             let headers = headers.await.unwrap();
+            let masking = masking.await.unwrap();
 
             tokio::pin!(seqlocs);
             tokio::pin!(seqs);
             tokio::pin!(ids);
             tokio::pin!(headers);
-            // tokio::pin!(masking);
+            tokio::pin!(masking);
 
             loop {
                 let seqloc = match seqlocs.next().await {
@@ -202,14 +212,18 @@ impl<'sfa> Sfasta<'sfa>
                 println!("SeqLoc number: {:#?}", seqloc.0);
                 // println!("{:#?}", seqloc.1.get_sequence());
 
-                let seq = seqs.next(seqloc.1.get_sequence()).await;
+                // todo this is sequential
+                let mut seq = seqs.next(seqloc.1.get_sequence()).await.unwrap();
                 let id = ids.next(seqloc.1.get_ids()).await;
                 let header = headers.next(seqloc.1.get_headers()).await;
+                let mask = masking.next(seqloc.1.get_masking()).await;
+
+                mask_sequence(seq.borrow_mut(), mask.unwrap());
 
                 // println!("{:#?}", seq.unwrap());
 
                 let sequence = Sequence {
-                    sequence: seq,
+                    sequence: Some(seq.freeze()),
                     id,
                     header,
                     scores: None,

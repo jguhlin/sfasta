@@ -636,7 +636,27 @@ fn view(input: String)
         tokio::pin!(stream);
 
         while let Some(seq) = stream.next().await {
-            println!("{:#?}", seq);
+            // write all vectored, already unwrapped
+            let sequence = seq.sequence.unwrap(); // We always have sequence
+            let id = seq.id.unwrap(); // Always have id
+
+            let header = seq.header;
+
+            let mut bufs: Vec<IoSlice> =
+                vec![IoSlice::new(b">"), IoSlice::new(&id)];
+            
+            if header.is_some() {
+                bufs.push(IoSlice::new(b" "));
+                bufs.push(IoSlice::new(header.as_ref().unwrap()));
+            }
+
+            bufs.push(IoSlice::new(b"\n"));
+
+            bufs.extend(ioslice_sequence(&sequence, 60));
+
+            stdout
+                .write_all_vectored(&mut bufs)
+                .expect("Unable to write to stdout");
         }
 
 

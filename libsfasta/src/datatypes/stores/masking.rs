@@ -5,7 +5,14 @@
 use std::{
     io::{BufRead, Read, Seek, Write},
     sync::Arc,
+    pin::Pin,
 };
+
+#[cfg(feature = "async")]
+use bytes::{BufMut, Bytes, BytesMut};
+
+#[cfg(feature = "async")]
+use tokio_stream::StreamExt;
 
 #[cfg(feature = "async")]
 use async_stream::stream;
@@ -345,6 +352,75 @@ pub fn mask_sequence(seq: &mut [u8], mask_raw: bytes::Bytes)
         }
     });
 }
+
+#[cfg(feature = "async")]
+pub struct MaskingBlockReader
+{
+    active: Option<Pin<Box<(dyn Stream<Item = (u32, Bytes)> + Send)>>>,
+    cached_block: (u32, Bytes),
+}
+
+#[cfg(feature = "async")]
+impl MaskingBlockReader
+{
+    pub async fn new(
+        block_store: Arc<Masking>,
+        fhm: Arc<AsyncFileHandleManager>,
+    ) -> Self
+    {
+        let store = Arc::clone(&block_store);
+        let stream = store.stream(fhm).await;
+
+        let mut boxed = Box::pin(stream);
+        let cached_block = boxed.next().await.unwrap();
+
+        MaskingBlockReader {
+            active: Some(boxed),
+            cached_block,
+        }
+    }
+
+    pub async fn next(&mut self, loc: &[Loc]) -> Option<Bytes>
+    {
+        let mut locs = &loc[..];
+        let mut results = Vec::new();
+
+        while !locs.is_empty() {
+            let loc = &locs[0];
+            let block = loc.block;
+
+            debug_assert!(
+                block >= self.cached_block.0,
+                "Block: {} Cached: {}",
+                block,
+                self.cached_block.0
+            );
+
+            if block == self.cached_block.0 {
+                let start = loc.start as usize;
+                let end = (loc.start + loc.len) as usize;
+                let j = self.cached_block.1.slice(start..end);
+                results.push(j);
+                locs = &locs[1..];
+            } else {
+                let block = self.active.as_mut().unwrap().next().await.unwrap();
+                self.cached_block = block;
+            }
+        }
+
+        if results.is_empty() {
+            return None;
+        }
+
+        let mut result = BytesMut::new();
+        for r in results {
+            result.put(r);
+        }
+
+        Some(result.freeze())
+    }
+}
+
 
 #[cfg(test)]
 mod tests
