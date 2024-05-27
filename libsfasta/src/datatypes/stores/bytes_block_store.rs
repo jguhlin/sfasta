@@ -1071,16 +1071,15 @@ impl AsyncLRU
     }
 }
 
-// todo the name is so wrong here...
 #[cfg(feature = "async")]
-pub struct BytesBlockStoreSeqLocReader
+pub struct BytesBlockStoreBlockReader
 {
     active: Option<Pin<Box<(dyn Stream<Item = (u32, Bytes)> + Send)>>>,
-    cached_block: (u32, Bytes),
+    current_block: (u32, Bytes),
 }
 
 #[cfg(feature = "async")]
-impl BytesBlockStoreSeqLocReader
+impl BytesBlockStoreBlockReader
 {
     pub async fn new(
         block_store: Arc<BytesBlockStore>,
@@ -1091,11 +1090,11 @@ impl BytesBlockStoreSeqLocReader
         let stream = store.stream(fhm).await;
 
         let mut boxed = Box::pin(stream);
-        let cached_block = boxed.next().await.unwrap();
+        let current_block = boxed.next().await.unwrap();
 
-        BytesBlockStoreSeqLocReader {
+        BytesBlockStoreBlockReader {
             active: Some(boxed),
-            cached_block,
+            current_block,
         }
     }
 
@@ -1109,21 +1108,21 @@ impl BytesBlockStoreSeqLocReader
             let block = loc.block;
 
             debug_assert!(
-                block >= self.cached_block.0,
+                block >= self.current_block.0,
                 "Block: {} Cached: {}",
                 block,
-                self.cached_block.0
+                self.current_block.0
             );
 
-            if block == self.cached_block.0 {
+            if block == self.current_block.0 {
                 let start = loc.start as usize;
                 let end = (loc.start + loc.len) as usize;
-                let j = self.cached_block.1.slice(start..end);
+                let j = self.current_block.1.slice(start..end);
                 results.push(j);
                 locs = &locs[1..];
             } else {
                 let block = self.active.as_mut().unwrap().next().await.unwrap();
-                self.cached_block = block;
+                self.current_block = block;
             }
         }
 
@@ -1131,7 +1130,7 @@ impl BytesBlockStoreSeqLocReader
             return None;
         }
 
-        let mut result = BytesMut::new();
+        let mut result = BytesMut::with_capacity(results.iter().map(|r| r.len()).sum());
         for r in results {
             result.put(r);
         }

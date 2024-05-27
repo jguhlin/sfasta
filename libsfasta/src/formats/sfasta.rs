@@ -147,7 +147,7 @@ impl<'sfa> Sfasta<'sfa>
             let seqlocs = tokio::spawn(Arc::clone(&sfasta.seqlocs.as_ref().unwrap()).stream());
 
             let seqs = tokio::spawn( {
-                BytesBlockStoreSeqLocReader::new(
+                BytesBlockStoreBlockReader::new(
                     Arc::clone(&sfasta.sequences.as_ref().unwrap()),
                     Arc::clone(&sfasta.file_handles),
             )});
@@ -212,10 +212,14 @@ impl<'sfa> Sfasta<'sfa>
 
                 // Get the sequence
 
+                let seqloc = Arc::new(seqloc);
+
                 // todo this is sequential
-                let mut seq = seqs.next(seqloc.1.get_sequence()).await.unwrap();
+                let seq = seqs.next(seqloc.1.get_sequence());
                 let id = ids.next(seqloc.1.get_ids()).await;
                 let header = headers.next(seqloc.1.get_headers()).await;
+
+                let mut seq = seq.await.unwrap();
 
                 if sfasta.masking.is_some() {
                     let mask = masking.next(seqloc.1.get_masking()).await;
