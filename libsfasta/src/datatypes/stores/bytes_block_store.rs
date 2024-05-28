@@ -85,7 +85,7 @@ impl DataOrLater
 pub struct BytesBlockStoreBuilder
 {
     /// Locations of the blocks in the file
-    pub block_locations: Vec<Arc<AtomicU64>>,
+    pub block_data: Vec<(Arc<AtomicU64>, Arc<AtomicU64>, usize)>,
 
     /// Locations of the block index (Where the serialized
     /// block_locations are stored)
@@ -113,6 +113,11 @@ pub struct BytesBlockStoreBuilder
     dict_data: Vec<Vec<u8>>,
     dict_size: u64,
     dict_samples: u64,
+
+    // Statistics
+    pub data_size: usize,
+    pub compressed_size: usize,
+
 }
 
 unsafe impl Send for BytesBlockStoreBuilder {}
@@ -141,7 +146,7 @@ impl Default for BytesBlockStoreBuilder
     {
         BytesBlockStoreBuilder {
             block_locations_pos: 0,
-            block_locations: Vec::new(),
+            block_data: Vec::new(),
             block_size: 64 * 1024,
             data: Vec::new(),
             tree_compression_config: CompressionConfig::default(),
@@ -152,6 +157,8 @@ impl Default for BytesBlockStoreBuilder
             dict_data: Vec::new(),
             dict_size: 64 * 1024,
             dict_samples: 128,
+            data_size: 0,
+            compressed_size: 0,
         }
     }
 }
@@ -219,6 +226,9 @@ impl BytesBlockStoreBuilder
         let mut data = Vec::with_capacity(self.block_size as usize);
         std::mem::swap(&mut self.data, &mut data);
 
+        self.data_size += data.len();
+        let data_len = data.len();
+
         if self.create_dict {
             self.dict_data.push(data.clone());
             // Sum all the data for the dictionary
@@ -234,7 +244,7 @@ impl BytesBlockStoreBuilder
             let worker = self.compression_worker.as_ref().unwrap();
             let loc =
                 worker.compress(data, Arc::clone(&self.compression_config));
-            self.block_locations.push(loc);
+            self.block_data.push((loc.0, loc.1, data_len));
         }
     }
 
@@ -252,9 +262,11 @@ impl BytesBlockStoreBuilder
         let mut data = Vec::new();
         std::mem::swap(&mut self.data, &mut data);
 
+        let data_len = data.len();
+
         let worker = self.compression_worker.as_ref().unwrap();
         let loc = worker.compress(data, Arc::clone(&self.compression_config));
-        self.block_locations.push(loc);
+        self.block_data.push((loc.0, loc.1, data_len));
     }
 
     pub fn create_dict(&mut self)
@@ -277,17 +289,18 @@ impl BytesBlockStoreBuilder
 
         // Compress the data we have
         for data in self.dict_data.iter() {
+            let data_len = data.len();
             let worker = self.compression_worker.as_ref().unwrap();
             let loc = worker
                 .compress(data.clone(), Arc::clone(&self.compression_config));
-            self.block_locations.push(loc);
+            self.block_data.push((loc.0, loc.1, data_len));
         }
     }
 
     /// Get number of blocks
     pub fn block_len(&self) -> usize
     {
-        self.block_locations.len()
+        self.block_data.len()
     }
 
     pub fn block_size(&self) -> usize
@@ -305,7 +318,7 @@ impl BytesBlockStoreBuilder
         }
 
         // Check that all block_locations are not 0, or backoff if any are
-        let block_locations = &self.block_locations;
+        let block_locations = &self.block_data.iter().map(|x| &x.0).collect::<Vec<_>>();
         let backoff = Backoff::new();
         let mut all_nonzero = false;
 
@@ -333,7 +346,7 @@ impl BytesBlockStoreBuilder
             panic!("Cannot add to finalized block store.");
         }
 
-        let mut current_block = self.block_locations.len();
+        let mut current_block = self.block_data.len();
         let mut locs = Vec::with_capacity(8);
 
         let mut written = 0;
@@ -488,7 +501,7 @@ impl BytesBlockStoreBuilder
         self.check_complete();
 
         // No blocks, no data, exit out of this function.
-        if self.block_locations.is_empty() {
+        if self.block_data.is_empty() {
             return Err(BlockStoreError::Empty);
         }
 
@@ -496,9 +509,9 @@ impl BytesBlockStoreBuilder
             FractalTreeBuild::new(512, 8192);
 
         let block_locations: Vec<u64> = self
-            .block_locations
+            .block_data
             .iter()
-            .map(|x| x.load(Ordering::Relaxed))
+            .map(|x| x.0.load(Ordering::Relaxed))
             .collect();
         assert!(block_locations.len() < u32::MAX as usize);
         block_locations.iter().enumerate().for_each(|(i, x)| {

@@ -419,6 +419,8 @@ pub struct CompressionBlock
 {
     pub input: Vec<u8>,
     pub location: Arc<AtomicU64>,
+    pub compressed_size: Arc<AtomicU64>,
+    pub decompressed_size: u64,
     pub compression_config: Arc<CompressionConfig>,
 }
 
@@ -430,15 +432,22 @@ impl CompressionBlock
     ) -> Self
     {
         Self {
+            decompressed_size: input.len() as u64,
             input,
             location: Arc::new(AtomicU64::new(0)),
             compression_config,
+            compressed_size: Arc::new(AtomicU64::new(0)),
         }
     }
 
     pub fn get_location(&self) -> Arc<AtomicU64>
     {
         Arc::clone(&self.location)
+    }
+
+    pub fn get_compressed_size(&self) -> Arc<AtomicU64>
+    {
+        Arc::clone(&self.compressed_size)
     }
 
     pub fn is_complete(&self) -> bool
@@ -559,14 +568,15 @@ impl CompressionWorker
         &self,
         input: Vec<u8>,
         compression_config: Arc<CompressionConfig>,
-    ) -> Arc<AtomicU64>
+    ) -> (Arc<AtomicU64>, Arc<AtomicU64>)
     {
         let block = CompressionBlock::new(input, compression_config);
         let location = block.get_location();
+        let size = block.get_compressed_size();
 
         self.submit(CompressorWork::Compress(block));
 
-        location
+        (location, size)
     }
 
     pub fn shutdown(&mut self)
@@ -748,6 +758,10 @@ fn compression_worker(
                         work.compression_config.compression_type
                     ),
                 };
+
+                // Set the compressed size
+                work.compressed_size
+                    .store(compressed.len() as u64, Ordering::Relaxed);
 
                 let output_block = OutputBlock {
                     data: compressed,
