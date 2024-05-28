@@ -142,7 +142,7 @@ impl Default for BytesBlockStoreBuilder
         BytesBlockStoreBuilder {
             block_locations_pos: 0,
             block_locations: Vec::new(),
-            block_size: 8 * 1024,
+            block_size: 64 * 1024,
             data: Vec::new(),
             tree_compression_config: CompressionConfig::default(),
             compression_config: Arc::new(CompressionConfig::default()),
