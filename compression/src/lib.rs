@@ -870,7 +870,6 @@ pub fn from_4bit(seq: &mut [u8]) {
     }
 }
 
-
 #[cfg(test)]
 mod tests
 {
