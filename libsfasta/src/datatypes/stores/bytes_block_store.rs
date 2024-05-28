@@ -508,6 +508,8 @@ impl BytesBlockStoreBuilder
         let mut block_locations_tree: FractalTreeBuild<u32, u64> =
             FractalTreeBuild::new(512, 8192);
 
+        // todo print compression percent
+
         let block_locations: Vec<u64> = self
             .block_data
             .iter()
