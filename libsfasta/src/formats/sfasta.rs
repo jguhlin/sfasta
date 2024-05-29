@@ -16,10 +16,10 @@
 // ATTTTTATTGTTGATTAGTTGGTAAGCGAAAGAAAGTCCGTATACGCGCGTTGTTTCGGT
 
 use std::{
+    borrow::BorrowMut,
     io::{BufRead, Read, Seek, SeekFrom},
     sync::Arc,
     time::Instant,
-    borrow::BorrowMut,
 };
 
 #[cfg(feature = "async")]
@@ -134,8 +134,8 @@ impl<'sfa> Default for Sfasta<'sfa>
 impl<'sfa> Sfasta<'sfa>
 {
     /// Right now ignores scores, but add that in soon...
-    // todo channels would be better and let things work in parallel in the background
-    // but good enough for now
+    // todo channels would be better and let things work in parallel in the
+    // background but good enough for now
     #[cfg(feature = "async")]
     pub fn stream(self: Arc<Self>) -> impl Stream<Item = Sequence> + 'sfa
     {

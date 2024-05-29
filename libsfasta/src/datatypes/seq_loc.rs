@@ -353,8 +353,8 @@ impl Encode for SeqLoc
 
         // Subtract the lowest loc from all locs
         // todo see if this works before implementing in decode
-        // saved 3% of space, without adding the min back in... so not really worth it...
-        // let min = locs.iter().min().unwrap();
+        // saved 3% of space, without adding the min back in... so not really
+        // worth it... let min = locs.iter().min().unwrap();
         // let locs = locs.iter().map(|loc| loc - min).collect::<Vec<u32>>();
 
         bincode::Encode::encode(&values, encoder)?;
@@ -401,6 +401,11 @@ pub struct SeqLocsStoreBuilder
     pub tree: FractalTreeBuild<u32, SeqLoc>,
     pub compression: CompressionConfig,
     count: usize,
+
+    create_dict: bool,
+    dict_data: Vec<Vec<u8>>,
+    dict_size: u64,
+    dict_samples: u64,
 }
 
 impl Default for SeqLocsStoreBuilder
@@ -416,12 +421,38 @@ impl Default for SeqLocsStoreBuilder
                 compression_dict: None,
             },
             count: 0,
+
+            // none of this is implemented (because it's all in the fractal
+            // tree!)
+            dict_data: Vec::new(),
+            dict_size: 64 * 1024,
+            dict_samples: 128,
+            create_dict: false,
+            // todo raw and compressed sizes
         }
     }
 }
 
 impl SeqLocsStoreBuilder
 {
+    pub fn with_dict(mut self) -> Self
+    {
+        self.create_dict = true;
+        self
+    }
+
+    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self
+    {
+        self.dict_samples = dict_samples;
+        self
+    }
+
+    pub fn with_dict_size(mut self, dict_size: u64) -> Self
+    {
+        self.dict_size = dict_size;
+        self
+    }
+
     /// Create a new SeqLocs object
     pub fn new() -> Self
     {
@@ -463,10 +494,22 @@ impl SeqLocsStoreBuilder
         self.location = out_buf.stream_position().unwrap();
 
         let mut tree: FractalTreeDisk<u32, SeqLoc> = self.tree.into();
+
+        let dict = if self.create_dict {
+            Some(tree.create_zstd_dict())
+        } else {
+            None
+        };
+
+        if dict.is_some() {
+            log::debug!("Dict size for SeqLocs is: {}", dict.as_ref().unwrap().len());
+        }
+
+        // todo this should be configurable!
         tree.set_compression(CompressionConfig {
             compression_type: CompressionType::ZSTD,
             compression_level: -3,
-            compression_dict: None,
+            compression_dict: dict,
         });
         tree.write_to_buffer(&mut out_buf)
     }

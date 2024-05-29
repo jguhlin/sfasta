@@ -3,8 +3,8 @@
 
 use std::{
     io::{BufRead, Read, Seek, Write},
-    sync::Arc,
     pin::Pin,
+    sync::Arc,
 };
 
 use simdutf8::basic::from_utf8;
@@ -48,7 +48,7 @@ use tokio_stream::Stream;
 
 pub struct StringBlockStoreBuilder
 {
-    inner: BytesBlockStoreBuilder,
+    pub inner: BytesBlockStoreBuilder,
 }
 
 impl Default for StringBlockStoreBuilder
@@ -299,7 +299,6 @@ impl StringBlockStore
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 }
-
 
 #[cfg(feature = "async")]
 pub struct StringBlockStoreSeqLocReader

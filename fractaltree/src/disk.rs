@@ -132,15 +132,17 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         new_root.store_dummy(&mut out_buf, &mut sample_sizes);
 
         log::info!(
-            "Average Size: {}",
-            sample_sizes.iter().sum::<usize>() / sample_sizes.len()
+            "Average Size: {} Min/Max: {}/{}",
+            sample_sizes.iter().sum::<usize>() / sample_sizes.len(),
+            sample_sizes.iter().min().unwrap(),
+            sample_sizes.iter().max().unwrap()
         );
+
+        log::debug!("Number of samples: {} Max Dict Size: {}", sample_sizes.len(), 32 * 1024);
 
         let buf = out_buf.into_inner();
 
-        // First 128 bytes
-
-        match zstd::dict::from_continuous(&buf, &sample_sizes, 32 * 1024) {
+         match zstd::dict::from_continuous(&buf, &sample_sizes, 32 * 1024) {
             Ok(dict) => dict,
             Err(e) => {
                 panic!("Error creating zstd dict: {:?}", e);

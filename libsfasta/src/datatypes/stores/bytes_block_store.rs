@@ -22,7 +22,10 @@ use libfilehandlemanager::AsyncFileHandleManager;
 use tokio::{
     fs::File,
     io::{AsyncSeekExt, BufReader},
-    sync::{oneshot, Mutex, OwnedRwLockWriteGuard, RwLock, mpsc, mpsc::Sender, mpsc::Receiver},
+    sync::{
+        mpsc, mpsc::Receiver, mpsc::Sender, oneshot, Mutex,
+        OwnedRwLockWriteGuard, RwLock,
+    },
 };
 
 use bytes::{Buf, BufMut, Bytes, BytesMut};
@@ -54,7 +57,6 @@ pub enum BlockStoreError
     Empty,
     Other(&'static str),
 }
-
 
 #[cfg(feature = "async")]
 pub enum DataOrLater
@@ -117,7 +119,6 @@ pub struct BytesBlockStoreBuilder
     // Statistics
     pub data_size: usize,
     pub compressed_size: usize,
-
 }
 
 unsafe impl Send for BytesBlockStoreBuilder {}
@@ -318,7 +319,8 @@ impl BytesBlockStoreBuilder
         }
 
         // Check that all block_locations are not 0, or backoff if any are
-        let block_locations = &self.block_data.iter().map(|x| &x.0).collect::<Vec<_>>();
+        let block_locations =
+            &self.block_data.iter().map(|x| &x.0).collect::<Vec<_>>();
         let backoff = Backoff::new();
         let mut all_nonzero = false;
 
@@ -510,6 +512,12 @@ impl BytesBlockStoreBuilder
 
         // todo print compression percent
 
+        self.compressed_size = self
+            .block_data
+            .iter()
+            .map(|x| x.1.load(Ordering::Relaxed) as usize)
+            .sum::<usize>();
+
         let block_locations: Vec<u64> = self
             .block_data
             .iter()
@@ -520,7 +528,6 @@ impl BytesBlockStoreBuilder
             block_locations_tree.insert(i as u32, *x);
         });
 
-        log::trace!("Storing BytesBlockStore Fractal Tree");
         let mut block_locations_tree: FractalTreeDisk<_, _> =
             block_locations_tree.into();
         block_locations_tree
@@ -733,10 +740,11 @@ impl BytesBlockStore
         // Lengths may be different
         let compression = self.compression_config.clone();
         // let decompressed = tokio::task::spawn_blocking(move || {
-            // Bytes::from(compression.decompress(&compressed_block).unwrap())
+        // Bytes::from(compression.decompress(&compressed_block).unwrap())
         // });
 
-        let decompressed = Bytes::from(compression.decompress(&compressed_block).unwrap());
+        let decompressed =
+            Bytes::from(compression.decompress(&compressed_block).unwrap());
 
         // let decompressed = decompressed.await.unwrap();
 
@@ -978,7 +986,8 @@ impl BytesBlockStore
         self.block_size as usize
     }
 
-    // todo create a spsc channel to send the blocks in order, allowing for prefetching
+    // todo create a spsc channel to send the blocks in order, allowing
+    // for prefetching
     #[cfg(feature = "async")]
     pub async fn block_queue(
         self: Arc<Self>,
@@ -998,7 +1007,7 @@ impl BytesBlockStore
                 tx.send((loc, block)).await.unwrap();
             }
             return ();
-       });
+        });
 
         rx
     }
@@ -1167,7 +1176,8 @@ impl BytesBlockStoreBlockReader
                 results.push(j);
                 locs_idx += 1;
             } else {
-                // let block = self.active.as_mut().unwrap().next().await.unwrap();
+                // let block =
+                // self.active.as_mut().unwrap().next().await.unwrap();
                 let block = self.active.as_mut().unwrap().recv().await.unwrap();
                 self.current_block = block;
             }
@@ -1177,7 +1187,8 @@ impl BytesBlockStoreBlockReader
             return None;
         }
 
-        let mut result = BytesMut::with_capacity(results.iter().map(|r| r.len()).sum());
+        let mut result =
+            BytesMut::with_capacity(results.iter().map(|r| r.len()).sum());
         for r in results {
             result.put(r);
         }

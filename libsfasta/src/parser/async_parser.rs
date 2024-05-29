@@ -5,7 +5,7 @@ use std::{
 
 use tokio::io::{
     AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncReadExt, AsyncSeek,
-    AsyncSeekExt, SeekFrom
+    AsyncSeekExt, SeekFrom,
 };
 
 use tokio::task::spawn_blocking;

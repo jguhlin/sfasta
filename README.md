@@ -116,7 +116,7 @@ The same rule applies for FASTQ.
 | Base Modifications | Planned |
 | Sequence and Whole Genome Alignments | Planned |
 | Pangenome Graph | Maybe |
-| Read Alignments | Not Planned. CRAM fulfills this role. |
+| Read Alignments | Not Planned. CRAM fulfills this role and is exceptionally well optimized. |
 | Variants | Too different, another solution needed. |
 
 

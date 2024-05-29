@@ -16,6 +16,8 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use xbytes::ByteSize;
+
 use crate::{datatypes::*, formats::*};
 use libcompression::*;
 use libfractaltree::FractalTreeDisk;
@@ -310,6 +312,8 @@ impl Converter
 
             let start = out_buffer_thread.stream_position().unwrap();
 
+            // let mut seqlocs = seqlocs.with_dict();
+
             log::trace!("Storing seqlocs");
             seqlocs_location =
                 seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
@@ -522,6 +526,8 @@ impl Converter
                 .with_dict()
                 .with_dict_samples(self.dict_samples)
                 .with_dict_size(self.dict_size);
+
+            // todo seqlocs dict
         }
 
         let mut reader = parse_fastx_reader(in_buf).unwrap();
@@ -555,9 +561,9 @@ impl Converter
                     // testing - this brought it to 2.8Gb
                     // Can we store as 2bit
                     // if can_store_2bit(&seq) {
-                        // to_2bit(&mut seq);
+                    // to_2bit(&mut seq);
                     // } else {
-                        // to_4bit(&mut seq)
+                    // to_4bit(&mut seq)
                     // }
 
                     let loc = sequences.add(seq);
@@ -634,6 +640,8 @@ impl Converter
 
         let start = out_buffer.stream_position().unwrap();
 
+        // --------------------------- Headers
+
         log::trace!("Writing headers");
 
         let mut headers = match headers.write_block_locations(&mut *out_buffer)
@@ -646,7 +654,25 @@ impl Converter
         };
 
         let end = out_buffer.stream_position().unwrap();
-        log::info!("Headers Fractal Tree Size: {}", formatter(end - start));
+        log::debug!("Headers Fractal Tree Size: {}", formatter(end - start));
+
+        log::info!(
+            "Headers Compression Ratio: {:.2}% ({} -> {})",
+            100.0
+                - (headers.as_ref().unwrap().inner.compressed_size as f64
+                    / headers.as_ref().unwrap().inner.data_size as f64
+                    * 100.0),
+            ByteSize::from_bytes(
+                headers.as_ref().unwrap().inner.data_size as u64
+            )
+            .to_string(),
+            ByteSize::from_bytes(
+                headers.as_ref().unwrap().inner.compressed_size as u64
+            )
+            .to_string()
+        );
+
+        // --------------------------- IDs
 
         log::trace!("Writing IDs");
 
@@ -659,7 +685,26 @@ impl Converter
             },
         };
         let end = out_buffer.stream_position().unwrap();
-        log::info!("IDs Fractal Tree Size: {}", formatter(end - start));
+        log::debug!("IDs Fractal Tree Size: {}", formatter(end - start));
+
+        log::info!(
+            "IDs Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
+            100.0
+                - (ids.as_ref().unwrap().inner.compressed_size as f64
+                    / ids.as_ref().unwrap().inner.data_size as f64
+                    * 100.0),
+            ByteSize::from_bytes(ids.as_ref().unwrap().inner.data_size as u64)
+                .to_string(),
+            ByteSize::from_bytes(
+                ids.as_ref().unwrap().inner.compressed_size as u64
+            )
+            .to_string(),
+            ByteSize::from_bytes(
+                ids.as_ref().unwrap().inner.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / ids.as_ref().unwrap().inner.block_data.len() as u64
+            )
+        );
+
+        // --------------------------- Masking
 
         let start = out_buffer.stream_position().unwrap();
         let mut masking = match masking.write_block_locations(&mut *out_buffer)
@@ -671,7 +716,34 @@ impl Converter
             },
         };
         let end = out_buffer.stream_position().unwrap();
-        log::info!("Masking Fractal Tree Size: {}", formatter(end - start));
+
+        if masking.is_some() {
+
+            log::debug!("Masking Fractal Tree Size: {}", formatter(end - start));
+
+            log::info!(
+                "Masking Compression Ratio: {:.2}% ({} -> {})  - Avg Compressed Block Size: {}",
+                100.0
+                    - (masking.as_ref().unwrap().inner.compressed_size as f64
+                        / masking.as_ref().unwrap().inner.data_size as f64
+                        * 100.0),
+                ByteSize::from_bytes(
+                    masking.as_ref().unwrap().inner.data_size as u64
+                )
+                .to_string(),
+                ByteSize::from_bytes(
+                    masking.as_ref().unwrap().inner.compressed_size as u64
+                )
+                .to_string(),
+                ByteSize::from_bytes(
+                    masking.as_ref().unwrap().inner.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / masking.as_ref().unwrap().inner.block_data.len() as u64
+                )
+            );
+        } else {
+            log::debug!("No masking data");
+        }
+
+        // --------------------------- Sequences
 
         let start = out_buffer.stream_position().unwrap();
         let mut sequences =
@@ -683,7 +755,26 @@ impl Converter
                 },
             };
         let end = out_buffer.stream_position().unwrap();
-        log::info!("Sequences Fractal Tree Size: {}", formatter(end - start));
+        log::debug!("Sequences Fractal Tree Size: {}", formatter(end - start));
+
+        log::info!(
+            "Sequences Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
+            100.0
+                - (sequences.as_ref().unwrap().compressed_size as f64
+                    / sequences.as_ref().unwrap().data_size as f64
+                    * 100.0),
+            ByteSize::from_bytes(sequences.as_ref().unwrap().data_size as u64)
+                .to_string(),
+            ByteSize::from_bytes(
+                sequences.as_ref().unwrap().compressed_size as u64
+            )
+            .to_string(),
+            ByteSize::from_bytes(
+                sequences.as_ref().unwrap().block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / sequences.as_ref().unwrap().block_data.len() as u64
+            )
+        );
+
+        // --------------------------- Scores
 
         let start = out_buffer.stream_position().unwrap();
         let mut scores = match scores.write_block_locations(&mut *out_buffer) {
@@ -693,8 +784,33 @@ impl Converter
                 _ => panic!("Error writing scores: {:?}", x),
             },
         };
-        let end = out_buffer.stream_position().unwrap();
-        log::info!("Scores Fractal Tree Size: {}", formatter(end - start));
+
+        if scores.is_some() {
+
+            let end = out_buffer.stream_position().unwrap();
+            log::debug!("Scores Fractal Tree Size: {}", formatter(end - start));
+
+            log::info!(
+                "Scores Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
+                100.0
+                    - (scores.as_ref().unwrap().compressed_size as f64
+                        / scores.as_ref().unwrap().data_size as f64
+                        * 100.0),
+                ByteSize::from_bytes(scores.as_ref().unwrap().data_size as u64)
+                    .to_string(),
+                ByteSize::from_bytes(
+                    scores.as_ref().unwrap().compressed_size as u64
+                )
+                .to_string(),
+                ByteSize::from_bytes(
+                    scores.as_ref().unwrap().block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / scores.as_ref().unwrap().block_data.len() as u64
+                )
+            );
+        } else {
+            log::debug!("No scores data");
+        }
+
+        // --- finished
 
         // Write the headers for each store...
         if headers.is_some() {

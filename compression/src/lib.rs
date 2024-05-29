@@ -45,16 +45,17 @@ use crossbeam::{queue::ArrayQueue, utils::Backoff};
 #[non_exhaustive]
 pub enum CompressionType
 {
-    ZSTD,   // 1 should be default compression ratio
-    LZ4,    // 9 should be default compression ratio
-    SNAPPY, // Implemented
-    GZIP,   // Implemented
-    NONE,   // No Compression
-    XZ,     // Implemented, 6 is default ratio
-    BROTLI, // Implemented, 6 is default
-    BZIP2,  // Implemented
-    BIT2,   // Not implemented
-    BIT4,   // Not implemented
+    ZSTD,       // 1 should be default compression level
+    LZ4,        // 9 should be default compression level
+    SNAPPY,     // Implemented
+    GZIP,       // Implemented
+    NONE,       // No Compression
+    XZ,         // Implemented, 6 is default level
+    BROTLI,     // Implemented, 6 is default
+    BZIP2,      // Implemented
+    BIT2,       // Not implemented
+    BIT4,       // Not implemented
+    NAIVECABAC, // Quality scores only
 }
 
 #[derive(Debug, Clone)]
@@ -377,7 +378,26 @@ pub fn zstd_encoder(
     encoder
         .long_distance_matching(true)
         .expect("Unable to set long_distance_matching");
+    encoder
+        .include_dictid(false)
+        .expect("Unable to set include_dictid");
     encoder.window_log(31).expect("Unable to set window_log");
+    encoder
+        .set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
+        .expect("Unable to set max memory");
+    encoder
+        .set_parameter(zstd::stream::raw::CParameter::HashLog(30))
+        .expect("Unable to set max memory");
+    // chain log
+    encoder
+        .set_parameter(zstd::stream::raw::CParameter::ChainLog(30))
+        .expect("Unable to set max memory");
+
+    // Search log
+    encoder
+        .set_parameter(zstd::stream::raw::CParameter::SearchLog(30))
+        .expect("Unable to set max memory");
+
     encoder
 }
 
@@ -792,7 +812,8 @@ fn compression_worker(
 }
 
 // todo cute nucleotides is better
-pub fn can_store_2bit(bytes: &[u8]) -> bool {
+pub fn can_store_2bit(bytes: &[u8]) -> bool
+{
     // ACTG, but no N, and never protein
     // can also be lower case (masking stored separately)
     bytes.iter().all(|&x| {
@@ -808,7 +829,8 @@ pub fn can_store_2bit(bytes: &[u8]) -> bool {
 }
 
 // Convert to 2bit encoding
-pub fn to_2bit(bytes: &[u8]) -> Vec<u8> {
+pub fn to_2bit(bytes: &[u8]) -> Vec<u8>
+{
     let mut output = Vec::with_capacity(bytes.len() / 4);
     let mut buffer = 0_u8;
     let mut shift = 6_u8;
@@ -835,7 +857,8 @@ pub fn to_2bit(bytes: &[u8]) -> Vec<u8> {
 }
 
 // Convert from 2bit encoding
-pub fn from_2bit(bytes: &[u8]) -> Vec<u8> {
+pub fn from_2bit(bytes: &[u8]) -> Vec<u8>
+{
     let mut output = Vec::with_capacity(bytes.len() * 4);
     for &x in bytes.iter() {
         let mut shift = 6;
@@ -857,7 +880,8 @@ pub fn from_2bit(bytes: &[u8]) -> Vec<u8> {
 
 // to 4 bit
 // includes N
-pub fn to_4bit(seq: &mut [u8]) {
+pub fn to_4bit(seq: &mut [u8])
+{
     for x in seq.iter_mut() {
         match x {
             b'A' | b'a' => *x = 0,
@@ -871,7 +895,8 @@ pub fn to_4bit(seq: &mut [u8]) {
 }
 
 // from 4 bit
-pub fn from_4bit(seq: &mut [u8]) {
+pub fn from_4bit(seq: &mut [u8])
+{
     for x in seq.iter_mut() {
         match x {
             0 => *x = b'A',

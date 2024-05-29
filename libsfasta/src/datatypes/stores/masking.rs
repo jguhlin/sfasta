@@ -4,8 +4,8 @@
 // length in time for masking. TODO: Try stream vbytes for this...
 use std::{
     io::{BufRead, Read, Seek, Write},
-    sync::Arc,
     pin::Pin,
+    sync::Arc,
 };
 
 #[cfg(feature = "async")]
@@ -46,7 +46,7 @@ use pulp::Arch;
 
 pub struct MaskingStoreBuilder
 {
-    inner: BytesBlockStoreBuilder,
+    pub inner: BytesBlockStoreBuilder,
 }
 
 impl Builder<Vec<u8>> for MaskingStoreBuilder
@@ -221,10 +221,10 @@ fn rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
 pub struct Masking
 {
     #[cfg(feature = "async")]
-    inner: Arc<BytesBlockStore>,
+    pub inner: Arc<BytesBlockStore>,
 
     #[cfg(not(feature = "async"))]
-    inner: BytesBlockStore,
+    pub inner: BytesBlockStore,
 }
 
 impl Masking
@@ -266,18 +266,16 @@ impl Masking
         Arc::clone(&self.inner).stream(fhm).await
 
         // let bincode_config =
-            // bincode::config::standard().with_variable_int_encoding();
+        // bincode::config::standard().with_variable_int_encoding();
 
-        /*
-
-        Arc::clone(&self.inner).stream(fhm).await.map(move |x| {
-            log::trace!("Size of mask (still RLE): {}", x.1.len());
-            let mask: Vec<(u64, u8)> =
-                bincode::decode_from_slice(&x.1, bincode_config)
-                    .expect("Failed to decode mask")
-                    .0;
-            (x.0, bytes::Bytes::from(rle_decode(&mask)))
-        }) */
+        // Arc::clone(&self.inner).stream(fhm).await.map(move |x| {
+        // log::trace!("Size of mask (still RLE): {}", x.1.len());
+        // let mask: Vec<(u64, u8)> =
+        // bincode::decode_from_slice(&x.1, bincode_config)
+        // .expect("Failed to decode mask")
+        // .0;
+        // (x.0, bytes::Bytes::from(rle_decode(&mask)))
+        // })
     }
 
     #[cfg(not(feature = "async"))]
@@ -325,15 +323,13 @@ impl Masking
     {
         let mask = self.inner.get(in_buf, loc).await;
 
-        /*
-        let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
-
-        let mask: Vec<(u64, u8)> =
-            bincode::decode_from_slice(&mask, bincode_config)
-                .expect("Failed to decode mask")
-                .0;
-        */
+        // let bincode_config =
+        // bincode::config::standard().with_variable_int_encoding();
+        //
+        // let mask: Vec<(u64, u8)> =
+        // bincode::decode_from_slice(&mask, bincode_config)
+        // .expect("Failed to decode mask")
+        // .0;
         // bytes::Bytes::from(rle_decode(&mask))
         mask
     }
@@ -348,7 +344,8 @@ pub fn mask_sequence(seq: &mut [u8], mask_raw: bytes::Bytes)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    let mask: Vec<(u64, u8)> = bincode::decode_from_slice(&mask_raw, config).unwrap().0;
+    let mask: Vec<(u64, u8)> =
+        bincode::decode_from_slice(&mask_raw, config).unwrap().0;
 
     let mask_raw = rle_decode(&mask);
 
@@ -391,7 +388,8 @@ impl MaskingBlockReader
     }
 
     /// Hack for when no masking is found
-    pub async fn dummy() -> Self {
+    pub async fn dummy() -> Self
+    {
         MaskingBlockReader {
             active: None,
             cached_block: (0, Bytes::new()),
@@ -438,7 +436,6 @@ impl MaskingBlockReader
         Some(result.freeze())
     }
 }
-
 
 #[cfg(test)]
 mod tests
