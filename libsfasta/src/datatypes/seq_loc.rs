@@ -502,7 +502,10 @@ impl SeqLocsStoreBuilder
         };
 
         if dict.is_some() {
-            log::debug!("Dict size for SeqLocs is: {}", dict.as_ref().unwrap().len());
+            log::debug!(
+                "Dict size for SeqLocs is: {}",
+                dict.as_ref().unwrap().len()
+            );
         }
 
         // todo this should be configurable!

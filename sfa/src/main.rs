@@ -644,7 +644,7 @@ fn view(input: String)
 
             let mut bufs: Vec<IoSlice> =
                 vec![IoSlice::new(b">"), IoSlice::new(&id)];
-            
+
             if header.is_some() {
                 bufs.push(IoSlice::new(b" "));
                 bufs.push(IoSlice::new(header.as_ref().unwrap()));

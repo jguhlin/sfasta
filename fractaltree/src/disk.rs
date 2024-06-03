@@ -138,11 +138,15 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
             sample_sizes.iter().max().unwrap()
         );
 
-        log::debug!("Number of samples: {} Max Dict Size: {}", sample_sizes.len(), 32 * 1024);
+        log::debug!(
+            "Number of samples: {} Max Dict Size: {}",
+            sample_sizes.len(),
+            32 * 1024
+        );
 
         let buf = out_buf.into_inner();
 
-         match zstd::dict::from_continuous(&buf, &sample_sizes, 32 * 1024) {
+        match zstd::dict::from_continuous(&buf, &sample_sizes, 32 * 1024) {
             Ok(dict) => dict,
             Err(e) => {
                 panic!("Error creating zstd dict: {:?}", e);
@@ -267,7 +271,6 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
                     node_a = &node_a.children.as_ref().unwrap()[*i];
                 }
 
-
                 let mut node_b = &self.root.children.as_ref().unwrap()[b.1[0]];
 
                 for i in &b.1[1..] {
@@ -280,7 +283,6 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
             let mut previous_key = K::default();
 
             for (_layer, path) in nodes {
-
                 let mut node =
                     &mut self.root.children.as_mut().unwrap()[path[0]];
 

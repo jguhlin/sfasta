@@ -504,7 +504,6 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         // Release the lock
         drop(node_write);
 
-
         self.opened.insert(loc, Arc::clone(&node).into());
     }
 

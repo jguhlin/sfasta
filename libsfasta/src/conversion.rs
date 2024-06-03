@@ -718,8 +718,10 @@ impl Converter
         let end = out_buffer.stream_position().unwrap();
 
         if masking.is_some() {
-
-            log::debug!("Masking Fractal Tree Size: {}", formatter(end - start));
+            log::debug!(
+                "Masking Fractal Tree Size: {}",
+                formatter(end - start)
+            );
 
             log::info!(
                 "Masking Compression Ratio: {:.2}% ({} -> {})  - Avg Compressed Block Size: {}",
@@ -786,7 +788,6 @@ impl Converter
         };
 
         if scores.is_some() {
-
             let end = out_buffer.stream_position().unwrap();
             log::debug!("Scores Fractal Tree Size: {}", formatter(end - start));
 
