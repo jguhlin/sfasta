@@ -1,0 +1,3 @@
+[submodule "htscodecs-sys/htscodecs"]
+	path = htscodecs-sys/htscodecs
+	url = https://github.com/samtools/htscodecs
