@@ -1,0 +1,26 @@
+[package]
+name = "htscodecs-sys"
+version = "0.1.0"
+edition = "2021"
+links = "libhtscodecs"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[build-dependencies]
+
+[build-dependencies.bindgen]
+optional = true
+version = "0.69.4"
+default-features = false
+features = ["which-rustfmt", "runtime"]
+
+[build-dependencies.cc]
+version = "1"
+
+[features]
+default = ["bindgen"]
+vendored = ["bindgen"]
+bindgen = ["dep:bindgen"]

@@ -5,7 +5,8 @@ members = [
 	"sfa",
 	"fractaltree",
 	"compression", 
-	"preload",
+	"preload", 
+	# "htscodecs-sys",
 ]
 
 [profile.release]

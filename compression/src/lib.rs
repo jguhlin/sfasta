@@ -2,6 +2,8 @@ extern crate core_affinity;
 
 use bzip2::Compression;
 use serde::{Deserialize, Serialize};
+use ux::{u3, u5};
+// use htscodecs_sys::{fqz_compress, fqz_gparams, fqz_slice};
 
 use std::{
     io::{Read, Write},
@@ -55,7 +57,7 @@ pub enum CompressionType
     BZIP2,      // Implemented
     BIT2,       // Not implemented
     BIT4,       // Not implemented
-    NAIVECABAC, // Quality scores only
+    FQZCOMP,    // Quality scores only
 }
 
 #[derive(Debug, Clone)]
@@ -240,6 +242,45 @@ impl CompressionConfig
 
                 Ok(output)
             }
+            /*
+            CompressionType::FQZCOMP => {
+                let uncomp_size = bytes.len();
+                // Pointer for compressed size as size_t
+                let mut comp_size: usize = 0;
+                let vers = 2;
+
+                /*
+                pub struct fqz_slice
+                    {
+                    pub num_records: ::std::os::raw::c_int,
+                    pub len: *mut u32,
+                    pub flags: *mut u32,
+                    } */
+
+                // Treat it as a single slice, of bytes.len(), with no flags
+                let mut s = fqz_slice {
+                    num_records: 1,
+                    len: std::ptr::null_mut(),
+                    flags: std::ptr::null_mut(),
+                };
+
+                s.len = &uncomp_size as *const _ as *mut u32;
+                s.flags = std::ptr::null_mut();
+
+                let mut bytes = bytes.to_vec();
+
+                let output = unsafe {
+                    fqz_compress(vers, &mut s, bytes.as_mut_ptr() as *mut i8, uncomp_size as usize, &mut comp_size, 0, std::ptr::null_mut())
+                };
+
+                // Convert output to Vec<u8>
+                let output = unsafe {
+                    std::slice::from_raw_parts(output as *const u8, comp_size as usize)
+                        .to_vec()
+                };
+
+                Ok(output)
+            } */
             _ => {
                 // Todo: implement others. This isn't just used for
                 // fractaltrees...
@@ -930,4 +971,12 @@ mod tests
         let compression_config = compression_config.with_compression_level(12);
         assert_eq!(compression_config.compression_level, 11);
     }
+
+    // #[test]
+    // pub fn test_fqzcomp() {
+        // let scores = b"-3331-,,,.22114568744.++++555:>?@AB<<AGHEA49?@AA?::(&&''(''((*---432+))'(-(*+*+,,,8776..-30/0112556677:2,,,++/58832334:<<;8::<=87998;>DCDA?@A><:66////.23327842:3**,,,,,))*('''(*./+((*14449200()))45-)))*6444**)))()((%$$$$%&&*',532222566.,---11137;;<>6-*))558::0.-+,0/+,::820..)&&&'68899<<<>>:EFH@DG=<886ABFD@9///./7>>9?C;C?BAC@A@<975+*****/000//111A@?:730-.??:(12:8533.//--,-03:9:A:9C1.-,*+,069<?=<.--:8B83:?>AEES>89757:6;;<<<8@106545789@@FHGA?D<?>@IDDGDA<B@@CCCFDIADE=:;;40012@A;4><:865966656812/5/.-2413+*++.:<;88;><88>=4173688?@878==;>FIFDB?=:99:=7//CB86BA=DDIEAEDBGE?<==7950-EBC??42/,/=9=52GDB8D@A<<FB<8>:9>G:=B><SLC<:977532./+,-*777/./,*//6<:66FA0//..?ED=::<3-'%%&('((,3449::++5<DDHIACD<EA@GCB@744-+-63/.-/65:D8:II<837:66;>.BEE?6:9:6?EB><9<;8ACA;;:==;887646@KKI>:640/6@,))),844997789=8?7/*,:C=8<B=998.-.2HAEJLSMSSI>JFAM6433022102>CA?>>A21/,3/,,0.,++-0./0/112987449:7AH?>4568C?6:<;<F3588;321665346801.-./01-,,,+,6>?;61176555443433229:7)(),,-00/.,026889999A=DDDIGJES@9:7=<69:886HACA:/+)AHKEC:4-)*-*)),,,/0.2335@;8<>:IBCH>;98:=49?D?E77677;<89:8GSK6655GDFD874775FFE<1.-656421111644345>:;:8>BA@@<GDSFI=83331112:<75438<>:2..)-)(((+5443342..2210/,/24554264677ABB=43334??.****--20";
+        // let compressed = CompressionConfig::new().with_compression_type(CompressionType::FQZCOMP).compress(scores).unwrap();
+
+    // } 
+
 }
