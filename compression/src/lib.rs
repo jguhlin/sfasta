@@ -27,6 +27,9 @@ use std::{
     time::Duration,
 };
 
+pub mod rans_impl;
+pub use rans_impl::*;
+
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
 thread_local! {
@@ -1085,7 +1088,7 @@ mod tests
             RansEncoderMulti,
         };
 
-        const SCALE_BITS: u32 = 6;
+        const SCALE_BITS: u32 = 11;
 
         // Encode two symbols
         let mut encoder = ByteRansEncoder::new(1024);
@@ -1157,9 +1160,8 @@ mod tests
             }
         }
 
-        panic!();
 
-        // Above from crate docs
+        // Real data
 
         let mut fastq = needletail::parse_fastx_file(
             "/mnt/data/data/sfasta_testing/reads.fastq",
@@ -1175,6 +1177,91 @@ mod tests
                 break;
             }
         }
+
+        // Operate on blocks of 1024
+        let block_size = 1024;
+        let scores = scores[..block_size].to_vec();
+        // let scores = sequences[..block_size].to_vec();
+
+
+        // Get frequencies
+        let mut counts = [0; 256];
+        for &x in scores.iter() {
+            counts[x as usize] += 1;
+        }
+
+        // Get cumulative frequencies
+        let mut cumul = [0; 256];
+        let mut total = 0;
+        for i in 0..256 {
+            cumul[i] = total;
+            total += counts[i];
+        }
+
+        // Normalize - because you can't have 0 probability
+        let mut scale = 1;
+        for i in 0..256 {
+            if counts[i] != 0 {
+                cumul[i] = scale;
+                scale += counts[i];
+            }
+        }
+
+        // Create map
+        let mut map: HashMap<u8, (ByteRansEncSymbol, u32, u32)> = HashMap::new();
+
+        for i in scores.iter() {
+            let symbol = ByteRansEncSymbol::new(cumul[*i as usize], counts[*i as usize], SCALE_BITS);
+            map.insert(*i, (symbol, cumul[*i as usize], counts[*i as usize]));
+        }
+
+        // Map for conversion backwards
+        let mut map2: HashMap<u32, u8> = HashMap::new();
+        for i in scores.iter() {
+            for x in cumul[*i as usize]..(cumul[*i as usize] + counts[*i as usize]) {
+                // If not already in map
+                if !map2.contains_key(&x) {
+                    map2.insert(x, *i);
+                }
+            }
+        }
+
+        // Now encode
+        let mut encoder = ByteRansEncoder::new(scores.len());
+        for i in scores.iter() {
+            let (symbol, _, _) = &map[&i];
+            encoder.put(symbol);
+        }
+
+        encoder.flush();
+
+        let data = encoder.data().to_owned();
+        println!("Data: {:?}", data);
+        println!("Original data size: {}", scores.len());
+        println!("Encoded data size: {}", data.len());
+        println!("Compression Ratio: {:.2}", data.len() as f64 / scores.len() as f64);
+
+        // Now try with the module
+        use rans_impl::*;
+
+        let freqs = calculate_frequencies(&scores);
+        let mut cumul_freqs = to_cumulative_frequencies(&freqs);
+        normalize_frequencies(&mut cumul_freqs);
+
+        // let (scale_bits, symbols) = generate_encoding_symbols(&cumul_freqs);
+        let data = encode(&scores, &cumul_freqs);
+
+        println!("Data: {:?}", data);
+        println!("Original data size: {}", scores.len());
+        println!("Encoded data size: {}", data.len());
+        println!("Compression Ratio: {:.2}", data.len() as f64 / scores.len() as f64);
+
+        
+
+
+
+
+
 
         panic!();
     }
