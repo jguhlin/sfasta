@@ -295,7 +295,7 @@ impl Converter
 
         // Build the index in another thread...
         thread::scope(|s| {
-            let mut indexer = libfractaltree::FractalTreeBuild::new(512, 8192);
+            let mut indexer = libfractaltree::FractalTreeBuild::new(1024, 2048);
 
             let index_handle = Some(s.spawn(|_| {
                 for (id, loc) in ids_to_locs.into_iter() {

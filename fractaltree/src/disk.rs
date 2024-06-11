@@ -285,6 +285,8 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
 
             let mut previous_key = K::default();
 
+            // todo can we compress children in parallel?
+
             for (_layer, path) in nodes {
                 let mut node =
                     &mut self.root.children.as_mut().unwrap()[path[0]];
