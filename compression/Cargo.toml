@@ -30,6 +30,10 @@ bzip2 = { version = "0.4.4", features = ["static"] }
 fqcomp = { git = "https://github.com/Minhyeok01/FCLQC" }
 vers-vecs = "1.3.1"
 ux = { version = "0.1.6", features = ["std"] }
+minimum_redundancy = "0.3.1"
+bitm = "0.4.1"
+rans = "0.4.0"
+# bitm = { version = "0.4.1", features = ["aligned-vec"] }
 # htscodecs-sys = { path = "../htscodecs-sys" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -46,6 +50,9 @@ flate2 = { version = "1.0.28", features = ["rust_backend"], default-features = t
 zstd = { version="0.13", default-features = false, features=["wasm", "arrays", "zdict_builder", "experimental"] }
 liblzma = { version = "0.3.1", features = ["static", "wasm"] }
 brotli = "6.0.0"
+
+[dev-dependencies]
+needletail = { git = "https://github.com/onecodex/needletail" }
 
 [features]
 default = []

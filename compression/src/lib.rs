@@ -4,9 +4,20 @@ use bzip2::Compression;
 use serde::{Deserialize, Serialize};
 use ux::{u3, u5};
 // use htscodecs_sys::{fqz_compress, fqz_gparams, fqz_slice};
+use bitm::{BitAccess, BitVec};
+use crossbeam::{queue::ArrayQueue, utils::Backoff};
+use liblzma::read::{XzDecoder, XzEncoder};
+use lz4_flex::block::{compress_prepend_size, decompress_size_prepended};
+use minimum_redundancy::{
+    BitsPerFragment, Code, Coding, DecodingResult, Frequencies,
+};
 
 use std::{
+    cell::RefCell,
+    collections::HashMap,
+    hash::Hash,
     io::{Read, Write},
+    rc::Rc,
     sync::{
         atomic::{AtomicBool, AtomicU64, Ordering},
         Arc,
@@ -16,13 +27,7 @@ use std::{
     time::Duration,
 };
 
-use lz4_flex::block::{compress_prepend_size, decompress_size_prepended};
-
-use liblzma::read::{XzDecoder, XzEncoder};
-
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
-
-use std::{cell::RefCell, rc::Rc};
 
 thread_local! {
     static ZSTD_COMPRESSOR: RefCell<zstd::bulk::Compressor<'static>> = RefCell::new(zstd_encoder(3, &None));
@@ -30,8 +35,6 @@ thread_local! {
 
     // todo, all the others
 }
-
-use crossbeam::{queue::ArrayQueue, utils::Backoff};
 
 #[derive(
     PartialEq,
@@ -47,17 +50,17 @@ use crossbeam::{queue::ArrayQueue, utils::Backoff};
 #[non_exhaustive]
 pub enum CompressionType
 {
-    ZSTD,       // 1 should be default compression level
-    LZ4,        // 9 should be default compression level
-    SNAPPY,     // Implemented
-    GZIP,       // Implemented
-    NONE,       // No Compression
-    XZ,         // Implemented, 6 is default level
-    BROTLI,     // Implemented, 6 is default
-    BZIP2,      // Implemented
-    BIT2,       // Not implemented
-    BIT4,       // Not implemented
-    FQZCOMP,    // Quality scores only
+    ZSTD,   // 1 should be default compression level
+    LZ4,    // 9 should be default compression level
+    SNAPPY, // Implemented
+    GZIP,   // Implemented
+    NONE,   // No Compression
+    XZ,     // Implemented, 6 is default level
+    BROTLI, // Implemented, 6 is default
+    BZIP2,  // Implemented
+    BIT2,   // Not implemented
+    BIT4,   // Not implemented
+    MINIMUMREDUNDANCY,
 }
 
 #[derive(Debug, Clone)]
@@ -153,8 +156,6 @@ impl CompressionConfig
         }
     }
 
-    /// Only used by FractalTree's....
-    /// need todo fix that
     pub fn compress(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error>
     {
         match self.compression_type {
@@ -239,6 +240,82 @@ impl CompressionConfig
                     .compress(bytes, &mut output, bzip2::Action::Finish)
                     .unwrap();
                 output.shrink_to_fit();
+
+                Ok(output)
+            }
+
+            // Some improvement with zstd, not a ton
+            // also this project isn't about finding/making new compression algorithms
+            CompressionType::MINIMUMREDUNDANCY => {
+                #[cfg(not(debug))]
+                unimplemented!("Minimum Redundancy is not implemented in release mode");
+
+                // Split into chunks
+                let chunks = bytes.chunks_exact(3);
+                // Get remainder early
+                let remainder = chunks.remainder();
+
+                // Copy into new vec
+                let mut to_huffman = chunks.map(|x| x.to_vec()).collect::<Vec<Vec<u8>>>();
+                // If there is a remainder, add it
+                if !remainder.is_empty() {
+                    to_huffman.push(remainder.to_vec());
+                }
+
+                // Calculate entropy
+                let freqs = frequencies(&to_huffman);
+                let degree = minimum_redundancy::entropy_to_bpf(freqs.entropy());
+                println!("Degree: {}", degree);
+
+                // let huffman: Coding<&[u8]> = Coding::from_iter(BitsPerFragment(degree), to_huffman.iter());
+                let huffman = Coding::from_frequencies_cloned(BitsPerFragment(degree), &freqs);
+                let size = total_size_bits(&freqs, &huffman.codes_for_values()) * degree as usize;
+
+                let mut compressed = Box::<[u64]>::with_zeroed_bits(size);
+
+                // println!("Degree: {}", degree);
+                // println!("Size: {}", size);
+
+                // Now encode
+                // Get K/V pairs
+                let dict = huffman.codes_for_values();
+                let mut bit_index = 0;
+                for k in to_huffman.iter() {
+                    let c = dict[k];
+                    // println!("Content: {:b} Len: {}", c.content, c.len);
+                    // println!("Setting bits {} to {}", bit_index, (bit_index + c.len as usize * degree as usize));
+                    // Currently set to:
+                    // println!("Currently set to: {:b}", compressed.get_bits(bit_index, c.len as u8));
+
+                    compressed.init_bits(bit_index, c.content as u64, c.len.min(32) as u8);
+                    bit_index += c.len as usize * degree as usize;
+                }
+
+                let output: Vec<u64> = compressed.to_vec();
+
+                let bincode_config = bincode::config::standard().with_variable_int_encoding();
+
+                // Encoder
+                let mut encoder_dict = Vec::new();
+                // println!("Total count of values: {}", huffman.values.len());
+                // println!("{:#?}", huffman.values);
+                let values = bincode::encode_to_vec(&huffman.values, bincode_config).unwrap();
+
+                // println!("Values len: {}", values.len());
+                // println!("Internal Nodes Count: {:?}", huffman.internal_nodes_count);
+                let internal_nodes_count = bincode::encode_to_vec(&huffman.internal_nodes_count, bincode_config).unwrap();
+                let degree = bincode::encode_to_vec(&huffman.degree.0, bincode_config).unwrap();
+
+                encoder_dict.extend(values);
+                encoder_dict.extend(internal_nodes_count);
+                encoder_dict.extend(degree);
+
+                // Convert u64 to underlying bytes (u8)
+                let data = output.iter().flat_map(|&x| x.to_be_bytes().to_vec()).collect::<Vec<u8>>();
+
+                let mut output = Vec::new();
+                output.extend(encoder_dict);
+                output.extend(data);
 
                 Ok(output)
             }
@@ -417,15 +494,18 @@ pub fn zstd_encoder(
         .include_contentsize(false)
         .expect("Unable to set ZSTD Content Size Flag");
     encoder
-        .long_distance_matching(true)
-        .expect("Unable to set long_distance_matching");
-    encoder
         .include_dictid(false)
         .expect("Unable to set include_dictid");
-    encoder.window_log(31).expect("Unable to set window_log");
     encoder
         .set_parameter(zstd::stream::raw::CParameter::BlockDelimiters(false))
         .expect("Unable to set max memory");
+
+    encoder
+        .long_distance_matching(true)
+        .expect("Unable to set long_distance_matching");
+
+    encoder.window_log(31).expect("Unable to set window_log");
+
     encoder
         .set_parameter(zstd::stream::raw::CParameter::HashLog(30))
         .expect("Unable to set max memory");
@@ -515,6 +595,22 @@ impl CompressionBlock
     {
         self.location.load(Ordering::Relaxed) != 0_u64
     }
+}
+
+fn total_size_bits<T: Eq + Hash + Clone>(
+    frequencies: &HashMap<T, usize>,
+    dict: &HashMap<T, Code>,
+) -> usize
+{
+    frequencies
+        .iter()
+        .fold(0, |acc, (k, w)| acc + dict[&k].len as usize * *w)
+}
+
+fn frequencies<T: Eq + Hash + Clone>(data: &[T]) -> HashMap<T, usize>
+{
+    let result = HashMap::<T, usize>::with_occurrences_of(data.iter());
+    result
 }
 
 pub struct CompressionWorker
@@ -814,6 +910,26 @@ fn compression_worker(
 
                         output
                     }
+                    CompressionType::MINIMUMREDUNDANCY => {
+                        #[cfg(not(debug))]
+                        unimplemented!("Minimum Redundancy is not implemented in release mode");
+
+                        let mut compression_config = CompressionConfig::new();
+                        compression_config.compression_type =
+                            CompressionType::MINIMUMREDUNDANCY;
+
+                        let huffman_compressed =
+                            compression_config.compress(&work.input).unwrap();
+                        let compression_config = CompressionConfig::new();
+                        let compression_config = compression_config
+                            .with_compression_type(CompressionType::ZSTD);
+                        let compression_config =
+                            compression_config.with_compression_level(7);
+                        let compressed = compression_config
+                            .compress(&huffman_compressed)
+                            .unwrap();
+                        compressed
+                    }
                     _ => panic!(
                         "Unsupported compression type: {:?}",
                         work.compression_config.compression_type
@@ -831,7 +947,7 @@ fn compression_worker(
 
                 let mut x = output_queue.try_send(output_block);
                 while let Err(y) = x {
-                    log::trace!("Output queue is full");
+                    // log::trace!("Output queue is full");
                     backoff.snooze();
                     match y {
                         flume::TrySendError::Full(y) => {
@@ -953,7 +1069,223 @@ pub fn from_4bit(seq: &mut [u8])
 #[cfg(test)]
 mod tests
 {
+    use rans::RansDecoderMulti;
+
     use super::*;
+
+    // This whole section is me figuring out how rANS works
+    // htscodecs has it implemented, but I still want to learn how it works
+    #[test]
+    pub fn rans()
+    {
+        use rans::{
+            byte_decoder::{ByteRansDecSymbol, ByteRansDecoder},
+            byte_encoder::{ByteRansEncSymbol, ByteRansEncoder},
+            RansDecSymbol, RansDecoder, RansEncSymbol, RansEncoder,
+            RansEncoderMulti,
+        };
+
+        const SCALE_BITS: u32 = 6;
+
+        // Encode two symbols
+        let mut encoder = ByteRansEncoder::new(1024);
+        let symbol1 = ByteRansEncSymbol::new(0, 2, SCALE_BITS);
+        let symbol2 = ByteRansEncSymbol::new(2, 2, SCALE_BITS);
+
+        encoder.put(&symbol1);
+        encoder.put(&symbol2);
+        encoder.flush();
+
+        let mut data = encoder.data().to_owned();
+
+        println!("Data: {:?}", data);
+
+        // Decode the encoded data
+        let mut decoder = ByteRansDecoder::new(data);
+        let symbol1 = ByteRansDecSymbol::new(0, 2);
+        let symbol2 = ByteRansDecSymbol::new(2, 2);
+
+        // Please note that the data is being decoded in reverse
+        assert_eq!(decoder.get(SCALE_BITS), 2); // Decoder returns cumulative frequency
+        decoder.advance(&symbol2, SCALE_BITS);
+        assert_eq!(decoder.get(SCALE_BITS), 0);
+        decoder.advance(&symbol1, SCALE_BITS);
+
+        // Let's try a toy example with FASTQ
+
+        let toy = b"AACTGAAATT";
+
+        // Get frequencies
+        let mut counts = [0; 256];
+        for &x in toy.iter() {
+            counts[x as usize] += 1;
+        }
+
+        // Get cumulative frequencies
+        let mut cumul = [0; 256];
+        let mut total = 0;
+        for i in 0..256 {
+            cumul[i] = total;
+            total += counts[i];
+        }
+
+        // Normalize - because you can't have 0 probability
+        let mut scale = 1;
+        for i in 0..256 {
+            if counts[i] != 0 {
+                cumul[i] = scale;
+                scale += counts[i];
+            }
+        }
+
+        // Create map
+        let mut map: HashMap<u8, (ByteRansEncSymbol, u32, u32)> = HashMap::new();
+
+        for i in toy {
+            let symbol = ByteRansEncSymbol::new(cumul[*i as usize], counts[*i as usize], SCALE_BITS);
+            map.insert(*i, (symbol, cumul[*i as usize], counts[*i as usize]));
+        }
+
+        // Map for conversion backwards
+        let mut map2: HashMap<u32, u8> = HashMap::new();
+        for i in toy {
+            for x in cumul[*i as usize]..(cumul[*i as usize] + counts[*i as usize]) {
+                // If not already in map
+                if !map2.contains_key(&x) {
+                    map2.insert(x, *i);
+                }
+            }
+        }
+
+        panic!();
+
+        // Above from crate docs
+
+        let mut fastq = needletail::parse_fastx_file(
+            "/mnt/data/data/sfasta_testing/reads.fastq",
+        )
+        .unwrap();
+        let mut scores = Vec::new();
+        let mut sequences = Vec::new();
+        while let Some(record) = fastq.next() {
+            let record = record.unwrap();
+            scores.extend_from_slice(&record.qual().unwrap());
+            sequences.extend_from_slice(&record.seq());
+            if scores.len() >= 64 * 1024 {
+                break;
+            }
+        }
+
+        panic!();
+    }
+
+    
+    pub fn test_minimum_redundancy()
+    {
+        let mut compression_config = CompressionConfig::new();
+        compression_config.compression_type =
+            CompressionType::MINIMUMREDUNDANCY;
+
+        let mut fastq = needletail::parse_fastx_file(
+            "/mnt/data/data/sfasta_testing/reads.fastq",
+        )
+        .unwrap();
+        let mut scores = Vec::new();
+        let mut sequences = Vec::new();
+        while let Some(record) = fastq.next() {
+            let record = record.unwrap();
+            scores.extend_from_slice(&record.qual().unwrap());
+            sequences.extend_from_slice(&record.seq());
+            if scores.len() >= 64 * 1024 {
+                break;
+            }
+        }
+
+        println!("Scores Length: {}", scores.len());
+
+        let data = scores;
+
+        let huffman_compressed = compression_config.compress(&data).unwrap();
+        println!(
+            "Orig Length: {} / Compressed Length: {}",
+            data.len(),
+            huffman_compressed.len()
+        );
+        println!(
+            "Ratio: {:.2}",
+            huffman_compressed.len() as f64 / data.len() as f64
+        );
+
+        // Zstd compress it
+        let compression_config = CompressionConfig::new();
+        let compression_config =
+            compression_config.with_compression_type(CompressionType::ZSTD);
+        let compression_config = compression_config.with_compression_level(7);
+        let compressed = compression_config.compress(&data).unwrap();
+
+        println!(
+            "Orig Length: {} / Zstd Length: {}",
+            data.len(),
+            compressed.len()
+        );
+        println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as f64);
+
+        // Compare against the huffman compressed + zstd compressed
+        let compressed =
+            compression_config.compress(&huffman_compressed).unwrap();
+        println!(
+            "Data Length: {} / Huffman Length: {} / Huffman+ZSTD Length: {}",
+            data.len(),
+            huffman_compressed.len(),
+            compressed.len()
+        );
+        println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as f64);
+
+        println!("===============================Sequences============================");
+
+        // Repeat for sequences
+        let data = sequences;
+        let mut compression_config = CompressionConfig::new();
+        compression_config.compression_type =
+            CompressionType::MINIMUMREDUNDANCY;
+        let huffman_compressed = compression_config.compress(&data).unwrap();
+        println!(
+            "Orig Length: {} / Compressed Length: {}",
+            data.len(),
+            huffman_compressed.len()
+        );
+        println!(
+            "Ratio: {:.2}",
+            huffman_compressed.len() as f64 / data.len() as f64
+        );
+
+        // Zstd compress it
+        let compression_config = CompressionConfig::new();
+        let compression_config =
+            compression_config.with_compression_type(CompressionType::ZSTD);
+        let compression_config = compression_config.with_compression_level(7);
+        let compressed = compression_config.compress(&data).unwrap();
+
+        println!(
+            "Orig Length: {} / Zstd Length: {}",
+            data.len(),
+            compressed.len()
+        );
+        println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as f64);
+
+        // Compare against the huffman compressed + zstd compressed
+        let compressed =
+            compression_config.compress(&huffman_compressed).unwrap();
+        println!(
+            "Data Length: {} / Huffman Length: {} / Huffman+ZSTD Length: {}",
+            data.len(),
+            huffman_compressed.len(),
+            compressed.len()
+        );
+        println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as f64);
+
+        panic!();
+    }
 
     #[test]
     pub fn test_out_of_range()
@@ -974,9 +1306,30 @@ mod tests
 
     // #[test]
     // pub fn test_fqzcomp() {
-        // let scores = b"-3331-,,,.22114568744.++++555:>?@AB<<AGHEA49?@AA?::(&&''(''((*---432+))'(-(*+*+,,,8776..-30/0112556677:2,,,++/58832334:<<;8::<=87998;>DCDA?@A><:66////.23327842:3**,,,,,))*('''(*./+((*14449200()))45-)))*6444**)))()((%$$$$%&&*',532222566.,---11137;;<>6-*))558::0.-+,0/+,::820..)&&&'68899<<<>>:EFH@DG=<886ABFD@9///./7>>9?C;C?BAC@A@<975+*****/000//111A@?:730-.??:(12:8533.//--,-03:9:A:9C1.-,*+,069<?=<.--:8B83:?>AEES>89757:6;;<<<8@106545789@@FHGA?D<?>@IDDGDA<B@@CCCFDIADE=:;;40012@A;4><:865966656812/5/.-2413+*++.:<;88;><88>=4173688?@878==;>FIFDB?=:99:=7//CB86BA=DDIEAEDBGE?<==7950-EBC??42/,/=9=52GDB8D@A<<FB<8>:9>G:=B><SLC<:977532./+,-*777/./,*//6<:66FA0//..?ED=::<3-'%%&('((,3449::++5<DDHIACD<EA@GCB@744-+-63/.-/65:D8:II<837:66;>.BEE?6:9:6?EB><9<;8ACA;;:==;887646@KKI>:640/6@,))),844997789=8?7/*,:C=8<B=998.-.2HAEJLSMSSI>JFAM6433022102>CA?>>A21/,3/,,0.,++-0./0/112987449:7AH?>4568C?6:<;<F3588;321665346801.-./01-,,,+,6>?;61176555443433229:7)(),,-00/.,026889999A=DDDIGJES@9:7=<69:886HACA:/+)AHKEC:4-)*-*)),,,/0.2335@;8<>:IBCH>;98:=49?D?E77677;<89:8GSK6655GDFD874775FFE<1.-656421111644345>:;:8>BA@@<GDSFI=83331112:<75438<>:2..)-)(((+5443342..2210/,/24554264677ABB=43334??.****--20";
-        // let compressed = CompressionConfig::new().with_compression_type(CompressionType::FQZCOMP).compress(scores).unwrap();
+    // let scores =
+    // b"-3331-,,,.22114568744.++++555:>?@AB<<AGHEA49?@AA?::(&&''(''
+    // ((*---432+))'(-(*+*+,,,8776..-30/0112556677:2,,,++/58832334:<<;
+    // 8::<=87998;>DCDA?@A><:66////.23327842:3**,,,,,))*('''(*./+((*
+    // 14449200()))45-)))*6444**)))()((%$$$$%&&*',532222566.,---11137;
+    // ;<>6-*))558::0.-+,0/+,::820..)&&&'68899<<<>>:EFH@DG=<886ABFD@9/
+    // //./7>>9?C;C?BAC@A@<975+*****/000//111A@?:730-.??:(12:8533.//
+    // --,-03:9:A:9C1.-,*+,069<?=<.--:8B83:?>AEES>89757:6;;<<<8@
+    // 106545789@@FHGA?D<?>@IDDGDA<B@@CCCFDIADE=:;;40012@A;4><:
+    // 865966656812/5/.-2413+*++.:<;88;><88>=4173688?@878==;>FIFDB?=:
+    // 99:=7//CB86BA=DDIEAEDBGE?<==7950-EBC??42/,/=9=52GDB8D@A<<FB<8>:
+    // 9>G:=B><SLC<:977532./+,-*777/./,*//6<:66FA0//..?ED=::<3-'%%&('
+    // ((,3449::++5<DDHIACD<EA@GCB@744-+-63/.-/65:D8:II<837:66;>.BEE?
+    // 6:9:6?EB><9<;8ACA;;:==;887646@KKI>:640/6@,))),844997789=8?7/*,:
+    // C=8<B=998.-.2HAEJLSMSSI>JFAM6433022102>CA?>>A21/,3/,,0.,++-0./
+    // 0/112987449:7AH?>4568C?6:<;<F3588;321665346801.-./01-,,,+,6>?;
+    // 61176555443433229:7)(),,-00/.,026889999A=DDDIGJES@9:7=<69:
+    // 886HACA:/+)AHKEC:4-)*-*)),,,/0.2335@;8<>:IBCH>;98:=49?D?E77677;
+    // <89:8GSK6655GDFD874775FFE<1.-656421111644345>:;:8>BA@@
+    // <GDSFI=83331112:<75438<>:2..)-)(((+5443342..2210/,/
+    // 24554264677ABB=43334??.****--20"; let compressed =
+    // CompressionConfig::new().
+    // with_compression_type(CompressionType::FQZCOMP).
+    // compress(scores).unwrap();
 
-    // } 
-
+    // }
 }

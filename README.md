@@ -93,6 +93,7 @@ Should work anywhere that supports [Rust](https://www.rust-lang.org/). Tested on
 *Compression can be set per data type*
 - You can use ZSTD for sequence compression, XZ for masking, Brotli for IDs and Headers, for example.
 - Compression profiles are found in [compression_profiles](https://github.com/jguhlin/sfasta) folder and are stored as YAML.
+- Future work should involve including algorithms from htscodecs.
 - You can load your own compression profile from the command line.
 - IDs are interpreted from FASTA/Q files as the part before the space on an identified line, for example
 ```
@@ -101,6 +102,8 @@ Should work anywhere that supports [Rust](https://www.rust-lang.org/). Tested on
  ID    Header
 ```
 The same rule applies for FASTQ.
+
+
 
 ## Data Types Supported
 

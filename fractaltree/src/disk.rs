@@ -95,8 +95,7 @@ impl<K: Key, V: Value> Default for FractalTreeDisk<K, V>
                 ..Default::default()
             },
             start: 0,
-            compression: None, /* Default to no compression
-                                * first_leaf: 0, */
+            compression: None, // No compression by default
         }
     }
 }
@@ -250,7 +249,11 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
 
         // Get the max layer number
         let max_layer = accounted_for.iter().map(|x| x.0).max().unwrap();
-        log::debug!("Tree has {} layers", max_layer);
+        log::debug!(
+            "Tree has {} layers - Compression with {:?}",
+            max_layer,
+            self.compression.as_ref().unwrap().compression_type
+        );
 
         for layer in (1..=max_layer).rev() {
             // Get all the nodes at this layer
@@ -668,6 +671,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                     .unwrap()
                     .compress(&uncompressed)
                     .unwrap();
+
                 match bincode::encode_into_std_write(
                     &compressed,
                     out_buf,
@@ -685,7 +689,9 @@ impl<K: Key, V: Value> NodeDisk<K, V>
                 self.state = NodeState::OnDisk(cur_pos as u32 - start as u32);
                 self.children = None;
                 self.values = None;
+
             } else {
+
                 delta_encode(&mut self.keys);
                 let config = bincode::config::standard()
                     .with_variable_int_encoding()

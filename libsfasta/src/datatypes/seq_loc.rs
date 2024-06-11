@@ -342,6 +342,9 @@ impl Encode for SeqLoc
         let values: [u16; 7] =
             [*ids, *sequence, *masking, *scores, *signal, *headers, *mods];
 
+        // NOTE: Convert each pair of u16's to u32 and combining them made it
+        // a little larger
+
         // TODO: Is there a way to directly access the Vec<Loc> to get
         // Vec<u32>'s? Check out bytemuck (and reddit question I asked
         // about it)
@@ -359,6 +362,16 @@ impl Encode for SeqLoc
 
         bincode::Encode::encode(&values, encoder)?;
         bincode::Encode::encode(&locs, encoder)?;
+
+        // log::info!("SeqLocs Locs: {:?}", locs);
+        // log::info!("SeqLoc: {:?}", self);
+        // Combine the two into a single Vec<u32>
+        // let mut combined = Vec::with_capacity(values.len() + locs.len());
+        // combined.extend_from_slice(&values);
+        // combined.extend_from_slice(&locs);
+
+        // bincode::Encode::encode(&combined, encoder)?;
+
         Ok(())
     }
 }
@@ -414,10 +427,10 @@ impl Default for SeqLocsStoreBuilder
     {
         SeqLocsStoreBuilder {
             location: 0,
-            tree: FractalTreeBuild::new(512, 8192),
+            tree: FractalTreeBuild::new(1024, 8192),
             compression: CompressionConfig {
                 compression_type: CompressionType::ZSTD,
-                compression_level: 1,
+                compression_level: 3,
                 compression_dict: None,
             },
             count: 0,
@@ -511,7 +524,7 @@ impl SeqLocsStoreBuilder
         // todo this should be configurable!
         tree.set_compression(CompressionConfig {
             compression_type: CompressionType::ZSTD,
-            compression_level: -3,
+            compression_level: 3,
             compression_dict: dict,
         });
         tree.write_to_buffer(&mut out_buf)

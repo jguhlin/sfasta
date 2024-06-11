@@ -5,7 +5,7 @@ data:
     compression_level: 7
   headers:
     compression_type: ZSTD
-    compression_level: 7
+    compression_level: 9
   sequence:
     compression_type: ZSTD
     compression_level: 7

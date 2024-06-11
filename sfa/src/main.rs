@@ -988,7 +988,7 @@ fn convert(
         if size as usize * 1024 > u32::MAX as usize {
             panic!("Block size too large");
         }
-        converter.with_block_size(size as usize * 1024);
+        converter.with_block_size(size as usize);
     }
 
     if dict {
