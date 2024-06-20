@@ -12,6 +12,7 @@
 //
 // IDEA: Make 2 dictionaries for >= 50% GC and < 50% GC
 // Maybe even more refined.... but depends on the data? Not always worth a huge dictionary
+// Could do for different GC contents (for esp. large datasets, like nt)
 
 // Split ACTGN into individual streams
 // A C T G N
