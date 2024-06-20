@@ -23,6 +23,8 @@ use tokio_stream::Stream;
 #[cfg(feature = "async")]
 use libfilehandlemanager::AsyncFileHandleManager;
 
+use vers_vecs::{BitVec, RsVec};
+
 use super::Builder;
 use crate::datatypes::{
     BlockStoreError, BytesBlockStore, BytesBlockStoreBuilder, Loc,
@@ -217,6 +219,84 @@ fn rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
 
     data
 }
+
+// New experimental one
+// Instead of Vec<(u64, u8)> to convert back to [u8]
+// Here we do
+// First bit is starting state (0, or 1, for masked)
+// Next number is RLE encoding of the first stage
+// using modified integer storage (maybe a better way?)
+// So for numbers [0 1 1 0] represents a u4 of value 6
+// But if the first bit is 1, it means a u8 is stored
+// [1 0 0 0 0 0 0 0] with the first 4 bits the last 4 bits of u8 (so have to re-arrange)
+// (hmmm, wonder how streaming stuff / packing handles it, maybe just use that directly)
+
+// SO: for now, it's just u8's
+// 0 values are set to 0
+// So masking value of
+// [1 1 1 1 1 1 1 1 1 1 0 0 0 0 0]
+// Becomes -> [1 9 5]
+// 1 as the first bit to indicate masking on, or initial value repeated is true
+// then 5 0's (state switches with each integer)
+// bit format is:
+// [1 0 0 0 0 1 0 0 1 0 0 0 0 0 1 0 1]
+//  _ initial bit
+//    _______________ 9
+//                    _______________ 5
+
+// more notes
+// store as stream vbyte? 
+// so initial bit is the state, then we have a stream of integers
+
+fn bit_rle_encode(data: &[bool]) -> Vec<(u64, u8)>
+{
+
+    // todo optimizations with stream vbyte
+    use stream_vbyte::{
+        encode::encode,
+        decode::{decode, cursor::DecodeCursor},
+        scalar::Scalar
+    };
+
+    let mut current_state = data[0];
+    let mut count = 0;
+    let mut counts = Vec::new();
+
+    for x in data.iter() {
+        if *x == current_state {
+            count += 1;
+        } else {
+            counts.push(count);
+            count = 1;
+            current_state = *x;
+        }
+    }
+
+    counts.push(count);
+    let mut encoded_data = Vec::new();
+    encoded_data.resize(5 * nums.len(), 0x0);
+    
+    let encoded_len = encode::<Scalar>(&nums, &mut encoded_data);
+    // trim
+    encoded_data.resize(encoded_len, 0x0);
+    println!("Encoded {} u32s into {} bytes", nums.len(), encoded_len);
+
+
+}
+
+fn bit_rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
+{
+    let mut data = Vec::new();
+
+    for (count, value) in rle.iter() {
+        for _ in 0..*count {
+            data.push(*value);
+        }
+    }
+
+    data
+}
+
 
 pub struct Masking
 {
