@@ -105,12 +105,12 @@ type u4 = u8;
 
 struct DictEntry(u4, u8);
 
-enum IntermediateNucleotides {
+enum IntermediateRepr {
     A,
     C,
     T,
     G,
-    HPC(Vec<IntermediateNucleotides>, u8),
+    HPC(Vec<IntermediateRepr>, u8), // Homopolymer compressed
     Dict(DictEntry), // Dictionary to use, kmer to use
     HPCDict(DictEntry)
 }

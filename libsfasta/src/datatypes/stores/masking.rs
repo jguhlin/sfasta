@@ -23,6 +23,12 @@ use tokio_stream::Stream;
 #[cfg(feature = "async")]
 use libfilehandlemanager::AsyncFileHandleManager;
 
+use stream_vbyte::{
+    encode::encode,
+    decode::{decode, cursor::DecodeCursor},
+    scalar::Scalar
+};
+
 use vers_vecs::{BitVec, RsVec};
 
 use super::Builder;
@@ -163,18 +169,24 @@ impl MaskingStoreBuilder
             return Vec::new();
         }
 
+        if seq.len() == 0 {
+            return Vec::new();
+        }
+
         // No benefit to using pulp here... (even with for loop)
-        let masked: Vec<u8> =
-            seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
+        // let masked: Vec<u8> =
+            // seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
 
         // RLE - while zstd does it, this can reduce some of the blocks to fit
         // into a single block
-        let masked = rle_encode(&masked);
+        // let masked = rle_encode(&masked);
 
-        let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
+        let masked = rle_encode(&seq.iter().map(|x| x > &b'`').collect::<Vec<bool>>());
 
-        let masked = bincode::encode_to_vec(&masked, bincode_config).unwrap();
+        // let bincode_config =
+            // bincode::config::standard().with_variable_int_encoding();
+
+        // let masked = bincode::encode_to_vec(&masked, bincode_config).unwrap();
 
         self.inner
             .add(masked)
@@ -187,7 +199,7 @@ impl MaskingStoreBuilder
     }
 }
 
-fn rle_encode(data: &[u8]) -> Vec<(u64, u8)>
+fn previous_rle_encode(data: &[u8]) -> Vec<(u64, u8)>
 {
     let mut rle = Vec::new();
     let mut count = 0;
@@ -207,7 +219,7 @@ fn rle_encode(data: &[u8]) -> Vec<(u64, u8)>
     rle
 }
 
-fn rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
+fn previous_rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
 {
     let mut data = Vec::new();
 
@@ -225,7 +237,7 @@ fn rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
 // Here we do
 // First bit is starting state (0, or 1, for masked)
 // Next number is RLE encoding of the first stage
-// using modified integer storage (maybe a better way?)
+// using modified integer storage (maybe a better way?) - stream vbyte maybe?
 // So for numbers [0 1 1 0] represents a u4 of value 6
 // But if the first bit is 1, it means a u8 is stored
 // [1 0 0 0 0 0 0 0] with the first 4 bits the last 4 bits of u8 (so have to re-arrange)
@@ -248,53 +260,78 @@ fn rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
 // store as stream vbyte? 
 // so initial bit is the state, then we have a stream of integers
 
-fn bit_rle_encode(data: &[bool]) -> Vec<(u64, u8)>
+fn rle_encode(data: &[bool]) -> Vec<u8>
 {
+    // let mut bit_vec = BitVec::new();
 
-    // todo optimizations with stream vbyte
-    use stream_vbyte::{
-        encode::encode,
-        decode::{decode, cursor::DecodeCursor},
-        scalar::Scalar
-    };
+    // Initial state
+    // bit_vec.append(data[0]);
 
+    let mut compressed = Vec::new();
+    compressed.push(data[0] as u8);
+
+    // Where we are in the slice
+    let mut idx = 1;
+    let mut count: u32 = 0;
     let mut current_state = data[0];
-    let mut count = 0;
-    let mut counts = Vec::new();
 
-    for x in data.iter() {
-        if *x == current_state {
+    let mut integers = Vec::new();
+
+    while idx < data.len() {
+        if data[idx] == current_state {
             count += 1;
         } else {
-            counts.push(count);
+            // If we have a count, we need to store it
+            assert!(count > 0);
+            assert!(count < u32::MAX);
+
+            integers.push(count);
+
+            // Switch state
+            current_state = data[idx];
             count = 1;
-            current_state = *x;
         }
+
+        idx += 1;
     }
 
-    counts.push(count);
     let mut encoded_data = Vec::new();
-    encoded_data.resize(5 * nums.len(), 0x0);
-    
-    let encoded_len = encode::<Scalar>(&nums, &mut encoded_data);
-    // trim
-    encoded_data.resize(encoded_len, 0x0);
-    println!("Encoded {} u32s into {} bytes", nums.len(), encoded_len);
+    encoded_data.resize(5 * integers.len(), 0);
+    let encoded_len = encode::<Scalar>(&integers, &mut encoded_data);
+    log::trace!("Encoded {} u32s into {} bytes", integers.len(), encoded_len);
 
+    // Append
+    assert!(integers.len() < u32::MAX as usize);
+    let integers_count = integers.len() as u32;
+    compressed.extend_from_slice(&integers_count.to_le_bytes());
+    compressed.extend_from_slice(&encoded_data[..encoded_len]);
 
+    compressed
 }
 
-fn bit_rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
+fn rle_decode(rle: &[u8]) -> Vec<bool>
 {
-    let mut data = Vec::new();
+    let mut masking = Vec::new();
 
-    for (count, value) in rle.iter() {
-        for _ in 0..*count {
-            data.push(*value);
+    let mut current_state = rle[0] == 1;
+    let len = u32::from_le_bytes([rle[1], rle[2], rle[3], rle[4]]) as usize;
+    let mut decoded_nums = Vec::new();
+    decoded_nums.resize(len, 0);
+    log::trace!("Decoding {} bytes into {} u32s", rle.len() - 5, len);
+    let bytes_decoded = decode::<Scalar>(&rle[5..], len, &mut decoded_nums);
+    log::trace!("Decoded {} bytes into {} u32s", bytes_decoded, len);
+
+    masking.push(current_state);
+
+    for x in decoded_nums.iter() {
+        for _ in 0..*x {
+            masking.push(current_state);
         }
+
+        current_state = !current_state;
     }
 
-    data
+    masking
 }
 
 
@@ -424,14 +461,17 @@ pub fn mask_sequence(seq: &mut [u8], mask_raw: bytes::Bytes)
 
     let config = bincode::config::standard().with_variable_int_encoding();
 
-    let mask: Vec<(u64, u8)> =
-        bincode::decode_from_slice(&mask_raw, config).unwrap().0;
+    // let mask: Vec<(u64, u8)> =
+        // bincode::decode_from_slice(&mask_raw, config).unwrap().0;
+
+    // will this work without bincode? dunno
+    let mask: Vec<u8> = mask_raw.to_vec();
 
     let mask_raw = rle_decode(&mask);
 
     arch.dispatch(|| {
         for (i, m) in mask_raw.iter().enumerate() {
-            seq[i] = if *m == 1 {
+            seq[i] = if *m {
                 seq[i].to_ascii_lowercase()
             } else {
                 seq[i]

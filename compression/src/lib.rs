@@ -27,8 +27,8 @@ use std::{
     time::Duration,
 };
 
-pub mod rans_impl;
-pub use rans_impl::*;
+// pub mod rans_impl;
+// pub use rans_impl::*;
 
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
@@ -1072,9 +1072,11 @@ pub fn from_4bit(seq: &mut [u8])
 #[cfg(test)]
 mod tests
 {
-    use rans::RansDecoderMulti;
 
     use super::*;
+
+    /*
+    use rans::RansDecoderMulti;
 
     // This whole section is me figuring out how rANS works
     // htscodecs has it implemented, but I still want to learn how it works
@@ -1373,6 +1375,8 @@ mod tests
 
         panic!();
     }
+
+    */
 
     #[test]
     pub fn test_out_of_range()
