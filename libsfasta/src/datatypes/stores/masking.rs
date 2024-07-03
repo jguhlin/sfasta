@@ -298,7 +298,7 @@ fn rle_encode(data: &[bool]) -> Vec<u8>
     let mut encoded_data = Vec::new();
     encoded_data.resize(5 * integers.len(), 0);
     let encoded_len = encode::<Scalar>(&integers, &mut encoded_data);
-    log::trace!("Encoded {} u32s into {} bytes", integers.len(), encoded_len);
+    // log::trace!("Encoded {} u32s into {} bytes", integers.len(), encoded_len);
 
     // Append
     assert!(integers.len() < u32::MAX as usize);
@@ -317,9 +317,9 @@ fn rle_decode(rle: &[u8]) -> Vec<bool>
     let len = u32::from_le_bytes([rle[1], rle[2], rle[3], rle[4]]) as usize;
     let mut decoded_nums = Vec::new();
     decoded_nums.resize(len, 0);
-    log::trace!("Decoding {} bytes into {} u32s", rle.len() - 5, len);
+    // log::trace!("Decoding {} bytes into {} u32s", rle.len() - 5, len);
     let bytes_decoded = decode::<Scalar>(&rle[5..], len, &mut decoded_nums);
-    log::trace!("Decoded {} bytes into {} u32s", bytes_decoded, len);
+    // log::trace!("Decoded {} bytes into {} u32s", bytes_decoded, len);
 
     masking.push(current_state);
 

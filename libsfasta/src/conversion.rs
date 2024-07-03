@@ -658,8 +658,7 @@ impl Converter
 
         log::info!(
             "Headers Compression Ratio: {:.2}% ({} -> {})",
-            100.0
-                - (headers.as_ref().unwrap().inner.compressed_size as f64
+                (headers.as_ref().unwrap().inner.compressed_size as f64
                     / headers.as_ref().unwrap().inner.data_size as f64
                     * 100.0),
             ByteSize::from_bytes(
@@ -689,8 +688,7 @@ impl Converter
 
         log::info!(
             "IDs Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
-            100.0
-                - (ids.as_ref().unwrap().inner.compressed_size as f64
+                (ids.as_ref().unwrap().inner.compressed_size as f64
                     / ids.as_ref().unwrap().inner.data_size as f64
                     * 100.0),
             ByteSize::from_bytes(ids.as_ref().unwrap().inner.data_size as u64)
@@ -725,8 +723,7 @@ impl Converter
 
             log::info!(
                 "Masking Compression Ratio: {:.2}% ({} -> {})  - Avg Compressed Block Size: {}",
-                100.0
-                    - (masking.as_ref().unwrap().inner.compressed_size as f64
+                    (masking.as_ref().unwrap().inner.compressed_size as f64
                         / masking.as_ref().unwrap().inner.data_size as f64
                         * 100.0),
                 ByteSize::from_bytes(
@@ -761,8 +758,7 @@ impl Converter
 
         log::info!(
             "Sequences Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
-            100.0
-                - (sequences.as_ref().unwrap().compressed_size as f64
+                (sequences.as_ref().unwrap().compressed_size as f64
                     / sequences.as_ref().unwrap().data_size as f64
                     * 100.0),
             ByteSize::from_bytes(sequences.as_ref().unwrap().data_size as u64)
@@ -793,8 +789,7 @@ impl Converter
 
             log::info!(
                 "Scores Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
-                100.0
-                    - (scores.as_ref().unwrap().compressed_size as f64
+                    (scores.as_ref().unwrap().compressed_size as f64
                         / scores.as_ref().unwrap().data_size as f64
                         * 100.0),
                 ByteSize::from_bytes(scores.as_ref().unwrap().data_size as u64)

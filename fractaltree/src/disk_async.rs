@@ -423,7 +423,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
         in_buf.seek(SeekFrom::Start(pos)).await.unwrap();
         let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
+            bincode::config::standard().with_fixed_int_encoding().with_limit::<{8 * 1024 * 1024}>();
 
         let mut tree: FractalTreeDiskAsync<K, V> =
             match bincode_decode_from_buffer_async_with_size_hint::<
@@ -466,7 +466,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         let loc = node_write.loc;
 
         let config = bincode::config::standard()
-            .with_variable_int_encoding()
+            .with_fixed_int_encoding()
             .with_limit::<{ 8 * 1024 * 1024 }>();
 
         let mut loaded_node: NodeDiskAsync<K, V> = if self.compression.is_some()
@@ -522,7 +522,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         let loc = in_buf.stream_position().await.unwrap();
 
         let config = bincode::config::standard()
-            .with_variable_int_encoding()
+            .with_fixed_int_encoding()
             .with_limit::<{ 1024 * 1024 }>();
 
         let mut loaded_node: NodeDiskAsync<K, V> = if self.compression.is_some()
@@ -774,7 +774,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
             .unwrap();
 
         let config = bincode::config::standard()
-            .with_variable_int_encoding()
+            .with_fixed_int_encoding()
             .with_limit::<{ 8 * 1024 * 1024 }>();
 
         *self = if compression.is_some() {

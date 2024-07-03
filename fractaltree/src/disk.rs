@@ -176,7 +176,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
 
         let tree_location = out_buf.seek(SeekFrom::Current(0)).unwrap();
         let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
+            bincode::config::standard().with_fixed_int_encoding();
         bincode::encode_into_std_write(&*self, &mut out_buf, bincode_config)
             .unwrap();
 
@@ -315,7 +315,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
     {
         in_buf.seek(SeekFrom::Start(pos)).unwrap();
         let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
+            bincode::config::standard().with_fixed_int_encoding();
 
         let tree: FractalTreeDisk<K, V> =
             bincode::decode_from_std_read(&mut in_buf, bincode_config).unwrap();
@@ -536,7 +536,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
 
         *self = if compression.is_some() {
             let config = bincode::config::standard()
-                .with_variable_int_encoding()
+                .with_fixed_int_encoding()
                 .with_limit::<{ 8 * 1024 * 1024 }>();
 
             let compressed: Vec<u8> =
@@ -549,7 +549,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
             bincode::decode_from_slice(&decompressed, config).unwrap().0
         } else {
             let config = bincode::config::standard()
-                .with_variable_int_encoding()
+                .with_fixed_int_encoding()
                 .with_limit::<{ 1024 * 1024 }>();
             bincode::decode_from_std_read(in_buf, config).unwrap()
         };
@@ -589,7 +589,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         W: Write + Seek,
     {
         let config = bincode::config::standard()
-            .with_variable_int_encoding()
+            .with_fixed_int_encoding()
             .with_limit::<{ 1024 * 1024 }>();
 
         // let mut new_self = self.clone();
@@ -645,7 +645,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         if !self.is_root {
             if compression.is_some() {
                 let config = bincode::config::standard()
-                    .with_variable_int_encoding()
+                    .with_fixed_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
 
                 /*
@@ -696,7 +696,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
 
                 delta_encode(&mut self.keys);
                 let config = bincode::config::standard()
-                    .with_variable_int_encoding()
+                    .with_fixed_int_encoding()
                     .with_limit::<{ 1024 * 1024 }>();
                 bincode::encode_into_std_write(&*self, out_buf, config)
                     .unwrap();
@@ -851,7 +851,7 @@ mod tests
         };
 
         let bincode_config =
-            bincode::config::standard().with_variable_int_encoding();
+            bincode::config::standard().with_fixed_int_encoding();
 
         let mut buf = std::io::BufWriter::new(std::io::Cursor::new(Vec::new()));
         bincode::encode_into_std_write(&node.is_leaf, &mut buf, bincode_config)
@@ -979,7 +979,7 @@ mod tests
         let mut tree: FractalTreeDisk<u32, u32> =
             bincode::decode_from_std_read(
                 &mut buf,
-                bincode::config::standard().with_variable_int_encoding(),
+                bincode::config::standard().with_fixed_int_encoding(),
             )
             .unwrap();
         assert!(tree.root.keys == orig_root_keys);
@@ -1069,7 +1069,7 @@ mod tests
         let mut tree: FractalTreeDisk<u32, u32> =
             bincode::decode_from_std_read(
                 &mut buf,
-                bincode::config::standard().with_variable_int_encoding(),
+                bincode::config::standard().with_fixed_int_encoding(),
             )
             .unwrap();
         assert!(tree.root.keys == orig_root_keys);

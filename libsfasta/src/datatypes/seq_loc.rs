@@ -28,6 +28,12 @@ use std::{
     sync::{atomic::AtomicU32, Arc},
 };
 
+use stream_vbyte::{
+    encode::encode,
+    decode::{decode, cursor::DecodeCursor},
+    scalar::Scalar
+};
+
 use bincode::{Decode, Encode};
 use flate2::Compression;
 use rand::seq;
@@ -360,8 +366,15 @@ impl Encode for SeqLoc
         // worth it... let min = locs.iter().min().unwrap();
         // let locs = locs.iter().map(|loc| loc - min).collect::<Vec<u32>>();
 
+        let mut encoded_data = Vec::new();
+        encoded_data.resize(5 * locs.len(), 0x0);
+        let encoded_len = encode::<Scalar>(&locs, &mut encoded_data);
+
         bincode::Encode::encode(&values, encoder)?;
-        bincode::Encode::encode(&locs, encoder)?;
+        bincode::Encode::encode(&(locs.len() as u32).to_le_bytes(), encoder)?;
+        bincode::Encode::encode(&encoded_data[..encoded_len], encoder)?;
+
+        // bincode::Encode::encode(&locs, encoder)?;
 
         // log::info!("SeqLocs Locs: {:?}", locs);
         // log::info!("SeqLoc: {:?}", self);
@@ -384,7 +397,14 @@ impl Decode for SeqLoc
     {
         let values: [u16; 7] = bincode::Decode::decode(decoder)?;
 
-        let locs: Vec<u32> = bincode::Decode::decode(decoder)?;
+        let len_bytes: [u8; 4] = bincode::Decode::decode(decoder)?;
+        let len = u32::from_le_bytes(len_bytes) as usize;
+
+        let encoded_data_raw: Vec<u8> = bincode::Decode::decode(decoder)?;
+        let mut locs: Vec<u32> = vec![0; len];
+        decode::<Scalar>(&encoded_data_raw, len, &mut locs);
+
+        // let locs: Vec<u32> = bincode::Decode::decode(decoder)?; 
         let locs = locs
             .chunks_exact(3)
             .map(|chunk| Loc::from(chunk))
@@ -403,8 +423,8 @@ impl Decode for SeqLoc
     }
 }
 
-// TODO! Need tests...
-// TODO: When data gets too large, pre-emptively compress it into
+// todo Need tests...
+// todo When data gets too large, pre-emptively compress it into
 // memory (such as nt db, >200Gb).
 
 /// Handles access to SeqLocs

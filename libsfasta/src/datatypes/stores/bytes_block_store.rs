@@ -7,6 +7,12 @@ use std::{
     },
 };
 
+use stream_vbyte::{
+    encode::encode,
+    decode::{decode, cursor::DecodeCursor},
+    scalar::Scalar
+};
+
 use hashbrown::HashMap;
 
 #[cfg(feature = "async")]
@@ -508,9 +514,7 @@ impl BytesBlockStoreBuilder
         }
 
         let mut block_locations_tree: FractalTreeBuild<u32, u64> =
-            FractalTreeBuild::new(512, 8192);
-
-        // todo print compression percent
+            FractalTreeBuild::new(512, 1024);
 
         self.compressed_size = self
             .block_data
