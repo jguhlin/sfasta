@@ -1,4 +1,7 @@
+// This is likely a separate project...
+
 // This is modified from a paper (presentation? white paper?)
+// INSPO: https://saurabhkadekodi.github.io/dna_compression.pdf
 // from another person, but I am offline with no internet right now... must find that for citation
 // and to see if anything was missed
 

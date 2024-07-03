@@ -30,6 +30,9 @@ use std::{
 // pub mod rans_impl;
 // pub use rans_impl::*;
 
+pub mod stream_based;
+pub use stream_based::*;
+
 pub const MAX_DECOMPRESS_SIZE: usize = 1024 * 1024 * 1024; // 1GB
 
 thread_local! {
