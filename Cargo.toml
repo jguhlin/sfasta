@@ -5,7 +5,8 @@ members = [
 	"sfa",
 	"fractaltree",
 	"compression", 
-	"preload", 
+	"pysfasta"
+	# "preload", 
 	# "htscodecs-sys",
 ]
 

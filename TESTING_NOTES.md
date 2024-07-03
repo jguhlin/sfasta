@@ -2,7 +2,8 @@
 
 ## UniProt Swiss-Prot Proteins
 ### Default Profile (zstd)
-Headers Compression Ratio: 17.76% (58.38 MiB -> 10.IDs Compression Ratio: 31.52% (10.94 MiB -> 3.44 MiB) - Avg Compressed Block Size: 19.83 KiB
+Headers Compression Ratio: 17.76% (58.38 MiB -> 10....
+IDs Compression Ratio: 31.52% (10.94 MiB -> 3.44 MiB) - Avg Compressed Block Size: 19.83 KiB
 Sequences Compression Ratio: 29.99% (197.10 MiB -> 59.11 MiB) - Avg Compressed Block Size: 19.08 KiB
 
 ### Brotli - Default Level
@@ -24,3 +25,15 @@ Sequences Compression Ratio: 29.99% (197.10 MiB -> 59.11 MiB) - Avg Compressed B
 [2024-07-03T23:04:24Z INFO  libsfasta::conversion] Headers Compression Ratio: 28.40% (58.38 MiB -> 16.58 MiB)
 [2024-07-03T23:04:24Z INFO  libsfasta::conversion] IDs Compression Ratio: 58.94% (10.94 MiB -> 6.44 MiB) - Avg Compressed Block Size: 275.11 KiB
 [2024-07-03T23:04:24Z INFO  libsfasta::conversion] Sequences Compression Ratio: 59.56% (197.10 MiB -> 117.38 MiB) - Avg Compressed Block Size: 302.78 KiB
+
+## Illumina Reads (has scores, no masking)
+### Default (brotli for IDs, Headers now, zstd for the rest)
+[2024-07-03T23:10:46Z INFO  libsfasta::conversion] Headers Compression Ratio: 0.32% (871.50 MiB -> 2.74 MiB)
+[2024-07-03T23:10:46Z INFO  libsfasta::conversion] IDs Compression Ratio: 12.33% (1.49 GiB -> 189.18 MiB) - Avg Compressed Block Size: 7.88 KiB
+[2024-07-03T23:10:46Z INFO  libsfasta::conversion] Sequences Compression Ratio: 28.97% (3.73 GiB -> 1.08 GiB) - Avg Compressed Block Size: 18.51 KiB
+[2024-07-03T23:10:46Z INFO  libsfasta::conversion] Scores Compression Ratio: 19.51% (3.73 GiB -> 746.82 MiB) - Avg Compressed Block Size: 12.47 KiB
+
+### Brotli
+
+
+
