@@ -1,10 +1,10 @@
 block_size: 64
 data:
   ids:
-    compression_type: ZSTD
+    compression_type: BROTLI
     compression_level: 7
   headers:
-    compression_type: ZSTD
+    compression_type: BROTLI
     compression_level: 9
   sequence:
     compression_type: ZSTD
