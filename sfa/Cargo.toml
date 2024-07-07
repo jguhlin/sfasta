@@ -37,10 +37,10 @@ indicatif = "0.17.8"
 # Compression stuff:
 flate2 = {version = "1.0.28", features = ["zlib-ng"], default-features = false}
 snap = "1.1.1"
-ratatui = "0.26.2"
+ratatui = "0.27"
 page_size = "0.6.0"
-serde = "1.0.199"
-serde_yml = "0.0.7"
+serde = "1.0"
+serde_yml = "0.0.10"
 xxhash-rust = { version = "0.8.10", features = ["xxh3"], optional = true}
 tokio = { version = "1.37.0", features = ["full", "tracing"], optional = true }
 bytes = "1.6.0"
@@ -55,7 +55,7 @@ tokio-stream = "0.1.15"
 
 # Unix only
 [target.'cfg(unix)'.dependencies]
-nix = { version = "0.28.0", features = ["fs"] }
+nix = { version = "0.29", features = ["fs"] }
 
 [dependencies.clap]
 version = "4.5"
