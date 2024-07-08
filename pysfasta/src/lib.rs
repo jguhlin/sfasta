@@ -64,7 +64,9 @@ impl Sfasta
             loop {
                 let seqloc = match seqlocs.next().await {
                     Some(s) => s,
-                    None => break,
+                    None => {
+                        break
+                    },
                 };
 
                 // Get the sequence
@@ -88,6 +90,71 @@ impl Sfasta
         PySeries(all_ids)
     }
 
+    fn headers(&self) -> PyDataFrame {
+        self.runtime.block_on(async move {
+
+            let mut all_ids = Vec::new();
+            let mut all_headers = Vec::new();
+
+            let seqlocs = tokio::spawn(Arc::clone(&self.inner.seqlocs.as_ref().unwrap()).stream());
+            let ids = tokio::spawn( {
+                StringBlockStoreSeqLocReader::new(
+                    Arc::clone(&self.inner.ids.as_ref().unwrap()),
+                    Arc::clone(&self.inner.file_handles),
+            )});
+
+            let headers = tokio::spawn( {
+                StringBlockStoreSeqLocReader::new(
+                    Arc::clone(&self.inner.headers.as_ref().unwrap()),
+                    Arc::clone(&self.inner.file_handles),
+            )});
+
+            let seqlocs = seqlocs.await.unwrap();
+            let ids = ids.await.unwrap();
+            let headers = headers.await.unwrap();
+
+            tokio::pin!(seqlocs);
+            tokio::pin!(ids);
+            tokio::pin!(headers);
+
+            loop {
+                let seqloc = match seqlocs.next().await {
+                    Some(s) => s,
+                    None => break,
+                };
+
+                // Get the sequence
+
+                let seqloc = Arc::new(seqloc);
+
+                let id = ids.next(seqloc.1.get_ids()).await;
+                let header = headers.next(seqloc.1.get_headers()).await;
+
+                if let Some(id) = id {
+                    // Convert id to String
+                    let id = String::from_utf8(id.to_vec()).unwrap();
+                    all_ids.push(id);
+                } else {
+                    all_ids.push("".to_string());
+                }
+
+                if let Some(header) = header {
+                    // Convert header to String
+                    let header = String::from_utf8(header.to_vec()).unwrap();
+                    all_headers.push(header);
+                } else {
+                    all_headers.push("".to_string());
+                }
+
+            }
+
+            let all_ids = Series::new("ID", all_ids);
+            let all_headers = Series::new("Header", all_headers);
+
+            let df = DataFrame::new(vec![all_ids, all_headers]).unwrap();
+            PyDataFrame(df)
+        })
+    }
 }
 
 /// A Python module implemented in Rust.

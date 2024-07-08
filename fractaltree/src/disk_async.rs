@@ -183,9 +183,11 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
 
                         for i in 0..len {
                             let node = node.read().await;
-                            let key: K = node.keys[i].clone();
-                            let value: V = node.values.as_ref().unwrap()[i].clone();
-                            yield (key, value);
+                            if node.is_leaf {
+                                let key: K = node.keys[i].clone();
+                                let value: V = node.values.as_ref().unwrap()[i].clone();
+                                yield (key, value);
+                            }
                         }
                     }
                 } else {
@@ -261,19 +263,18 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             }
         }
 
+        // This works, because all leaves are stored in order and stored first...
         while node.read().await.is_leaf {
+            
             if tx.is_some() {
                 let _ =
                     tx.as_mut().unwrap().send(Arc::clone(&node).into()).await;
             }
 
-            let num_keys = node.read().await.keys.len();
-
             // Read the next one
-            let pos = in_buf.stream_position().await.unwrap();
             node = Arc::new(RwLock::with_max_readers(
                 NodeDiskAsync::<K, V>::from_loc(0), // Doesn't matter
-                128,
+                16,
             ));
 
             let borrowed_self = Arc::clone(&self);
@@ -304,7 +305,15 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             // node_clone);
         }
 
-        Ok(())
+        if self.opened.len() > 0 {
+            self.all_leaves_loaded
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            return Ok(());
+        } else {
+            self.all_leaves_loaded
+                .store(true, std::sync::atomic::Ordering::SeqCst);
+            return Err("Failed to load next node");
+        }
     }
 
     pub async fn load_children(
@@ -548,14 +557,29 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                     .as_ref()
                     .unwrap()
                     .decompress(&compressed)
-                    .unwrap()
             });
 
             let decompressed = decompressed.await.unwrap();
+            let decompressed = match decompressed {
+                Ok(x) => x,
+                Err(_) => {
+                    return Err("Failed to decompress node");
+                }
+            };
 
-            bincode::decode_from_slice(&decompressed, config).unwrap().0
+            match bincode::decode_from_slice(&decompressed, config) {
+                Ok(x) => x.0,
+                Err(_) => {
+                    return Err("Failed to decode decompressed node");
+                }
+            }
         } else {
-            bincode_decode_from_buffer_async_with_size_hint::<{32 * 1024}, _, _>(&mut in_buf, config).await.unwrap()
+            match bincode_decode_from_buffer_async_with_size_hint::<{32 * 1024}, _, _>(&mut in_buf, config).await {
+                Ok(x) => x,
+                Err(_) => {
+                    return Err("Failed to decode node");
+                }
+            }
         };
 
         delta_decode(&mut loaded_node.keys);
