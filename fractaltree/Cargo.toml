@@ -55,5 +55,5 @@ stream-vbyte = "0.4.1"
 tokio = { version = "1", default-features = false, features = ["full"] }
 
 [features]
-default = ["async"]
+# default = ["async"] 
 async = ["tokio", "futures", "compression/async", "filehandlemanager"]

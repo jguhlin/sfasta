@@ -2,8 +2,12 @@ use std::sync::Arc;
 
 use libsfasta::prelude::*;
 use pyo3::prelude::*;
+use pyo3_polars::{PySeries, PyDataFrame};
+use libsfasta::datatypes::StringBlockStoreSeqLocReader;
+use tokio_stream::StreamExt;
+use polars_core::prelude::*;
 
-// Async when supported...
+// Pyo3 async fn when stabilised
 
 #[pyclass]
 struct Sfasta
@@ -37,6 +41,53 @@ impl Sfasta
 
         Ok(Sfasta { inner, runtime })
     }
+
+    fn ids(&self) -> PySeries
+    {
+        let all_ids = self.runtime.block_on(async move {
+
+            let mut all_ids = Vec::new();
+
+            let seqlocs = tokio::spawn(Arc::clone(&self.inner.seqlocs.as_ref().unwrap()).stream());
+            let ids = tokio::spawn( {
+                StringBlockStoreSeqLocReader::new(
+                    Arc::clone(&self.inner.ids.as_ref().unwrap()),
+                    Arc::clone(&self.inner.file_handles),
+            )});
+
+            let seqlocs = seqlocs.await.unwrap();
+            let ids = ids.await.unwrap();
+
+            tokio::pin!(seqlocs);
+            tokio::pin!(ids);
+
+            loop {
+                let seqloc = match seqlocs.next().await {
+                    Some(s) => s,
+                    None => break,
+                };
+
+                // Get the sequence
+
+                let seqloc = Arc::new(seqloc);
+
+                let id = ids.next(seqloc.1.get_ids()).await;
+                if let Some(id) = id {
+                    // Convert id to String
+                    let id = String::from_utf8(id.to_vec()).unwrap();
+                    all_ids.push(id);
+                }
+            }
+
+            all_ids
+        });
+
+        // let all_ids: Series = all_ids.into_iter().collect();
+        let all_ids = Series::new("ID", all_ids);
+
+        PySeries(all_ids)
+    }
+
 }
 
 /// A Python module implemented in Rust.

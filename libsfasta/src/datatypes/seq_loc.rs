@@ -29,9 +29,9 @@ use std::{
 };
 
 use stream_vbyte::{
+    decode::{cursor::DecodeCursor, decode},
     encode::encode,
-    decode::{decode, cursor::DecodeCursor},
-    scalar::Scalar
+    scalar::Scalar,
 };
 
 use bincode::{Decode, Encode};
@@ -404,7 +404,7 @@ impl Decode for SeqLoc
         let mut locs: Vec<u32> = vec![0; len];
         decode::<Scalar>(&encoded_data_raw, len, &mut locs);
 
-        // let locs: Vec<u32> = bincode::Decode::decode(decoder)?; 
+        // let locs: Vec<u32> = bincode::Decode::decode(decoder)?;
         let locs = locs
             .chunks_exact(3)
             .map(|chunk| Loc::from(chunk))

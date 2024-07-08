@@ -658,9 +658,9 @@ impl Converter
 
         log::info!(
             "Headers Compression Ratio: {:.2}% ({} -> {})",
-                (headers.as_ref().unwrap().inner.compressed_size as f64
-                    / headers.as_ref().unwrap().inner.data_size as f64
-                    * 100.0),
+            (headers.as_ref().unwrap().inner.compressed_size as f64
+                / headers.as_ref().unwrap().inner.data_size as f64
+                * 100.0),
             ByteSize::from_bytes(
                 headers.as_ref().unwrap().inner.data_size as u64
             )

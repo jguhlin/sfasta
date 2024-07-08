@@ -9,7 +9,10 @@ name = "sfasta"
 crate-type = ["cdylib"]
 
 [dependencies]
-pyo3 = { version = "0.22.1", features = ["extension-module"] }
+pyo3 = { version = "0.21", features = ["extension-module"] }
 libsfasta = { path = "../libsfasta" }
 tokio = { version = "1", features = ["full"] }
 bytes = "1.6.0"
+pyo3-polars = "0.15.0"
+tokio-stream = "0.1.15"
+polars-core = "0.41.3"

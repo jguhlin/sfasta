@@ -8,9 +8,9 @@ use std::{
 };
 
 use stream_vbyte::{
+    decode::{cursor::DecodeCursor, decode},
     encode::encode,
-    decode::{decode, cursor::DecodeCursor},
-    scalar::Scalar
+    scalar::Scalar,
 };
 
 use hashbrown::HashMap;

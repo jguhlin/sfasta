@@ -450,9 +450,9 @@ fn ioslice_sequence(seq: &[u8], line_length: usize) -> Vec<IoSlice<'_>>
 
 #[cfg(feature = "async")]
 async fn get_sequence_output(
-    sfasta: std::sync::Arc<libsfasta::prelude::Sfasta<'_>>,
+    sfasta: std::sync::Arc<libsfasta::prelude::Sfasta>,
     index: usize,
-) -> Result<Option<libsfasta::Sequence>, &str>
+) -> Result<Option<libsfasta::Sequence>, &'static str>
 {
     sfasta.get_sequence_by_index(index).await
 }
@@ -608,7 +608,6 @@ fn view(input: String)
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .worker_threads(16) // todo set from cli
         .enable_all()
-        // .disable_lifo_slot()
         .build()
         .unwrap();
 
@@ -658,9 +657,7 @@ fn view(input: String)
                 .write_all_vectored(&mut bufs)
                 .expect("Unable to write to stdout");
         }
-
-
-
+  
         /*
 
         let mut futures = VecDeque::new();
@@ -766,8 +763,6 @@ fn list(input: &str)
         .build()
         .unwrap();
 
-    // let runtime = tokio::runtime::Builder::new_current_thread().build()
-    // .expect("Unable to build runtime");
 
     let sfasta_filename = input;
     let mut sfasta = runtime

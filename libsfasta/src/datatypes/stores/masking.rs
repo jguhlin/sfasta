@@ -24,9 +24,9 @@ use tokio_stream::Stream;
 use libfilehandlemanager::AsyncFileHandleManager;
 
 use stream_vbyte::{
+    decode::{cursor::DecodeCursor, decode},
     encode::encode,
-    decode::{decode, cursor::DecodeCursor},
-    scalar::Scalar
+    scalar::Scalar,
 };
 
 use vers_vecs::{BitVec, RsVec};
@@ -175,18 +175,20 @@ impl MaskingStoreBuilder
 
         // No benefit to using pulp here... (even with for loop)
         // let masked: Vec<u8> =
-            // seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
+        // seq.iter().map(|x| x > &b'`').map(|x| x as u8).collect();
 
         // RLE - while zstd does it, this can reduce some of the blocks to fit
         // into a single block
         // let masked = rle_encode(&masked);
 
-        let masked = rle_encode(&seq.iter().map(|x| x > &b'`').collect::<Vec<bool>>());
+        let masked =
+            rle_encode(&seq.iter().map(|x| x > &b'`').collect::<Vec<bool>>());
 
         // let bincode_config =
-            // bincode::config::standard().with_variable_int_encoding();
+        // bincode::config::standard().with_variable_int_encoding();
 
-        // let masked = bincode::encode_to_vec(&masked, bincode_config).unwrap();
+        // let masked = bincode::encode_to_vec(&masked,
+        // bincode_config).unwrap();
 
         self.inner
             .add(masked)
@@ -237,19 +239,20 @@ fn previous_rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
 // Here we do
 // First bit is starting state (0, or 1, for masked)
 // Next number is RLE encoding of the first stage
-// using modified integer storage (maybe a better way?) - stream vbyte maybe?
-// So for numbers [0 1 1 0] represents a u4 of value 6
+// using modified integer storage (maybe a better way?) - stream vbyte
+// maybe? So for numbers [0 1 1 0] represents a u4 of value 6
 // But if the first bit is 1, it means a u8 is stored
-// [1 0 0 0 0 0 0 0] with the first 4 bits the last 4 bits of u8 (so have to re-arrange)
-// (hmmm, wonder how streaming stuff / packing handles it, maybe just use that directly)
+// [1 0 0 0 0 0 0 0] with the first 4 bits the last 4 bits of u8 (so
+// have to re-arrange) (hmmm, wonder how streaming stuff / packing
+// handles it, maybe just use that directly)
 
 // SO: for now, it's just u8's
 // 0 values are set to 0
 // So masking value of
 // [1 1 1 1 1 1 1 1 1 1 0 0 0 0 0]
 // Becomes -> [1 9 5]
-// 1 as the first bit to indicate masking on, or initial value repeated is true
-// then 5 0's (state switches with each integer)
+// 1 as the first bit to indicate masking on, or initial value
+// repeated is true then 5 0's (state switches with each integer)
 // bit format is:
 // [1 0 0 0 0 1 0 0 1 0 0 0 0 0 1 0 1]
 //  _ initial bit
@@ -257,7 +260,7 @@ fn previous_rle_decode(rle: &[(u64, u8)]) -> Vec<u8>
 //                    _______________ 5
 
 // more notes
-// store as stream vbyte? 
+// store as stream vbyte?
 // so initial bit is the state, then we have a stream of integers
 
 fn rle_encode(data: &[bool]) -> Vec<u8>
@@ -298,7 +301,8 @@ fn rle_encode(data: &[bool]) -> Vec<u8>
     let mut encoded_data = Vec::new();
     encoded_data.resize(5 * integers.len(), 0);
     let encoded_len = encode::<Scalar>(&integers, &mut encoded_data);
-    // log::trace!("Encoded {} u32s into {} bytes", integers.len(), encoded_len);
+    // log::trace!("Encoded {} u32s into {} bytes", integers.len(),
+    // encoded_len);
 
     // Append
     assert!(integers.len() < u32::MAX as usize);
@@ -333,7 +337,6 @@ fn rle_decode(rle: &[u8]) -> Vec<bool>
 
     masking
 }
-
 
 pub struct Masking
 {
@@ -412,7 +415,7 @@ impl Masking
         let bincode_config =
             bincode::config::standard().with_variable_int_encoding();
 
-        let mask_raw: Vec<(u64, u8)> =
+        let mask_raw: Vec<u8> =
             bincode::decode_from_slice(&mask_raw, bincode_config)
                 .expect("Failed to decode mask")
                 .0;
@@ -421,7 +424,7 @@ impl Masking
 
         arch.dispatch(|| {
             for (i, m) in mask_raw.iter().enumerate() {
-                seq[i] = if *m == 1 {
+                seq[i] = if *m {
                     seq[i].to_ascii_lowercase()
                 } else {
                     seq[i]
@@ -462,7 +465,7 @@ pub fn mask_sequence(seq: &mut [u8], mask_raw: bytes::Bytes)
     let config = bincode::config::standard().with_variable_int_encoding();
 
     // let mask: Vec<(u64, u8)> =
-        // bincode::decode_from_slice(&mask_raw, config).unwrap().0;
+    // bincode::decode_from_slice(&mask_raw, config).unwrap().0;
 
     // will this work without bincode? dunno
     let mask: Vec<u8> = mask_raw.to_vec();

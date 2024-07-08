@@ -58,7 +58,7 @@ use std::os::fd::AsRawFd;
 
 #[cfg(not(feature = "async"))]
 /// Main Sfasta struct
-pub struct Sfasta<'sfa>
+pub struct Sfasta
 {
     pub version: u64, /* I'm going to regret this, but
                        * 18,446,744,073,709,551,615 versions should be
@@ -71,7 +71,7 @@ pub struct Sfasta<'sfa>
 
     pub index: Option<FractalTreeDisk<u32, u32>>,
 
-    pub buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
+    pub buf: Option<Arc<RwLock<Box<dyn ReadAndSeek + Send + Sync>>>>,
     pub sequences: Option<BytesBlockStore>,
     pub seqlocs: Option<SeqLocsStore>,
     pub headers: Option<StringBlockStore>,
@@ -83,7 +83,7 @@ pub struct Sfasta<'sfa>
 
 #[cfg(feature = "async")]
 /// Main Sfasta struct
-pub struct Sfasta<'sfa>
+pub struct Sfasta
 {
     pub version: u64, /* I'm going to regret this, but
                        * 18,446,744,073,709,551,615 versions should be
@@ -94,7 +94,7 @@ pub struct Sfasta<'sfa>
     pub directory: Directory,
     pub metadata: Option<Metadata>,
     pub index: Option<Arc<FractalTreeDiskAsync<u32, u32>>>,
-    pub buf: Option<RwLock<Box<dyn ReadAndSeek + Send + Sync + 'sfa>>>,
+    pub buf: Option<Arc<RwLock<Box<dyn ReadAndSeek + Send + Sync>>>>,
     pub sequences: Option<Arc<BytesBlockStore>>,
     pub seqlocs: Option<Arc<SeqLocsStore>>,
     pub headers: Option<Arc<StringBlockStore>>,
@@ -107,7 +107,7 @@ pub struct Sfasta<'sfa>
     pub file_handles: Arc<AsyncFileHandleManager>,
 }
 
-impl<'sfa> Default for Sfasta<'sfa>
+impl Default for Sfasta
 {
     fn default() -> Self
     {
@@ -131,18 +131,15 @@ impl<'sfa> Default for Sfasta<'sfa>
     }
 }
 
-impl<'sfa> Sfasta<'sfa>
+impl Sfasta
 {
     /// Right now ignores scores, but add that in soon...
     // todo channels would be better and let things work in parallel in the
     // background but good enough for now
     #[cfg(feature = "async")]
-    pub fn stream(self: Arc<Self>) -> impl Stream<Item = Sequence> + 'sfa
+    pub fn stream(self: Arc<Self>) -> impl Stream<Item = Sequence>
     {
-        use bytes::BytesMut;
-
         let sfasta = Arc::clone(&self);
-        let fhm = Arc::clone(&self.file_handles);
 
         let gen = stream! {
             // Get the generators
@@ -247,13 +244,13 @@ impl<'sfa> Sfasta<'sfa>
         self
     }
 
+    #[cfg(not(feature = "async"))]
     /// Use for after cloning(primarily for multiple threads), give
     /// the object a new read buffer
-    pub fn with_buffer<R>(mut self, buf: R) -> Self
-    where
-        R: 'sfa + Read + Seek + Send + Sync + BufRead,
+    pub fn with_buffer(mut self, buf: impl Read + Seek + Send + Sync + BufRead + 'static) -> Self
     {
-        self.buf = Some(RwLock::new(Box::new(buf)));
+        let buf = Box::new(buf);
+        self.buf = Some(Arc::new(RwLock::new(buf)));
         self
     }
 
@@ -1194,7 +1191,7 @@ impl<'sfa> Sfasta<'sfa>
 #[cfg(feature = "async")]
 pub struct SfastaIterator
 {
-    sfasta: Arc<Sfasta<'static>>,
+    sfasta: Arc<Sfasta>,
     current: usize,
     runtime: tokio::runtime::Runtime,
 
@@ -1217,7 +1214,7 @@ pub struct SfastaIterator
 #[cfg(feature = "async")]
 impl SfastaIterator
 {
-    pub fn new(mut sfasta: Sfasta<'static>) -> Self
+    pub fn new(sfasta: Sfasta) -> Self
     {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()

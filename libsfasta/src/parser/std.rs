@@ -1,4 +1,6 @@
 use std::io::{BufReader, Read, Seek};
+use std::sync::Arc;
+use std::sync::RwLock;
 
 use libfractaltree::FractalTreeDisk;
 
@@ -14,9 +16,9 @@ const FULL_HEADER_SIZE: usize =
 // this is ~ 3ms slower than the previous version (SfastaParser)
 // not sure why.... but it does have more checking, so probably
 // acceptable...
-pub fn open_with_buffer<'sfa, R>(mut in_buf: R) -> Result<Sfasta<'sfa>, String>
+pub fn open_with_buffer<R>(mut in_buf: R) -> Result<Sfasta, String>
 where
-    R: 'sfa + Read + Seek + Send + Sync,
+    R: Read + Seek + Send + Sync + 'static,
 {
     let sfasta = match open_from_buffer(&mut in_buf) {
         Ok(x) => x,
@@ -53,9 +55,9 @@ fn get_reasonable_buffer_size(buf_size: usize) -> usize
 /// This does not take ownership of the buffer.
 /// Useful for cloning the sfasta struct and creating new buffers
 /// manually.
-pub fn open_from_buffer<'sfa, R>(in_buf: &mut R) -> Result<Sfasta<'sfa>, String>
+pub fn open_from_buffer<R>(in_buf: &mut R) -> Result<Sfasta, String>
 where
-    R: 'sfa + Read + Seek + Send + Sync,
+    R: Read + Seek + Send + Sync + 'static,
 {
     let bincode_config_fixed = crate::BINCODE_CONFIG
         .with_fixed_int_encoding()
