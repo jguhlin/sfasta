@@ -1078,308 +1078,317 @@ mod tests
 
     use super::*;
 
-    /*
-    use rans::RansDecoderMulti;
-
+    // use rans::RansDecoderMulti;
+    //
     // This whole section is me figuring out how rANS works
-    // htscodecs has it implemented, but I still want to learn how it works
-    #[test]
-    pub fn rans()
-    {
-        use rans::{
-            byte_decoder::{ByteRansDecSymbol, ByteRansDecoder},
-            byte_encoder::{ByteRansEncSymbol, ByteRansEncoder},
-            RansDecSymbol, RansDecoder, RansEncSymbol, RansEncoder,
-            RansEncoderMulti,
-        };
-
-        const SCALE_BITS: u32 = 11;
-
-        // Encode two symbols
-        let mut encoder = ByteRansEncoder::new(1024);
-        let symbol1 = ByteRansEncSymbol::new(0, 2, SCALE_BITS);
-        let symbol2 = ByteRansEncSymbol::new(2, 2, SCALE_BITS);
-
-        encoder.put(&symbol1);
-        encoder.put(&symbol2);
-        encoder.flush();
-
-        let mut data = encoder.data().to_owned();
-
-        println!("Data: {:?}", data);
-
-        // Decode the encoded data
-        let mut decoder = ByteRansDecoder::new(data);
-        let symbol1 = ByteRansDecSymbol::new(0, 2);
-        let symbol2 = ByteRansDecSymbol::new(2, 2);
-
-        // Please note that the data is being decoded in reverse
-        assert_eq!(decoder.get(SCALE_BITS), 2); // Decoder returns cumulative frequency
-        decoder.advance(&symbol2, SCALE_BITS);
-        assert_eq!(decoder.get(SCALE_BITS), 0);
-        decoder.advance(&symbol1, SCALE_BITS);
-
-        // Let's try a toy example with FASTQ
-
-        let toy = b"AACTGAAATT";
-
-        // Get frequencies
-        let mut counts = [0; 256];
-        for &x in toy.iter() {
-            counts[x as usize] += 1;
-        }
-
-        // Get cumulative frequencies
-        let mut cumul = [0; 256];
-        let mut total = 0;
-        for i in 0..256 {
-            cumul[i] = total;
-            total += counts[i];
-        }
-
-        // Normalize - because you can't have 0 probability
-        let mut scale = 1;
-        for i in 0..256 {
-            if counts[i] != 0 {
-                cumul[i] = scale;
-                scale += counts[i];
-            }
-        }
-
-        // Create map
-        let mut map: HashMap<u8, (ByteRansEncSymbol, u32, u32)> = HashMap::new();
-
-        for i in toy {
-            let symbol = ByteRansEncSymbol::new(cumul[*i as usize], counts[*i as usize], SCALE_BITS);
-            map.insert(*i, (symbol, cumul[*i as usize], counts[*i as usize]));
-        }
-
-        // Map for conversion backwards
-        let mut map2: HashMap<u32, u8> = HashMap::new();
-        for i in toy {
-            for x in cumul[*i as usize]..(cumul[*i as usize] + counts[*i as usize]) {
-                // If not already in map
-                if !map2.contains_key(&x) {
-                    map2.insert(x, *i);
-                }
-            }
-        }
-
-
-        // Real data
-
-        let mut fastq = needletail::parse_fastx_file(
-            "/mnt/data/data/sfasta_testing/reads.fastq",
-        )
-        .unwrap();
-        let mut scores = Vec::new();
-        let mut sequences = Vec::new();
-        while let Some(record) = fastq.next() {
-            let record = record.unwrap();
-            scores.extend_from_slice(&record.qual().unwrap());
-            sequences.extend_from_slice(&record.seq());
-            if scores.len() >= 64 * 1024 {
-                break;
-            }
-        }
-
-        // Operate on blocks of 1024
-        let block_size = 1024;
-        let scores = scores[..block_size].to_vec();
-        // let scores = sequences[..block_size].to_vec();
-
-
-        // Get frequencies
-        let mut counts = [0; 256];
-        for &x in scores.iter() {
-            counts[x as usize] += 1;
-        }
-
-        // Get cumulative frequencies
-        let mut cumul = [0; 256];
-        let mut total = 0;
-        for i in 0..256 {
-            cumul[i] = total;
-            total += counts[i];
-        }
-
-        // Normalize - because you can't have 0 probability
-        let mut scale = 1;
-        for i in 0..256 {
-            if counts[i] != 0 {
-                cumul[i] = scale;
-                scale += counts[i];
-            }
-        }
-
-        // Create map
-        let mut map: HashMap<u8, (ByteRansEncSymbol, u32, u32)> = HashMap::new();
-
-        for i in scores.iter() {
-            let symbol = ByteRansEncSymbol::new(cumul[*i as usize], counts[*i as usize], SCALE_BITS);
-            map.insert(*i, (symbol, cumul[*i as usize], counts[*i as usize]));
-        }
-
-        // Map for conversion backwards
-        let mut map2: HashMap<u32, u8> = HashMap::new();
-        for i in scores.iter() {
-            for x in cumul[*i as usize]..(cumul[*i as usize] + counts[*i as usize]) {
-                // If not already in map
-                if !map2.contains_key(&x) {
-                    map2.insert(x, *i);
-                }
-            }
-        }
-
-        // Now encode
-        let mut encoder = ByteRansEncoder::new(scores.len());
-        for i in scores.iter() {
-            let (symbol, _, _) = &map[&i];
-            encoder.put(symbol);
-        }
-
-        encoder.flush();
-
-        let data = encoder.data().to_owned();
-        println!("Data: {:?}", data);
-        println!("Original data size: {}", scores.len());
-        println!("Encoded data size: {}", data.len());
-        println!("Compression Ratio: {:.2}", data.len() as f64 / scores.len() as f64);
-
-        // Now try with the module
-        use rans_impl::*;
-
-        let freqs = calculate_frequencies(&scores);
-        let mut cumul_freqs = to_cumulative_frequencies(&freqs);
-        normalize_frequencies(&mut cumul_freqs);
-
-        // let (scale_bits, symbols) = generate_encoding_symbols(&cumul_freqs);
-        let data = encode(&scores, &cumul_freqs);
-
-        println!("Data: {:?}", data);
-        println!("Original data size: {}", scores.len());
-        println!("Encoded data size: {}", data.len());
-        println!("Compression Ratio: {:.2}", data.len() as f64 / scores.len() as f64);
-
-        
-
-
-
-
-
-
-        panic!();
-    }
-
-    
-    pub fn test_minimum_redundancy()
-    {
-        let mut compression_config = CompressionConfig::new();
-        compression_config.compression_type =
-            CompressionType::MINIMUMREDUNDANCY;
-
-        let mut fastq = needletail::parse_fastx_file(
-            "/mnt/data/data/sfasta_testing/reads.fastq",
-        )
-        .unwrap();
-        let mut scores = Vec::new();
-        let mut sequences = Vec::new();
-        while let Some(record) = fastq.next() {
-            let record = record.unwrap();
-            scores.extend_from_slice(&record.qual().unwrap());
-            sequences.extend_from_slice(&record.seq());
-            if scores.len() >= 64 * 1024 {
-                break;
-            }
-        }
-
-        println!("Scores Length: {}", scores.len());
-
-        let data = scores;
-
-        let huffman_compressed = compression_config.compress(&data).unwrap();
-        println!(
-            "Orig Length: {} / Compressed Length: {}",
-            data.len(),
-            huffman_compressed.len()
-        );
-        println!(
-            "Ratio: {:.2}",
-            huffman_compressed.len() as f64 / data.len() as f64
-        );
-
-        // Zstd compress it
-        let compression_config = CompressionConfig::new();
-        let compression_config =
-            compression_config.with_compression_type(CompressionType::ZSTD);
-        let compression_config = compression_config.with_compression_level(7);
-        let compressed = compression_config.compress(&data).unwrap();
-
-        println!(
-            "Orig Length: {} / Zstd Length: {}",
-            data.len(),
-            compressed.len()
-        );
-        println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as f64);
-
-        // Compare against the huffman compressed + zstd compressed
-        let compressed =
-            compression_config.compress(&huffman_compressed).unwrap();
-        println!(
-            "Data Length: {} / Huffman Length: {} / Huffman+ZSTD Length: {}",
-            data.len(),
-            huffman_compressed.len(),
-            compressed.len()
-        );
-        println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as f64);
-
-        println!("===============================Sequences============================");
-
-        // Repeat for sequences
-        let data = sequences;
-        let mut compression_config = CompressionConfig::new();
-        compression_config.compression_type =
-            CompressionType::MINIMUMREDUNDANCY;
-        let huffman_compressed = compression_config.compress(&data).unwrap();
-        println!(
-            "Orig Length: {} / Compressed Length: {}",
-            data.len(),
-            huffman_compressed.len()
-        );
-        println!(
-            "Ratio: {:.2}",
-            huffman_compressed.len() as f64 / data.len() as f64
-        );
-
-        // Zstd compress it
-        let compression_config = CompressionConfig::new();
-        let compression_config =
-            compression_config.with_compression_type(CompressionType::ZSTD);
-        let compression_config = compression_config.with_compression_level(7);
-        let compressed = compression_config.compress(&data).unwrap();
-
-        println!(
-            "Orig Length: {} / Zstd Length: {}",
-            data.len(),
-            compressed.len()
-        );
-        println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as f64);
-
-        // Compare against the huffman compressed + zstd compressed
-        let compressed =
-            compression_config.compress(&huffman_compressed).unwrap();
-        println!(
-            "Data Length: {} / Huffman Length: {} / Huffman+ZSTD Length: {}",
-            data.len(),
-            huffman_compressed.len(),
-            compressed.len()
-        );
-        println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as f64);
-
-        panic!();
-    }
-
-    */
+    // htscodecs has it implemented, but I still want to learn how it
+    // works #[test]
+    // pub fn rans()
+    // {
+    // use rans::{
+    // byte_decoder::{ByteRansDecSymbol, ByteRansDecoder},
+    // byte_encoder::{ByteRansEncSymbol, ByteRansEncoder},
+    // RansDecSymbol, RansDecoder, RansEncSymbol, RansEncoder,
+    // RansEncoderMulti,
+    // };
+    //
+    // const SCALE_BITS: u32 = 11;
+    //
+    // Encode two symbols
+    // let mut encoder = ByteRansEncoder::new(1024);
+    // let symbol1 = ByteRansEncSymbol::new(0, 2, SCALE_BITS);
+    // let symbol2 = ByteRansEncSymbol::new(2, 2, SCALE_BITS);
+    //
+    // encoder.put(&symbol1);
+    // encoder.put(&symbol2);
+    // encoder.flush();
+    //
+    // let mut data = encoder.data().to_owned();
+    //
+    // println!("Data: {:?}", data);
+    //
+    // Decode the encoded data
+    // let mut decoder = ByteRansDecoder::new(data);
+    // let symbol1 = ByteRansDecSymbol::new(0, 2);
+    // let symbol2 = ByteRansDecSymbol::new(2, 2);
+    //
+    // Please note that the data is being decoded in reverse
+    // assert_eq!(decoder.get(SCALE_BITS), 2); // Decoder returns
+    // cumulative frequency decoder.advance(&symbol2, SCALE_BITS);
+    // assert_eq!(decoder.get(SCALE_BITS), 0);
+    // decoder.advance(&symbol1, SCALE_BITS);
+    //
+    // Let's try a toy example with FASTQ
+    //
+    // let toy = b"AACTGAAATT";
+    //
+    // Get frequencies
+    // let mut counts = [0; 256];
+    // for &x in toy.iter() {
+    // counts[x as usize] += 1;
+    // }
+    //
+    // Get cumulative frequencies
+    // let mut cumul = [0; 256];
+    // let mut total = 0;
+    // for i in 0..256 {
+    // cumul[i] = total;
+    // total += counts[i];
+    // }
+    //
+    // Normalize - because you can't have 0 probability
+    // let mut scale = 1;
+    // for i in 0..256 {
+    // if counts[i] != 0 {
+    // cumul[i] = scale;
+    // scale += counts[i];
+    // }
+    // }
+    //
+    // Create map
+    // let mut map: HashMap<u8, (ByteRansEncSymbol, u32, u32)> =
+    // HashMap::new();
+    //
+    // for i in toy {
+    // let symbol = ByteRansEncSymbol::new(cumul[*i as usize], counts[*i
+    // as usize], SCALE_BITS); map.insert(*i, (symbol, cumul[*i as
+    // usize], counts[*i as usize])); }
+    //
+    // Map for conversion backwards
+    // let mut map2: HashMap<u32, u8> = HashMap::new();
+    // for i in toy {
+    // for x in cumul[*i as usize]..(cumul[*i as usize] + counts[*i as
+    // usize]) { If not already in map
+    // if !map2.contains_key(&x) {
+    // map2.insert(x, *i);
+    // }
+    // }
+    // }
+    //
+    //
+    // Real data
+    //
+    // let mut fastq = needletail::parse_fastx_file(
+    // "/mnt/data/data/sfasta_testing/reads.fastq",
+    // )
+    // .unwrap();
+    // let mut scores = Vec::new();
+    // let mut sequences = Vec::new();
+    // while let Some(record) = fastq.next() {
+    // let record = record.unwrap();
+    // scores.extend_from_slice(&record.qual().unwrap());
+    // sequences.extend_from_slice(&record.seq());
+    // if scores.len() >= 64 * 1024 {
+    // break;
+    // }
+    // }
+    //
+    // Operate on blocks of 1024
+    // let block_size = 1024;
+    // let scores = scores[..block_size].to_vec();
+    // let scores = sequences[..block_size].to_vec();
+    //
+    //
+    // Get frequencies
+    // let mut counts = [0; 256];
+    // for &x in scores.iter() {
+    // counts[x as usize] += 1;
+    // }
+    //
+    // Get cumulative frequencies
+    // let mut cumul = [0; 256];
+    // let mut total = 0;
+    // for i in 0..256 {
+    // cumul[i] = total;
+    // total += counts[i];
+    // }
+    //
+    // Normalize - because you can't have 0 probability
+    // let mut scale = 1;
+    // for i in 0..256 {
+    // if counts[i] != 0 {
+    // cumul[i] = scale;
+    // scale += counts[i];
+    // }
+    // }
+    //
+    // Create map
+    // let mut map: HashMap<u8, (ByteRansEncSymbol, u32, u32)> =
+    // HashMap::new();
+    //
+    // for i in scores.iter() {
+    // let symbol = ByteRansEncSymbol::new(cumul[*i as usize], counts[*i
+    // as usize], SCALE_BITS); map.insert(*i, (symbol, cumul[*i as
+    // usize], counts[*i as usize])); }
+    //
+    // Map for conversion backwards
+    // let mut map2: HashMap<u32, u8> = HashMap::new();
+    // for i in scores.iter() {
+    // for x in cumul[*i as usize]..(cumul[*i as usize] + counts[*i as
+    // usize]) { If not already in map
+    // if !map2.contains_key(&x) {
+    // map2.insert(x, *i);
+    // }
+    // }
+    // }
+    //
+    // Now encode
+    // let mut encoder = ByteRansEncoder::new(scores.len());
+    // for i in scores.iter() {
+    // let (symbol, _, _) = &map[&i];
+    // encoder.put(symbol);
+    // }
+    //
+    // encoder.flush();
+    //
+    // let data = encoder.data().to_owned();
+    // println!("Data: {:?}", data);
+    // println!("Original data size: {}", scores.len());
+    // println!("Encoded data size: {}", data.len());
+    // println!("Compression Ratio: {:.2}", data.len() as f64 /
+    // scores.len() as f64);
+    //
+    // Now try with the module
+    // use rans_impl::*;
+    //
+    // let freqs = calculate_frequencies(&scores);
+    // let mut cumul_freqs = to_cumulative_frequencies(&freqs);
+    // normalize_frequencies(&mut cumul_freqs);
+    //
+    // let (scale_bits, symbols) =
+    // generate_encoding_symbols(&cumul_freqs); let data =
+    // encode(&scores, &cumul_freqs);
+    //
+    // println!("Data: {:?}", data);
+    // println!("Original data size: {}", scores.len());
+    // println!("Encoded data size: {}", data.len());
+    // println!("Compression Ratio: {:.2}", data.len() as f64 /
+    // scores.len() as f64);
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    //
+    // panic!();
+    // }
+    //
+    //
+    // pub fn test_minimum_redundancy()
+    // {
+    // let mut compression_config = CompressionConfig::new();
+    // compression_config.compression_type =
+    // CompressionType::MINIMUMREDUNDANCY;
+    //
+    // let mut fastq = needletail::parse_fastx_file(
+    // "/mnt/data/data/sfasta_testing/reads.fastq",
+    // )
+    // .unwrap();
+    // let mut scores = Vec::new();
+    // let mut sequences = Vec::new();
+    // while let Some(record) = fastq.next() {
+    // let record = record.unwrap();
+    // scores.extend_from_slice(&record.qual().unwrap());
+    // sequences.extend_from_slice(&record.seq());
+    // if scores.len() >= 64 * 1024 {
+    // break;
+    // }
+    // }
+    //
+    // println!("Scores Length: {}", scores.len());
+    //
+    // let data = scores;
+    //
+    // let huffman_compressed =
+    // compression_config.compress(&data).unwrap(); println!(
+    // "Orig Length: {} / Compressed Length: {}",
+    // data.len(),
+    // huffman_compressed.len()
+    // );
+    // println!(
+    // "Ratio: {:.2}",
+    // huffman_compressed.len() as f64 / data.len() as f64
+    // );
+    //
+    // Zstd compress it
+    // let compression_config = CompressionConfig::new();
+    // let compression_config =
+    // compression_config.with_compression_type(CompressionType::ZSTD);
+    // let compression_config =
+    // compression_config.with_compression_level(7); let compressed =
+    // compression_config.compress(&data).unwrap();
+    //
+    // println!(
+    // "Orig Length: {} / Zstd Length: {}",
+    // data.len(),
+    // compressed.len()
+    // );
+    // println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as
+    // f64);
+    //
+    // Compare against the huffman compressed + zstd compressed
+    // let compressed =
+    // compression_config.compress(&huffman_compressed).unwrap();
+    // println!(
+    // "Data Length: {} / Huffman Length: {} / Huffman+ZSTD Length: {}",
+    // data.len(),
+    // huffman_compressed.len(),
+    // compressed.len()
+    // );
+    // println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as
+    // f64);
+    //
+    // println!("===============================Sequences============================");
+    //
+    // Repeat for sequences
+    // let data = sequences;
+    // let mut compression_config = CompressionConfig::new();
+    // compression_config.compression_type =
+    // CompressionType::MINIMUMREDUNDANCY;
+    // let huffman_compressed =
+    // compression_config.compress(&data).unwrap(); println!(
+    // "Orig Length: {} / Compressed Length: {}",
+    // data.len(),
+    // huffman_compressed.len()
+    // );
+    // println!(
+    // "Ratio: {:.2}",
+    // huffman_compressed.len() as f64 / data.len() as f64
+    // );
+    //
+    // Zstd compress it
+    // let compression_config = CompressionConfig::new();
+    // let compression_config =
+    // compression_config.with_compression_type(CompressionType::ZSTD);
+    // let compression_config =
+    // compression_config.with_compression_level(7); let compressed =
+    // compression_config.compress(&data).unwrap();
+    //
+    // println!(
+    // "Orig Length: {} / Zstd Length: {}",
+    // data.len(),
+    // compressed.len()
+    // );
+    // println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as
+    // f64);
+    //
+    // Compare against the huffman compressed + zstd compressed
+    // let compressed =
+    // compression_config.compress(&huffman_compressed).unwrap();
+    // println!(
+    // "Data Length: {} / Huffman Length: {} / Huffman+ZSTD Length: {}",
+    // data.len(),
+    // huffman_compressed.len(),
+    // compressed.len()
+    // );
+    // println!("Ratio: {:.2}", compressed.len() as f64 / data.len() as
+    // f64);
+    //
+    // panic!();
+    // }
+    //
 
     #[test]
     pub fn test_out_of_range()

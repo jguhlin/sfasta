@@ -657,7 +657,7 @@ fn view(input: String)
                 .write_all_vectored(&mut bufs)
                 .expect("Unable to write to stdout");
         }
-  
+
         /*
 
         let mut futures = VecDeque::new();
@@ -762,7 +762,6 @@ fn list(input: &str)
         .enable_all()
         .build()
         .unwrap();
-
 
     let sfasta_filename = input;
     let mut sfasta = runtime

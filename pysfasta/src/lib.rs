@@ -1,11 +1,10 @@
 use std::sync::Arc;
 
-use libsfasta::prelude::*;
-use pyo3::prelude::*;
-use pyo3_polars::{PySeries, PyDataFrame};
-use libsfasta::datatypes::StringBlockStoreSeqLocReader;
-use tokio_stream::StreamExt;
+use libsfasta::{datatypes::StringBlockStoreSeqLocReader, prelude::*};
 use polars_core::prelude::*;
+use pyo3::prelude::*;
+use pyo3_polars::{PyDataFrame, PySeries};
+use tokio_stream::StreamExt;
 
 // Pyo3 async fn when stabilised
 
@@ -22,18 +21,17 @@ impl Sfasta
     #[new]
     fn new(path: &str, threads: usize) -> PyResult<Self>
     {
-        let runtime = Arc::new(
-            match threads {
-                0 => tokio::runtime::Builder::new_current_thread()
+        let runtime = Arc::new(match threads {
+            0 => tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .unwrap(),
-                _ => tokio::runtime::Builder::new_multi_thread()
-                    .worker_threads(threads)
-                    .enable_all()
-                    .build()
-                    .unwrap(),
-            });
+            _ => tokio::runtime::Builder::new_multi_thread()
+                .worker_threads(threads)
+                .enable_all()
+                .build()
+                .unwrap(),
+        });
 
         let inner = Arc::new(runtime.block_on(async move {
             open_from_file_async(path).await.unwrap()
@@ -45,15 +43,17 @@ impl Sfasta
     fn ids(&self) -> PySeries
     {
         let all_ids = self.runtime.block_on(async move {
-
             let mut all_ids = Vec::new();
 
-            let seqlocs = tokio::spawn(Arc::clone(&self.inner.seqlocs.as_ref().unwrap()).stream());
-            let ids = tokio::spawn( {
+            let seqlocs = tokio::spawn(
+                Arc::clone(&self.inner.seqlocs.as_ref().unwrap()).stream(),
+            );
+            let ids = tokio::spawn({
                 StringBlockStoreSeqLocReader::new(
                     Arc::clone(&self.inner.ids.as_ref().unwrap()),
                     Arc::clone(&self.inner.file_handles),
-            )});
+                )
+            });
 
             let seqlocs = seqlocs.await.unwrap();
             let ids = ids.await.unwrap();
@@ -64,9 +64,7 @@ impl Sfasta
             loop {
                 let seqloc = match seqlocs.next().await {
                     Some(s) => s,
-                    None => {
-                        break
-                    },
+                    None => break,
                 };
 
                 // Get the sequence
@@ -90,24 +88,28 @@ impl Sfasta
         PySeries(all_ids)
     }
 
-    fn headers(&self) -> PyDataFrame {
+    fn headers(&self) -> PyDataFrame
+    {
         self.runtime.block_on(async move {
-
             let mut all_ids = Vec::new();
             let mut all_headers = Vec::new();
 
-            let seqlocs = tokio::spawn(Arc::clone(&self.inner.seqlocs.as_ref().unwrap()).stream());
-            let ids = tokio::spawn( {
+            let seqlocs = tokio::spawn(
+                Arc::clone(&self.inner.seqlocs.as_ref().unwrap()).stream(),
+            );
+            let ids = tokio::spawn({
                 StringBlockStoreSeqLocReader::new(
                     Arc::clone(&self.inner.ids.as_ref().unwrap()),
                     Arc::clone(&self.inner.file_handles),
-            )});
+                )
+            });
 
-            let headers = tokio::spawn( {
+            let headers = tokio::spawn({
                 StringBlockStoreSeqLocReader::new(
                     Arc::clone(&self.inner.headers.as_ref().unwrap()),
                     Arc::clone(&self.inner.file_handles),
-            )});
+                )
+            });
 
             let seqlocs = seqlocs.await.unwrap();
             let ids = ids.await.unwrap();
@@ -145,7 +147,6 @@ impl Sfasta
                 } else {
                     all_headers.push("".to_string());
                 }
-
             }
 
             let all_ids = Series::new("ID", all_ids);

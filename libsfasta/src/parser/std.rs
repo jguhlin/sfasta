@@ -1,6 +1,7 @@
-use std::io::{BufReader, Read, Seek};
-use std::sync::Arc;
-use std::sync::RwLock;
+use std::{
+    io::{BufReader, Read, Seek},
+    sync::{Arc, RwLock},
+};
 
 use libfractaltree::FractalTreeDisk;
 

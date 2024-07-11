@@ -247,7 +247,10 @@ impl Sfasta
     #[cfg(not(feature = "async"))]
     /// Use for after cloning(primarily for multiple threads), give
     /// the object a new read buffer
-    pub fn with_buffer(mut self, buf: impl Read + Seek + Send + Sync + BufRead + 'static) -> Self
+    pub fn with_buffer(
+        mut self,
+        buf: impl Read + Seek + Send + Sync + BufRead + 'static,
+    ) -> Self
     {
         let buf = Box::new(buf);
         self.buf = Some(Arc::new(RwLock::new(buf)));

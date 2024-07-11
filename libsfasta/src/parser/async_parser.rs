@@ -30,9 +30,7 @@ const FULL_HEADER_SIZE: usize =
 ///
 /// Multiple threads are used to read the file.
 #[tracing::instrument]
-pub async fn open_from_file_async(
-    file: &str,
-) -> Result<Sfasta, String>
+pub async fn open_from_file_async(file: &str) -> Result<Sfasta, String>
 {
     // Create shareable string for the filename
     let file = file.to_string();

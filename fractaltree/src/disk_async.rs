@@ -263,9 +263,9 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             }
         }
 
-        // This works, because all leaves are stored in order and stored first...
+        // This works, because all leaves are stored in order and stored
+        // first...
         while node.read().await.is_leaf {
-            
             if tx.is_some() {
                 let _ =
                     tx.as_mut().unwrap().send(Arc::clone(&node).into()).await;
@@ -431,8 +431,9 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         let mut in_buf = fhm.get_filehandle().await;
 
         in_buf.seek(SeekFrom::Start(pos)).await.unwrap();
-        let bincode_config =
-            bincode::config::standard().with_fixed_int_encoding().with_limit::<{8 * 1024 * 1024}>();
+        let bincode_config = bincode::config::standard()
+            .with_fixed_int_encoding()
+            .with_limit::<{ 8 * 1024 * 1024 }>();
 
         let mut tree: FractalTreeDiskAsync<K, V> =
             match bincode_decode_from_buffer_async_with_size_hint::<
@@ -574,7 +575,13 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
                 }
             }
         } else {
-            match bincode_decode_from_buffer_async_with_size_hint::<{32 * 1024}, _, _>(&mut in_buf, config).await {
+            match bincode_decode_from_buffer_async_with_size_hint::<
+                { 32 * 1024 },
+                _,
+                _,
+            >(&mut in_buf, config)
+            .await
+            {
                 Ok(x) => x,
                 Err(_) => {
                     return Err("Failed to decode node");
