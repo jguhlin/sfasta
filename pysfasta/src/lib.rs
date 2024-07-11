@@ -6,8 +6,16 @@ use pyo3::prelude::*;
 use pyo3_polars::{PyDataFrame, PySeries};
 use tokio_stream::StreamExt;
 
-// Pyo3 async fn when stabilised
+#[pyclass]
+struct Sequence
+{
+    id: Option<String>,
+    header: Option<String>,
+    sequence: Option<String>,
+    scores: Option<String>,
+}
 
+// Pyo3 async fn when stabilised
 #[pyclass]
 struct Sfasta
 {
@@ -156,6 +164,54 @@ impl Sfasta
             PyDataFrame(df)
         })
     }
+
+    fn seq(&self, id: &str) -> PyResult<PyDataFrame>
+    {
+        let seq = self.runtime.block_on(async move {
+            self.inner.get_sequence_by_id(id).await
+        });
+
+        match seq {
+            Ok(Some(seq)) => {
+                let id = match seq.id {
+                    Some(id) => String::from_utf8(id.to_vec()).unwrap(),
+                    None => "".to_string(),
+                };
+
+                let header = match seq.header {
+                    Some(header) => String::from_utf8(header.to_vec()).unwrap(),
+                    None => "".to_string(),
+                };
+
+                let sequence = match seq.sequence {
+                    Some(sequence) => String::from_utf8(sequence.to_vec()).unwrap(),
+                    None => "".to_string(),
+                };
+
+                let scores = match seq.scores {
+                    Some(scores) => String::from_utf8(scores.to_vec()).unwrap(),
+                    None => "".to_string(),
+                };
+
+                Ok(
+                    PyDataFrame(DataFrame::new(vec![
+                        Series::new("ID", vec![id]),
+                        Series::new("Header", vec![header]),
+                        Series::new("Sequence", vec![sequence]),
+                        Series::new("Scores", vec![scores]),
+                    ])
+                    .unwrap()),
+                )
+
+            },
+            Ok(None) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("ID {} not found", id),
+            )),
+            Err(e) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("Error: {}", e),
+            )),
+        }
+    }
 }
 
 /// A Python module implemented in Rust.
@@ -163,5 +219,6 @@ impl Sfasta
 fn sfasta(m: &Bound<'_, PyModule>) -> PyResult<()>
 {
     m.add_class::<Sfasta>()?;
+    m.add_class::<Sequence>()?;
     Ok(())
 }
