@@ -48,6 +48,27 @@ impl Sfasta
         Ok(Sfasta { inner, runtime })
     }
 
+    fn __len__(&self) -> usize
+    {
+        self.runtime.block_on(async move {
+            self.inner.len().await
+        })
+    }
+
+    fn __contains__(&self, id: &str) -> bool
+    {
+        self.runtime.block_on(async move {
+            let find = self.inner.find(id).await;
+            match find {
+                Ok(Some(_)) => true,
+                Ok(None) => false,
+                Err(_) => false,
+            }            
+        })
+    }
+
+    // todo implement __getitem__ to work on seqloc integers
+
     fn ids(&self) -> PySeries
     {
         let all_ids = self.runtime.block_on(async move {
@@ -212,6 +233,10 @@ impl Sfasta
             )),
         }
     }
+
+    // todo optimize for getting multiple sequences by ids
+
+    // todo optimize fn for getting multiple sequences by seqloc range
 }
 
 /// A Python module implemented in Rust.
