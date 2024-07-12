@@ -514,7 +514,7 @@ impl BytesBlockStoreBuilder
         }
 
         let mut block_locations_tree: FractalTreeBuild<u32, u64> =
-            FractalTreeBuild::new(512, 1024);
+            FractalTreeBuild::new(1024, 512);
 
         self.compressed_size = self
             .block_data
@@ -650,7 +650,7 @@ impl BytesBlockStore
 
         let bincode_config_fixed = bincode::config::standard()
             .with_fixed_int_encoding()
-            .with_limit::<{ 256 * 1024 * 1024 }>(); // 256 MB is max limit TODO: Enforce elsewhere too
+            .with_limit::<{ 256 * 1024 * 1024 }>();
 
         let block_location = self.block_locations.search(&block).await.unwrap();
 
@@ -859,7 +859,8 @@ impl BytesBlockStore
         let block_size = self.block_size as u32;
 
         // Calculate length from Loc
-        let mut result = Vec::with_capacity(loc.len());
+        let length: usize = loc.iter().map(|x| x.len as usize).sum();
+        let mut result = Vec::with_capacity(length);
         for l in loc.iter() {
             let block = match self.get_block(in_buf, l.block).await {
                 DataOrLater::Data(data) => data,
@@ -977,9 +978,9 @@ impl BytesBlockStore
             block_locations_pos,
             block_size,
             data: None,
-            cache: Arc::new(AsyncLRU::new(16)), /* Small, because it's
-                                                 * unlikely to reuse many
-                                                 * blocks */
+            cache: Arc::new(AsyncLRU::new(4)), /* Small, because it's
+                                                * unlikely to reuse many
+                                                * blocks */
             compression_config,
             block_jobs: Arc::new(Mutex::new(Vec::new())),
         })
@@ -990,8 +991,6 @@ impl BytesBlockStore
         self.block_size as usize
     }
 
-    // todo create a spsc channel to send the blocks in order, allowing
-    // for prefetching
     #[cfg(feature = "async")]
     pub async fn block_queue(
         self: Arc<Self>,
@@ -999,7 +998,7 @@ impl BytesBlockStore
     ) -> Receiver<(u32, Bytes)>
     {
         // Number here is how many to prefetch
-        const PREFETCH: usize = 8;
+        const PREFETCH: usize = 64;
         let (tx, rx) = tokio::sync::mpsc::channel(PREFETCH);
 
         tokio::spawn(async move {
@@ -1180,8 +1179,6 @@ impl BytesBlockStoreBlockReader
                 results.push(j);
                 locs_idx += 1;
             } else {
-                // let block =
-                // self.active.as_mut().unwrap().next().await.unwrap();
                 let block = self.active.as_mut().unwrap().recv().await.unwrap();
                 self.current_block = block;
             }

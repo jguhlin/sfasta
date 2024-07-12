@@ -1,4 +1,4 @@
-block_size: 8
+block_size: 32
 data:
   ids:
     compression_type: ZSTD

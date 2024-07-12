@@ -206,10 +206,9 @@ impl Sfasta
 
                 let seqloc = Arc::new(seqloc);
 
-                // todo this is sequential
                 let seq = seqs.next(seqloc.1.get_sequence());
-                let id = ids.next(seqloc.1.get_ids()).await;
-                let header = headers.next(seqloc.1.get_headers()).await;
+                let id = ids.next(seqloc.1.get_ids());
+                let header = headers.next(seqloc.1.get_headers());
 
                 let mut seq = seq.await.unwrap();
 
@@ -221,7 +220,8 @@ impl Sfasta
                     }
                 }
 
-                // println!("{:#?}", seq.unwrap());
+                let id = id.await;
+                let header = header.await;
 
                 let sequence = Sequence {
                     sequence: Some(seq.freeze()),
@@ -420,8 +420,6 @@ impl Sfasta
         idx: usize,
     ) -> Result<Option<Sequence>, &'static str>
     {
-        let start = Instant::now();
-
         let seqloc = match self.get_seqloc(idx).await {
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),
@@ -429,9 +427,6 @@ impl Sfasta
         };
 
         assert!(seqloc.sequence > 0);
-
-        let duration = start.elapsed();
-        log::trace!("get_seq_by_index took {:?}", duration);
 
         self.get_sequence_by_seqloc(seqloc).await
     }
@@ -479,6 +474,75 @@ impl Sfasta
             scores: None,
             offset: 0,
         }))
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn get_sequence_metadata(
+        &self,
+        id: &str,
+    ) -> Result<Option<SequenceMetadata>, &'static str>
+    {
+        let seqloc = match self.find(id).await {
+            Ok(Some(s)) => s,
+            Ok(None) => return Ok(None),
+            Err(e) => return Err(e),
+        };
+
+        Ok(Some(self.seqloc_metadata(&seqloc).await))
+    }
+
+    #[cfg(feature = "async")]
+    pub async fn seqloc_metadata(&self, seqloc: &SeqLoc) -> SequenceMetadata
+    {
+        let id = if seqloc.ids > 0 {
+            Some(
+                std::str::from_utf8(
+                    &self.get_id(seqloc.get_ids()).await.unwrap(),
+                )
+                .unwrap()
+                .to_string(),
+            )
+        } else {
+            None
+        };
+
+        let header = seqloc.headers > 0;
+        let masking = seqloc.masking > 0;
+        let scores = seqloc.scores > 0;
+        let length: u64 = seqloc
+            .get_sequence()
+            .iter()
+            .map(|x| x.len as u64)
+            .sum::<u64>();
+
+        SequenceMetadata {
+            id,
+            header,
+            masking,
+            length,
+            scores,
+        }
+    }
+
+    /// Faster version, non-async, no ID decompression
+    pub fn seqloc_metadata_no_id(&self, seqloc: &SeqLoc) -> SequenceMetadata
+    {
+        let header = seqloc.headers > 0;
+        let masking = seqloc.masking > 0;
+        let scores = seqloc.scores > 0;
+        let length: u64 = seqloc
+            .get_sequence()
+            .iter()
+            .map(|x| x.len as u64)
+            .sum::<u64>();
+
+        SequenceMetadata {
+            id: None,
+            header,
+            masking,
+            length,
+            scores,
+        }
     }
 
     #[cfg(feature = "async")]

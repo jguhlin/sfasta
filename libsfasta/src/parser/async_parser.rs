@@ -359,7 +359,7 @@ where
             }
             Err(_) => {
                 let orig_length = buf.len();
-                let doubled = buf.len() * 2;
+                let doubled = buf.len() + 16 * 1024;
 
                 buf.resize(doubled, 0);
 
@@ -432,7 +432,7 @@ where
         };
 
         let orig_length = buf.len();
-        let doubled = buf.len() * 2;
+        let doubled = buf.len() + SIZE_HINT;
 
         buf.resize(doubled, 0);
 
@@ -466,13 +466,13 @@ where
             }
             Err(_) => {
                 let orig_length = buf.len();
-                let doubled = buf.len() * 2;
+                let doubled = buf.len() + size_hint;
 
                 buf.resize(doubled, 0);
 
                 in_buf.read(&mut buf[orig_length..]).await.unwrap();
 
-                if doubled > 256 * 1024 * 1024 {
+                if doubled > 16 * 1024 * 1024 {
                     return Result::Err(
                         "Failed to decode bincode - Max size reached"
                             .to_string(),

@@ -34,6 +34,16 @@ pub struct Header
 }
 
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
+pub struct SequenceMetadata
+{
+    pub id: Option<String>,
+    pub length: u64,
+    pub masking: bool,
+    pub scores: bool,
+    pub header: bool,
+}
+
+#[derive(PartialEq, Eq, Clone, Debug, Default)]
 pub struct Sequence
 {
     pub sequence: Option<Bytes>,

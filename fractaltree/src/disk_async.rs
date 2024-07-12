@@ -391,6 +391,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
             .search(
                 Arc::clone(&self.file_handle_manager),
                 Arc::clone(&self.compression),
+                Arc::clone(&self.opened),
                 self.start,
                 key,
             )
@@ -483,7 +484,7 @@ impl<K: Key, V: Value> FractalTreeDiskAsync<K, V>
         {
             let compressed: Vec<u8> =
                 bincode_decode_from_buffer_async_with_size_hint::<
-                    { 8 * 1024 },
+                    { 16 * 1024 },
                     _,
                     _,
                 >(&mut in_buf, config)
@@ -811,7 +812,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         *self = if compression.is_some() {
             let compressed: Vec<u8> =
                 bincode_decode_from_buffer_async_with_size_hint::<
-                    { 64 * 1024 },
+                    { 16 * 1024 },
                     _,
                     _,
                 >(in_buf, config)
@@ -832,7 +833,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
 
             bincode::decode_from_slice(&decompressed, config).unwrap().0
         } else {
-            bincode_decode_from_buffer_async_with_size_hint::<{64 * 1024}, _, _>(in_buf, config).await.unwrap()
+            bincode_decode_from_buffer_async_with_size_hint::<{16 * 1024}, _, _>(in_buf, config).await.unwrap()
         };
 
         delta_decode(&mut self.keys);
@@ -881,14 +882,19 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         &mut self,
         fhm: Arc<AsyncFileHandleManager>,
         compression: Arc<Option<CompressionConfig>>,
+        opened: Arc<SkipMap<u64, ArcNodeDiskAsync<K, V>>>,
         start: u64,
         key: &K,
     ) -> Option<V>
     {
         if self.state.on_disk() {
-            let compression = Arc::clone(&compression);
-            let mut in_buf = fhm.get_filehandle().await;
-            self.load(&mut in_buf, &compression, start).await;
+            if let Some(node) = opened.get(&self.loc) {
+                let node = node.value().clone();
+                *self = node.read().await.clone();
+            } else {
+                let mut in_buf = fhm.get_filehandle().await;
+                self.load(&mut in_buf, &compression, start).await;
+            }
         }
 
         // Optimization notes:
@@ -916,21 +922,27 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
                 .read()
                 .await;
 
+            // If all the children are loaded, we can use search_read path
+            // which means no exclusive lock on this part of the tree....
             if children[i].read().await.children_in_memory {
                 let child = children[i].read().await;
                 let compression = Arc::clone(&compression);
                 return Box::pin(child.search_read(
                     fhm,
                     compression,
+                    opened,
                     start,
                     key,
                 ))
                 .await;
             } else {
+                // Otherwise, see if they are all loaded, and if not, use the
+                // regular search path
                 let mut child = children[i].write().await;
                 child.children_in_memory = child.children_loaded().await;
                 let compression = Arc::clone(&compression);
-                Box::pin(child.search(fhm, compression, start, key)).await
+                Box::pin(child.search(fhm, compression, opened, start, key))
+                    .await
             }
         }
     }
@@ -939,6 +951,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
         &self,
         fhm: Arc<AsyncFileHandleManager>,
         compression: Arc<Option<CompressionConfig>>,
+        opened: Arc<SkipMap<u64, ArcNodeDiskAsync<K, V>>>,
         start: u64,
         key: &K,
     ) -> Option<V>
@@ -973,6 +986,7 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
                 return Box::pin(child.search_read(
                     fhm,
                     compression,
+                    opened,
                     start,
                     key,
                 ))
@@ -981,7 +995,8 @@ impl<K: Key, V: Value> NodeDiskAsync<K, V>
                 let mut child = children[i].write().await;
                 child.children_in_memory = child.children_loaded().await;
 
-                Box::pin(child.search(fhm, compression, start, key)).await
+                Box::pin(child.search(fhm, compression, opened, start, key))
+                    .await
             }
         }
     }
@@ -1098,7 +1113,7 @@ where
         };
 
         let orig_length = buf.len();
-        let doubled = buf.len() * 2;
+        let doubled = buf.len() + SIZE_HINT;
 
         buf.resize(doubled, 0);
 
@@ -1108,7 +1123,9 @@ where
         }
 
         if doubled > 16 * 1024 * 1024 {
-            return Result::Err("Failed to decode bincode".to_string());
+            return Result::Err(
+                "Failed to decode bincode - Exceeds 16 megabytes".to_string(),
+            );
         }
     }
 }
@@ -1163,13 +1180,14 @@ impl<K: Key, V: Value> ArcNodeDiskAsync<K, V>
         &self,
         fhm: Arc<AsyncFileHandleManager>,
         compression: Arc<Option<CompressionConfig>>,
+        opened: Arc<SkipMap<u64, ArcNodeDiskAsync<K, V>>>,
         start: u64,
         key: &K,
     ) -> Option<V>
     {
         let node = Arc::clone(self.into());
         let node = node.read_owned().await;
-        node.search_read(fhm, compression, start, key).await
+        node.search_read(fhm, compression, opened, start, key).await
     }
 
     pub fn arc(&self) -> Arc<RwLock<NodeDiskAsync<K, V>>>

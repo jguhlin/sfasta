@@ -50,9 +50,7 @@ impl Sfasta
 
     fn __len__(&self) -> usize
     {
-        self.runtime.block_on(async move {
-            self.inner.len().await
-        })
+        self.runtime.block_on(async move { self.inner.len().await })
     }
 
     fn __contains__(&self, id: &str) -> bool
@@ -63,7 +61,7 @@ impl Sfasta
                 Ok(Some(_)) => true,
                 Ok(None) => false,
                 Err(_) => false,
-            }            
+            }
         })
     }
 
@@ -188,9 +186,9 @@ impl Sfasta
 
     fn seq(&self, id: &str) -> PyResult<PyDataFrame>
     {
-        let seq = self.runtime.block_on(async move {
-            self.inner.get_sequence_by_id(id).await
-        });
+        let seq = self
+            .runtime
+            .block_on(async move { self.inner.get_sequence_by_id(id).await });
 
         match seq {
             Ok(Some(seq)) => {
@@ -205,7 +203,9 @@ impl Sfasta
                 };
 
                 let sequence = match seq.sequence {
-                    Some(sequence) => String::from_utf8(sequence.to_vec()).unwrap(),
+                    Some(sequence) => {
+                        String::from_utf8(sequence.to_vec()).unwrap()
+                    }
                     None => "".to_string(),
                 };
 
@@ -214,17 +214,16 @@ impl Sfasta
                     None => "".to_string(),
                 };
 
-                Ok(
-                    PyDataFrame(DataFrame::new(vec![
+                Ok(PyDataFrame(
+                    DataFrame::new(vec![
                         Series::new("ID", vec![id]),
                         Series::new("Header", vec![header]),
                         Series::new("Sequence", vec![sequence]),
                         Series::new("Scores", vec![scores]),
                     ])
-                    .unwrap()),
-                )
-
-            },
+                    .unwrap(),
+                ))
+            }
             Ok(None) => Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
                 format!("ID {} not found", id),
             )),
@@ -232,6 +231,137 @@ impl Sfasta
                 format!("Error: {}", e),
             )),
         }
+    }
+
+    fn all_metadata(&self) -> PyDataFrame
+    {
+        self.runtime.block_on(async move {
+            let seqlocs = tokio::spawn(
+                Arc::clone(&self.inner.seqlocs.as_ref().unwrap()).stream(),
+            );
+
+            let ids = tokio::spawn({
+                StringBlockStoreSeqLocReader::new(
+                    Arc::clone(&self.inner.ids.as_ref().unwrap()),
+                    Arc::clone(&self.inner.file_handles),
+                )
+            });
+
+            let seqlocs = seqlocs.await.unwrap();
+            let ids = ids.await.unwrap();
+
+            tokio::pin!(seqlocs);
+            tokio::pin!(ids);
+
+            let mut n = Vec::new();
+            let mut all_ids = Vec::new();
+
+            let mut lengths = Vec::new();
+            let mut headers = Vec::new();
+            let mut masking = Vec::new();
+            let mut scores = Vec::new();
+
+            loop {
+                let seqloc = match seqlocs.next().await {
+                    Some(s) => s,
+                    None => break,
+                };
+
+                let id = ids.next(seqloc.1.get_ids()).await;
+                if let Some(id) = id {
+                    // Convert id to String
+                    let id = String::from_utf8(id.to_vec()).unwrap();
+                    all_ids.push(Some(id));
+                } else {
+                    all_ids.push(None);
+                }
+
+                // Get the sequence
+                n.push(seqloc.0);
+                let i = self.inner.seqloc_metadata_no_id(&seqloc.1);
+                lengths.push(i.length);
+                headers.push(i.header);
+                masking.push(i.masking);
+                scores.push(i.scores);
+            }
+
+            let n = Series::new("n", n);
+            let ids = Series::new("ID", all_ids);
+            let lengths = Series::new("Length", lengths);
+            let headers = Series::new("Header", headers);
+            let masking = Series::new("Masking", masking);
+            let scores = Series::new("Scores", scores);
+
+            let df =
+                DataFrame::new(vec![n, ids, lengths, headers, masking, scores])
+                    .unwrap();
+
+            PyDataFrame(df)
+        })
+    }
+
+    /// Get metadata for all sequences without the sequence ids
+    /// This is much faster
+    // todo implement
+    fn metatadata_no_ids(&self) -> PyDataFrame
+    {
+        self.runtime.block_on(async move {
+            let seqlocs = tokio::spawn(
+                Arc::clone(&self.inner.seqlocs.as_ref().unwrap()).stream(),
+            );
+
+            let seqlocs = seqlocs.await.unwrap();
+
+            tokio::pin!(seqlocs);
+
+            let mut n = Vec::new();
+            let mut metadata = Vec::new();
+
+            loop {
+                let seqloc = match seqlocs.next().await {
+                    Some(s) => s,
+                    None => break,
+                };
+
+                // Get the sequence
+                n.push(seqloc.0);
+                let seqloc1 = seqloc.1.clone();
+                let myself = Arc::clone(&self.inner);
+                metadata.push(self.runtime.spawn(async move {
+                    myself.seqloc_metadata(&seqloc1).await
+                }));
+            }
+
+            // Join all metadata
+            // let metadata = futures::future::join_all(metadata).await;
+            let mut ids = Vec::new();
+            let mut lengths = Vec::new();
+            let mut headers = Vec::new();
+            let mut masking = Vec::new();
+            let mut scores = Vec::new();
+
+            for i in metadata {
+                let i = i.await.unwrap();
+                ids.push(i.id);
+                lengths.push(i.length);
+                headers.push(i.header);
+                masking.push(i.masking);
+                scores.push(i.scores);
+            }
+
+            let n = Series::new("n", n);
+            let ids = Series::new("ID", ids);
+            let lengths = Series::new("Length", lengths);
+            let headers = Series::new("Header", headers);
+            let masking = Series::new("Masking", masking);
+            let scores = Series::new("Scores", scores);
+
+            let df =
+                DataFrame::new(vec![n, ids, lengths, headers, masking, scores])
+                    .unwrap();
+
+            PyDataFrame(df)
+        })
     }
 
     // todo optimize for getting multiple sequences by ids

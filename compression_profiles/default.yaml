@@ -1,7 +1,7 @@
-block_size: 64
+block_size: 32
 data:
   ids:
-    compression_type: BROTLI
+    compression_type: ZSTD
     compression_level: 7
   headers:
     compression_type: BROTLI

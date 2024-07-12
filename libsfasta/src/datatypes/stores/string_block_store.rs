@@ -289,8 +289,6 @@ impl StringBlockStore
     ) -> Bytes
     {
         self.inner.get(in_buf, loc).await
-        // string_as_bytes = self.inner.get(in_buf, loc).await
-        // from_utf8(&string_as_bytes).unwrap().to_string()
     }
 
     pub fn get_loaded(&self, loc: &[Loc]) -> String
