@@ -295,7 +295,7 @@ impl Converter
 
         // Build the index in another thread...
         thread::scope(|s| {
-            let mut indexer = libfractaltree::FractalTreeBuild::new(1024, 2048);
+            let mut indexer = libfractaltree::FractalTreeBuild::new(512, 2048);
 
             let index_handle = Some(s.spawn(|_| {
                 for (id, loc) in ids_to_locs.into_iter() {
@@ -329,8 +329,11 @@ impl Converter
                 let index = index_handle.unwrap().join().unwrap();
                 let start = out_buffer_thread.stream_position().unwrap();
 
+                // This points from u32 hash to u32 location (seqloc).
+                // This is done so the seqlocs can be in insertion order
+
                 let mut index: FractalTreeDisk<u32, u32> = index.into();
-                // todo can the index be made into a dict?
+
                 index
                     .set_compression(self.compression_profile.id_index.clone());
 
@@ -389,7 +392,7 @@ impl Converter
         }
     }
 
-    /// Process buffer that outputs Seq objects
+    /// Process buffer and write to output file
     pub fn process<'convert, W, R>(
         &self,
         in_buf: &mut R,
@@ -425,7 +428,7 @@ impl Converter
 
         // Start the compression workers
         let mut compression_workers = CompressionWorker::new()
-            .with_buffer_size(threads as usize)
+            .with_buffer_size(threads as usize * 2)
             .with_threads(threads as u16)
             .with_output_queue(Arc::clone(&output_queue));
 
@@ -558,7 +561,7 @@ impl Converter
                     let mut seq = seq.to_vec();
                     seq.make_ascii_uppercase();
 
-                    // testing - this brought it to 2.8Gb
+                    // Should be a separate compression type
                     // Can we store as 2bit
                     // if can_store_2bit(&seq) {
                     // to_2bit(&mut seq);
