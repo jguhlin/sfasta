@@ -186,9 +186,10 @@ impl Sfasta
 
     fn seq(&self, id: &str) -> PyResult<PyDataFrame>
     {
+        let inner = Arc::clone(&self.inner);
         let seq = self
             .runtime
-            .block_on(async move { self.inner.get_sequence_by_id(id).await });
+            .block_on(async move { inner.get_sequence_by_id(id).await });
 
         match seq {
             Ok(Some(seq)) => {
@@ -231,6 +232,162 @@ impl Sfasta
                 format!("Error: {}", e),
             )),
         }
+    }
+
+    fn seqs(&self, query_ids: Vec<String>) -> PyResult<PyDataFrame>
+    {
+        let mut ids = Vec::with_capacity(query_ids.len());
+        let mut headers = Vec::with_capacity(query_ids.len());
+        let mut sequences = Vec::with_capacity(query_ids.len());
+        let mut scores = Vec::with_capacity(query_ids.len());
+
+        for id in query_ids {
+            let inner = Arc::clone(&self.inner);
+        let seq = self
+            .runtime
+            .block_on(async move { inner.get_sequence_by_id(&id).await });
+
+        match seq {
+            Ok(Some(seq)) => {
+                let id = match seq.id {
+                    Some(id) => String::from_utf8(id.to_vec()).unwrap(),
+                    None => "".to_string(),
+                };
+
+                ids.push(id);
+
+                let header = match seq.header {
+                    Some(header) => String::from_utf8(header.to_vec()).unwrap(),
+                    None => "".to_string(),
+                };
+
+                headers.push(header);
+
+                let sequence = match seq.sequence {
+                    Some(sequence) => {
+                        String::from_utf8(sequence.to_vec()).unwrap()
+                    }
+                    None => "".to_string(),
+                };
+
+                sequences.push(sequence);
+
+                let scores_ = match seq.scores {
+                    Some(scores) => String::from_utf8(scores.to_vec()).unwrap(),
+                    None => "".to_string(),
+                };
+
+                scores.push(scores_);
+            },
+            Ok(None) => {
+                // Not sure what to do with not found, ignore for now...
+            },
+            Err(e) => {
+                // Not sure what to do with error, ignore for now...
+            }
+        }
+
+       }
+
+       let id = Series::new("ID", ids);
+       let header = Series::new("Header", headers);
+       let sequence = Series::new("Sequence", sequences);
+       let scores = Series::new("Scores", scores);
+
+       Ok(PyDataFrame(
+           DataFrame::new(vec![
+               id,
+               header,
+               sequence,
+               scores,
+           ])
+           .unwrap(),
+       ))
+    }
+
+    /// Much slower than seqs (which is much more linear)
+    /// Weird... maybe tokio and py are not a good combo here?
+    /// Or it's something with loading and unloading blocks. dunno
+
+    fn seqs_joinset(&self, query_ids: Vec<String>) -> PyResult<PyDataFrame>
+    {
+        
+        self.runtime.block_on(async move {
+            let mut seqs = tokio::task::JoinSet::new();
+
+            for id in query_ids {
+                let inner = Arc::clone(&self.inner);
+                seqs.spawn(async move {
+                    inner.get_sequence_by_id(&id).await
+                });
+            }
+
+            let mut ids = Vec::new();
+            let mut headers = Vec::new();
+            let mut sequences = Vec::new();
+            let mut scores = Vec::new();
+
+            while let Some(seq) = seqs.join_next().await {
+                let seq = seq.unwrap().unwrap();
+                match seq {
+                    Some(seq) => {
+                        let id = match seq.id {
+                            Some(id) => String::from_utf8(id.to_vec()).unwrap(),
+                            None => "".to_string(),
+                        };
+
+                        ids.push(id);
+
+                        let header = match seq.header {
+                            Some(header) => {
+                                String::from_utf8(header.to_vec()).unwrap()
+                            }
+                            None => "".to_string(),
+                        };
+                        headers.push(header);
+
+                        let sequence = match seq.sequence {
+                            Some(sequence) => {
+                                String::from_utf8(sequence.to_vec()).unwrap()
+                            }
+                            None => "".to_string(),
+                        };
+
+                        sequences.push(sequence);
+
+                        let score = match seq.scores {
+                            Some(scores) => {
+                                String::from_utf8(scores.to_vec()).unwrap()
+                            }
+                            None => "".to_string(),
+                        };
+
+                        scores.push(score);
+                    },
+                    None => {
+                        // Not sure what to do with not found, ignore for now...
+                    }
+                }
+            }
+
+            let id = Series::new("ID", ids);
+            let header = Series::new("Header", headers);
+            let sequence = Series::new("Sequence", sequences);
+            let scores = Series::new("Scores", scores);
+
+            Ok(PyDataFrame(
+                DataFrame::new(vec![
+                    id,
+                    header,
+                    sequence,
+                    scores,
+                ])
+                .unwrap(),
+            ))
+
+        }
+    )
+
     }
 
     fn all_metadata(&self) -> PyDataFrame

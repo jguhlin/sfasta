@@ -333,11 +333,11 @@ impl Sfasta
     /// Convenience function. Not optimized for speed. If you don't
     /// need the header, scores, or masking, it's better to call
     /// more performant functions.
-    #[tracing::instrument(skip(self))]
+    // #[tracing::instrument(skip(self))]
     pub async fn get_sequence_by_id(
-        &self,
+        self: Arc<Self>,
         id: &str,
-    ) -> Result<Option<Sequence>, &str>
+    ) -> Result<Option<Sequence>, &'static str>
     {
         let matches = self.find(id).await.expect("Unable to find entry");
         if matches.is_none() {
