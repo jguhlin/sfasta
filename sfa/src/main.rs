@@ -452,7 +452,7 @@ fn ioslice_sequence(seq: &[u8], line_length: usize) -> Vec<IoSlice<'_>>
 async fn get_sequence_output(
     sfasta: std::sync::Arc<libsfasta::prelude::Sfasta>,
     index: usize,
-) -> Result<Option<libsfasta::Sequence>, &'static str>
+) -> Result<Option<libsfasta::Sequence<bytes::Bytes>>, &'static str>
 {
     sfasta.get_sequence_by_index(index).await
 }
