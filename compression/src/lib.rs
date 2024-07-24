@@ -64,9 +64,10 @@ pub enum CompressionType
     XZ,     // Implemented, 6 is default level
     BROTLI, // Implemented, 6 is default
     BZIP2,  // Implemented
-    BITS,   // Not implemented. Compress as 2bit or huffman, then as ZSTD if unable to do so...
-    BIT2,   // Not implemented
-    BIT4,   // Not implemented
+    BITS,   /* Not implemented. Compress as 2bit or huffman, then as ZSTD
+             * if unable to do so... */
+    BIT2, // Not implemented
+    BIT4, // Not implemented
     MINIMUMREDUNDANCY,
 }
 

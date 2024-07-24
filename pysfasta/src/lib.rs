@@ -243,66 +243,65 @@ impl Sfasta
 
         for id in query_ids {
             let inner = Arc::clone(&self.inner);
-        let seq = self
-            .runtime
-            .block_on(async move { inner.get_sequence_by_id(&id).await });
+            let seq = self
+                .runtime
+                .block_on(async move { inner.get_sequence_by_id(&id).await });
 
-        match seq {
-            Ok(Some(seq)) => {
-                let id = match seq.id {
-                    Some(id) => String::from_utf8(id.to_vec()).unwrap(),
-                    None => "".to_string(),
-                };
+            match seq {
+                Ok(Some(seq)) => {
+                    let id = match seq.id {
+                        Some(id) => String::from_utf8(id.to_vec()).unwrap(),
+                        None => "".to_string(),
+                    };
 
-                ids.push(id);
+                    ids.push(id);
 
-                let header = match seq.header {
-                    Some(header) => String::from_utf8(header.to_vec()).unwrap(),
-                    None => "".to_string(),
-                };
+                    let header = match seq.header {
+                        Some(header) => {
+                            String::from_utf8(header.to_vec()).unwrap()
+                        }
+                        None => "".to_string(),
+                    };
 
-                headers.push(header);
+                    headers.push(header);
 
-                let sequence = match seq.sequence {
-                    Some(sequence) => {
-                        String::from_utf8(sequence.to_vec()).unwrap()
-                    }
-                    None => "".to_string(),
-                };
+                    let sequence = match seq.sequence {
+                        Some(sequence) => {
+                            String::from_utf8(sequence.to_vec()).unwrap()
+                        }
+                        None => "".to_string(),
+                    };
 
-                sequences.push(sequence);
+                    sequences.push(sequence);
 
-                let scores_ = match seq.scores {
-                    Some(scores) => String::from_utf8(scores.to_vec()).unwrap(),
-                    None => "".to_string(),
-                };
+                    let scores_ = match seq.scores {
+                        Some(scores) => {
+                            String::from_utf8(scores.to_vec()).unwrap()
+                        }
+                        None => "".to_string(),
+                    };
 
-                scores.push(scores_);
-            },
-            Ok(None) => {
-                // Not sure what to do with not found, ignore for now...
-            },
-            Err(e) => {
-                // Not sure what to do with error, ignore for now...
+                    scores.push(scores_);
+                }
+                Ok(None) => {
+                    // Not sure what to do with not found, ignore for
+                    // now...
+                }
+                Err(e) => {
+                    // Not sure what to do with error, ignore for
+                    // now...
+                }
             }
         }
 
-       }
+        let id = Series::new("ID", ids);
+        let header = Series::new("Header", headers);
+        let sequence = Series::new("Sequence", sequences);
+        let scores = Series::new("Scores", scores);
 
-       let id = Series::new("ID", ids);
-       let header = Series::new("Header", headers);
-       let sequence = Series::new("Sequence", sequences);
-       let scores = Series::new("Scores", scores);
-
-       Ok(PyDataFrame(
-           DataFrame::new(vec![
-               id,
-               header,
-               sequence,
-               scores,
-           ])
-           .unwrap(),
-       ))
+        Ok(PyDataFrame(
+            DataFrame::new(vec![id, header, sequence, scores]).unwrap(),
+        ))
     }
 
     /// Much slower than seqs (which is much more linear)
@@ -311,15 +310,12 @@ impl Sfasta
 
     fn seqs_joinset(&self, query_ids: Vec<String>) -> PyResult<PyDataFrame>
     {
-        
         self.runtime.block_on(async move {
             let mut seqs = tokio::task::JoinSet::new();
 
             for id in query_ids {
                 let inner = Arc::clone(&self.inner);
-                seqs.spawn(async move {
-                    inner.get_sequence_by_id(&id).await
-                });
+                seqs.spawn(async move { inner.get_sequence_by_id(&id).await });
             }
 
             let mut ids = Vec::new();
@@ -363,9 +359,10 @@ impl Sfasta
                         };
 
                         scores.push(score);
-                    },
+                    }
                     None => {
-                        // Not sure what to do with not found, ignore for now...
+                        // Not sure what to do with not found, ignore
+                        // for now...
                     }
                 }
             }
@@ -376,18 +373,9 @@ impl Sfasta
             let scores = Series::new("Scores", scores);
 
             Ok(PyDataFrame(
-                DataFrame::new(vec![
-                    id,
-                    header,
-                    sequence,
-                    scores,
-                ])
-                .unwrap(),
+                DataFrame::new(vec![id, header, sequence, scores]).unwrap(),
             ))
-
-        }
-    )
-
+        })
     }
 
     fn all_metadata(&self) -> PyDataFrame

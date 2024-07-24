@@ -43,9 +43,9 @@ pub struct SequenceMetadata
     pub header: bool,
 }
 
-
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
-pub struct Sequence<T> {
+pub struct Sequence<T>
+{
     pub sequence: Option<T>,
     pub scores: Option<T>,
     pub header: Option<T>,
@@ -54,8 +54,10 @@ pub struct Sequence<T> {
 }
 
 // Implementations for specific types if needed
-impl Sequence<Bytes> {
-    pub fn len(&self) -> usize {
+impl Sequence<Bytes>
+{
+    pub fn len(&self) -> usize
+    {
         self.sequence.as_ref().unwrap().len()
     }
 
@@ -79,11 +81,12 @@ impl Sequence<Bytes> {
     {
         self.sequence.as_ref().unwrap().is_empty()
     }
-
 }
 
-impl Sequence<Vec<u8>> {
-    pub fn len(&self) -> usize {
+impl Sequence<Vec<u8>>
+{
+    pub fn len(&self) -> usize
+    {
         self.sequence.as_ref().unwrap().len()
     }
 
@@ -111,9 +114,7 @@ impl Sequence<Vec<u8>> {
 
 impl<T> Sequence<T>
 {
-    pub fn into_parts(
-        self,
-    ) -> (Option<T>, Option<T>, Option<T>, Option<T>)
+    pub fn into_parts(self) -> (Option<T>, Option<T>, Option<T>, Option<T>)
     {
         {
             (self.id, self.header, self.sequence, self.scores)
@@ -135,10 +136,6 @@ impl<T> Sequence<T>
             offset: 0,
         }
     }
-
-    
-
-
 }
 
 // Prefer conversion to Bytes
@@ -231,7 +228,8 @@ mod tests
         assert_eq!(scores, Some(Bytes::from(vec![b'7', b'8', b'9'])));
 
         // Test make_uppercase and make_lowercase
-        let mut seq: Sequence<Bytes> = Sequence::from(vec![b'a', b'c', b'g', b't']);
+        let mut seq: Sequence<Bytes> =
+            Sequence::from(vec![b'a', b'c', b'g', b't']);
         seq.make_uppercase();
         assert_eq!(
             seq.sequence.as_ref().unwrap(),
