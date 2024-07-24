@@ -137,7 +137,7 @@ impl Sfasta
     // todo channels would be better and let things work in parallel in the
     // background but good enough for now
     #[cfg(feature = "async")]
-    pub fn stream(self: Arc<Self>) -> impl Stream<Item = Sequence>
+    pub fn stream(self: Arc<Self>) -> impl Stream<Item = Sequence<Bytes>>
     {
         let sfasta = Arc::clone(&self);
 
@@ -337,7 +337,7 @@ impl Sfasta
     pub async fn get_sequence_by_id(
         self: Arc<Self>,
         id: &str,
-    ) -> Result<Option<Sequence>, &'static str>
+    ) -> Result<Option<Sequence<Bytes>>, &'static str>
     {
         let matches = self.find(id).await.expect("Unable to find entry");
         if matches.is_none() {
@@ -418,7 +418,7 @@ impl Sfasta
     pub async fn get_sequence_by_index(
         &self,
         idx: usize,
-    ) -> Result<Option<Sequence>, &'static str>
+    ) -> Result<Option<Sequence<Bytes>>, &'static str>
     {
         let seqloc = match self.get_seqloc(idx).await {
             Ok(Some(s)) => s,
@@ -550,7 +550,7 @@ impl Sfasta
     pub async fn get_sequence_by_seqloc(
         &self,
         seqloc: SeqLoc,
-    ) -> Result<Option<Sequence>, &'static str>
+    ) -> Result<Option<Sequence<Bytes>>, &'static str>
     {
         let seqloc = Arc::new(seqloc);
 
@@ -656,7 +656,7 @@ impl Sfasta
         &self,
         seqloc: &SeqLoc,
         cache: bool,
-    ) -> Result<Option<Sequence>, &'static str>
+    ) -> Result<Option<Sequence<Bytes>>, &'static str>
     {
         let sequence = if seqloc.sequence > 0 {
             if cache {
@@ -712,7 +712,7 @@ impl Sfasta
         &self,
         locs: &[Loc],
         cache: bool,
-    ) -> Result<Option<Sequence>, &'static str>
+    ) -> Result<Option<Sequence<Bytes>>, &'static str>
     {
         let sequence = if cache {
             Some(self.get_sequence_by_locs(locs).await.unwrap())
@@ -1316,7 +1316,7 @@ impl SfastaIterator
 #[cfg(feature = "async")]
 impl Iterator for SfastaIterator
 {
-    type Item = Result<Sequence, &'static str>;
+    type Item = Result<Sequence<Bytes>, &'static str>;
 
     fn next(&mut self) -> Option<Self::Item>
     {

@@ -43,47 +43,19 @@ pub struct SequenceMetadata
     pub header: bool,
 }
 
+
 #[derive(PartialEq, Eq, Clone, Debug, Default)]
-pub struct Sequence
-{
-    pub sequence: Option<Bytes>,
-    pub scores: Option<Bytes>,
-    pub header: Option<Bytes>,
-    pub id: Option<Bytes>,
-    /// Primarily used downstream, but when used for random access
-    /// this is the offset from the start of the sequence
+pub struct Sequence<T> {
+    pub sequence: Option<T>,
+    pub scores: Option<T>,
+    pub header: Option<T>,
+    pub id: Option<T>,
     pub offset: usize,
 }
 
-impl Sequence
-{
-    pub fn into_parts(
-        self,
-    ) -> (Option<Bytes>, Option<Bytes>, Option<Bytes>, Option<Bytes>)
-    {
-        {
-            (self.id, self.header, self.sequence, self.scores)
-        }
-    }
-
-    pub fn new(
-        sequence: Option<Bytes>,
-        id: Option<Bytes>,
-        header: Option<Bytes>,
-        scores: Option<Bytes>,
-    ) -> Sequence
-    {
-        Sequence {
-            sequence,
-            header,
-            id,
-            scores,
-            offset: 0,
-        }
-    }
-
-    pub fn len(&self) -> usize
-    {
+// Implementations for specific types if needed
+impl Sequence<Bytes> {
+    pub fn len(&self) -> usize {
         self.sequence.as_ref().unwrap().len()
     }
 
@@ -107,11 +79,72 @@ impl Sequence
     {
         self.sequence.as_ref().unwrap().is_empty()
     }
+
 }
 
-impl From<Vec<u8>> for Sequence
+impl Sequence<Vec<u8>> {
+    pub fn len(&self) -> usize {
+        self.sequence.as_ref().unwrap().len()
+    }
+
+    pub fn make_uppercase(&mut self)
+    {
+        // Convert to Vec<u8>
+        let mut seq: Vec<u8> = self.sequence.take().unwrap().into();
+        seq.make_ascii_uppercase();
+        self.sequence = Some(seq);
+    }
+
+    pub fn make_lowercase(&mut self)
+    {
+        // Convert to Vec<u8>
+        let mut seq: Vec<u8> = self.sequence.take().unwrap().into();
+        seq.make_ascii_lowercase();
+        self.sequence = Some(seq);
+    }
+
+    pub fn is_empty(&self) -> bool
+    {
+        self.sequence.as_ref().unwrap().is_empty()
+    }
+}
+
+impl<T> Sequence<T>
 {
-    fn from(seq: Vec<u8>) -> Sequence
+    pub fn into_parts(
+        self,
+    ) -> (Option<T>, Option<T>, Option<T>, Option<T>)
+    {
+        {
+            (self.id, self.header, self.sequence, self.scores)
+        }
+    }
+
+    pub fn new(
+        sequence: Option<T>,
+        id: Option<T>,
+        header: Option<T>,
+        scores: Option<T>,
+    ) -> Sequence<T>
+    {
+        Sequence {
+            sequence,
+            header,
+            id,
+            scores,
+            offset: 0,
+        }
+    }
+
+    
+
+
+}
+
+// Prefer conversion to Bytes
+impl From<Vec<u8>> for Sequence<Bytes>
+{
+    fn from(seq: Vec<u8>) -> Sequence<Bytes>
     {
         Sequence {
             sequence: Some(Bytes::from(seq)),
@@ -123,9 +156,23 @@ impl From<Vec<u8>> for Sequence
     }
 }
 
-impl From<Bytes> for Sequence
+impl From<Bytes> for Sequence<Bytes>
 {
-    fn from(seq: Bytes) -> Sequence
+    fn from(seq: Bytes) -> Sequence<Bytes>
+    {
+        Sequence {
+            sequence: Some(seq),
+            header: None,
+            id: None,
+            scores: None,
+            offset: 0,
+        }
+    }
+}
+
+impl From<Vec<u8>> for Sequence<Vec<u8>>
+{
+    fn from(seq: Vec<u8>) -> Sequence<Vec<u8>>
     {
         Sequence {
             sequence: Some(seq),
@@ -145,7 +192,7 @@ mod tests
     #[test]
     fn test_sequence()
     {
-        let seq = Sequence::from(vec![b'A', b'C', b'G', b'T']);
+        let seq: Sequence<Bytes> = Sequence::from(vec![b'A', b'C', b'G', b'T']);
         assert_eq!(
             seq.sequence.as_ref().unwrap(),
             &vec![b'A', b'C', b'G', b'T']
@@ -184,7 +231,7 @@ mod tests
         assert_eq!(scores, Some(Bytes::from(vec![b'7', b'8', b'9'])));
 
         // Test make_uppercase and make_lowercase
-        let mut seq = Sequence::from(vec![b'a', b'c', b'g', b't']);
+        let mut seq: Sequence<Bytes> = Sequence::from(vec![b'a', b'c', b'g', b't']);
         seq.make_uppercase();
         assert_eq!(
             seq.sequence.as_ref().unwrap(),
@@ -197,14 +244,14 @@ mod tests
         );
 
         // Test is_empty
-        let seq = Sequence::from(vec![]);
+        let seq: Sequence<Bytes> = Sequence::from(vec![]);
         assert_eq!(seq.is_empty(), true);
 
-        let seq = Sequence::from(vec![b'A']);
+        let seq: Sequence<Bytes> = Sequence::from(vec![b'A']);
         assert_eq!(seq.is_empty(), false);
 
         // Test len
-        let seq = Sequence::from(vec![b'A', b'C', b'G', b'T']);
+        let seq: Sequence<Bytes> = Sequence::from(vec![b'A', b'C', b'G', b'T']);
         assert_eq!(seq.len(), 4);
     }
 }
