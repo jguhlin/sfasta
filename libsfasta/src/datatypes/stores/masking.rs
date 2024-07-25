@@ -61,7 +61,7 @@ impl Builder<Vec<u8>> for MaskingStoreBuilder
 {
     fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
     {
-        Ok(self.add(input))
+        Ok(self.add(&input))
     }
 
     fn finalize(&mut self) -> Result<(), &str>
@@ -161,7 +161,7 @@ impl MaskingStoreBuilder
         self
     }
 
-    pub fn add(&mut self, seq: Vec<u8>) -> Vec<Loc>
+    pub fn add(&mut self, seq: &[u8]) -> Vec<Loc>
     {
         // If none are lowercase, nope out here... Written in a way that
         // allows for easy vectorization for SIMD

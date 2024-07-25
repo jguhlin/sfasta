@@ -209,6 +209,8 @@ where
             .stream_position()
             .expect("Unable to work with seek API");
 
+        self.directory_location = loc;
+
         out_fh
             .write_all("sfasta".as_bytes())
             .expect("Unable to write 'sfasta' to output");
@@ -230,8 +232,6 @@ where
     }
 
     pub fn init(&mut self, out_fh: Box<W>)
-    where
-        W: WriteAndSeek + 'static + Send + Sync,
     {
         self.out_fh = Some(Arc::new(Mutex::new(out_fh)));
 
@@ -354,22 +354,304 @@ where
         self.scores = scores;
     }
 
+    pub fn add_sequence(
+        &mut self,
+        id: Vec<u8>,
+        seq: Vec<u8>,
+        header: Option<Vec<u8>>,
+        scores: Option<Vec<u8>>,
+    )
+    {
+        let scores_locs = if let Some(quals) = scores {
+            let loc = self.scores.add(quals);
+            loc.unwrap()
+        } else {
+            vec![]
+        };
+
+        let masking_locs = self.masking.add(&seq);
+
+        let mut seq = seq.to_vec();
+        seq.make_ascii_uppercase();
+
+        let loc = self.sequences.add(seq);
+        let sequence_locs = loc.unwrap();
+
+        let myid = std::sync::Arc::new(id.to_vec());
+        let id_locs = self.ids.add(myid.to_vec());
+
+        let headers_loc = if let Some(x) = header {
+            self.headers.add(x.to_vec())
+        } else {
+            vec![]
+        };
+
+        let mut seqloc = SeqLoc::new();
+        seqloc.add_locs(
+            &id_locs,
+            &sequence_locs,
+            &masking_locs,
+            &scores_locs,
+            &headers_loc,
+            &vec![],
+            &vec![],
+        );
+
+        let loc = self.seqlocs.as_mut().unwrap().add_to_index(seqloc);
+
+        // ids_string.push(Arc::clone(&myid));
+        self.ids_to_locs.push((myid, loc));
+    }
+
     pub fn finish(&mut self)
     {
         let mut out_fh = self.out_fh.as_mut().unwrap().lock().unwrap();
-
-        // todo anything else?
         out_fh
             .seek(SeekFrom::Start(self.directory_location))
             .expect("Unable to seek to start of the file");
 
+        out_fh.flush().expect("Unable to flush output buffer");
         drop(out_fh);
 
+        self.write_headers();
+    }
+
+    pub fn shutdown_stores(&mut self)
+    {
         self.output_worker.as_mut().unwrap().shutdown();
-        // Destroy it
+
+        while self.output_worker.as_ref().unwrap().len() > 0 {
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+
         self.output_worker = None;
 
-        self.write_headers();
+        let mut out_fh = self.out_fh.as_mut().unwrap().lock().unwrap();
+
+        let formatter = make_format(DECIMAL);
+
+        let start = out_fh.stream_position().unwrap();
+
+        // --------------------------- Headers
+
+        log::trace!("Writing headers");
+
+        match self.headers.write_block_locations(&mut *out_fh) {
+            Ok(_) => (),
+            Err(x) => match x {
+                BlockStoreError::Empty => (),
+                _ => panic!("Error writing headers: {:?}", x),
+            },
+        };
+
+        let end = out_fh.stream_position().unwrap();
+        log::debug!("Headers Fractal Tree Size: {}", formatter(end - start));
+
+        log::info!(
+            "Headers Compression Ratio: {:.2}% ({} -> {})",
+            (self.headers.inner.compressed_size as f64
+                / self.headers.inner.data_size as f64
+                * 100.0),
+            ByteSize::from_bytes(self.headers.inner.data_size as u64)
+                .to_string(),
+            ByteSize::from_bytes(self.headers.inner.compressed_size as u64)
+                .to_string()
+        );
+
+        // --------------------------- IDs
+
+        log::trace!("Writing IDs");
+
+        let start = out_fh.stream_position().unwrap();
+        match self.ids.write_block_locations(&mut *out_fh) {
+            Ok(_) => (),
+            Err(x) => match x {
+                BlockStoreError::Empty => (),
+                _ => panic!("Error writing ids: {:?}", x),
+            },
+        };
+        let end = out_fh.stream_position().unwrap();
+        log::debug!("IDs Fractal Tree Size: {}", formatter(end - start));
+
+        log::info!(
+            "IDs Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
+                (self.ids.inner.compressed_size as f64
+                    / self.ids.inner.data_size as f64
+                    * 100.0),
+            ByteSize::from_bytes(self.ids.inner.data_size as u64)
+                .to_string(),
+            ByteSize::from_bytes(
+                self.ids.inner.compressed_size as u64
+            )
+            .to_string(),
+            ByteSize::from_bytes(
+                self.ids.inner.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / self.ids.inner.block_data.len() as u64
+            )
+        );
+
+        // --------------------------- Masking
+
+        // todo make sure we are handling empties properly!
+
+        let start = out_fh.stream_position().unwrap();
+        match self.masking.write_block_locations(&mut *out_fh) {
+            Ok(_) => {
+                let end = out_fh.stream_position().unwrap();
+                log::debug!(
+                    "Masking Fractal Tree Size: {}",
+                    formatter(end - start)
+                );
+
+                log::info!(
+                    "Masking Compression Ratio: {:.2}% ({} -> {})  - Avg Compressed Block Size: {}",
+                        (self.masking.inner.compressed_size as f64
+                            / self.masking.inner.data_size as f64
+                            * 100.0),
+                    ByteSize::from_bytes(
+                        self.masking.inner.data_size as u64
+                    )
+                    .to_string(),
+                    ByteSize::from_bytes(
+                        self.masking.inner.compressed_size as u64
+                    )
+                    .to_string(),
+                    ByteSize::from_bytes(
+                        self.masking.inner.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / self.masking.inner.block_data.len() as u64
+                    )
+                );
+            }
+            Err(x) => match x {
+                BlockStoreError::Empty => (),
+                _ => panic!("Error writing masking: {:?}", x),
+            },
+        };
+
+        // --------------------------- Sequences
+
+        let start = out_fh.stream_position().unwrap();
+        match self.sequences.write_block_locations(&mut *out_fh) {
+            Ok(_) => {
+                let end = out_fh.stream_position().unwrap();
+                log::debug!(
+                    "Sequences Fractal Tree Size: {}",
+                    formatter(end - start)
+                );
+
+                log::info!(
+                        "Sequences Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
+                            (self.sequences.compressed_size as f64
+                                / self.sequences.data_size as f64
+                                * 100.0),
+                        ByteSize::from_bytes(self.sequences.data_size as u64)
+                            .to_string(),
+                        ByteSize::from_bytes(
+                            self.sequences.compressed_size as u64
+                        )
+                        .to_string(),
+                        ByteSize::from_bytes(
+                            self.sequences.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / self.sequences.block_data.len() as u64
+                        )
+                    );
+            }
+            Err(x) => match x {
+                BlockStoreError::Empty => (),
+                _ => panic!("Error writing sequences: {:?}", x),
+            },
+        };
+
+        // --------------------------- Scores
+
+        let start = out_fh.stream_position().unwrap();
+        match self.scores.write_block_locations(&mut *out_fh) {
+            Ok(_) => {
+                let end = out_fh.stream_position().unwrap();
+                log::debug!(
+                    "Scores Fractal Tree Size: {}",
+                    formatter(end - start)
+                );
+
+                log::info!(
+                    "Scores Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
+                        (self.scores.compressed_size as f64
+                        / self.scores.data_size as f64
+                        * 100.0),
+                ByteSize::from_bytes(self.scores.data_size as u64)
+                    .to_string(),
+                ByteSize::from_bytes(
+                    self.scores.compressed_size as u64
+                )
+                .to_string(),
+                ByteSize::from_bytes(
+                    self.scores.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / self.scores.block_data.len() as u64
+                )
+            );
+            }
+            Err(x) => match x {
+                BlockStoreError::Empty => (),
+                _ => panic!("Error writing scores: {:?}", x),
+            },
+        };
+
+        // --- finished
+
+        // Write the headers for each store...
+        if !self.headers.is_empty() {
+            self.sfasta.directory.headers_loc =
+                NonZeroU64::new(out_fh.stream_position().unwrap());
+            self.headers.write_header(
+                self.sfasta.directory.headers_loc.unwrap().into(),
+                &mut *out_fh,
+            );
+        } else {
+            self.sfasta.directory.headers_loc = None;
+        }
+
+        if !self.ids.is_empty() {
+            self.sfasta.directory.ids_loc =
+                NonZeroU64::new(out_fh.stream_position().unwrap());
+            self.ids.write_header(
+                self.sfasta.directory.ids_loc.unwrap().into(),
+                &mut *out_fh,
+            );
+        } else {
+            self.sfasta.directory.ids_loc = None;
+        }
+
+        if !self.masking.is_empty() {
+            self.sfasta.directory.masking_loc =
+                NonZeroU64::new(out_fh.stream_position().unwrap());
+            self.masking.write_header(
+                self.sfasta.directory.masking_loc.unwrap().into(),
+                &mut *out_fh,
+            );
+        } else {
+            self.sfasta.directory.masking_loc = None;
+        }
+
+        if !self.sequences.is_empty() {
+            self.sfasta.directory.sequences_loc =
+                NonZeroU64::new(out_fh.stream_position().unwrap());
+            self.sequences.write_header(
+                self.sfasta.directory.sequences_loc.unwrap().into(),
+                &mut *out_fh,
+            );
+        } else {
+            self.sfasta.directory.sequences_loc = None;
+        }
+
+        if !self.scores.is_empty() {
+            self.sfasta.directory.scores_loc =
+                NonZeroU64::new(out_fh.stream_position().unwrap());
+            self.scores.write_header(
+                self.sfasta.directory.scores_loc.unwrap().into(),
+                &mut *out_fh,
+            );
+        } else {
+            self.sfasta.directory.scores_loc = None;
+        }
+
+        out_fh.flush().expect("Unable to flush output buffer");
+        drop(out_fh);
     }
 
     /// Main conversion function for FASTA/Q files
@@ -385,9 +667,13 @@ where
     {
         self.init(out_fh);
 
-        log::info!("Writing sequences start...",);
+        log::info!("Writing sequences start...");
 
         self.process(in_buf);
+        log::debug!("Finished processing sequences");
+        self.shutdown_stores();
+
+        log::trace!("Stores shutdown");
 
         let mut fractaltree_pos = 0;
         let mut seqlocs_location = 0;
@@ -399,20 +685,15 @@ where
 
         std::mem::swap(&mut ids_to_locs, &mut self.ids_to_locs);
 
-        // thread::scope(|s| {
         let mut indexer = libfractaltree::FractalTreeBuild::new(512, 2048);
         let out_buffer = Arc::clone(self.out_fh.as_ref().unwrap());
         let mut out_buffer_thread = out_buffer.lock().unwrap();
 
-        // let index_handle = Some(s.spawn(|_| {
         for (id, loc) in ids_to_locs.into_iter() {
             let id = xxh3_64(&id);
             indexer.insert(id as u32, loc);
         }
         indexer.flush_all();
-
-        //                indexer
-        // }));
 
         let formatter = make_format(DECIMAL);
 
@@ -521,7 +802,7 @@ where
                         vec![]
                     };
 
-                    let masking_locs = self.masking.add(seq.to_vec());
+                    let masking_locs = self.masking.add(&seq);
 
                     // Capitalize and add to sequences
                     let mut seq = seq.to_vec();
@@ -593,240 +874,7 @@ where
             }
         }
 
-        self.output_worker.as_mut().unwrap().shutdown();
-
-        let formatter = make_format(DECIMAL);
-
-        // Probably unnecessary Arc clone, but adds very little time (overall)
-        // and important for multithreading safety...
-        let out_fh = Arc::clone(self.out_fh.as_ref().unwrap());
-        let mut out_buffer = out_fh.lock().unwrap();
-
-        let start = out_buffer.stream_position().unwrap();
-
-        // --------------------------- Headers
-
-        log::trace!("Writing headers");
-
-        match self.headers.write_block_locations(&mut *out_buffer) {
-            Ok(_) => (),
-            Err(x) => match x {
-                BlockStoreError::Empty => (),
-                _ => panic!("Error writing headers: {:?}", x),
-            },
-        };
-
-        let end = out_buffer.stream_position().unwrap();
-        log::debug!("Headers Fractal Tree Size: {}", formatter(end - start));
-
-        log::info!(
-            "Headers Compression Ratio: {:.2}% ({} -> {})",
-            (self.headers.inner.compressed_size as f64
-                / self.headers.inner.data_size as f64
-                * 100.0),
-            ByteSize::from_bytes(self.headers.inner.data_size as u64)
-                .to_string(),
-            ByteSize::from_bytes(self.headers.inner.compressed_size as u64)
-                .to_string()
-        );
-
-        // --------------------------- IDs
-
-        log::trace!("Writing IDs");
-
-        let start = out_buffer.stream_position().unwrap();
-        match self.ids.write_block_locations(&mut *out_buffer) {
-            Ok(_) => (),
-            Err(x) => match x {
-                BlockStoreError::Empty => (),
-                _ => panic!("Error writing ids: {:?}", x),
-            },
-        };
-        let end = out_buffer.stream_position().unwrap();
-        log::debug!("IDs Fractal Tree Size: {}", formatter(end - start));
-
-        log::info!(
-            "IDs Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
-                (self.ids.inner.compressed_size as f64
-                    / self.ids.inner.data_size as f64
-                    * 100.0),
-            ByteSize::from_bytes(self.ids.inner.data_size as u64)
-                .to_string(),
-            ByteSize::from_bytes(
-                self.ids.inner.compressed_size as u64
-            )
-            .to_string(),
-            ByteSize::from_bytes(
-                self.ids.inner.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / self.ids.inner.block_data.len() as u64
-            )
-        );
-
-        // --------------------------- Masking
-
-        // todo make sure we are handling empties properly!
-
-        let start = out_buffer.stream_position().unwrap();
-        match self.masking.write_block_locations(&mut *out_buffer) {
-            Ok(_) => {
-                let end = out_buffer.stream_position().unwrap();
-                log::debug!(
-                    "Masking Fractal Tree Size: {}",
-                    formatter(end - start)
-                );
-
-                log::info!(
-                    "Masking Compression Ratio: {:.2}% ({} -> {})  - Avg Compressed Block Size: {}",
-                        (self.masking.inner.compressed_size as f64
-                            / self.masking.inner.data_size as f64
-                            * 100.0),
-                    ByteSize::from_bytes(
-                        self.masking.inner.data_size as u64
-                    )
-                    .to_string(),
-                    ByteSize::from_bytes(
-                        self.masking.inner.compressed_size as u64
-                    )
-                    .to_string(),
-                    ByteSize::from_bytes(
-                        self.masking.inner.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / self.masking.inner.block_data.len() as u64
-                    )
-                );
-            }
-            Err(x) => match x {
-                BlockStoreError::Empty => (),
-                _ => panic!("Error writing masking: {:?}", x),
-            },
-        };
-
-        // --------------------------- Sequences
-
-        let start = out_buffer.stream_position().unwrap();
-        match self.sequences.write_block_locations(&mut *out_buffer) {
-            Ok(_) => {
-                let end = out_buffer.stream_position().unwrap();
-                log::debug!(
-                    "Sequences Fractal Tree Size: {}",
-                    formatter(end - start)
-                );
-
-                log::info!(
-                        "Sequences Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
-                            (self.sequences.compressed_size as f64
-                                / self.sequences.data_size as f64
-                                * 100.0),
-                        ByteSize::from_bytes(self.sequences.data_size as u64)
-                            .to_string(),
-                        ByteSize::from_bytes(
-                            self.sequences.compressed_size as u64
-                        )
-                        .to_string(),
-                        ByteSize::from_bytes(
-                            self.sequences.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / self.sequences.block_data.len() as u64
-                        )
-                    );
-            }
-            Err(x) => match x {
-                BlockStoreError::Empty => (),
-                _ => panic!("Error writing sequences: {:?}", x),
-            },
-        };
-
-        // --------------------------- Scores
-
-        let start = out_buffer.stream_position().unwrap();
-        match self.scores.write_block_locations(&mut *out_buffer) {
-            Ok(_) => {
-                let end = out_buffer.stream_position().unwrap();
-                log::debug!(
-                    "Scores Fractal Tree Size: {}",
-                    formatter(end - start)
-                );
-
-                log::info!(
-                    "Scores Compression Ratio: {:.2}% ({} -> {}) - Avg Compressed Block Size: {}",
-                        (self.scores.compressed_size as f64
-                        / self.scores.data_size as f64
-                        * 100.0),
-                ByteSize::from_bytes(self.scores.data_size as u64)
-                    .to_string(),
-                ByteSize::from_bytes(
-                    self.scores.compressed_size as u64
-                )
-                .to_string(),
-                ByteSize::from_bytes(
-                    self.scores.block_data.iter().map(|x| x.1.load(std::sync::atomic::Ordering::SeqCst)).sum::<u64>() as u64 / self.scores.block_data.len() as u64
-                )
-            );
-            }
-            Err(x) => match x {
-                BlockStoreError::Empty => (),
-                _ => panic!("Error writing scores: {:?}", x),
-            },
-        };
-
-        // --- finished
-
-        // Write the headers for each store...
-        if !self.headers.is_empty() {
-            self.sfasta.directory.headers_loc =
-                NonZeroU64::new(out_buffer.stream_position().unwrap());
-            self.headers.write_header(
-                self.sfasta.directory.headers_loc.unwrap().into(),
-                &mut *out_buffer,
-            );
-        } else {
-            self.sfasta.directory.headers_loc = None;
-        }
-
-        if !self.ids.is_empty() {
-            self.sfasta.directory.ids_loc =
-                NonZeroU64::new(out_buffer.stream_position().unwrap());
-            self.ids.write_header(
-                self.sfasta.directory.ids_loc.unwrap().into(),
-                &mut *out_buffer,
-            );
-        } else {
-            self.sfasta.directory.ids_loc = None;
-        }
-
-        if !self.masking.is_empty() {
-            self.sfasta.directory.masking_loc =
-                NonZeroU64::new(out_buffer.stream_position().unwrap());
-            self.masking.write_header(
-                self.sfasta.directory.masking_loc.unwrap().into(),
-                &mut *out_buffer,
-            );
-        } else {
-            self.sfasta.directory.masking_loc = None;
-        }
-
-        if !self.sequences.is_empty() {
-            self.sfasta.directory.sequences_loc =
-                NonZeroU64::new(out_buffer.stream_position().unwrap());
-            self.sequences.write_header(
-                self.sfasta.directory.sequences_loc.unwrap().into(),
-                &mut *out_buffer,
-            );
-        } else {
-            self.sfasta.directory.sequences_loc = None;
-        }
-
-        if !self.scores.is_empty() {
-            self.sfasta.directory.scores_loc =
-                NonZeroU64::new(out_buffer.stream_position().unwrap());
-            self.scores.write_header(
-                self.sfasta.directory.scores_loc.unwrap().into(),
-                &mut *out_buffer,
-            );
-        } else {
-            self.sfasta.directory.scores_loc = None;
-        }
-
         log::debug!("Conversion Process function complete");
-
-        // let seqlocs = seqlocs.join().unwrap();
-
-        out_buffer.flush().expect("Unable to flush output buffer");
     }
 }
 
