@@ -125,6 +125,7 @@ pub struct BytesBlockStoreBuilder
     // Statistics
     pub data_size: usize,
     pub compressed_size: usize,
+    pub entries: usize,
 }
 
 unsafe impl Send for BytesBlockStoreBuilder {}
@@ -166,6 +167,7 @@ impl Default for BytesBlockStoreBuilder
             dict_samples: 128,
             data_size: 0,
             compressed_size: 0,
+            entries: 0,
         }
     }
 }
@@ -345,6 +347,16 @@ impl BytesBlockStoreBuilder
         }
     }
 
+    pub fn len(&self) -> usize
+    {
+        self.entries
+    }
+
+    pub fn is_empty(&self) -> bool
+    {
+        self.entries == 0
+    }
+
     /// Add a sequence of bytes to the block store
     /// Returns a vector of Loc's that point to the location of the
     /// bytes in the block store (can span multiple blocks)
@@ -353,6 +365,8 @@ impl BytesBlockStoreBuilder
         if self.finalized {
             panic!("Cannot add to finalized block store.");
         }
+
+        self.entries += 1;
 
         let mut current_block = self.block_data.len();
         let mut locs = Vec::with_capacity(8);

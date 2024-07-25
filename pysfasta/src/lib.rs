@@ -520,5 +520,16 @@ fn sfasta(m: &Bound<'_, PyModule>) -> PyResult<()>
 {
     m.add_class::<Sfasta>()?;
     m.add_class::<Sequence>()?;
+    // m.add_function(create_sfasta)?; // not convert existing file
     Ok(())
 }
+
+// Take a polars dataframe and create an SFASTA file
+// #[pyfunction]
+// fn create_sfasta(path: &str, seqs: PyDataFrame) -> PyResult<Sfasta>
+// {
+//
+//
+//
+//
+// }

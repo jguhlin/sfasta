@@ -169,6 +169,16 @@ impl StringBlockStoreBuilder
             .add(input)
             .expect("Failed to add string to block store")
     }
+
+    pub fn len(&self) -> usize
+    {
+        self.inner.len()
+    }
+
+    pub fn is_empty(&self) -> bool
+    {
+        self.inner.is_empty()
+    }
 }
 
 pub struct StringBlockStore
