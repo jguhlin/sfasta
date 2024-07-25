@@ -901,7 +901,7 @@ fn convert(
             .expect("Unable to read metadata file");
         let metadata: Metadata =
             serde_yml::from_str(&metadata).expect("Unable to parse metadata");
-        converter.with_metadata(metadata);
+        converter.sfasta.metadata = Some(metadata);
     }
 
     let mut compression_type = CompressionType::default();
