@@ -280,6 +280,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
                     node_b = &node_b.children.as_ref().unwrap()[*i];
                 }
 
+                // Lowest to highest
                 node_a.keys[0].cmp(&node_b.keys[0])
             });
 
@@ -300,7 +301,16 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
                     assert!(node.children_stored_on_disk());
                 }
 
-                assert!(node.keys[0] >= previous_key);
+                println!("{:#?}", node.keys[0]);
+
+                assert!(
+                    node.keys[0] >= previous_key,
+                    "Layer: {}/{} - {:?} >= {:?}",
+                    layer,
+                    max_layer,
+                    node.keys[0],
+                    previous_key
+                );
                 previous_key = node.keys[node.keys.len() - 1];
 
                 node.store(&mut out_buf, &self.compression, start);

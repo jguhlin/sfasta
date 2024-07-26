@@ -405,6 +405,97 @@ where
 
     pub fn finish(&mut self)
     {
+        let mut fractaltree_pos = 0;
+        let mut seqlocs_location = 0;
+
+        let seqlocs = self.seqlocs.take().unwrap();
+
+        let mut ids_to_locs = Vec::new();
+
+        std::mem::swap(&mut ids_to_locs, &mut self.ids_to_locs);
+
+        let mut indexer = libfractaltree::FractalTreeBuild::new(512, 1024);
+        let out_buffer = Arc::clone(self.out_fh.as_ref().unwrap());
+
+        for (id, loc) in ids_to_locs.into_iter() {
+            let id = xxh3_64(&id);
+            indexer.insert(id as u32, loc);
+        }
+        indexer.flush_all();
+
+        let formatter = make_format(DECIMAL);
+
+        let mut out_buffer_thread = out_buffer.lock().unwrap();
+        let start = out_buffer_thread.stream_position().unwrap();
+
+        log::trace!("Storing seqlocs");
+        seqlocs_location =
+            seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
+
+        log::info!(
+            "SeqLocs Size: {} {} {}",
+            formatter(out_buffer_thread.stream_position().unwrap() - start),
+            out_buffer_thread.stream_position().unwrap(),
+            start
+        );
+
+        if self.index {
+            // let index = index_handle.unwrap().join().unwrap();
+            let start = out_buffer_thread.stream_position().unwrap();
+
+            // This points from u32 hash to u32 location (seqloc).
+            // This is done so the seqlocs can be in insertion order
+
+            let mut index: FractalTreeDisk<u32, u32> = indexer.into();
+
+            index.set_compression(self.compression_profile.id_index.clone());
+
+            fractaltree_pos = index
+                .write_to_buffer(&mut *out_buffer_thread)
+                .expect("Unable to write index to file");
+
+            let end = out_buffer_thread.stream_position().unwrap();
+
+            log::info!("Index Size: {}", formatter(end - start));
+            self.debug_sizes
+                .push(("index".to_string(), (end - start) as usize));
+        }
+        // })
+        // .expect("Error");
+
+        self.sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
+        self.sfasta.directory.index_loc = NonZeroU64::new(fractaltree_pos);
+
+        // Go to the beginning, and write the location of the index
+
+        out_buffer_thread
+            .seek(SeekFrom::Start(self.directory_location))
+            .expect("Unable to rewind to start of the file");
+
+        // Here we re-write the directory information at the start of the
+        // file, allowing for easy jumps to important areas while
+        // keeping everything in a single file
+
+        let start = out_buffer_thread.stream_position().unwrap();
+
+        drop(out_buffer_thread);
+        self.write_headers();
+
+        let mut out_buffer_thread = out_buffer.lock().unwrap();
+
+        let end = out_buffer_thread.stream_position().unwrap();
+        self.debug_sizes
+            .push(("sfasta headers".to_string(), (end - start) as usize));
+
+        log::info!("DEBUG: {:?}", self.debug_sizes);
+
+        out_buffer_thread
+            .flush()
+            .expect("Unable to flush output file");
+
+        drop(out_buffer_thread);
+        drop(out_buffer);
+
         let mut out_fh = self.out_fh.as_mut().unwrap().lock().unwrap();
         out_fh
             .seek(SeekFrom::Start(self.directory_location))
@@ -418,11 +509,36 @@ where
 
     pub fn shutdown_stores(&mut self)
     {
-        self.output_worker.as_mut().unwrap().shutdown();
+        // Wait for all the workers to finish...
+        self.headers.finalize();
+        self.ids.finalize();
+        self.masking
+            .finalize()
+            .expect("Unable to finalize masking store");
+        self.sequences
+            .finalize()
+            .expect("Unable to finalize sequences store");
+        self.scores
+            .finalize()
+            .expect("Unable to finalize scores store");
 
-        while self.output_worker.as_ref().unwrap().len() > 0 {
-            std::thread::sleep(std::time::Duration::from_millis(20));
+        let backoff = Backoff::new();
+        while self.compression_workers.as_ref().unwrap().len() > 0
+            || self.output_worker.as_ref().unwrap().len() > 0
+        {
+            backoff.snooze();
+            if backoff.is_completed() {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+                log::debug!(
+                    "Compression Length: {} Output Worker Length: {}",
+                    self.compression_workers.as_ref().unwrap().len(),
+                    self.output_worker.as_ref().unwrap().len()
+                );
+                backoff.reset();
+            }
         }
+
+        self.output_worker.as_mut().unwrap().shutdown();
 
         self.output_worker = None;
 
@@ -673,99 +789,9 @@ where
         log::debug!("Finished processing sequences");
         self.shutdown_stores();
 
+        // todo this should be part of finish function (or the procedure, to
+        // keep fn smaller)
         log::trace!("Stores shutdown");
-
-        let mut fractaltree_pos = 0;
-        let mut seqlocs_location = 0;
-
-        let seqlocs = self.seqlocs.take().unwrap();
-
-        // Build the index in another thread...
-        let mut ids_to_locs = Vec::new();
-
-        std::mem::swap(&mut ids_to_locs, &mut self.ids_to_locs);
-
-        let mut indexer = libfractaltree::FractalTreeBuild::new(512, 2048);
-        let out_buffer = Arc::clone(self.out_fh.as_ref().unwrap());
-        let mut out_buffer_thread = out_buffer.lock().unwrap();
-
-        for (id, loc) in ids_to_locs.into_iter() {
-            let id = xxh3_64(&id);
-            indexer.insert(id as u32, loc);
-        }
-        indexer.flush_all();
-
-        let formatter = make_format(DECIMAL);
-
-        let start = out_buffer_thread.stream_position().unwrap();
-
-        log::trace!("Storing seqlocs");
-        seqlocs_location =
-            seqlocs.write_to_buffer(&mut *out_buffer_thread).unwrap();
-
-        log::info!(
-            "SeqLocs Size: {} {} {}",
-            formatter(out_buffer_thread.stream_position().unwrap() - start),
-            out_buffer_thread.stream_position().unwrap(),
-            start
-        );
-
-        if self.index {
-            // let index = index_handle.unwrap().join().unwrap();
-            let start = out_buffer_thread.stream_position().unwrap();
-
-            // This points from u32 hash to u32 location (seqloc).
-            // This is done so the seqlocs can be in insertion order
-
-            let mut index: FractalTreeDisk<u32, u32> = indexer.into();
-
-            index.set_compression(self.compression_profile.id_index.clone());
-
-            fractaltree_pos = index
-                .write_to_buffer(&mut *out_buffer_thread)
-                .expect("Unable to write index to file");
-
-            let end = out_buffer_thread.stream_position().unwrap();
-
-            log::info!("Index Size: {}", formatter(end - start));
-            self.debug_sizes
-                .push(("index".to_string(), (end - start) as usize));
-        }
-        // })
-        // .expect("Error");
-
-        self.sfasta.directory.seqlocs_loc = NonZeroU64::new(seqlocs_location);
-        self.sfasta.directory.index_loc = NonZeroU64::new(fractaltree_pos);
-
-        // Go to the beginning, and write the location of the index
-
-        out_buffer_thread
-            .seek(SeekFrom::Start(self.directory_location))
-            .expect("Unable to rewind to start of the file");
-
-        // Here we re-write the directory information at the start of the
-        // file, allowing for easy jumps to important areas while
-        // keeping everything in a single file
-
-        let start = out_buffer_thread.stream_position().unwrap();
-
-        drop(out_buffer_thread);
-        self.write_headers();
-
-        let mut out_buffer_thread = out_buffer.lock().unwrap();
-
-        let end = out_buffer_thread.stream_position().unwrap();
-        self.debug_sizes
-            .push(("sfasta headers".to_string(), (end - start) as usize));
-
-        log::info!("DEBUG: {:?}", self.debug_sizes);
-
-        out_buffer_thread
-            .flush()
-            .expect("Unable to flush output file");
-
-        drop(out_buffer_thread);
-        drop(out_buffer);
 
         self.finish();
 

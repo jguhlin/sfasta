@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use libsfasta::{datatypes::StringBlockStoreSeqLocReader, prelude::*};
-use polars_core::prelude::*;
+use polars::prelude::*;
 use pyo3::prelude::*;
 use pyo3_polars::{PyDataFrame, PySeries};
 use tokio_stream::StreamExt;
@@ -13,6 +13,14 @@ struct Sequence
     header: Option<String>,
     sequence: Option<String>,
     scores: Option<String>,
+}
+
+struct SequenceToAdd
+{
+    id: Option<Vec<u8>>,
+    header: Option<Vec<u8>>,
+    sequence: Option<Vec<u8>>,
+    scores: Option<Vec<u8>>,
 }
 
 // Pyo3 async fn when stabilised
@@ -520,16 +528,93 @@ fn sfasta(m: &Bound<'_, PyModule>) -> PyResult<()>
 {
     m.add_class::<Sfasta>()?;
     m.add_class::<Sequence>()?;
-    // m.add_function(create_sfasta)?; // not convert existing file
+    m.add_function(wrap_pyfunction!(create_sfasta, m)?)?; // not convert existing file
     Ok(())
 }
 
 // Take a polars dataframe and create an SFASTA file
-// #[pyfunction]
-// fn create_sfasta(path: &str, seqs: PyDataFrame) -> PyResult<Sfasta>
-// {
-//
-//
-//
-//
-// }
+#[pyfunction]
+fn create_sfasta(path: &str, seqs: PyDataFrame) -> PyResult<()>
+{
+    let out_fh = match std::fs::File::create(path) {
+        Ok(fh) => fh,
+        Err(e) => {
+            return Err(PyErr::new::<pyo3::exceptions::PyValueError, _>(
+                format!("Error creating file: {}", e),
+            ))
+        }
+    };
+
+    let out_buf = std::io::BufWriter::new(out_fh);
+
+    let mut converter = libsfasta::prelude::Converter::default();
+    converter.with_threads(8);
+    converter.init(Box::new(out_buf));
+
+    let seqs: DataFrame = seqs.into();
+
+    let seqs: Vec<SequenceToAdd> = seqs
+        .into_struct("Sequence")
+        .iter()
+        .map(|row| {
+            let id = if !row[0].is_null() {
+                Some(row[0].get_str().unwrap().as_bytes().to_vec())
+            } else {
+                None
+            };
+
+            let header = if !row[1].is_null() {
+                Some(row[1].get_str().unwrap().as_bytes().to_vec())
+            } else {
+                None
+            };
+
+            let sequence = if !row[2].is_null() {
+                Some(row[2].get_str().unwrap().as_bytes().to_vec())
+            } else {
+                None
+            };
+
+            let scores = if !row[3].is_null() {
+                Some(row[3].get_str().unwrap().as_bytes().to_vec())
+            } else {
+                None
+            };
+
+            SequenceToAdd {
+                id,
+                header,
+                sequence,
+                scores,
+            }
+        })
+        .collect();
+
+    println!("Inserting sequences");
+    log::info!("Inserting sequences");
+
+    for seq in seqs.into_iter() {
+        // Destructure
+        let SequenceToAdd {
+            id,
+            header,
+            sequence,
+            scores,
+        } = seq;
+        converter.add_sequence(id.unwrap(), sequence.unwrap(), header, scores);
+    }
+
+    // todo freezes
+
+    println!("Shutting down stores");
+    log::info!("Shutting down stores");
+
+    converter.shutdown_stores();
+
+    println!("Finishing");
+    log::info!("Finishing");
+
+    converter.finish();
+
+    Ok(())
+}
