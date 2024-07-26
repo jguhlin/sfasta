@@ -302,6 +302,7 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
                 }
 
                 println!("{:#?}", node.keys[0]);
+                println!("new previous: {:#?}", node.keys[node.keys.len() - 1]);
 
                 assert!(
                     node.keys[0] >= previous_key,
