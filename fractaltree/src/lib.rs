@@ -43,6 +43,14 @@ pub trait Key = 'static
 pub trait Value =
     'static + std::fmt::Debug + Encode + Decode + Clone + Send + Sync + Default;
 
+#[derive(Debug)]
+pub enum IntegrityError<K> {
+    CountKeysValuesMismatch,
+    CountChildrenKeysMismatch,
+    KeysNotSorted,
+    KeysNotSortedBetweenNodes(K, K),
+}
+
 #[cfg(test)]
 mod test
 {

@@ -35,6 +35,41 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
         }
     }
 
+    pub fn integrity_check(&self) -> Result<(), IntegrityError<K>>
+    {
+        let mut stack = vec![&self.root];
+        while let Some(node) = stack.pop() {
+            if node.is_leaf {
+                if node.keys.len() != node.values.as_ref().unwrap().len() {
+                    return Err(IntegrityError::CountKeysValuesMismatch);
+                }
+            } else {
+                if node.keys.len() + 1 != node.children.as_ref().unwrap().len() {
+                    return Err(IntegrityError::CountChildrenKeysMismatch);
+                }
+
+                // Check that the keys are ordered (including between children)
+                for i in 1..node.keys.len() {
+                    if node.keys[i - 1] > node.keys[i] {
+                        return Err(IntegrityError::KeysNotSorted);
+                    }
+                }
+
+                // Check that children keys are ordered (esp. between children, child[i].keys[-1] < child[i+1].keys[0])
+                for (child_x, child_y) in node.children.as_ref().unwrap().iter().zip(node.children.as_ref().unwrap().iter().skip(1)) {
+                    if child_x.keys[child_x.keys.len() - 1] > child_y.keys[0] {
+                        return Err(IntegrityError::KeysNotSortedBetweenNodes(child_x.keys[child_x.keys.len() - 1], child_y.keys[0]));
+                    }
+                }
+
+                for child in node.children.as_ref().unwrap().iter() {
+                    stack.push(child);
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub fn flush(&mut self, all: bool)
     {
         self.root.flush(self.order, self.buffer_size, all);
@@ -61,6 +96,9 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
     pub fn flush_all(&mut self)
     {
         self.flush(true);
+        if let Err(e) = self.integrity_check() {
+            panic!("Integrity check failed! {:?}", e);
+        }
     }
 
     pub fn search(&self, key: &K) -> Option<V>
@@ -637,4 +675,32 @@ mod tests
         assert!(result.is_some());
         assert_eq!(result.unwrap(), 1);
     }
+
+    // Test identical keys at node split
+    #[test]
+    fn identical_keys()
+    {
+        let mut tree: FractalTreeBuild<u32, u32> = FractalTreeBuild::new(128, 256);
+
+        for i in 0..1024 {
+            tree.insert(i, i);
+        }
+
+        // Insert identical keys at the split
+        for i in 0..128 {
+            tree.insert(127, i);
+        }
+
+        tree.flush_all();
+
+        // Convert to disk
+        let mut tree: FractalTreeDisk<u32, u32> = tree.into();
+
+        // Write to fake buffer
+        let mut buf = std::io::Cursor::new(Vec::new());
+        tree.store_by_layer(&mut buf, 0);
+
+        
+    }
+
 }
