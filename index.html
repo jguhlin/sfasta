@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en" id="oranda" class="dark">
+  <head>
+    <title>SFASTA</title>
+    
+      <meta property="og:url" content="https://jguhlin.github.io/sfasta" />
+    
+    
+      <link rel="icon" href="/sfasta/favicon.ico" />
+    
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    
+      <meta name="description" content="Smaller genomic and protein sequence files with fast random access" />
+      <meta property="og:description" content="Smaller genomic and protein sequence files with fast random access" />
+    
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content="SFASTA" />
+    
+    
+    
+      <meta name="twitter:creator" content="@josephguhlin" />
+      <meta name="twitter:site" content="@josephguhlin" />
+    
+    <meta http-equiv="Permissions-Policy" content="interest-cohort=()" />
+    <link rel="stylesheet" href="/sfasta/oranda-v0.6.1.css" />
+    
+    
+  </head>
+  <body>
+    <div class="container">
+      <div class="page-body">
+        
+          <div class="repo_banner">
+            <a href="https://github.com/jguhlin/sfasta">
+              <div class="github-icon" aria-hidden="true"></div>
+              Check out our GitHub!
+            </a>
+          </div>
+        
+
+        <main>
+          <header>
+            
+            <h1 class="title">SFASTA</h1>
+            
+  <nav class="nav">
+    <ul>
+      <li><a href="/sfasta/">Home</a></li>
+
+      
+
+      
+
+      
+        <li><a href="/sfasta/book/">Docs</a></li>
+      
+
+      
+
+      
+        <li><a href="/sfasta/changelog/">Changelog</a></li>
+      
+    </ul>
+  </nav>
+
+          </header>
+
+          
+
+
+    <h1>Introduction</h1>
+<p>Sfasta is a replacement for the FASTA/Q format with the twin goals of saving space and having very fast random-access, even for large datasets (such as the nt database, 203Gb gzip compressed, 210Gb bgzip compressed(+1.8Gb index), and 141Gb with sfasta, index inclusive).</p>
+<p>Speed comes from assuming modern hardware, thus:</p>
+<ul>
+<li>Multiple compression threads by default</li>
+<li>Dedicated I/O Threads</li>
+<li>Modern compression algorithms (ZSTD, as default)</li>
+<li>Fractal Index</li>
+<li>Everything stored as sequence streams (like stored with like, for better compression)</li>
+</ul>
+<p>The goals are random-access speed by query or random, and smaller size. It supports other compression algorithms, which could be used for archival purposes (such as xz compression).</p>
+<h2>Community Feedback Period</h2>
+<p>I'm hopeful folks will check this out, play around, break it, and give feedback.</p>
+<h1>Usage</h1>
+<h2>Installation</h2>
+<p><code>cargo install sfasta</code> <a href="https://rustup.rs/" rel="noopener noreferrer">Don't have cargo?</a></p>
+<h2>Usage</h2>
+<h3>Compression</h3>
+<p>To compress a file:</p>
+<pre style="background-color:#263238;"><span style="color:#82aaff;">sfa convert MyFile.fasta
+</span><span style="color:#eeffff;">
+</span><span style="font-style:italic;color:#546e7a;">#You can also convert directly from gzipped files:
+</span><span style="color:#82aaff;">sfa convert MyFile.fasta.gz
+</span></pre>
+
+<p>Compression profiles are supported. The built-in ones can be accessed with --fast, --fastest, --small, --smallest.</p>
+<pre style="background-color:#263238;"><span style="color:#82aaff;">sfa convert</span><span style="color:#89ddff;"> --</span><span style="color:#f78c6c;">fast</span><span style="color:#82aaff;"> reads.fastq
+</span><span style="color:#82aaff;">sfa convert</span><span style="color:#89ddff;"> --</span><span style="color:#f78c6c;">fastest</span><span style="color:#82aaff;"> reads.fastq
+</span></pre>
+
+<p>Fast / Fastest are optimized for fast reading and random access, while Small / Smallest are optimized for size of file on disk. <em>These are in development, let me know what works best for you</em></p>
+<p>You can specify your own profile, using a template from <a href="https://github.com/jguhlin/sfasta" rel="noopener noreferrer">GitHub</a> as an starting point:</p>
+<pre style="background-color:#263238;"><span style="color:#eeffff;">sfa convert -p myprofile.yml reads.fastq
+</span></pre>
+
+<p>You can use other compression schemes. The software automatically detects which is used and decompresses accordingly.</p>
+<pre style="background-color:#263238;"><span style="color:#82aaff;">sfa convert</span><span style="color:#89ddff;"> --</span><span style="color:#f78c6c;">snappy</span><span style="color:#82aaff;"> MyFile.fasta
+</span><span style="color:#82aaff;">sfa convert</span><span style="color:#89ddff;"> --</span><span style="color:#f78c6c;">xz</span><span style="color:#82aaff;"> MyFile.fasta
+</span><span style="color:#eeffff;">
+</span><span style="font-style:italic;color:#546e7a;"># Reading the file "just works"
+</span><span style="color:#82aaff;">sfa view MyFile.sfasta 
+</span></pre>
+
+<p>You can also change the block size. Smaller blocks will speed up random access, while larger blocks will increase compression ratios. 512 (512kb, 524288 bytes) is default.</p>
+<pre style="background-color:#263238;"><span style="font-style:italic;color:#546e7a;"># This will create 8Mb blocks
+</span><span style="color:#82aaff;">sfa convert</span><span style="color:#89ddff;"> --</span><span style="color:#f78c6c;">block-size</span><span style="color:#82aaff;"> 8192 MyFile.fasta
+</span></pre>
+
+<p>View a file:</p>
+<pre style="background-color:#263238;"><span style="color:#82aaff;">sfa view MyFile.sfasta
+</span></pre>
+
+<p>Query a file by sequence ID:</p>
+<pre style="background-color:#263238;"><span style="color:#82aaff;">sfa faidx MyFile.sfasta Chr1
+</span></pre>
+
+<p>For help:</p>
+<pre style="background-color:#263238;"><span style="color:#82aaff;">sfa</span><span style="color:#89ddff;"> --</span><span style="color:#f78c6c;">help
+</span></pre>
+
+<h2>Requirements</h2>
+<p>Should work anywhere that supports <a href="https://www.rust-lang.org/" rel="noopener noreferrer">Rust</a>. Tested on Ubuntu, Red Hat, and Windows 10. I suspect it will work on Mac OS. WASM support is forthcoming.</p>
+<h1>Details</h1>
+<h2>Compression Types Supported</h2>
+<table>
+<thead>
+<tr>
+<th align="left">Type</th>
+<th align="center">Status</th>
+<th align="center">Notes</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left">ZSTD</td>
+<td align="center">Default</td>
+<td align="center">Optimized</td>
+</tr>
+<tr>
+<td align="left">Brotli</td>
+<td align="center">Implemented</td>
+<td align="center">Could be more optimized</td>
+</tr>
+<tr>
+<td align="left">LZ4</td>
+<td align="center">Implemented</td>
+<td align="center">Rust implementation does not support levels</td>
+</tr>
+<tr>
+<td align="left">XZ</td>
+<td align="center">Implemented</td>
+<td align="center">Slow, high compression</td>
+</tr>
+<tr>
+<td align="left">Snappy</td>
+<td align="center">Implemented</td>
+<td align="center">Not recommended</td>
+</tr>
+<tr>
+<td align="left">GZIP</td>
+<td align="center">Implemented</td>
+<td align="center">Not recommended</td>
+</tr>
+<tr>
+<td align="left">BZIP2</td>
+<td align="center">Implemented</td>
+<td align="center">Not recommended</td>
+</tr>
+<tr>
+<td align="left">NONE</td>
+<td align="center"></td>
+<td align="center">No compression, supported</td>
+</tr>
+</tbody>
+</table>
+<p><em>Compression can be set per data type</em></p>
+<ul>
+<li>You can use ZSTD for sequence compression, XZ for masking, Brotli for IDs and Headers, for example.</li>
+<li>Compression profiles are found in <a href="https://github.com/jguhlin/sfasta" rel="noopener noreferrer">compression_profiles</a> folder and are stored as YAML.</li>
+<li>You can load your own compression profile from the command line.</li>
+<li>IDs are interpreted from FASTA/Q files as the part before the space on an identified line, for example</li>
+</ul>
+<pre style="background-color:#263238;"><span style="color:#eeffff;">&gt;Chr1 This is the chromosome
+</span><span style="color:#eeffff;">^---^ ^--------------------^
+</span><span style="color:#eeffff;"> ID    Header
+</span></pre>
+
+<p>The same rule applies for FASTQ.</p>
+<h2>Data Types Supported</h2>
+<table>
+<thead>
+<tr>
+<th align="center">Data</th>
+<th align="center">Status</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center">Sequences</td>
+<td align="center">Fully supported, nucleotide, amino, and RNA (anything, really)</td>
+</tr>
+<tr>
+<td align="center">Sequence IDs</td>
+<td align="center">Fully Supported</td>
+</tr>
+<tr>
+<td align="center">Additional Header Information</td>
+<td align="center">Fully Supported</td>
+</tr>
+<tr>
+<td align="center">Quality Scores</td>
+<td align="center">Fully Supported</td>
+</tr>
+<tr>
+<td align="center">Masking</td>
+<td align="center">Fully Supported</td>
+</tr>
+<tr>
+<td align="center">Flags</td>
+<td align="center">Planned</td>
+</tr>
+<tr>
+<td align="center">Nanopore Signals</td>
+<td align="center">Planned</td>
+</tr>
+<tr>
+<td align="center">Base Modifications</td>
+<td align="center">Planned</td>
+</tr>
+<tr>
+<td align="center">Pangenome Graph</td>
+<td align="center">Maybe</td>
+</tr>
+<tr>
+<td align="center">Alignments</td>
+<td align="center">Not Planned. CRAM fulfills this role.</td>
+</tr>
+<tr>
+<td align="center">Variants</td>
+<td align="center">Too different, another solution needed.</td>
+</tr>
+</tbody>
+</table>
+<h1>Comparisons</h1>
+<h2>Features</h2>
+<table>
+<thead>
+<tr>
+<th align="center">Compression Type</th>
+<th align="center">Random Access</th>
+<th align="center">Multithreaded</th>
+<th align="center">Tools</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center">sfasta</td>
+<td align="center">Yes</td>
+<td align="center">Yes</td>
+<td align="center">sfa</td>
+</tr>
+<tr>
+<td align="center">gzip</td>
+<td align="center">No</td>
+<td align="center">Yes</td>
+<td align="center">gzip, pigz, crabz</td>
+</tr>
+<tr>
+<td align="center"><a href="http://www.htslib.org/doc/bgzip.html" rel="noopener noreferrer">bgzip</a></td>
+<td align="center">Yes</td>
+<td align="center">Yes</td>
+<td align="center">bgzip, crabz</td>
+</tr>
+<tr>
+<td align="center"><a href="https://github.com/KirillKryukov/naf" rel="noopener noreferrer">NAF</a></td>
+<td align="center">No</td>
+<td align="center">No</td>
+<td align="center">naf</td>
+</tr>
+<tr>
+<td align="center"><a href="http://facebook.github.io/zstd/" rel="noopener noreferrer">ZSTD</a></td>
+<td align="center">No</td>
+<td align="center">Yes</td>
+<td align="center">zstd</td>
+</tr>
+</tbody>
+</table>
+<h2>Benchmarks</h2>
+<h3>Uniprot Random Access</h3>
+<p>Using <a href="https://www.uniprot.org/help/downloads" rel="noopener noreferrer">UniProt SWISS-Prot release 2024_02</a>. File size is ~88Mb.</p>
+<p>Samtools index pre-built with <code>samtools faidx uniprot_sprot.fasta.gz</code> with a bgzip compressed file.</p>
+<table>
+<thead>
+<tr>
+<th align="left">Command</th>
+<th align="right">Mean [ms]</th>
+<th align="right">Min [ms]</th>
+<th align="right">Max [ms]</th>
+<th align="right">Relative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><code>sfa faidx uniprot_sprot.sfasta "sp|Q8CIX8|LGSN_MOUSE" "sp|O31861|YOJB_BACSU" "sp|B2XTX0|PSAJ_HETA4" "sp|A2YNP0|SPX6_ORYSI" "sp|P69474|CAPSD_CGMVS" </code></td>
+<td align="right">16.5 ± 0.3</td>
+<td align="right">15.7</td>
+<td align="right">18.2</td>
+<td align="right">1.00</td>
+</tr>
+<tr>
+<td align="left"><code>samtools faidx uniprot_sprot.fasta.gz "sp|Q8CIX8|LGSN_MOUSE" "sp|O31861|YOJB_BACSU" "sp|B2XTX0|PSAJ_HETA4" "sp|A2YNP0|SPX6_ORYSI" "sp|P69474|CAPSD_CGMVS" </code></td>
+<td align="right">456.9 ± 6.8</td>
+<td align="right">451.8</td>
+<td align="right">474.9</td>
+<td align="right">27.75 ± 0.66</td>
+</tr>
+</tbody>
+</table>
+<h3>Uniprot Size</h3>
+<p>Uncompressed: 272M</p>
+<table>
+<thead>
+<tr>
+<th>Compression Type</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>sfasta (index incl)</td>
+<td>71Mb</td>
+</tr>
+<tr>
+<td>NAF (no index)</td>
+<td>66Mb</td>
+</tr>
+<tr>
+<td>zstd (no index)</td>
+<td>76Mb</td>
+</tr>
+<tr>
+<td>bgzip (excl. index)</td>
+<td>88Mb</td>
+</tr>
+<tr>
+<td>bgzip (incl. index)</td>
+<td>111Mb (88Mb + 23Mb)</td>
+</tr>
+<tr>
+<td>pigz (no index)</td>
+<td>89Mb</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>SFASTA contains an index, where the other formats do not. An fai index is 23Mb for this uniprot.</li>
+<li>SFASTA uses a higher compression level for zstd as default, as well as stream compression like NAF, thus the smaller size.</li>
+</ul>
+<pre style="background-color:#263238;"><span style="color:#eeffff;">❯ ls -lah uniprot_sprot.fasta.gz.fai
+</span><span style="color:#eeffff;">-rw-rw-r-- 1 joseph joseph 23M Apr 26 17:02 uniprot_sprot.fasta.gz.fai
+</span></pre>
+
+<h3>UniProt Size (sfa profiles)</h3>
+<table>
+<thead>
+<tr>
+<th align="center">Profile</th>
+<th align="center">Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="center">smallest</td>
+<td align="center">59Mb</td>
+</tr>
+<tr>
+<td align="center">small</td>
+<td align="center">62Mb</td>
+</tr>
+<tr>
+<td align="center">default</td>
+<td align="center">68Mb</td>
+</tr>
+<tr>
+<td align="center">fast</td>
+<td align="center">73Mb</td>
+</tr>
+<tr>
+<td align="center">fastest</td>
+<td align="center">78Mb</td>
+</tr>
+</tbody>
+</table>
+<h3>Uniprot Compression Speed</h3>
+<table>
+<thead>
+<tr>
+<th align="left">Command</th>
+<th align="right">Mean [s]</th>
+<th align="right">Min [s]</th>
+<th align="right">Max [s]</th>
+<th align="right">Relative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><code>sfa convert --threads 14 uniprot_sprot.fasta</code></td>
+<td align="right">1.543 ± 0.057</td>
+<td align="right">1.458</td>
+<td align="right">1.648</td>
+<td align="right">3.67 ± 0.34</td>
+</tr>
+<tr>
+<td align="left"><code>bgzip -kf --threads 16 uniprot_sprot.fasta</code></td>
+<td align="right">1.293 ± 0.042</td>
+<td align="right">1.187</td>
+<td align="right">1.345</td>
+<td align="right">3.08 ± 0.28</td>
+</tr>
+<tr>
+<td align="left"><code>pigz -kf -p 16 uniprot_sprot.fasta</code></td>
+<td align="right">0.959 ± 0.017</td>
+<td align="right">0.934</td>
+<td align="right">0.990</td>
+<td align="right">2.28 ± 0.20</td>
+</tr>
+<tr>
+<td align="left"><code>ennaf --protein --temp-dir /tmp uniprot_sprot.fasta -o uniprot_sprot.naf</code></td>
+<td align="right">1.078 ± 0.008</td>
+<td align="right">1.069</td>
+<td align="right">1.094</td>
+<td align="right">2.57 ± 0.22</td>
+</tr>
+<tr>
+<td align="left"><code>zstd -k uniprot_sprot.fasta -f -T16</code></td>
+<td align="right">0.420 ± 0.035</td>
+<td align="right">0.363</td>
+<td align="right">0.485</td>
+<td align="right">1.00</td>
+</tr>
+<tr>
+<td align="left"><code>crabz -f bgzf -p 16 uniprot_sprot.fasta -o uniprot_sprot.fasta.gz</code></td>
+<td align="right">0.674 ± 0.017</td>
+<td align="right">0.649</td>
+<td align="right">0.703</td>
+<td align="right">1.60 ± 0.14</td>
+</tr>
+</tbody>
+</table>
+<p>Compression speed is slower, but this is primarily due to the index creation. For bgzip samtools takes 2.07 seconds to generate the index. Also of note is pigz, ennaf, and zstd do not support indexing, while crabz does (using bgzf format).</p>
+<h2>Nanopore Reads</h2>
+<p>As a FASTA file.</p>
+<h3>Nanopore Reads Compression Speed</h3>
+<table>
+<thead>
+<tr>
+<th align="left">Command</th>
+<th align="right">Mean [s]</th>
+<th align="right">Min [s]</th>
+<th align="right">Max [s]</th>
+<th align="right">Relative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><code>sfa convert nanopore.fasta</code></td>
+<td align="right">22.844 ± 2.973</td>
+<td align="right">18.514</td>
+<td align="right">26.591</td>
+<td align="right">3.37 ± 0.45</td>
+</tr>
+<tr>
+<td align="left"><code>ennaf nanopore.fasta --temp-dir /tmp</code></td>
+<td align="right">19.231 ± 0.158</td>
+<td align="right">19.003</td>
+<td align="right">19.505</td>
+<td align="right">2.84 ± 0.10</td>
+</tr>
+<tr>
+<td align="left"><code>bgzip -k --index -f --threads 7 nanopore.fasta</code></td>
+<td align="right">82.065 ± 0.478</td>
+<td align="right">81.559</td>
+<td align="right">82.720</td>
+<td align="right">12.10 ± 0.42</td>
+</tr>
+<tr>
+<td align="left"><code>pigz -k -p 7 nanopore.fasta -f</code></td>
+<td align="right">83.118 ± 0.994</td>
+<td align="right">82.055</td>
+<td align="right">85.015</td>
+<td align="right">12.26 ± 0.44</td>
+</tr>
+<tr>
+<td align="left"><code>crabz -p 7 nanopore.fasta &gt; nanopore.fasta.crabz</code></td>
+<td align="right">82.933 ± 1.268</td>
+<td align="right">81.313</td>
+<td align="right">84.412</td>
+<td align="right">12.23 ± 0.46</td>
+</tr>
+<tr>
+<td align="left"><code>zstd -k nanopore.fasta -f -T7</code></td>
+<td align="right">6.780 ± 0.232</td>
+<td align="right">6.484</td>
+<td align="right">7.220</td>
+<td align="right">1.00</td>
+</tr>
+</tbody>
+</table>
+<h3>Nanopore Reads Random Access</h3>
+<p>Samtools index pre-built</p>
+<table>
+<thead>
+<tr>
+<th align="left">Command</th>
+<th align="right">Mean [ms]</th>
+<th align="right">Min [ms]</th>
+<th align="right">Max [ms]</th>
+<th align="right">Relative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><code>sfa faidx nanopore.sfasta ae278260-d941-45c9-9e76-40f04ef8e56c</code></td>
+<td align="right">83.6 ± 10.6</td>
+<td align="right">71.7</td>
+<td align="right">98.5</td>
+<td align="right">1.00</td>
+</tr>
+<tr>
+<td align="left"><code>samtools faidx nanopore.fasta.gz ae278260-d941-45c9-9e76-40f04ef8e56c</code></td>
+<td align="right">752.6 ± 5.8</td>
+<td align="right">746.7</td>
+<td align="right">764.8</td>
+<td align="right">9.01 ± 1.15</td>
+</tr>
+</tbody>
+</table>
+<h3>Nanopore Reads Size</h3>
+<p>Uncompressed Size: 8.8G</p>
+<table>
+<thead>
+<tr>
+<th>Compression Type</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NAF (no index)</td>
+<td>2.2G</td>
+</tr>
+<tr>
+<td>sfasta (incl index)</td>
+<td>2.6G</td>
+</tr>
+<tr>
+<td>bgzip (excl index)</td>
+<td>2.6G</td>
+</tr>
+<tr>
+<td>zstd (no index)</td>
+<td>2.7G</td>
+</tr>
+</tbody>
+</table>
+<h2>Genome</h2>
+<h3>Genome Random Access Speed</h3>
+<p>Samtools index pre-built</p>
+<table>
+<thead>
+<tr>
+<th align="left">Command</th>
+<th align="right">Mean [ms]</th>
+<th align="right">Min [ms]</th>
+<th align="right">Max [ms]</th>
+<th align="right">Relative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><code>sfa faidx Erow_1.0.sfasta PXIH01S0167520.1</code></td>
+<td align="right">135.3 ± 9.4</td>
+<td align="right">129.4</td>
+<td align="right">153.4</td>
+<td align="right">1.09 ± 0.09</td>
+</tr>
+<tr>
+<td align="left"><code>samtools faidx Erow_1.0.fasta.gz PXIH01S0167520.1</code></td>
+<td align="right">189.7 ± 10.2</td>
+<td align="right">182.2</td>
+<td align="right">215.7</td>
+<td align="right">1.53 ± 0.10</td>
+</tr>
+</tbody>
+</table>
+<h3>Genome Compression Speed</h3>
+<table>
+<thead>
+<tr>
+<th align="left">Command</th>
+<th align="right">Mean [s]</th>
+<th align="right">Min [s]</th>
+<th align="right">Max [s]</th>
+<th align="right">Relative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><code>sfa convert Erow_1.0.fasta</code></td>
+<td align="right">4.847 ± 0.189</td>
+<td align="right">4.579</td>
+<td align="right">5.199</td>
+<td align="right">2.39 ± 0.16</td>
+</tr>
+<tr>
+<td align="left"><code>ennaf Erow_1.0.fasta --temp-dir /tmp</code></td>
+<td align="right">8.054 ± 0.044</td>
+<td align="right">7.986</td>
+<td align="right">8.155</td>
+<td align="right">3.97 ± 0.22</td>
+</tr>
+<tr>
+<td align="left"><code>bgzip -k --index -f --threads 10 Erow_1.0.fasta</code></td>
+<td align="right">7.522 ± 0.510</td>
+<td align="right">6.639</td>
+<td align="right">8.132</td>
+<td align="right">3.71 ± 0.32</td>
+</tr>
+<tr>
+<td align="left"><code>pigz -k -p 10 Erow_1.0.fasta -f</code></td>
+<td align="right">7.593 ± 0.110</td>
+<td align="right">7.353</td>
+<td align="right">7.965</td>
+<td align="right">3.75 ± 0.21</td>
+</tr>
+<tr>
+<td align="left"><code>crabz -p 10 Erow_1.0.fasta &gt; Erow_1.0.crabz</code></td>
+<td align="right">7.530 ± 0.203</td>
+<td align="right">7.317</td>
+<td align="right">7.992</td>
+<td align="right">3.72 ± 0.23</td>
+</tr>
+<tr>
+<td align="left"><code>zstd -k Erow_1.0.fasta -f -T10</code></td>
+<td align="right">2.026 ± 0.112</td>
+<td align="right">1.834</td>
+<td align="right">2.273</td>
+<td align="right">1.00</td>
+</tr>
+</tbody>
+</table>
+<h3>Genome Size</h3>
+<p>Uncompressed: 2.7G</p>
+<table>
+<thead>
+<tr>
+<th>Compression Type</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NAF (no index)</td>
+<td>446M</td>
+</tr>
+<tr>
+<td>sfasta (incl index)</td>
+<td>596M</td>
+</tr>
+<tr>
+<td>bgzip (excl index)</td>
+<td>635M</td>
+</tr>
+<tr>
+<td>Zstd (no index)</td>
+<td>663M</td>
+</tr>
+</tbody>
+</table>
+<h2>Illumina Reads</h2>
+<p>11Gb of reads (FASTQ)</p>
+<h3>Compression Speed</h3>
+<table>
+<thead>
+<tr>
+<th align="left">Command</th>
+<th align="right">Mean [s]</th>
+<th align="right">Min [s]</th>
+<th align="right">Max [s]</th>
+<th align="right">Relative</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td align="left"><code>sfa convert --threads 14 reads.fastq</code></td>
+<td align="right">80.794 ± 3.379</td>
+<td align="right">77.700</td>
+<td align="right">87.570</td>
+<td align="right">9.59 ± 0.53</td>
+</tr>
+<tr>
+<td align="left"><code>bgzip -kf --threads 16 reads.fastq</code></td>
+<td align="right">48.920 ± 0.264</td>
+<td align="right">48.645</td>
+<td align="right">49.279</td>
+<td align="right">5.81 ± 0.21</td>
+</tr>
+<tr>
+<td align="left"><code>pigz -kf -p 16 reads.fastq</code></td>
+<td align="right">80.712 ± 1.461</td>
+<td align="right">78.945</td>
+<td align="right">83.181</td>
+<td align="right">9.58 ± 0.39</td>
+</tr>
+<tr>
+<td align="left"><code>ennaf --dna --fastq --temp-dir /tmp reads.fastq -o reads.naf</code></td>
+<td align="right">38.276 ± 0.246</td>
+<td align="right">37.951</td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td align="left">38.602</td>
+<td align="right">4.54 ± 0.17</td>
+<td align="right"></td>
+<td align="right"></td>
+<td align="right"></td>
+</tr>
+<tr>
+<td align="left"><code>zstd -k reads.fastq -f -T16</code></td>
+<td align="right">8.423 ± 0.303</td>
+<td align="right">7.915</td>
+<td align="right">8.889</td>
+<td align="right">1.00</td>
+</tr>
+<tr>
+<td align="left"><code>crabz -f bgzf -p 16 reads.fastq -o reads.fastq.gz</code></td>
+<td align="right">22.176 ± 3.802</td>
+<td align="right">17.889</td>
+<td align="right">26.813</td>
+<td align="right">2.63 ± 0.46</td>
+</tr>
+</tbody>
+</table>
+<h3>File size</h3>
+<p>Uncompressed: 2.7G</p>
+<table>
+<thead>
+<tr>
+<th>Compression Type</th>
+<th>Size</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NAF (no index)</td>
+<td>1.9Gb</td>
+</tr>
+<tr>
+<td>sfasta (incl index)</td>
+<td>2.5Gb</td>
+</tr>
+<tr>
+<td>bgzip (excl index)</td>
+<td>2.4Gb (+ 2.8Gb index )</td>
+</tr>
+<tr>
+<td>Zstd (no index)</td>
+<td>2.5Gb</td>
+</tr>
+</tbody>
+</table>
+<h1>Future Plans</h1>
+<h2>Implement NAF-like algorithm</h2>
+<p><a href="https://github.com/KirillKryukov/naf" rel="noopener noreferrer">NAF</a> has an advantage with 4bit encoding. It's possible to implement this, and use 2bit when possible, to gain additional speed-ups. Further, there is some <a href="https://github.com/Daniel-Liu-c0deb0t/cute-nucleotides" rel="noopener noreferrer">SIMD support</a> for 2bit and 4bit DNA/RNA encoding.</p>
+<h2>Subsequence support for faidx CLI</h2>
+<p>Only open the block(s) that contain the subsequence. The index is already set up to support this and I've had it working before in the python bindings.</p>
+<h2>Additional Speed-ups</h2>
+<p>There is plenty of room for speed improvements, including adding more threads for specific tasks, CPU affinities, native compilation, and maybe more Cow.</p>
+<h2>C and Python bindings</h2>
+<p>To make it easier to use in other programs and in python/jupyter</p>
+<h2>Small file optimization</h2>
+<p>Sfasta is currently optimized for larger files.</p>
+<h2>GFA file format support</h2>
+<p>Graph genome file format is in dire need of an optimized format</p>
+<h2>Profile Guided Optimization</h2>
+<p>Never mind. This somehow doubled the time it takes to compress binaries. Enable PGO for additional speed-ups</p>
+<h1>Fuzzing</h1>
+<p>The following format parsers are fuzzed. To fuzz execute the following in the libsfasta directory:</p>
+<pre style="background-color:#263238;"><span style="color:#eeffff;">cargo fuzz run parse_fastq  -- -max_len=8388608
+</span><span style="color:#eeffff;">cargo fuzz run parse_fasta  -- -max_len=8388608
+</span><span style="color:#eeffff;">cargo fuzz run parse_sfasta -- -detect_leaks=0 -rss_limit_mb=4096mb -max_len=8388608
+</span></pre>
+
+<h1>FAQ</h1>
+<h2>I get a strange symbol near the progress bar</h2>
+<p>You need to install a font that supports Unicode. I'll see if there is a way to auto-detect.</p>
+<h2>Why so many dependencies?</h2>
+<p>Right it it works with a wide range of compression functions. Once some are determined to be the best others could be dropped from future versions. The file format itself has a version identifier so we could request people rollback to an older version if they need to.</p>
+<h2>Why samtools comparison?</h2>
+<p>I've got plenty of experiments trying to get a fast gzip compressed multi-threaded reader, but even when mounted on a ramdisk, it is too slow. Samtools is an awesome, handy tool that has the 'faidx' function, which I use almost constantly. While faidx is a handy utility function, it is not optimized for large datasets, thus the test is a little unfair. Still, it's helpful to have something to compare to.</p>
+<h1>File Format</h1>
+<p>The format is found in the docs.</p>
+<p><img src="./static/genomics-aotearoa.png" alt="Genomics Aotearoa"></p>
+
+
+
+        </main>
+      </div>
+
+      <footer>
+        
+          <a href="https://github.com/jguhlin/sfasta"><div class="github-icon" aria-hidden="true"></div></a>
+        
+        <span>
+          SFASTA
+        </span>
+      </footer>
+    </div>
+
+    
+    
+
+    
+
+
+  </body>
+</html>
