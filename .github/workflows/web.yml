@@ -61,6 +61,9 @@ jobs:
       - uses: swatinem/rust-cache@v2
 
       # If you use any mdbook plugins, here's the place to install them!
+      - name: Install mdbook plugins
+        run: cargo install mdbook-toc mdbook-mermaid mdbook-admonish
+        
 
       # Install and run oranda (and mdbook)
       # This will write all output to ./public/ (including copying mdbook's output to there)
