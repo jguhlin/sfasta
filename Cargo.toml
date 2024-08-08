@@ -5,7 +5,7 @@ members = [
 	"sfa",
 	"fractaltree",
 	"compression", 
-	"preload",
+	# "preload",
 ]
 
 [profile.release]
