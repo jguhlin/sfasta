@@ -38,10 +38,10 @@ indicatif = "0.17.8"
 # Compression stuff:
 flate2 = {version = "1.0.28", features = ["zlib-ng"], default-features = false}
 snap = "1.1.1"
-ratatui = "0.26.2"
+ratatui = "0.29"
 page_size = "0.6.0"
 serde = "1.0.199"
-serde_yml = "0.0.4"
+serde_yml = "0.0.12"
 xxhash-rust = { version = "0.8.10", features = ["xxh3"], optional = true}
 
 
