@@ -576,7 +576,7 @@ impl SeqLocsStore
         R: Read + Seek + BufRead,
     {
         log::info!("Prefetching SeqLocs");
-
+        self.preloaded = true;
         self.tree.load_tree(in_buf)
     }
 

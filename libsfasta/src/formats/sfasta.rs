@@ -528,14 +528,12 @@ impl<'sfa> SfastaParser<'sfa>
             panic!("Unable to open file: {}", path.as_ref().display())
         });
         let in_buf = std::io::BufReader::new(in_buf);
-        SfastaParser::open_from_buffer(in_buf, false)
+        SfastaParser::open_from_buffer(in_buf)
     }
 
     // TODO: Can probably multithread parts of this...
-    // Prefetch should probably be another name...
     pub fn open_from_buffer<R>(
         mut in_buf: R,
-        prefetch: bool,
     ) -> Result<Sfasta<'sfa>, String>
     where
         R: 'sfa + Read + Seek + Send + Sync + BufRead,
@@ -968,7 +966,7 @@ mod tests
         println!("3...");
 
         let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf, false).unwrap();
+            SfastaParser::open_from_buffer(out_buf).unwrap();
         println!("4...");
         sfasta.index_load().expect("Unable to load index");
         println!("5...");
@@ -1016,7 +1014,7 @@ mod tests
 
         // TODO: Test this with prefecth both true and false...
         let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf, false).unwrap();
+            SfastaParser::open_from_buffer(out_buf).unwrap();
         sfasta.index_load().expect("Unable to load index");
         assert!(sfasta.index_len() == Ok(10));
 
@@ -1077,7 +1075,7 @@ mod tests
         };
 
         let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf, false).unwrap();
+            SfastaParser::open_from_buffer(out_buf).unwrap();
         sfasta.index_load().expect("Unable to load index");
         println!("Index len: {:#?}", sfasta.index_len());
         assert!(sfasta.index_len() == Ok(10));
