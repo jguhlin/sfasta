@@ -532,9 +532,7 @@ impl<'sfa> SfastaParser<'sfa>
     }
 
     // TODO: Can probably multithread parts of this...
-    pub fn open_from_buffer<R>(
-        mut in_buf: R,
-    ) -> Result<Sfasta<'sfa>, String>
+    pub fn open_from_buffer<R>(mut in_buf: R) -> Result<Sfasta<'sfa>, String>
     where
         R: 'sfa + Read + Seek + Send + Sync + BufRead,
     {
@@ -965,8 +963,7 @@ mod tests
 
         println!("3...");
 
-        let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf).unwrap();
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
         println!("4...");
         sfasta.index_load().expect("Unable to load index");
         println!("5...");
@@ -1013,8 +1010,7 @@ mod tests
         };
 
         // TODO: Test this with prefecth both true and false...
-        let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf).unwrap();
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
         sfasta.index_load().expect("Unable to load index");
         assert!(sfasta.index_len() == Ok(10));
 
@@ -1074,8 +1070,7 @@ mod tests
             panic!("Unable to seek to start of file, {x:#?}")
         };
 
-        let mut sfasta =
-            SfastaParser::open_from_buffer(out_buf).unwrap();
+        let mut sfasta = SfastaParser::open_from_buffer(out_buf).unwrap();
         sfasta.index_load().expect("Unable to load index");
         println!("Index len: {:#?}", sfasta.index_len());
         assert!(sfasta.index_len() == Ok(10));
