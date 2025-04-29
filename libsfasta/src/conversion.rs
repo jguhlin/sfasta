@@ -5,7 +5,7 @@
 
 // Easy, high-performance conversion functions
 use crossbeam::{thread, utils::Backoff};
-use humansize::{make_format, DECIMAL};
+use humansize::{DECIMAL, make_format};
 use needletail::parse_fastx_reader;
 use xxhash_rust::xxh3::xxh3_64;
 
@@ -29,8 +29,7 @@ use libfractaltree::FractalTreeDisk;
 /// let mut converter = Converter::default()
 ///    .with_threads(4);
 /// ```
-pub struct Converter
-{
+pub struct Converter {
     index: bool,
     threads: usize,
     dict: bool,
@@ -50,10 +49,8 @@ pub struct Converter
 /// * quality scores: off
 /// * compression_type: ZSTD
 /// * compression_level: Default (3 for ZSTD)
-impl Default for Converter
-{
-    fn default() -> Self
-    {
+impl Default for Converter {
+    fn default() -> Self {
         Converter {
             threads: 8,
             index: true,
@@ -66,13 +63,14 @@ impl Default for Converter
     }
 }
 
-impl Converter
-{
+impl Converter {
     // Builder configuration functions...
     /// Specify a dictionary to use for compression. Untested.
-    pub fn with_dict(&mut self, dict_samples: u64, dict_size: u64)
-        -> &mut Self
-    {
+    pub fn with_dict(
+        &mut self,
+        dict_samples: u64,
+        dict_size: u64,
+    ) -> &mut Self {
         self.dict = true;
         self.dict_samples = dict_samples;
         self.dict_size = dict_size;
@@ -80,29 +78,25 @@ impl Converter
     }
 
     /// Disable dictionary
-    pub fn without_dict(&mut self) -> &mut Self
-    {
+    pub fn without_dict(&mut self) -> &mut Self {
         self.dict = false;
         self
     }
 
     /// Enable seq index
-    pub fn with_index(&mut self) -> &mut Self
-    {
+    pub fn with_index(&mut self) -> &mut Self {
         self.index = true;
         self
     }
 
     /// Disable index
-    pub fn without_index(&mut self) -> &mut Self
-    {
+    pub fn without_index(&mut self) -> &mut Self {
         self.index = false;
         self
     }
 
     /// Set the number of threads to use
-    pub fn with_threads(&mut self, threads: usize) -> &mut Self
-    {
+    pub fn with_threads(&mut self, threads: usize) -> &mut Self {
         assert!(
             threads < u16::MAX as usize,
             "Maximum number of supported threads is u16::MAX"
@@ -111,14 +105,12 @@ impl Converter
         self
     }
 
-    pub fn threads(&self) -> usize
-    {
+    pub fn threads(&self) -> usize {
         self.threads
     }
 
     /// Set the block size for the sequence blocks
-    pub fn with_block_size(&mut self, block_size: usize) -> &mut Self
-    {
+    pub fn with_block_size(&mut self, block_size: usize) -> &mut Self {
         assert!(
             block_size * 1024 < u32::MAX as usize,
             "Block size must be less than u32::MAX (~4Gb)"
@@ -133,8 +125,7 @@ impl Converter
         &mut self,
         ct: CompressionType,
         level: i8,
-    ) -> &mut Self
-    {
+    ) -> &mut Self {
         log::info!("Setting compression to {:?} at level {}", ct, level);
         log::info!("Custom compression profiles often perform better...");
         self.compression_profile = CompressionProfile::set_global(ct, level);
@@ -145,15 +136,13 @@ impl Converter
     pub fn with_compression_profile(
         &mut self,
         profile: CompressionProfile,
-    ) -> &mut Self
-    {
+    ) -> &mut Self {
         self.compression_profile = profile;
         self
     }
 
     /// Set the metadata for the SFASTA file
-    pub fn with_metadata(&mut self, metadata: Metadata) -> &mut Self
-    {
+    pub fn with_metadata(&mut self, metadata: Metadata) -> &mut Self {
         self.metadata = Some(metadata);
         self
     }
@@ -755,19 +744,16 @@ impl Converter
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
     use std::{fs::File, io::Cursor};
 
-    fn init()
-    {
+    fn init() {
         let _ = env_logger::builder().is_test(true).try_init();
     }
 
     #[test]
-    pub fn test_create_sfasta()
-    {
+    pub fn test_create_sfasta() {
         init();
 
         let bincode_config = crate::BINCODE_CONFIG.with_fixed_int_encoding();

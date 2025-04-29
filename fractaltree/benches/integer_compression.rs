@@ -47,8 +47,7 @@ where
     }
 }
 
-pub fn bitpacking8x_delta_encode(values: &[u32]) -> Vec<u8>
-{
+pub fn bitpacking8x_delta_encode(values: &[u32]) -> Vec<u8> {
     let bitpacker = BitPacker8x::new();
 
     let num_bits = bitpacker.num_bits_sorted(values[0], values);
@@ -58,8 +57,7 @@ pub fn bitpacking8x_delta_encode(values: &[u32]) -> Vec<u8>
     compressed
 }
 
-pub fn bitpacking4x_delta_encode(values: &[u32]) -> Vec<u8>
-{
+pub fn bitpacking4x_delta_encode(values: &[u32]) -> Vec<u8> {
     let bitpacker = BitPacker4x::new();
 
     let num_bits = bitpacker.num_bits_sorted(values[0], values);
@@ -95,8 +93,7 @@ where
     }
 }
 
-pub fn bench_delta_decode(c: &mut Criterion)
-{
+pub fn bench_delta_decode(c: &mut Criterion) {
     let mut values1024: Vec<u32> = (0..1024_u32).collect();
     let pco_config = pco::ChunkConfig::default()
         .with_compression_level(8)
@@ -263,8 +260,7 @@ pub fn bench_delta_decode(c: &mut Criterion)
     group.finish();
 }
 
-pub fn bench_delta_encode_u32(c: &mut Criterion)
-{
+pub fn bench_delta_encode_u32(c: &mut Criterion) {
     let values1024: Vec<u32> = (0..1024_u32).collect();
 
     let values1mil: Vec<u32> = (0..1024 * 1024_u32).collect();
@@ -390,8 +386,7 @@ pub fn bench_delta_encode_u32(c: &mut Criterion)
     group.finish();
 }
 
-pub fn bench_delta_encode_u8(c: &mut Criterion)
-{
+pub fn bench_delta_encode_u8(c: &mut Criterion) {
     let fastq_illumina_scores =
         include_bytes!("data/fastq_scores_illumina.txt").to_vec();
     let fastq_illumina_scores_1024 = fastq_illumina_scores[..1024].to_vec();

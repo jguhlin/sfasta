@@ -20,21 +20,18 @@ use libcompression::*;
 /// The root node is loaded with the fractal tree, but children are
 /// loaded on demand
 #[derive(Debug, Clone)]
-pub struct FractalTreeDisk<K: Key, V: Value>
-{
+pub struct FractalTreeDisk<K: Key, V: Value> {
     pub root: NodeDisk<K, V>,
     pub start: u64, /* On disk position of the fractal tree, such that
                      * all locations are start + offset */
     pub compression: Option<CompressionConfig>,
 }
 
-impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V>
-{
+impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V> {
     fn encode<E: bincode::enc::Encoder>(
         &self,
         encoder: &mut E,
-    ) -> core::result::Result<(), bincode::error::EncodeError>
-    {
+    ) -> core::result::Result<(), bincode::error::EncodeError> {
         bincode::Encode::encode(&self.compression, encoder)?;
         bincode::Encode::encode(&self.start, encoder)?;
         if self.compression.is_some() {
@@ -53,12 +50,10 @@ impl<K: Key, V: Value> Encode for FractalTreeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> Decode for FractalTreeDisk<K, V>
-{
+impl<K: Key, V: Value> Decode for FractalTreeDisk<K, V> {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
-    ) -> core::result::Result<Self, bincode::error::DecodeError>
-    {
+    ) -> core::result::Result<Self, bincode::error::DecodeError> {
         let compression: Option<CompressionConfig> =
             bincode::Decode::decode(decoder)?;
         let start: u64 = bincode::Decode::decode(decoder)?;
@@ -83,10 +78,8 @@ impl<K: Key, V: Value> Decode for FractalTreeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> Default for FractalTreeDisk<K, V>
-{
-    fn default() -> Self
-    {
+impl<K: Key, V: Value> Default for FractalTreeDisk<K, V> {
+    fn default() -> Self {
         FractalTreeDisk {
             root: NodeDisk {
                 is_root: true,
@@ -102,8 +95,7 @@ impl<K: Key, V: Value> Default for FractalTreeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> FractalTreeDisk<K, V>
-{
+impl<K: Key, V: Value> FractalTreeDisk<K, V> {
     pub fn load_tree<R>(&mut self, in_buf: &mut R) -> Result<(), &'static str>
     where
         R: Read + Seek + BufRead,
@@ -112,18 +104,15 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
         Ok(())
     }
 
-    pub fn len(&self) -> Result<usize, &'static str>
-    {
+    pub fn len(&self) -> Result<usize, &'static str> {
         self.root.len()
     }
 
-    pub fn set_compression(&mut self, compression: CompressionConfig)
-    {
+    pub fn set_compression(&mut self, compression: CompressionConfig) {
         self.compression = Some(compression);
     }
 
-    pub fn create_zstd_dict(&mut self) -> Vec<u8>
-    {
+    pub fn create_zstd_dict(&mut self) -> Vec<u8> {
         let out_buf = Vec::new();
         let mut out_buf = std::io::Cursor::new(out_buf);
 
@@ -194,49 +183,42 @@ impl<K: Key, V: Value> FractalTreeDisk<K, V>
 }
 
 #[derive(Debug, Clone)]
-pub enum NodeState
-{
+pub enum NodeState {
     InMemory,
     Compressed(Vec<u8>),
     OnDisk(u32),
 }
 
-impl NodeState
-{
-    pub fn as_ref(&self) -> Option<u32>
-    {
+impl NodeState {
+    pub fn as_ref(&self) -> Option<u32> {
         match self {
             NodeState::OnDisk(x) => Some(*x),
             _ => None,
         }
     }
 
-    pub fn on_disk(&self) -> bool
-    {
+    pub fn on_disk(&self) -> bool {
         match self {
             NodeState::OnDisk(_) => true,
             _ => false,
         }
     }
 
-    pub fn compressed(&self) -> bool
-    {
+    pub fn compressed(&self) -> bool {
         match self {
             NodeState::Compressed(_) => true,
             _ => false,
         }
     }
 
-    pub fn in_memory(&self) -> bool
-    {
+    pub fn in_memory(&self) -> bool {
         match self {
             NodeState::InMemory => true,
             _ => false,
         }
     }
 
-    pub fn loc(&self) -> u32
-    {
+    pub fn loc(&self) -> u32 {
         match self {
             NodeState::OnDisk(x) => *x,
             _ => panic!("Node not on disk"),
@@ -245,8 +227,7 @@ impl NodeState
 }
 
 #[derive(Debug, Clone)]
-pub struct NodeDisk<K, V>
-{
+pub struct NodeDisk<K, V> {
     pub is_root: bool,
     pub is_leaf: bool,
     pub state: NodeState,
@@ -255,13 +236,11 @@ pub struct NodeDisk<K, V>
     pub values: Option<Vec<V>>,
 }
 
-impl<K: Key, V: Value> Encode for NodeDisk<K, V>
-{
+impl<K: Key, V: Value> Encode for NodeDisk<K, V> {
     fn encode<E: bincode::enc::Encoder>(
         &self,
         encoder: &mut E,
-    ) -> core::result::Result<(), bincode::error::EncodeError>
-    {
+    ) -> core::result::Result<(), bincode::error::EncodeError> {
         bincode::Encode::encode(&self.is_leaf, encoder)?;
         bincode::Encode::encode(&self.keys, encoder)?;
 
@@ -282,12 +261,10 @@ impl<K: Key, V: Value> Encode for NodeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> Decode for NodeDisk<K, V>
-{
+impl<K: Key, V: Value> Decode for NodeDisk<K, V> {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
-    ) -> core::result::Result<Self, bincode::error::DecodeError>
-    {
+    ) -> core::result::Result<Self, bincode::error::DecodeError> {
         let is_leaf: bool = bincode::Decode::decode(decoder)?;
         let keys: Vec<K> = bincode::Decode::decode(decoder)?;
 
@@ -319,12 +296,10 @@ impl<K: Key, V: Value> Decode for NodeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> BorrowDecode<'_> for NodeDisk<K, V>
-{
+impl<K: Key, V: Value> BorrowDecode<'_> for NodeDisk<K, V> {
     fn borrow_decode<D: bincode::de::Decoder>(
         decoder: &mut D,
-    ) -> core::result::Result<Self, bincode::error::DecodeError>
-    {
+    ) -> core::result::Result<Self, bincode::error::DecodeError> {
         let is_leaf: bool = bincode::Decode::decode(decoder)?;
         let keys: Vec<K> = bincode::Decode::decode(decoder)?;
 
@@ -356,10 +331,8 @@ impl<K: Key, V: Value> BorrowDecode<'_> for NodeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> NodeDisk<K, V>
-{    
-    pub fn from_loc(loc: u32) -> Self
-    {
+impl<K: Key, V: Value> NodeDisk<K, V> {
+    pub fn from_loc(loc: u32) -> Self {
         NodeDisk {
             is_root: false,
             is_leaf: false,
@@ -576,8 +549,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         }
     }
 
-    pub fn children_stored_on_disk(&self) -> bool
-    {
+    pub fn children_stored_on_disk(&self) -> bool {
         if self.is_leaf {
             true
         } else {
@@ -589,8 +561,7 @@ impl<K: Key, V: Value> NodeDisk<K, V>
         }
     }
 
-    pub fn len(&self) -> Result<usize, &'static str>
-    {
+    pub fn len(&self) -> Result<usize, &'static str> {
         if self.is_leaf {
             Ok(self.keys.len())
         } else {
@@ -640,16 +611,14 @@ where
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
     use crate::*;
     use human_size::SpecificSize;
     use rand::prelude::*;
 
     #[test]
-    fn node_storage()
-    {
+    fn node_storage() {
         let rng = thread_rng();
         // Get 128 random values
         let values: Vec<u32> = rng
@@ -704,8 +673,7 @@ mod tests
     }
 
     #[test]
-    fn tree_create_dict()
-    {
+    fn tree_create_dict() {
         let mut rng = thread_rng();
 
         let mut tree = FractalTreeBuild::new(2048, 8192);
@@ -762,8 +730,7 @@ mod tests
     }
 
     #[test]
-    fn tree_storage()
-    {
+    fn tree_storage() {
         let mut rng = thread_rng();
 
         let mut tree = FractalTreeBuild::new(128, 256);
@@ -847,8 +814,7 @@ mod tests
     #[test]
     /// This is mostly to see how large a very large tree is (in gigs,
     /// and megabytes)
-    fn tree_large_storage()
-    {
+    fn tree_large_storage() {
         let mut rng = thread_rng();
 
         let mut tree = FractalTreeBuild::new(128, 256);

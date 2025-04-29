@@ -13,8 +13,7 @@ use serde::{Deserialize, Serialize};
     PartialEq,
     Eq,
 )]
-pub struct Metadata
-{
+pub struct Metadata {
     pub created_by: Option<String>,
     pub citation_doi: Option<String>,
     pub citation_url: Option<String>,
@@ -29,13 +28,11 @@ pub struct Metadata
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
 
     #[test]
-    pub fn bincode_size_struct()
-    {
+    pub fn bincode_size_struct() {
         let bincode_config =
             bincode::config::standard().with_fixed_int_encoding();
 

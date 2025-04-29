@@ -1,6 +1,6 @@
 use super::Loc;
 use flume::{Receiver, Sender};
-use std::sync::{atomic::AtomicBool, Arc, Mutex};
+use std::sync::{Arc, Mutex, atomic::AtomicBool};
 
 pub mod bytes_block_store;
 pub mod masking;

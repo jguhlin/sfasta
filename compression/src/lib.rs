@@ -43,8 +43,7 @@ use crossbeam::{queue::ArrayQueue, utils::Backoff};
     Deserialize,
 )]
 #[non_exhaustive]
-pub enum CompressionType
-{
+pub enum CompressionType {
     ZSTD,   // 1 should be default compression ratio
     LZ4,    // 9 should be default compression ratio
     SNAPPY, // Implemented
@@ -58,8 +57,7 @@ pub enum CompressionType
 }
 
 #[derive(Debug, Clone)]
-pub struct OutputBlock
-{
+pub struct OutputBlock {
     pub data: Vec<u8>,
     pub location: Arc<AtomicU64>,
 }
@@ -74,8 +72,7 @@ pub struct OutputBlock
     Eq,
     PartialEq,
 )]
-pub struct CompressionConfig
-{
+pub struct CompressionConfig {
     pub compression_type: CompressionType,
     pub compression_level: i8,
 
@@ -83,18 +80,14 @@ pub struct CompressionConfig
     pub compression_dict: Option<Vec<u8>>,
 }
 
-impl Default for CompressionConfig
-{
-    fn default() -> Self
-    {
+impl Default for CompressionConfig {
+    fn default() -> Self {
         Self::new()
     }
 }
 
-impl CompressionConfig
-{
-    pub const fn new() -> Self
-    {
+impl CompressionConfig {
+    pub const fn new() -> Self {
         Self {
             compression_type: CompressionType::ZSTD,
             compression_level: 3,
@@ -105,14 +98,12 @@ impl CompressionConfig
     pub const fn with_compression_type(
         mut self,
         compression_type: CompressionType,
-    ) -> Self
-    {
+    ) -> Self {
         self.compression_type = compression_type;
         self
     }
 
-    pub fn with_compression_level(mut self, compression_level: i8) -> Self
-    {
+    pub fn with_compression_level(mut self, compression_level: i8) -> Self {
         self.compression_level = compression_level;
         match self.check_compression_level() {
             Ok(_) => (),
@@ -132,14 +123,12 @@ impl CompressionConfig
     pub fn with_compression_dict(
         mut self,
         compression_dict: Option<Vec<u8>>,
-    ) -> Self
-    {
+    ) -> Self {
         self.compression_dict = compression_dict;
         self
     }
 
-    pub fn check_compression_level(&self) -> Result<(), i8>
-    {
+    pub fn check_compression_level(&self) -> Result<(), i8> {
         let (min, max) = self.compression_type.compression_level_range();
         if self.compression_level < min {
             Err(min)
@@ -152,8 +141,7 @@ impl CompressionConfig
 
     /// Only used by FractalTree's....
     /// need todo fix that
-    pub fn compress(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error>
-    {
+    pub fn compress(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
         match self.compression_type {
             CompressionType::ZSTD => {
                 if self.compression_dict.is_some() {
@@ -250,8 +238,7 @@ impl CompressionConfig
         }
     }
 
-    pub fn decompress(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error>
-    {
+    pub fn decompress(&self, bytes: &[u8]) -> Result<Vec<u8>, std::io::Error> {
         match self.compression_type {
             CompressionType::ZSTD => {
                 ZSTD_DECOMPRESSOR.with_borrow_mut(|zstd_decompressor| {
@@ -314,10 +301,8 @@ impl CompressionConfig
     }
 }
 
-impl CompressionType
-{
-    pub const fn default_compression_level(&self) -> i8
-    {
+impl CompressionType {
+    pub const fn default_compression_level(&self) -> i8 {
         match self {
             CompressionType::ZSTD => 3,
             CompressionType::LZ4 => 0, // Not applicable
@@ -331,8 +316,7 @@ impl CompressionType
         }
     }
 
-    pub const fn compression_level_range(&self) -> (i8, i8)
-    {
+    pub const fn compression_level_range(&self) -> (i8, i8) {
         match self {
             CompressionType::ZSTD => (1, 22),
             CompressionType::LZ4 => (0, 0),
@@ -347,10 +331,8 @@ impl CompressionType
     }
 }
 
-impl Default for CompressionType
-{
-    fn default() -> CompressionType
-    {
+impl Default for CompressionType {
+    fn default() -> CompressionType {
         CompressionType::ZSTD
     }
 }
@@ -359,8 +341,7 @@ impl Default for CompressionType
 pub fn zstd_encoder(
     compression_level: i32,
     dict: &Option<Vec<u8>>,
-) -> zstd::bulk::Compressor<'static>
-{
+) -> zstd::bulk::Compressor<'static> {
     let mut encoder = if let Some(dict) = dict {
         zstd::bulk::Compressor::with_dictionary(compression_level, &dict)
             .unwrap()
@@ -381,8 +362,10 @@ pub fn zstd_encoder(
     encoder
 }
 
-pub fn change_compression_level(compression_level: i32, dict: &Option<Vec<u8>>)
-{
+pub fn change_compression_level(
+    compression_level: i32,
+    dict: &Option<Vec<u8>>,
+) {
     ZSTD_COMPRESSOR.with(|zstd_compressor| {
         let encoder = zstd_encoder(compression_level, dict);
         *zstd_compressor.borrow_mut() = encoder;
@@ -391,8 +374,7 @@ pub fn change_compression_level(compression_level: i32, dict: &Option<Vec<u8>>)
 
 pub fn zstd_decompressor<'a>(
     dict: Option<&[u8]>,
-) -> zstd::bulk::Decompressor<'a>
-{
+) -> zstd::bulk::Decompressor<'a> {
     let mut zstd_decompressor = if let Some(dict) = dict {
         zstd::bulk::Decompressor::with_dictionary(dict)
     } else {
@@ -409,26 +391,22 @@ pub fn zstd_decompressor<'a>(
     zstd_decompressor
 }
 
-pub enum CompressorWork
-{
+pub enum CompressorWork {
     Compress(CompressionBlock),
     Decompress(CompressionBlock), // TODO
 }
 
-pub struct CompressionBlock
-{
+pub struct CompressionBlock {
     pub input: Vec<u8>,
     pub location: Arc<AtomicU64>,
     pub compression_config: Arc<CompressionConfig>,
 }
 
-impl CompressionBlock
-{
+impl CompressionBlock {
     pub fn new(
         input: Vec<u8>,
         compression_config: Arc<CompressionConfig>,
-    ) -> Self
-    {
+    ) -> Self {
         Self {
             input,
             location: Arc::new(AtomicU64::new(0)),
@@ -436,19 +414,16 @@ impl CompressionBlock
         }
     }
 
-    pub fn get_location(&self) -> Arc<AtomicU64>
-    {
+    pub fn get_location(&self) -> Arc<AtomicU64> {
         Arc::clone(&self.location)
     }
 
-    pub fn is_complete(&self) -> bool
-    {
+    pub fn is_complete(&self) -> bool {
         self.location.load(Ordering::Relaxed) != 0_u64
     }
 }
 
-pub struct CompressionWorker
-{
+pub struct CompressionWorker {
     pub threads: u16,
     pub buffer_size: usize,
     handles: Vec<JoinHandle<()>>,
@@ -458,10 +433,8 @@ pub struct CompressionWorker
     shutdown_flag: Arc<AtomicBool>,
 }
 
-impl Default for CompressionWorker
-{
-    fn default() -> Self
-    {
+impl Default for CompressionWorker {
+    fn default() -> Self {
         Self {
             threads: 1,
             handles: Vec::new(),
@@ -473,21 +446,17 @@ impl Default for CompressionWorker
     }
 }
 
-impl CompressionWorker
-{
-    pub fn new() -> Self
-    {
+impl CompressionWorker {
+    pub fn new() -> Self {
         Self::default()
     }
 
-    pub fn with_threads(mut self, threads: u16) -> Self
-    {
+    pub fn with_threads(mut self, threads: u16) -> Self {
         self.threads = threads;
         self
     }
 
-    pub fn with_buffer_size(mut self, buffer_size: usize) -> Self
-    {
+    pub fn with_buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
         self
     }
@@ -495,14 +464,12 @@ impl CompressionWorker
     pub fn with_output_queue(
         mut self,
         writer: Arc<flume::Sender<OutputBlock>>,
-    ) -> Self
-    {
+    ) -> Self {
         self.writer = Some(writer);
         self
     }
 
-    pub fn start(&mut self)
-    {
+    pub fn start(&mut self) {
         let queue =
             Arc::new(ArrayQueue::<CompressorWork>::new(self.buffer_size));
         self.queue = Some(queue);
@@ -539,8 +506,7 @@ impl CompressionWorker
     }
 
     #[inline]
-    pub fn submit(&self, work: CompressorWork)
-    {
+    pub fn submit(&self, work: CompressorWork) {
         let backoff = Backoff::new();
 
         let mut entry = work;
@@ -559,8 +525,7 @@ impl CompressionWorker
         &self,
         input: Vec<u8>,
         compression_config: Arc<CompressionConfig>,
-    ) -> Arc<AtomicU64>
-    {
+    ) -> Arc<AtomicU64> {
         let block = CompressionBlock::new(input, compression_config);
         let location = block.get_location();
 
@@ -569,8 +534,7 @@ impl CompressionWorker
         location
     }
 
-    pub fn shutdown(&mut self)
-    {
+    pub fn shutdown(&mut self) {
         self.shutdown_flag.store(true, Ordering::Relaxed);
         for handle in self.handles.drain(..) {
             handle.join().unwrap();
@@ -578,14 +542,12 @@ impl CompressionWorker
     }
 
     #[inline]
-    pub fn get_queue(&self) -> Arc<ArrayQueue<CompressorWork>>
-    {
+    pub fn get_queue(&self) -> Arc<ArrayQueue<CompressorWork>> {
         Arc::clone(self.queue.as_ref().unwrap())
     }
 
     #[inline]
-    pub fn len(&self) -> usize
-    {
+    pub fn len(&self) -> usize {
         self.queue.as_ref().unwrap().len()
     }
 }
@@ -594,8 +556,7 @@ fn compression_worker(
     queue: Arc<ArrayQueue<CompressorWork>>,
     shutdown: Arc<AtomicBool>,
     output_queue: Arc<flume::Sender<OutputBlock>>,
-)
-{
+) {
     let mut result;
     let backoff = Backoff::new();
 
@@ -778,13 +739,11 @@ fn compression_worker(
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
 
     #[test]
-    pub fn test_out_of_range()
-    {
+    pub fn test_out_of_range() {
         let compression_config = CompressionConfig::new();
         let compression_config =
             compression_config.with_compression_type(CompressionType::ZSTD);

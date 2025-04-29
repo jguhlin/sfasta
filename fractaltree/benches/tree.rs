@@ -11,8 +11,7 @@ use xxhash_rust::xxh3::xxh3_64;
 
 use libfractaltree::*;
 
-pub fn bench_large_tree(c: &mut Criterion)
-{
+pub fn bench_large_tree(c: &mut Criterion) {
     let mut rng = thread_rng();
 
     let mut values1024 = (0..1024_u64)
@@ -64,11 +63,15 @@ pub fn bench_large_tree(c: &mut Criterion)
     for order in [8_usize, 16, 32, 64].iter() {
         for buffer_size in [8_usize, 32, 128].iter() {
             group.bench_with_input(
-                BenchmarkId::new("FractalTree", format!("{}-{}", order, buffer_size)),
+                BenchmarkId::new(
+                    "FractalTree",
+                    format!("{}-{}", order, buffer_size),
+                ),
                 &(*order, *buffer_size),
                 |b, (order, buffer_size)| {
                     b.iter(|| {
-                        let mut tree = FractalTreeBuild::new(*order, *buffer_size);
+                        let mut tree =
+                            FractalTreeBuild::new(*order, *buffer_size);
                         for i in values1m.iter() {
                             tree.insert(*i, *i);
                         }
@@ -102,8 +105,7 @@ pub fn bench_large_tree(c: &mut Criterion)
     group.finish();
 }
 
-pub fn bench_search(c: &mut Criterion)
-{
+pub fn bench_search(c: &mut Criterion) {
     let mut rng = thread_rng();
 
     let mut values1024 = (0..1024_u64)

@@ -38,8 +38,7 @@ use faidx_all::*;
 
 // const GIT_VERSION: &str = git_version!();
 
-fn style_pb(pb: ProgressBar) -> ProgressBar
-{
+fn style_pb(pb: ProgressBar) -> ProgressBar {
     let style = ProgressStyle::default_bar()
         .template("[{spinner:.green}] 🧬 {bar:25.green/yellow} {bytes:.cyan}/{total_bytes:.blue} ({eta})")
         .unwrap()
@@ -58,35 +57,29 @@ fn style_pb(pb: ProgressBar) -> ProgressBar
 #[clap(author = "Joseph Guhlin <joseph.guhlin@gmail.com>")]
 #[clap(about = "Sequence Storage optimized for fast random access", long_about = None)]
 #[clap(version = clap::crate_version!())]
-struct Cli
-{
+struct Cli {
     #[clap(subcommand)]
     command: Commands,
 }
 
 #[derive(Subcommand)]
-enum Commands
-{
+enum Commands {
     /// Adds files to myapp
-    View
-    {
-        input: String
+    View {
+        input: String,
     },
-    List
-    {
-        input: String
+    List {
+        input: String,
     },
     #[cfg(feature = "faidx-all")]
-    FaidxIndex
-    {
-        input: String
+    FaidxIndex {
+        input: String,
     },
-    Faidx
-    {
-        input: String, ids: Vec<String>
+    Faidx {
+        input: String,
+        ids: Vec<String>,
     },
-    Convert
-    {
+    Convert {
         input: String,
 
         /// Number of compression threads (Total usage will be this +
@@ -174,24 +167,19 @@ enum Commands
         #[clap(default_value_t = 110)]
         dict_size: u64,
     },
-    Summarize
-    {
-        input: String
+    Summarize {
+        input: String,
     },
-    Stats
-    {
-        input: String
+    Stats {
+        input: String,
     },
-    Bp
-    {
-        input: String
+    Bp {
+        input: String,
     },
-    Index
-    {
-        input: String
+    Index {
+        input: String,
     },
-    Split
-    {
+    Split {
         input: String,
         output: String,
         training: f32,
@@ -201,8 +189,7 @@ enum Commands
     },
 }
 
-fn main()
-{
+fn main() {
     sigpipe::reset();
     env_logger::init();
 
@@ -406,8 +393,7 @@ fn print_sequence(
     stdout: &mut std::io::StdoutLock,
     seq: &[u8],
     line_length: usize,
-)
-{
+) {
     let iter = seq.chunks_exact(line_length);
     let seq = iter.remainder();
     iter.for_each(|x| {
@@ -420,8 +406,7 @@ fn print_sequence(
 }
 
 // TODO: Subsequence support
-fn faidx(input: &str, ids: &Vec<String>)
-{
+fn faidx(input: &str, ids: &Vec<String>) {
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
@@ -472,8 +457,7 @@ fn faidx(input: &str, ids: &Vec<String>)
 }
 
 // TODO: Line length as an argument
-fn view(input: &str)
-{
+fn view(input: &str) {
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
@@ -555,8 +539,7 @@ fn view(input: &str)
     // }
 }
 
-fn list(input: &str)
-{
+fn list(input: &str) {
     let sfasta_filename = input;
 
     let in_buf = File::open(sfasta_filename).expect("Unable to open file");
@@ -615,8 +598,7 @@ fn convert(
     dict_samples: u64,
     dict_size: u64,
     metadata: Option<String>,
-)
-{
+) {
     let fs_metadata =
         fs::metadata(fasta_filename).expect("Unable to get filesize");
     let pb = ProgressBar::new(fs_metadata.len());
@@ -775,8 +757,7 @@ fn convert(
 pub fn generic_open_file_pb(
     pb: ProgressBar,
     filename: &str,
-) -> (usize, indicatif::ProgressBarIter<File>)
-{
+) -> (usize, indicatif::ProgressBarIter<File>) {
     let filesize = fs::metadata(filename)
         .unwrap_or_else(|_| {
             panic!("{}", &format!("Unable to open file: {}", filename))
@@ -813,9 +794,9 @@ pub fn generic_open_file_pb(
     (filesize as usize, file)
 }
 
-pub fn generic_open_file(filename: &str)
-    -> (usize, bool, Box<dyn Read + Send>)
-{
+pub fn generic_open_file(
+    filename: &str,
+) -> (usize, bool, Box<dyn Read + Send>) {
     let filesize = fs::metadata(filename)
         .unwrap_or_else(|_| {
             panic!("{}", &format!("Unable to open file: {}", filename))

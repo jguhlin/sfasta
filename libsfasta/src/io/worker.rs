@@ -6,8 +6,8 @@
 use std::{
     io::{Seek, Write},
     sync::{
-        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
         Arc, Condvar, Mutex,
+        atomic::{AtomicBool, AtomicU64, AtomicUsize, Ordering},
     },
     thread,
     thread::JoinHandle,
@@ -19,8 +19,7 @@ use flume::{Receiver, Sender};
 
 use libcompression::*;
 
-pub struct Worker<W: Write + Seek + Send + Seek + 'static>
-{
+pub struct Worker<W: Write + Seek + Send + Seek + 'static> {
     queue: Option<Arc<Sender<OutputBlock>>>,
     receiver_queue: Option<Receiver<OutputBlock>>,
     shutdown_flag: Arc<AtomicBool>,
@@ -30,18 +29,15 @@ pub struct Worker<W: Write + Seek + Send + Seek + 'static>
     output_buffer: Arc<Mutex<Box<W>>>,
 }
 
-impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
-{
-    pub fn into_inner(self) -> Box<W>
-    {
+impl<W: Write + Seek + Send + Sync + Seek> Worker<W> {
+    pub fn into_inner(self) -> Box<W> {
         match Arc::try_unwrap(self.output_buffer) {
             Ok(output_buffer) => output_buffer.into_inner().unwrap(),
             Err(_) => panic!("Could not unwrap output buffer"),
         }
     }
 
-    pub fn new(output_buffer: Arc<Mutex<Box<W>>>) -> Self
-    {
+    pub fn new(output_buffer: Arc<Mutex<Box<W>>>) -> Self {
         Self {
             queue: None,
             receiver_queue: None,
@@ -51,20 +47,17 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
         }
     }
 
-    pub fn with_buffer_size(mut self, buffer_size: usize) -> Self
-    {
+    pub fn with_buffer_size(mut self, buffer_size: usize) -> Self {
         self.buffer_size = buffer_size;
         self
     }
 
-    pub fn buffer_size(&self) -> usize
-    {
+    pub fn buffer_size(&self) -> usize {
         self.buffer_size
     }
 
     /// Starts the worker thread, and returns the JoinHandle.
-    pub fn start(&mut self) -> JoinHandle<()>
-    {
+    pub fn start(&mut self) -> JoinHandle<()> {
         let (tx, rx) = flume::bounded(self.buffer_size);
         let queue = Arc::new(tx);
         self.queue = Some(queue);
@@ -77,18 +70,15 @@ impl<W: Write + Seek + Send + Sync + Seek> Worker<W>
     }
 
     /// Manually shutdown the worker
-    pub fn shutdown(&mut self)
-    {
+    pub fn shutdown(&mut self) {
         self.shutdown_flag.store(true, Ordering::Relaxed);
     }
 
-    pub fn len(&self) -> usize
-    {
+    pub fn len(&self) -> usize {
         self.receiver_queue.as_ref().unwrap().len()
     }
 
-    pub fn get_queue(&self) -> Arc<Sender<OutputBlock>>
-    {
+    pub fn get_queue(&self) -> Arc<Sender<OutputBlock>> {
         Arc::clone(self.queue.as_ref().unwrap())
     }
 }
@@ -140,14 +130,12 @@ fn worker<W>(
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
     use std::io::Cursor;
 
     #[test]
-    fn test_worker()
-    {
+    fn test_worker() {
         let output_buffer =
             Arc::new(Mutex::new(Box::new(Cursor::new(Vec::new()))));
         let mut worker = Worker::new(output_buffer);

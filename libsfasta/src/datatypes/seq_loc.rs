@@ -25,7 +25,7 @@
 use std::{
     io::{BufRead, BufWriter, Read, Seek, SeekFrom, Write},
     ops::Range,
-    sync::{atomic::AtomicU32, Arc},
+    sync::{Arc, atomic::AtomicU32},
 };
 
 use bincode::{Decode, Encode};
@@ -42,8 +42,7 @@ use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
 // Compressed version is simply Vec<u8> of all the Locs
 // TODO: Base mods?
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
-pub struct SeqLoc
-{
+pub struct SeqLoc {
     pub sequence: u16,
     pub masking: u16,
     pub scores: u16,
@@ -54,10 +53,8 @@ pub struct SeqLoc
     pub locs: Vec<Loc>,
 }
 
-impl SeqLoc
-{
-    pub const fn new() -> Self
-    {
+impl SeqLoc {
+    pub const fn new() -> Self {
         Self {
             ids: 0,
             sequence: 0,
@@ -70,30 +67,25 @@ impl SeqLoc
         }
     }
 
-    pub fn ids_pos(&self) -> Range<usize>
-    {
+    pub fn ids_pos(&self) -> Range<usize> {
         0..self.ids as usize
     }
 
-    pub fn sequence_pos(&self) -> Range<usize>
-    {
+    pub fn sequence_pos(&self) -> Range<usize> {
         self.ids as usize..(self.sequence + self.ids) as usize
     }
 
-    pub fn masking_pos(&self) -> Range<usize>
-    {
+    pub fn masking_pos(&self) -> Range<usize> {
         (self.sequence + self.ids) as usize
             ..(self.sequence + self.ids + self.masking) as usize
     }
 
-    pub fn scores_pos(&self) -> Range<usize>
-    {
+    pub fn scores_pos(&self) -> Range<usize> {
         (self.sequence + self.masking + self.ids) as usize
             ..(self.sequence + self.masking + self.ids + self.scores) as usize
     }
 
-    pub fn signal_pos(&self) -> Range<usize>
-    {
+    pub fn signal_pos(&self) -> Range<usize> {
         (self.sequence + self.masking + self.scores + self.ids) as usize
             ..(self.sequence
                 + self.masking
@@ -102,8 +94,7 @@ impl SeqLoc
                 + self.signal) as usize
     }
 
-    pub fn headers_pos(&self) -> Range<usize>
-    {
+    pub fn headers_pos(&self) -> Range<usize> {
         (self.sequence + self.masking + self.scores + self.signal + self.ids)
             as usize
             ..(self.sequence
@@ -114,8 +105,7 @@ impl SeqLoc
                 + self.headers) as usize
     }
 
-    pub fn mods_pos(&self) -> Range<usize>
-    {
+    pub fn mods_pos(&self) -> Range<usize> {
         (self.sequence
             + self.masking
             + self.scores
@@ -131,33 +121,27 @@ impl SeqLoc
                 + self.mods) as usize
     }
 
-    pub fn get_sequence(&self) -> &[Loc]
-    {
+    pub fn get_sequence(&self) -> &[Loc] {
         &self.locs[self.sequence_pos()]
     }
 
-    pub fn get_masking(&self) -> &[Loc]
-    {
+    pub fn get_masking(&self) -> &[Loc] {
         &self.locs[self.masking_pos()]
     }
 
-    pub fn get_scores(&self) -> &[Loc]
-    {
+    pub fn get_scores(&self) -> &[Loc] {
         &self.locs[self.scores_pos()]
     }
 
-    pub fn get_signal(&self) -> &[Loc]
-    {
+    pub fn get_signal(&self) -> &[Loc] {
         &self.locs[self.signal_pos()]
     }
 
-    pub fn get_headers(&self) -> &[Loc]
-    {
+    pub fn get_headers(&self) -> &[Loc] {
         &self.locs[self.headers_pos()]
     }
 
-    pub fn get_ids(&self) -> &[Loc]
-    {
+    pub fn get_ids(&self) -> &[Loc] {
         &self.locs[self.ids_pos()]
     }
 
@@ -170,8 +154,7 @@ impl SeqLoc
         headers: &[Loc],
         mods: &[Loc],
         signal: &[Loc],
-    )
-    {
+    ) {
         self.sequence = sequence.len() as u16;
         self.masking = masking.len() as u16;
         self.scores = scores.len() as u16;
@@ -189,45 +172,37 @@ impl SeqLoc
         self.locs.extend_from_slice(mods);
     }
 
-    pub fn has_headers(&self) -> bool
-    {
+    pub fn has_headers(&self) -> bool {
         self.headers > 0
     }
 
-    pub fn has_ids(&self) -> bool
-    {
+    pub fn has_ids(&self) -> bool {
         self.ids > 0
     }
 
-    pub fn has_masking(&self) -> bool
-    {
+    pub fn has_masking(&self) -> bool {
         self.masking > 0
     }
 
-    pub fn has_scores(&self) -> bool
-    {
+    pub fn has_scores(&self) -> bool {
         self.scores > 0
     }
 
-    pub fn has_signal(&self) -> bool
-    {
+    pub fn has_signal(&self) -> bool {
         self.signal > 0
     }
 
-    pub fn has_sequence(&self) -> bool
-    {
+    pub fn has_sequence(&self) -> bool {
         self.sequence > 0
     }
 
     #[allow(clippy::len_without_is_empty)]
-    pub fn len(&self) -> usize
-    {
+    pub fn len(&self) -> usize {
         self.locs.iter().map(|loc| loc.len as usize).sum()
     }
 
     // Convert Vec of Locs to the ranges of the sequence...
-    pub fn seq_location_splits(sequence: &[Loc]) -> Vec<std::ops::Range<u32>>
-    {
+    pub fn seq_location_splits(sequence: &[Loc]) -> Vec<std::ops::Range<u32>> {
         let mut locations = Vec::with_capacity(sequence.len());
 
         if sequence.is_empty() {
@@ -253,8 +228,7 @@ impl SeqLoc
         &self,
         block_size: u32,
         range: std::ops::Range<u32>,
-    ) -> Vec<Loc>
-    {
+    ) -> Vec<Loc> {
         let mut new_locs = Vec::new();
 
         let locs = self.get_sequence();
@@ -272,7 +246,7 @@ impl SeqLoc
                 let end = range.end.saturating_sub(split.start);
                 new_locs.push(locs[i].slice(start..end));
                 break; // We are done if it contains the entire
-                       // range...
+            // range...
             } else if split.contains(&range.start) {
                 // Loc contains the start of the range...
                 // For example, Loc is 1500..2000 (length 500 in this Loc) and
@@ -290,7 +264,7 @@ impl SeqLoc
                 let end = range.end.saturating_sub(split.start);
                 new_locs.push(locs[i].slice(start..end));
                 break; // We are done if it contains the end of the
-                       // range...
+            // range...
             } else if split.start > range.start && split.end < range.end {
                 // Loc contains the entire range...
                 // For example, Loc is 1500..2000 (length 500 in the Loc) and
@@ -309,13 +283,11 @@ impl SeqLoc
     }
 }
 
-impl Encode for SeqLoc
-{
+impl Encode for SeqLoc {
     fn encode<E: bincode::enc::Encoder>(
         &self,
         encoder: &mut E,
-    ) -> core::result::Result<(), bincode::error::EncodeError>
-    {
+    ) -> core::result::Result<(), bincode::error::EncodeError> {
         let SeqLoc {
             sequence,
             masking,
@@ -345,12 +317,10 @@ impl Encode for SeqLoc
     }
 }
 
-impl Decode for SeqLoc
-{
+impl Decode for SeqLoc {
     fn decode<D: bincode::de::Decoder>(
         decoder: &mut D,
-    ) -> core::result::Result<Self, bincode::error::DecodeError>
-    {
+    ) -> core::result::Result<Self, bincode::error::DecodeError> {
         let values: [u16; 7] = bincode::Decode::decode(decoder)?;
 
         let locs: Vec<u32> = bincode::Decode::decode(decoder)?;
@@ -377,18 +347,15 @@ impl Decode for SeqLoc
 // memory (such as nt db, >200Gb).
 
 /// Handles access to SeqLocs
-pub struct SeqLocsStoreBuilder
-{
+pub struct SeqLocsStoreBuilder {
     pub location: u64,
     pub tree: FractalTreeBuild<u32, SeqLoc>,
     pub compression: CompressionConfig,
     count: usize,
 }
 
-impl Default for SeqLocsStoreBuilder
-{
-    fn default() -> Self
-    {
+impl Default for SeqLocsStoreBuilder {
+    fn default() -> Self {
         SeqLocsStoreBuilder {
             location: 0,
             tree: FractalTreeBuild::new(2048, 8192),
@@ -402,23 +369,19 @@ impl Default for SeqLocsStoreBuilder
     }
 }
 
-impl SeqLocsStoreBuilder
-{
+impl SeqLocsStoreBuilder {
     /// Create a new SeqLocs object
-    pub fn new() -> Self
-    {
+    pub fn new() -> Self {
         SeqLocsStoreBuilder::default()
     }
 
-    pub fn with_compression(mut self, compression: CompressionConfig) -> Self
-    {
+    pub fn with_compression(mut self, compression: CompressionConfig) -> Self {
         self.compression = compression;
         self
     }
 
     /// Add a SeqLoc to the store
-    pub fn add_to_index(&mut self, seqloc: SeqLoc) -> u32
-    {
+    pub fn add_to_index(&mut self, seqloc: SeqLoc) -> u32 {
         // let location = Arc::new(AtomicU32::new(0));
         // self.data.push((seqloc, Arc::clone(&location)));
         self.tree.insert(self.count as u32, seqloc);
@@ -428,8 +391,7 @@ impl SeqLocsStoreBuilder
     }
 
     /// Set the location u64 of the SeqLocs object
-    pub fn with_location(mut self, location: u64) -> Self
-    {
+    pub fn with_location(mut self, location: u64) -> Self {
         self.location = location;
         self
     }
@@ -458,18 +420,15 @@ impl SeqLocsStoreBuilder
 #[derive(
     Debug, Clone, bincode::Encode, bincode::Decode, PartialEq, Eq, Hash,
 )]
-pub struct Loc
-{
+pub struct Loc {
     pub block: u32,
     pub start: u32,
     pub len: u32,
 }
 
 // TODO: Bytemuck around here somewhere...
-impl From<&[u32]> for Loc
-{
-    fn from(loc: &[u32]) -> Self
-    {
+impl From<&[u32]> for Loc {
+    fn from(loc: &[u32]) -> Self {
         #[cfg(debug_assertions)]
         assert!(loc.len() == 3, "Loc must be 3 u32's long");
 
@@ -481,23 +440,19 @@ impl From<&[u32]> for Loc
     }
 }
 
-impl Loc
-{
+impl Loc {
     #[inline]
-    pub fn get_values(&self) -> [u32; 3]
-    {
+    pub fn get_values(&self) -> [u32; 3] {
         [self.block, self.start, self.len]
     }
 
     #[inline]
-    pub fn new(block: u32, start: u32, len: u32) -> Self
-    {
+    pub fn new(block: u32, start: u32, len: u32) -> Self {
         Self { block, start, len }
     }
 
     #[inline]
-    pub fn is_empty(&self) -> bool
-    {
+    pub fn is_empty(&self) -> bool {
         self.len == 0
     }
 
@@ -507,8 +462,7 @@ impl Loc
     /// itself...
     // TODO: Implement for RangeInclusive
     #[inline]
-    pub fn slice(&self, range: std::ops::Range<u32>) -> Loc
-    {
+    pub fn slice(&self, range: std::ops::Range<u32>) -> Loc {
         Loc {
             block: self.block,
             start: std::cmp::max(
@@ -520,15 +474,13 @@ impl Loc
     }
 }
 
-pub struct SeqLocsStore
-{
+pub struct SeqLocsStore {
     preloaded: bool,
     location: u64,
     tree: FractalTreeDisk<u32, SeqLoc>,
 }
 
-impl SeqLocsStore
-{
+impl SeqLocsStore {
     /// Prefetch the SeqLocs index into memory. Speeds up successive
     /// access, but can be a hefty one-time cost for large files.
     pub fn prefetch<R>(&mut self, in_buf: &mut R)
@@ -601,13 +553,11 @@ impl SeqLocsStore
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
 
     #[test]
-    fn test_seqloc_slice()
-    {
+    fn test_seqloc_slice() {
         let mut seqloc = SeqLoc::new();
 
         seqloc.sequence = 5;
@@ -709,15 +659,13 @@ mod tests
 
     // Make sure if seqloc has no header it returns a 0 length &[Loc]
     #[test]
-    fn header_zero()
-    {
+    fn header_zero() {
         let seqloc = SeqLoc::new();
         assert_eq!(seqloc.get_headers().len(), 0);
     }
 
     #[test]
-    fn encode_decode_seqloc()
-    {
+    fn encode_decode_seqloc() {
         let mut seqloc = SeqLoc::new();
         seqloc.sequence = 5;
         seqloc.add_locs(
@@ -758,8 +706,7 @@ mod tests
     }
 
     #[test]
-    pub fn encode_decode_seqlocstore()
-    {
+    pub fn encode_decode_seqlocstore() {
         let mut seqloc = SeqLoc::new();
         seqloc.add_locs(
             &vec![
@@ -836,8 +783,7 @@ mod tests
     }
 
     #[test]
-    fn test_pos()
-    {
+    fn test_pos() {
         let mut seqloc = SeqLoc::new();
         seqloc.sequence = 5;
         seqloc.add_locs(

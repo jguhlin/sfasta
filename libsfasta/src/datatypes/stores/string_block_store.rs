@@ -11,15 +11,12 @@ use crate::datatypes::{
 };
 use libcompression::*;
 
-pub struct StringBlockStoreBuilder
-{
+pub struct StringBlockStoreBuilder {
     inner: BytesBlockStoreBuilder,
 }
 
-impl Default for StringBlockStoreBuilder
-{
-    fn default() -> Self
-    {
+impl Default for StringBlockStoreBuilder {
+    fn default() -> Self {
         StringBlockStoreBuilder {
             inner: BytesBlockStoreBuilder::default()
                 .with_block_size(512 * 1024)
@@ -32,18 +29,15 @@ impl Default for StringBlockStoreBuilder
     }
 }
 
-impl Builder<Vec<u8>> for StringBlockStoreBuilder
-{
-    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
-    {
+impl Builder<Vec<u8>> for StringBlockStoreBuilder {
+    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str> {
         Ok(self
             .inner
             .add(input)
             .expect("Failed to add string to block store"))
     }
 
-    fn finalize(&mut self) -> Result<(), &str>
-    {
+    fn finalize(&mut self) -> Result<(), &str> {
         match self.inner.finalize() {
             Ok(_) => Ok(()),
             Err(e) => Err("Unable to finalize string block store"),
@@ -51,28 +45,23 @@ impl Builder<Vec<u8>> for StringBlockStoreBuilder
     }
 }
 
-impl StringBlockStoreBuilder
-{
-    pub fn with_dict(mut self) -> Self
-    {
+impl StringBlockStoreBuilder {
+    pub fn with_dict(mut self) -> Self {
         self.inner = self.inner.with_dict();
         self
     }
 
-    pub fn with_dict_size(mut self, dict_size: u64) -> Self
-    {
+    pub fn with_dict_size(mut self, dict_size: u64) -> Self {
         self.inner = self.inner.with_dict_size(dict_size);
         self
     }
 
-    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self
-    {
+    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self {
         self.inner = self.inner.with_dict_samples(dict_samples);
         self
     }
 
-    pub fn with_compression(mut self, config: CompressionConfig) -> Self
-    {
+    pub fn with_compression(mut self, config: CompressionConfig) -> Self {
         self.inner = self.inner.with_compression(config);
         self
     }
@@ -80,8 +69,7 @@ impl StringBlockStoreBuilder
     pub fn with_tree_compression(
         mut self,
         tree_compression: CompressionConfig,
-    ) -> Self
-    {
+    ) -> Self {
         self.inner = self.inner.with_tree_compression(tree_compression);
         self
     }
@@ -89,8 +77,7 @@ impl StringBlockStoreBuilder
     pub fn with_compression_worker(
         mut self,
         compression_worker: Arc<CompressionWorker>,
-    ) -> Self
-    {
+    ) -> Self {
         self.inner = self.inner.with_compression_worker(compression_worker);
         self
     }
@@ -112,37 +99,31 @@ impl StringBlockStoreBuilder
         self.inner.write_block_locations(&mut out_buf)
     }
 
-    pub fn block_len(&self) -> usize
-    {
+    pub fn block_len(&self) -> usize {
         self.inner.block_len()
     }
 
-    pub fn finalize(&mut self)
-    {
+    pub fn finalize(&mut self) {
         self.inner.finalize();
     }
 
-    pub fn with_block_size(mut self, block_size: usize) -> Self
-    {
+    pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.inner = self.inner.with_block_size(block_size);
         self
     }
 
-    pub fn add(&mut self, input: Vec<u8>) -> Vec<Loc>
-    {
+    pub fn add(&mut self, input: Vec<u8>) -> Vec<Loc> {
         self.inner
             .add(input)
             .expect("Failed to add string to block store")
     }
 }
 
-pub struct StringBlockStore
-{
+pub struct StringBlockStore {
     inner: BytesBlockStore,
 }
 
-impl StringBlockStore
-{
+impl StringBlockStore {
     pub fn from_buffer<R>(
         mut in_buf: &mut R,
         starting_pos: u64,
@@ -189,22 +170,19 @@ impl StringBlockStore
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 
-    pub fn get_loaded(&self, loc: &[Loc]) -> String
-    {
+    pub fn get_loaded(&self, loc: &[Loc]) -> String {
         let string_as_bytes = self.inner.get_loaded(loc);
         from_utf8(&string_as_bytes).unwrap().to_string()
     }
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
     use std::io::Cursor;
 
     #[test]
-    fn test_add_id()
-    {
+    fn test_add_id() {
         let mut store = StringBlockStoreBuilder {
             ..Default::default()
         };

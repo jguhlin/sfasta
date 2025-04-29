@@ -3,8 +3,8 @@
 use std::{
     io::{BufRead, Read, Seek, SeekFrom, Write},
     sync::{
-        atomic::{AtomicU64, Ordering},
         Arc,
+        atomic::{AtomicU64, Ordering},
     },
 };
 
@@ -17,8 +17,7 @@ use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
 
 // Implement some custom errors to return
 #[derive(Debug)]
-pub enum BlockStoreError
-{
+pub enum BlockStoreError {
     Empty,
     Other(&'static str),
 }
@@ -28,8 +27,7 @@ pub enum BlockStoreError
 /// used by sequence_block_store and string_block_store
 // TODO: Should be a compression version and already-compressed
 // version that doesn't use Arc<AtomicU64> and compression workers.
-pub struct BytesBlockStoreBuilder
-{
+pub struct BytesBlockStoreBuilder {
     /// Locations of the blocks in the file
     pub block_locations: Vec<Arc<AtomicU64>>,
 
@@ -65,15 +63,12 @@ unsafe impl Send for BytesBlockStoreBuilder {}
 unsafe impl Sync for BytesBlockStoreBuilder {}
 
 // The generic here is Vec<u8>
-impl Builder<Vec<u8>> for BytesBlockStoreBuilder
-{
-    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
-    {
+impl Builder<Vec<u8>> for BytesBlockStoreBuilder {
+    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str> {
         self.add(input)
     }
 
-    fn finalize(&mut self) -> Result<(), &str>
-    {
+    fn finalize(&mut self) -> Result<(), &str> {
         match self.finalize() {
             Ok(_) => Ok(()),
             Err(_) => Err("Unable to finalize block store"),
@@ -81,10 +76,8 @@ impl Builder<Vec<u8>> for BytesBlockStoreBuilder
     }
 }
 
-impl Default for BytesBlockStoreBuilder
-{
-    fn default() -> Self
-    {
+impl Default for BytesBlockStoreBuilder {
+    fn default() -> Self {
         BytesBlockStoreBuilder {
             block_locations_pos: 0,
             block_locations: Vec::new(),
@@ -102,29 +95,24 @@ impl Default for BytesBlockStoreBuilder
     }
 }
 
-impl BytesBlockStoreBuilder
-{
-    pub fn with_dict(mut self) -> Self
-    {
+impl BytesBlockStoreBuilder {
+    pub fn with_dict(mut self) -> Self {
         self.create_dict = true;
         self
     }
 
-    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self
-    {
+    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self {
         self.dict_samples = dict_samples;
         self
     }
 
-    pub fn with_dict_size(mut self, dict_size: u64) -> Self
-    {
+    pub fn with_dict_size(mut self, dict_size: u64) -> Self {
         self.dict_size = dict_size;
         self
     }
 
     /// Configuration. Set the block size
-    pub fn with_block_size(mut self, block_size: usize) -> Self
-    {
+    pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.block_size = block_size as u32;
         self.data = Vec::with_capacity(self.block_size as usize);
         self
@@ -134,15 +122,13 @@ impl BytesBlockStoreBuilder
     pub fn with_tree_compression(
         mut self,
         compression: CompressionConfig,
-    ) -> Self
-    {
+    ) -> Self {
         self.tree_compression_config = compression;
         self
     }
 
     /// Configuration. Set the compression config.
-    pub fn with_compression(mut self, compression: CompressionConfig) -> Self
-    {
+    pub fn with_compression(mut self, compression: CompressionConfig) -> Self {
         self.compression_config = Arc::new(compression);
         self
     }
@@ -151,15 +137,13 @@ impl BytesBlockStoreBuilder
     pub fn with_compression_worker(
         mut self,
         compression_worker: Arc<CompressionWorker>,
-    ) -> Self
-    {
+    ) -> Self {
         self.compression_worker = Some(compression_worker);
         self
     }
 
     /// Compress the current block
-    fn compress_block(&mut self)
-    {
+    fn compress_block(&mut self) {
         debug_assert!(self.compression_worker.is_some());
 
         let mut data = Vec::with_capacity(self.block_size as usize);
@@ -184,8 +168,7 @@ impl BytesBlockStoreBuilder
         }
     }
 
-    fn compress_final_block(&mut self)
-    {
+    fn compress_final_block(&mut self) {
         assert!(self.compression_worker.is_some());
 
         if self.create_dict {
@@ -203,8 +186,7 @@ impl BytesBlockStoreBuilder
         self.block_locations.push(loc);
     }
 
-    pub fn create_dict(&mut self)
-    {
+    pub fn create_dict(&mut self) {
         let dict =
             zstd::dict::from_samples(&self.dict_data, self.dict_size as usize);
         match dict {
@@ -231,19 +213,16 @@ impl BytesBlockStoreBuilder
     }
 
     /// Get number of blocks
-    pub fn block_len(&self) -> usize
-    {
+    pub fn block_len(&self) -> usize {
         self.block_locations.len()
     }
 
-    pub fn block_size(&self) -> usize
-    {
+    pub fn block_size(&self) -> usize {
         self.block_size as usize
     }
 
     /// Check that all block locations are not 0
-    pub fn check_complete(&self)
-    {
+    pub fn check_complete(&self) {
         // If we aren't using a compression worker, don't need to check that
         // anything is complete
         if self.compression_worker.is_none() {
@@ -273,8 +252,7 @@ impl BytesBlockStoreBuilder
     /// Add a sequence of bytes to the block store
     /// Returns a vector of Loc's that point to the location of the
     /// bytes in the block store (can span multiple blocks)
-    pub fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
-    {
+    pub fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str> {
         if self.finalized {
             panic!("Cannot add to finalized block store.");
         }
@@ -449,8 +427,7 @@ impl BytesBlockStoreBuilder
     }
 
     // Push the last block into the compression queue
-    pub fn finalize(&mut self) -> Result<(), BlockStoreError>
-    {
+    pub fn finalize(&mut self) -> Result<(), BlockStoreError> {
         assert!(self.compression_worker.is_some());
 
         if self.data.len() == 0 {
@@ -469,8 +446,7 @@ impl BytesBlockStoreBuilder
 
 /// This struct is for reading (and once finalized, writing)
 #[derive(Debug)]
-pub struct BytesBlockStore
-{
+pub struct BytesBlockStore {
     /// Locations of the blocks in the file
     // todo: fractal tree for all blocks across all datatypes...
     pub block_locations: FractalTreeDisk<u32, u64>,
@@ -491,8 +467,7 @@ pub struct BytesBlockStore
     cache: Option<(u32, Vec<u8>)>,
 }
 
-impl BytesBlockStore
-{
+impl BytesBlockStore {
     pub fn get_block<R>(&mut self, in_buf: &mut R, block: u32) -> Vec<u8>
     where
         R: Read + Seek + Send + Sync,
@@ -587,8 +562,7 @@ impl BytesBlockStore
         result
     }
 
-    pub fn get_loaded(&self, loc: &[Loc]) -> Vec<u8>
-    {
+    pub fn get_loaded(&self, loc: &[Loc]) -> Vec<u8> {
         let mut result = Vec::with_capacity(64);
 
         let block_size = self.block_size as u32;
@@ -627,7 +601,7 @@ impl BytesBlockStore
             match bincode::decode_from_std_read(&mut in_buf, bincode_config) {
                 Ok(x) => x,
                 Err(e) => {
-                    return Err(format!("Error decoding block store: {e}"))
+                    return Err(format!("Error decoding block store: {e}"));
                 }
             };
 
@@ -647,21 +621,18 @@ impl BytesBlockStore
         })
     }
 
-    pub fn block_size(&self) -> usize
-    {
+    pub fn block_size(&self) -> usize {
         self.block_size as usize
     }
 }
 
 // TODO: More tests
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
 
     #[test]
-    fn test_add_id()
-    {
+    fn test_add_id() {
         let output_buffer = Arc::new(std::sync::Mutex::new(Box::new(
             std::io::Cursor::new(Vec::with_capacity(1024 * 1024)),
         )));
@@ -729,8 +700,7 @@ mod tests
     }
 
     #[test]
-    fn test_constructor()
-    {
+    fn test_constructor() {
         let mut store = BytesBlockStoreBuilder::default();
         store.block_size = 10;
         store = store

@@ -1,9 +1,7 @@
 use super::*;
 
-impl<K: Key, V: Value> From<FractalTreeBuild<K, V>> for FractalTreeDisk<K, V>
-{
-    fn from(mut tree: FractalTreeBuild<K, V>) -> Self
-    {
+impl<K: Key, V: Value> From<FractalTreeBuild<K, V>> for FractalTreeDisk<K, V> {
+    fn from(mut tree: FractalTreeBuild<K, V>) -> Self {
         tree.flush_all();
         let root: NodeBuild<K, V> = tree.root.into();
         FractalTreeDisk {
@@ -13,10 +11,8 @@ impl<K: Key, V: Value> From<FractalTreeBuild<K, V>> for FractalTreeDisk<K, V>
     }
 }
 
-impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
-{
-    fn from(node: NodeBuild<K, V>) -> Self
-    {
+impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V> {
+    fn from(node: NodeBuild<K, V>) -> Self {
         let NodeBuild {
             is_root,
             is_leaf,
@@ -44,8 +40,7 @@ impl<K: Key, V: Value> From<NodeBuild<K, V>> for NodeDisk<K, V>
 impl<K: Key, V: Value> From<Box<build::NodeBuild<K, V>>>
     for Box<disk::NodeDisk<K, V>>
 {
-    fn from(node: Box<build::NodeBuild<K, V>>) -> Self
-    {
+    fn from(node: Box<build::NodeBuild<K, V>>) -> Self {
         Box::new((*node).into())
     }
 }
