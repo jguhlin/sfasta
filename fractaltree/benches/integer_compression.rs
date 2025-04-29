@@ -100,7 +100,7 @@ pub fn bench_delta_decode(c: &mut Criterion)
     let mut values1024: Vec<u32> = (0..1024_u32).collect();
     let pco_config = pco::ChunkConfig::default()
         .with_compression_level(8)
-        .with_delta_encoding_order(Some(1));
+        .with_delta_spec(pco::DeltaSpec::Auto);
     let compressed = simple_compress(&values1024, &pco_config).unwrap();
 
     pulp_delta_encode(&mut values1024);
@@ -321,7 +321,7 @@ pub fn bench_delta_encode_u32(c: &mut Criterion)
 
         let pco_config = pco::ChunkConfig::default()
             .with_compression_level(8)
-            .with_delta_encoding_order(Some(1));
+            .with_delta_spec(pco::DeltaSpec::Auto);
 
         group.bench_with_input(
             BenchmarkId::new("PCO Simpler Compress", input.0),

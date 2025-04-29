@@ -357,7 +357,7 @@ impl<K: Key, V: Value> BorrowDecode<'_> for NodeDisk<K, V>
 }
 
 impl<K: Key, V: Value> NodeDisk<K, V>
-{
+{    
     pub fn from_loc(loc: u32) -> Self
     {
         NodeDisk {
@@ -608,10 +608,6 @@ impl<K: Key, V: Value> NodeDisk<K, V>
     }
 }
 
-// it works! trying this now
-// todo try pulp
-// todo try wide crate?
-// or vers vers-vecs Elias-Fano
 pub fn delta_encode<T>(values: &mut [T])
 where
     T: Default + num::traits::Unsigned + Copy + SubAssign,

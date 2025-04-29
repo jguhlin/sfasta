@@ -113,6 +113,7 @@ pub struct NodeBuild<K: Key, V: Value>
 
 impl<K: Key, V: Value> NodeBuild<K, V>
 {
+    /// Creates a new internal node
     pub fn internal(order: usize, buffer_size: usize) -> Self
     {
         NodeBuild {
@@ -125,6 +126,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         }
     }
 
+    /// Creates a new leaf node
     pub fn leaf(order: usize, buffer_size: usize) -> Self
     {
         NodeBuild {
@@ -137,6 +139,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         }
     }
 
+    /// Searches for a key in the node
     pub fn search(&self, key: &K) -> Option<V>
     {
         debug_assert!(self.buffer.is_empty());

@@ -32,9 +32,8 @@ static_assertions = "1.1.0"
 bincode = { version = "2.0.0-rc.3" } #, features = ["serde"] }
 bytelines = { version = "2.5", default-features = false }
 simdutf8 = {version = "0.1.4", features = ["aarch64_neon"] }
-itertools = "0.13"
-# needletail = "0.5.1"
-needletail = { git = "https://github.com/jguhlin/needletail" }
+itertools = "0.14"
+needletail = "0.6.1"
 
 bumpalo = "3.16"
 flume = "0.11.0"
@@ -61,7 +60,7 @@ zstd = { version = "0.13.1", features = ["wasm"] }
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Comment flate2 out for testing wasm build
 flate2 = {version = "1.0.28", features = ["zlib-ng"], default-features = false}
-pulp = "0.20"
+pulp = "0.21"
 zstd = { version = "0.13" }
 # syncmers = "0.1.5"
 
