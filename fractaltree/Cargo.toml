@@ -21,12 +21,12 @@ name ="integer_compression"
 harness = false
 
 [dependencies]
-pulp = "0.18.8"
+pulp = "0.21"
 bumpalo = {version = "3.15.4", features = ["boxed", "collections"]}
 sorted-vec = "0.8.3"
 bincode = "2.0.0-rc.3"
 compression = { path = "../compression" }
-binout = "0.2.1"
+binout = "0.3"
 log = "0.4"
 rayon = "1.10.0"
 num = { version = "0.4.1", features = ["alloc", "libm"] }
@@ -39,5 +39,5 @@ xxhash-rust = { version = "0.8.10", features = ["xxh3"] }
 human-size = "0.4.3"
 bitpacking = "0.9.2"
 wide = "0.7.16"
-pco = "0.2.3"
+pco = "0.4.1"
 stream-vbyte = "0.4.1"
