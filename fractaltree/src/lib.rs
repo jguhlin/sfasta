@@ -1,4 +1,3 @@
-#![feature(is_sorted)]
 #![feature(trait_alias)]
 
 pub mod build;

@@ -20,7 +20,7 @@ name = "libsfasta"
 path = "src/lib.rs"
 
 [dependencies]
-fractaltree = { path = "../fractaltree" }
+bulk_load_bplus_tree = { path = "../bulk_load_bplus_tree" }
 compression = { path = "../compression"}
 rand = "0.9"
 rand_core = "0.9"

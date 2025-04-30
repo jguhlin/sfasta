@@ -13,7 +13,7 @@ use crossbeam::utils::Backoff;
 use super::Builder;
 use crate::datatypes::Loc;
 use libcompression::*;
-use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
+use libbulk_load_bplus_tree::SequentialBPlusTreeBuildU64;
 
 // Implement some custom errors to return
 #[derive(Debug)]
@@ -401,8 +401,7 @@ impl BytesBlockStoreBuilder {
             return Err(BlockStoreError::Empty);
         }
 
-        let mut block_locations_tree: FractalTreeBuild<u32, u64> =
-            FractalTreeBuild::new(2048, 8192);
+        let mut block_locations_tree = SequentialBPlusTreeBuildU64::new(2048);
 
         let block_locations: Vec<u64> = self
             .block_locations
@@ -410,9 +409,8 @@ impl BytesBlockStoreBuilder {
             .map(|x| x.load(Ordering::Relaxed))
             .collect();
         assert!(block_locations.len() < u32::MAX as usize);
-        block_locations.iter().enumerate().for_each(|(i, x)| {
-            block_locations_tree.insert(i as u32, *x);
-        });
+
+        block_locations_tree.extend(&block_locations);
 
         let mut block_locations_tree: FractalTreeDisk<_, _> =
             block_locations_tree.into();

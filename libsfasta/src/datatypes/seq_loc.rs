@@ -33,7 +33,7 @@ use flate2::Compression;
 use rand::seq;
 
 use libcompression::*;
-use libfractaltree::{FractalTreeBuild, FractalTreeDisk};
+use libbulk_load_bplus_tree::BPlusTreeBuild;
 
 // So each SeqLoc is:
 // Each seq, masking, scores, header, ids, are the number for each
@@ -349,7 +349,7 @@ impl Decode for SeqLoc {
 /// Handles access to SeqLocs
 pub struct SeqLocsStoreBuilder {
     pub location: u64,
-    pub tree: FractalTreeBuild<u32, SeqLoc>,
+    pub tree: BPlusTreeBuild<u32, SeqLoc>,
     pub compression: CompressionConfig,
     count: usize,
 }
@@ -358,7 +358,7 @@ impl Default for SeqLocsStoreBuilder {
     fn default() -> Self {
         SeqLocsStoreBuilder {
             location: 0,
-            tree: FractalTreeBuild::new(2048, 8192),
+            tree: BPlusTreeBuild::new(2048),
             compression: CompressionConfig {
                 compression_type: CompressionType::ZSTD,
                 compression_level: 1,
