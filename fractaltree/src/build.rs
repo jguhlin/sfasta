@@ -5,17 +5,14 @@ use sorted_vec::SortedVec;
 /// Meant for a write-many, write-once to disk, read-only-and-many
 /// database
 #[derive(Debug)]
-pub struct FractalTreeBuild<K: Key, V: Value>
-{
+pub struct FractalTreeBuild<K: Key, V: Value> {
     pub root: NodeBuild<K, V>,
     pub order: usize,
     pub buffer_size: usize,
 }
 
-impl<K: Key, V: Value> FractalTreeBuild<K, V>
-{
-    pub fn new(order: usize, buffer_size: usize) -> Self
-    {
+impl<K: Key, V: Value> FractalTreeBuild<K, V> {
+    pub fn new(order: usize, buffer_size: usize) -> Self {
         let mut root = NodeBuild::leaf(order, buffer_size);
         root.is_root = true;
         FractalTreeBuild {
@@ -25,15 +22,13 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
         }
     }
 
-    pub fn insert(&mut self, key: K, value: V)
-    {
+    pub fn insert(&mut self, key: K, value: V) {
         if self.root.insert(self.buffer_size, key, value) {
             self.flush(false);
         }
     }
 
-    pub fn flush(&mut self, all: bool)
-    {
+    pub fn flush(&mut self, all: bool) {
         self.root.flush(self.order, self.buffer_size, all);
 
         while self.root.needs_split(self.order) {
@@ -53,20 +48,17 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
         }
     }
 
-    pub fn flush_all(&mut self)
-    {
+    pub fn flush_all(&mut self) {
         self.flush(true);
     }
 
-    pub fn search(&self, key: &K) -> Option<V>
-    {
+    pub fn search(&self, key: &K) -> Option<V> {
         self.root.search(&key)
     }
 
     // Gets the depth by following the first child, iteratively, until
     // it's a leaf
-    pub fn depth(&self) -> usize
-    {
+    pub fn depth(&self) -> usize {
         let mut depth = 0;
         let mut node = &self.root;
         while !node.is_leaf {
@@ -76,8 +68,7 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
         depth
     }
 
-    pub fn count_all_nodes(&self) -> usize
-    {
+    pub fn count_all_nodes(&self) -> usize {
         let mut count = 0;
         let mut stack = vec![&self.root];
         while let Some(node) = stack.pop() {
@@ -94,15 +85,13 @@ impl<K: Key, V: Value> FractalTreeBuild<K, V>
 
 // Must use
 #[must_use]
-pub enum InsertionAction<K: Key, V: Value>
-{
+pub enum InsertionAction<K: Key, V: Value> {
     Success,
     NodeSplit(K, Box<NodeBuild<K, V>>),
 }
 
 #[derive(Debug)]
-pub struct NodeBuild<K: Key, V: Value>
-{
+pub struct NodeBuild<K: Key, V: Value> {
     pub is_root: bool,
     pub is_leaf: bool,
     pub keys: SortedVec<K>,
@@ -111,11 +100,9 @@ pub struct NodeBuild<K: Key, V: Value>
     pub buffer: Vec<(K, V)>,
 }
 
-impl<K: Key, V: Value> NodeBuild<K, V>
-{
-    /// Creates a new internal node
-    pub fn internal(order: usize, buffer_size: usize) -> Self
-    {
+
+impl<K: Key, V: Value> NodeBuild<K, V> {
+    pub fn internal(order: usize, buffer_size: usize) -> Self {
         NodeBuild {
             is_root: false,
             is_leaf: false,
@@ -126,9 +113,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         }
     }
 
-    /// Creates a new leaf node
-    pub fn leaf(order: usize, buffer_size: usize) -> Self
-    {
+    pub fn leaf(order: usize, buffer_size: usize) -> Self {
         NodeBuild {
             is_root: false,
             is_leaf: true,
@@ -139,9 +124,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         }
     }
 
-    /// Searches for a key in the node
-    pub fn search(&self, key: &K) -> Option<V>
-    {
+    pub fn search(&self, key: &K) -> Option<V> {
         debug_assert!(self.buffer.is_empty());
 
         let i = self.keys.binary_search(&key);
@@ -165,14 +148,12 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         }
     }
 
-    pub fn insert(&mut self, buffer_size: usize, key: K, value: V) -> bool
-    {
+    pub fn insert(&mut self, buffer_size: usize, key: K, value: V) -> bool {
         self.buffer.push((key, value));
         self.buffer.len() >= buffer_size
     }
 
-    pub fn flush(&mut self, order: usize, buffer_size: usize, all: bool)
-    {
+    pub fn flush(&mut self, order: usize, buffer_size: usize, all: bool) {
         // This flushes the buffer down the tree, or if a leaf node, into the
         // tree
 
@@ -243,8 +224,7 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         &mut self,
         order: usize,
         buffer_size: usize,
-    ) -> (K, Box<NodeBuild<K, V>>)
-    {
+    ) -> (K, Box<NodeBuild<K, V>>) {
         debug_assert!(self.keys.is_sorted());
 
         self.flush(order, buffer_size, true);
@@ -301,15 +281,13 @@ impl<K: Key, V: Value> NodeBuild<K, V>
         (new_key, new_node)
     }
 
-    pub fn needs_split(&self, order: usize) -> bool
-    {
+    pub fn needs_split(&self, order: usize) -> bool {
         self.keys.len() >= (order * 2)
     }
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
     use bincode::config;
     use human_size::SpecificSize;
@@ -317,8 +295,7 @@ mod tests
     use xxhash_rust::xxh3::xxh3_64;
 
     #[test]
-    fn split()
-    {
+    fn split() {
         let mut node: NodeBuild<u32, u32> = super::NodeBuild {
             is_root: false,
             is_leaf: true,
@@ -375,8 +352,7 @@ mod tests
     }
 
     #[test]
-    fn basic_tree()
-    {
+    fn basic_tree() {
         let mut tree = super::FractalTreeBuild::new(6, 3);
         tree.insert(0, 0);
 
@@ -392,8 +368,7 @@ mod tests
     }
 
     #[test]
-    fn simple_insertions()
-    {
+    fn simple_insertions() {
         let mut tree: FractalTreeBuild<u32, u32> =
             super::FractalTreeBuild::new(6, 3);
         tree.insert(1, 1);
@@ -409,8 +384,7 @@ mod tests
     }
 
     #[test]
-    fn tree_structure()
-    {
+    fn tree_structure() {
         let mut tree = super::FractalTreeBuild::new(8, 3);
 
         let mut rng = thread_rng();
@@ -463,8 +437,7 @@ mod tests
     }
 
     #[test]
-    fn search()
-    {
+    fn search() {
         let mut rng = thread_rng();
         let mut values_1024 = (0..1024_u32).collect::<Vec<u32>>();
         values_1024.shuffle(&mut rng);
@@ -536,8 +509,7 @@ mod tests
     }
 
     #[test]
-    fn search_noderead()
-    {
+    fn search_noderead() {
         let mut rng = thread_rng();
         let mut values_1024 = (0..1024_u32).collect::<Vec<u32>>();
         values_1024.shuffle(&mut rng);
@@ -563,8 +535,7 @@ mod tests
 
     #[ignore]
     #[test]
-    fn size_of_super_large()
-    {
+    fn size_of_super_large() {
         let values128m = (0..128_369_206_u32)
             .map(|x| xxh3_64(&x.to_le_bytes()))
             // Grab the lower bits as a u32
@@ -605,8 +576,7 @@ mod tests
     }
 
     #[test]
-    fn tree_build_and_find()
-    {
+    fn tree_build_and_find() {
         use std::io::{Seek, SeekFrom};
 
         let mut rng = thread_rng();

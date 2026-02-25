@@ -15,20 +15,16 @@ use libcompression::*;
 
 use pulp::Arch;
 
-pub struct MaskingStoreBuilder
-{
+pub struct MaskingStoreBuilder {
     inner: BytesBlockStoreBuilder,
 }
 
-impl Builder<Vec<u8>> for MaskingStoreBuilder
-{
-    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
-    {
+impl Builder<Vec<u8>> for MaskingStoreBuilder {
+    fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str> {
         Ok(self.add(input))
     }
 
-    fn finalize(&mut self) -> Result<(), &str>
-    {
+    fn finalize(&mut self) -> Result<(), &str> {
         match self.inner.finalize() {
             Ok(_) => Ok(()),
             Err(e) => Err("Unable to finalize masking store"),
@@ -36,10 +32,8 @@ impl Builder<Vec<u8>> for MaskingStoreBuilder
     }
 }
 
-impl Default for MaskingStoreBuilder
-{
-    fn default() -> Self
-    {
+impl Default for MaskingStoreBuilder {
+    fn default() -> Self {
         MaskingStoreBuilder {
             inner: BytesBlockStoreBuilder::default()
                 .with_block_size(512 * 1024),
@@ -47,28 +41,23 @@ impl Default for MaskingStoreBuilder
     }
 }
 
-impl MaskingStoreBuilder
-{
-    pub fn with_dict(mut self) -> Self
-    {
+impl MaskingStoreBuilder {
+    pub fn with_dict(mut self) -> Self {
         self.inner = self.inner.with_dict();
         self
     }
 
-    pub fn with_dict_size(mut self, dict_size: u64) -> Self
-    {
+    pub fn with_dict_size(mut self, dict_size: u64) -> Self {
         self.inner = self.inner.with_dict_size(dict_size);
         self
     }
 
-    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self
-    {
+    pub fn with_dict_samples(mut self, dict_samples: u64) -> Self {
         self.inner = self.inner.with_dict_samples(dict_samples);
         self
     }
 
-    pub fn with_compression(mut self, compression: CompressionConfig) -> Self
-    {
+    pub fn with_compression(mut self, compression: CompressionConfig) -> Self {
         self.inner = self.inner.with_compression(compression);
         self
     }
@@ -76,8 +65,7 @@ impl MaskingStoreBuilder
     pub fn with_tree_compression(
         mut self,
         tree_compression: CompressionConfig,
-    ) -> Self
-    {
+    ) -> Self {
         self.inner = self.inner.with_tree_compression(tree_compression);
         self
     }
@@ -99,8 +87,7 @@ impl MaskingStoreBuilder
         self.inner.write_block_locations(&mut out_buf)
     }
 
-    pub fn with_block_size(mut self, block_size: usize) -> Self
-    {
+    pub fn with_block_size(mut self, block_size: usize) -> Self {
         self.inner = self.inner.with_block_size(block_size);
         self
     }
@@ -108,14 +95,12 @@ impl MaskingStoreBuilder
     pub fn with_compression_worker(
         mut self,
         compression_worker: Arc<CompressionWorker>,
-    ) -> Self
-    {
+    ) -> Self {
         self.inner = self.inner.with_compression_worker(compression_worker);
         self
     }
 
-    pub fn add(&mut self, seq: Vec<u8>) -> Vec<Loc>
-    {
+    pub fn add(&mut self, seq: Vec<u8>) -> Vec<Loc> {
         // If none are lowercase, nope out here... Written in a way that
         // allows for easy vectorization for SIMD
         let arch = Arch::new();
@@ -141,19 +126,16 @@ impl MaskingStoreBuilder
             .expect("Failed to add masking to block store")
     }
 
-    pub fn finalize(&mut self) -> Result<(), BlockStoreError>
-    {
+    pub fn finalize(&mut self) -> Result<(), BlockStoreError> {
         self.inner.finalize()
     }
 }
 
-pub struct Masking
-{
+pub struct Masking {
     inner: BytesBlockStore,
 }
 
-impl Masking
-{
+impl Masking {
     pub fn from_buffer<R>(
         mut in_buf: &mut R,
         starting_pos: u64,
@@ -191,8 +173,7 @@ impl Masking
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
     use rand::Rng;
     use std::{
@@ -201,8 +182,7 @@ mod tests
     };
 
     #[test]
-    fn test_masking_basics()
-    {
+    fn test_masking_basics() {
         let seq = b"actgACTG";
         let value: Vec<bool> = seq.iter().map(|x| x >= &b'Z').collect();
         assert!(
@@ -211,8 +191,7 @@ mod tests
     }
 
     #[test]
-    fn test_masking()
-    {
+    fn test_masking() {
         let mut buffer = vec![0x0];
         buffer.reserve(64 * 1024);
         let mut output_buffer = Arc::new(std::sync::Mutex::new(Box::new(

@@ -1,4 +1,3 @@
-#![feature(is_sorted)]
 #![feature(trait_alias)]
 
 pub mod build;
@@ -32,13 +31,11 @@ pub trait Key = 'static
 pub trait Value = 'static + std::fmt::Debug + Encode + Decode + Clone;
 
 #[cfg(test)]
-mod test
-{
+mod test {
     use super::*;
 
     #[test]
-    fn test_duplicate_tree()
-    {
+    fn test_duplicate_tree() {
         let mut tree = FractalTreeBuild::new(8, 16);
         for _ in 0..8192 {
             tree.insert(1, 1);

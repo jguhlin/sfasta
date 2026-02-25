@@ -6,8 +6,8 @@ use super::{super::*, *};
 use std::{
     collections::VecDeque,
     sync::{
-        atomic::{AtomicBool, AtomicU32, Ordering},
         Arc, Mutex,
+        atomic::{AtomicBool, AtomicU32, Ordering},
     },
     thread::JoinHandle,
 };
@@ -36,8 +36,7 @@ where
     T: Send + Sync + 'static + Sized,
     Z: Send + Sync + Sized + Builder<T>,
 {
-    pub fn new(builder: Z) -> Self
-    {
+    pub fn new(builder: Z) -> Self {
         let builder = Arc::new(Mutex::new(builder));
 
         let (sender, receiver) = flume::bounded::<(LocMutex, T)>(32);
@@ -94,8 +93,7 @@ where
     // Return original builder
     pub fn join(
         self,
-    ) -> Result<Z, std::boxed::Box<(dyn std::any::Any + Send + 'static)>>
-    {
+    ) -> Result<Z, std::boxed::Box<(dyn std::any::Any + Send + 'static)>> {
         {
             self.shutdown.store(true, Ordering::SeqCst);
         }
@@ -111,8 +109,7 @@ where
     pub fn add(
         &self,
         data: T,
-    ) -> Result<LocMutex, flume::SendError<(LocMutex, T)>>
-    {
+    ) -> Result<LocMutex, flume::SendError<(LocMutex, T)>> {
         let loc = Arc::new((AtomicBool::new(false), Mutex::new(vec![])));
         self.sender.send((Arc::clone(&loc), data))?;
         Ok(loc)
@@ -121,8 +118,7 @@ where
 
 /// Specialized threading struct, we have to wait for all
 /// data to be available before pushing to the SeqLocsStore
-pub struct SeqLocsThreadBuilder
-{
+pub struct SeqLocsThreadBuilder {
     builder: Arc<Mutex<SeqLocsStoreBuilder>>,
     shutdown: Arc<AtomicBool>,
     worker: Option<JoinHandle<()>>,
@@ -144,10 +140,8 @@ pub struct SeqLocsThreadBuilder
     pub sender: Sender<(Arc<AtomicU32>, LocMutex, [Option<LocMutex>; 6])>,
 }
 
-impl SeqLocsThreadBuilder
-{
-    pub fn new(builder: SeqLocsStoreBuilder) -> Self
-    {
+impl SeqLocsThreadBuilder {
+    pub fn new(builder: SeqLocsStoreBuilder) -> Self {
         let builder = Arc::new(Mutex::new(builder));
 
         let (sender, receiver) = flume::bounded::<(
@@ -180,7 +174,7 @@ impl SeqLocsThreadBuilder
                 }
 
                 while !buffer.is_empty()
-                    && buffer[0].1 .0.load(Ordering::SeqCst)
+                    && buffer[0].1.0.load(Ordering::SeqCst)
                     && Arc::strong_count(&buffer[0].1) == 1
                     && buffer[0].2.iter().all(|x| {
                         x.is_none()
@@ -248,8 +242,7 @@ impl SeqLocsThreadBuilder
     ) -> Result<
         SeqLocsStoreBuilder,
         std::boxed::Box<(dyn std::any::Any + Send + 'static)>,
-    >
-    {
+    > {
         {
             self.shutdown.store(true, Ordering::SeqCst);
         }
@@ -269,8 +262,7 @@ impl SeqLocsThreadBuilder
     ) -> Result<
         Arc<AtomicU32>,
         flume::SendError<(Arc<AtomicU32>, LocMutex, [Option<LocMutex>; 6])>,
-    >
-    {
+    > {
         let loc_storage = Arc::new(AtomicU32::default());
         self.sender.send((Arc::clone(&loc_storage), id, locs))?;
         Ok(loc_storage)
@@ -278,43 +270,37 @@ impl SeqLocsThreadBuilder
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
     use flume::RecvError;
     use std::{
         sync::{
-            atomic::{AtomicBool, Ordering},
             Arc,
+            atomic::{AtomicBool, Ordering},
         },
         thread::sleep,
         time::Duration,
     };
 
-    struct TestBuilder
-    {
+    struct TestBuilder {
         data: Vec<u8>,
         finalized: AtomicBool,
     }
 
-    impl Builder<Vec<u8>> for TestBuilder
-    {
-        fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str>
-        {
+    impl Builder<Vec<u8>> for TestBuilder {
+        fn add(&mut self, input: Vec<u8>) -> Result<Vec<Loc>, &str> {
             self.data.extend(input);
             Ok(vec![])
         }
 
-        fn finalize(&mut self) -> Result<(), &str>
-        {
+        fn finalize(&mut self) -> Result<(), &str> {
             self.finalized.store(true, Ordering::SeqCst);
             Ok(())
         }
     }
 
     #[test]
-    fn test_thread_builder()
-    {
+    fn test_thread_builder() {
         let builder = TestBuilder {
             data: vec![],
             finalized: AtomicBool::new(false),

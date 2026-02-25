@@ -9,8 +9,7 @@ trait ReadAndSeek: std::io::Read + Seek {}
 impl<T: Read + Seek> ReadAndSeek for T {}
 
 // create an index file (add .frai to extension)
-pub fn create_index(input_file: &str)
-{
+pub fn create_index(input_file: &str) {
     let output_file = format!("{}.frai", file);
     let mut file_reader = BufReader::new(std::fs::File::open(file).unwrap());
     let mut writer =
@@ -80,8 +79,7 @@ pub fn create_index(input_file: &str)
     }
 }
 
-fn detect_compression(bytes: &[u8; 10]) -> Option<CompressionType>
-{
+fn detect_compression(bytes: &[u8; 10]) -> Option<CompressionType> {
     // Detect DEFLATE vs ZLIB vs GZIP and panic if DEFLATE or ZLIB
     if bytes[0] == 0x78 && bytes[1] == 0x9c {
         panic!("Deflate!");
@@ -133,13 +131,11 @@ fn detect_compression(bytes: &[u8; 10]) -> Option<CompressionType>
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
 
     #[test]
-    pub fn test_detect_compression()
-    {
+    pub fn test_detect_compression() {
         let bytes: [u8; 10] = [31, 139, 8, 8, 253, 74, 31, 102, 0, 3];
         assert_eq!(detect_compression(&bytes), Some(CompressionType::GZIP));
 
@@ -162,8 +158,7 @@ mod tests
     }
 
     #[test]
-    pub fn test_decompression()
-    {
+    pub fn test_decompression() {
         let file_test = "/mnt/data/data/sfasta_testing/reads.fasta.gz";
 
         // Try it with box

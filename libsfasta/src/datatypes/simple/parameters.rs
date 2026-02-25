@@ -3,15 +3,12 @@ use crate::*;
 use libcompression::*;
 
 #[derive(Debug, Clone, bincode::Encode, bincode::Decode)]
-pub struct Parameters
-{
+pub struct Parameters {
     pub block_size: u32,
 }
 
-impl Default for Parameters
-{
-    fn default() -> Self
-    {
+impl Default for Parameters {
+    fn default() -> Self {
         Parameters {
             block_size: 512 * 1024, // 512k
         }
@@ -19,13 +16,11 @@ impl Default for Parameters
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
 
     #[test]
-    pub fn bincode_size_struct()
-    {
+    pub fn bincode_size_struct() {
         let bincode_config =
             bincode::config::standard().with_fixed_int_encoding();
 

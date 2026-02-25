@@ -3,8 +3,8 @@ resolver = "2"
 members = [
 	"libsfasta",
 	"sfa",
-	"fractaltree",
 	"compression", 
+	"bulk_load_bplus_tree",
 	# "preload",
 ]
 

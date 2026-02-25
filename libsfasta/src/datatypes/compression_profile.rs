@@ -2,50 +2,43 @@ use serde::{Deserialize, Serialize};
 
 use libcompression::{CompressionConfig, CompressionType};
 
-impl CompressionProfile
-{
-    pub fn default() -> Self
-    {
+impl CompressionProfile {
+    pub fn default() -> Self {
         serde_yml::from_str(include_str!(
             "../../../compression_profiles/default.yaml"
         ))
         .unwrap()
     }
 
-    pub fn fast() -> Self
-    {
+    pub fn fast() -> Self {
         serde_yml::from_str(include_str!(
             "../../../compression_profiles/fast.yaml"
         ))
         .unwrap()
     }
 
-    pub fn fastest() -> Self
-    {
+    pub fn fastest() -> Self {
         serde_yml::from_str(include_str!(
             "../../../compression_profiles/fastest.yaml"
         ))
         .unwrap()
     }
 
-    pub fn small() -> Self
-    {
+    pub fn small() -> Self {
         serde_yml::from_str(include_str!(
             "../../../compression_profiles/small.yaml"
         ))
         .unwrap()
     }
 
-    pub fn smallest() -> Self
-    {
+    pub fn smallest() -> Self {
         serde_yml::from_str(include_str!(
             "../../../compression_profiles/smallest.yaml"
         ))
         .unwrap()
     }
 
-    pub fn set_global(ct: CompressionType, level: i8) -> Self
-    {
+    pub fn set_global(ct: CompressionType, level: i8) -> Self {
         let config = CompressionConfig::new()
             .with_compression_type(ct)
             .with_compression_level(level);
@@ -59,17 +52,14 @@ impl CompressionProfile
     }
 }
 
-impl Default for CompressionProfile
-{
-    fn default() -> Self
-    {
+impl Default for CompressionProfile {
+    fn default() -> Self {
         Self::default()
     }
 }
 
 #[derive(Serialize, Deserialize, PartialEq, Eq, Debug)]
-pub struct CompressionProfile
-{
+pub struct CompressionProfile {
     pub block_size: u32,
     pub data: DataCompressionProfile,
     pub index: IndexCompressionProfile,
@@ -78,8 +68,7 @@ pub struct CompressionProfile
 }
 
 #[derive(Default, Serialize, Deserialize, PartialEq, Eq, Debug)]
-pub struct DataCompressionProfile
-{
+pub struct DataCompressionProfile {
     pub ids: CompressionConfig,
     pub headers: CompressionConfig,
     pub sequence: CompressionConfig,
@@ -89,10 +78,8 @@ pub struct DataCompressionProfile
     pub modifications: CompressionConfig,
 }
 
-impl DataCompressionProfile
-{
-    fn splat(cc: CompressionConfig) -> Self
-    {
+impl DataCompressionProfile {
+    fn splat(cc: CompressionConfig) -> Self {
         Self {
             ids: cc.clone(),
             headers: cc.clone(),
@@ -106,8 +93,7 @@ impl DataCompressionProfile
 }
 
 #[derive(Default, Serialize, Deserialize, PartialEq, Eq, Debug)]
-pub struct IndexCompressionProfile
-{
+pub struct IndexCompressionProfile {
     pub ids: CompressionConfig,
     pub headers: CompressionConfig,
     pub sequence: CompressionConfig,
@@ -117,10 +103,8 @@ pub struct IndexCompressionProfile
     pub modifications: CompressionConfig,
 }
 
-impl IndexCompressionProfile
-{
-    fn splat(cc: CompressionConfig) -> Self
-    {
+impl IndexCompressionProfile {
+    fn splat(cc: CompressionConfig) -> Self {
         Self {
             ids: cc.clone(),
             headers: cc.clone(),
@@ -135,14 +119,12 @@ impl IndexCompressionProfile
 
 #[cfg(test)]
 
-mod tests
-{
+mod tests {
     use super::*;
     use libcompression::CompressionType;
 
     #[test]
-    fn test_parsing_compression_profile()
-    {
+    fn test_parsing_compression_profile() {
         // Load up compression_profiles/default.yaml
         let default_profile = serde_yml::from_str::<CompressionProfile>(
             include_str!("../../../compression_profiles/default.yaml"),
@@ -151,8 +133,7 @@ mod tests
     }
 
     #[test]
-    fn test_splat()
-    {
+    fn test_splat() {
         let cc = CompressionConfig::new()
             .with_compression_type(CompressionType::BZIP2)
             .with_compression_level(9);
@@ -167,8 +148,7 @@ mod tests
     }
 
     #[test]
-    fn test_profiles()
-    {
+    fn test_profiles() {
         // Should not equal default
         assert_ne!(CompressionProfile::default(), CompressionProfile::fast());
         assert_ne!(

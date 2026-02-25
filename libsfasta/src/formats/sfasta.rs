@@ -19,8 +19,7 @@ use xxhash_rust::xxh3::xxh3_64;
 use crate::datatypes::*;
 
 /// Main Sfasta struct
-pub struct Sfasta<'sfa>
-{
+pub struct Sfasta<'sfa> {
     pub version: u64, /* I'm going to regret this, but
                        * 18,446,744,073,709,551,615 versions should be
                        * enough for anybody. */
@@ -36,10 +35,8 @@ pub struct Sfasta<'sfa>
     pub masking: Option<Masking>,
 }
 
-impl<'sfa> Default for Sfasta<'sfa>
-{
-    fn default() -> Self
-    {
+impl<'sfa> Default for Sfasta<'sfa> {
+    fn default() -> Self {
         Sfasta {
             version: 1,
             directory: Directory::default(),
@@ -56,10 +53,8 @@ impl<'sfa> Default for Sfasta<'sfa>
     }
 }
 
-impl<'sfa> Sfasta<'sfa>
-{
-    pub fn conversion(mut self) -> Self
-    {
+impl<'sfa> Sfasta<'sfa> {
+    pub fn conversion(mut self) -> Self {
         self.parameters = Some(Parameters::default());
         self.metadata = Some(Metadata::default());
         self
@@ -75,14 +70,12 @@ impl<'sfa> Sfasta<'sfa>
         self
     }
 
-    pub fn block_size(mut self, block_size: u32) -> Self
-    {
+    pub fn block_size(mut self, block_size: u32) -> Self {
         self.parameters.as_mut().unwrap().block_size = block_size;
         self
     }
 
-    pub fn get_block_size(&self) -> u32
-    {
+    pub fn get_block_size(&self) -> u32 {
         self.parameters.as_ref().unwrap().block_size * 1024
     }
 
@@ -90,8 +83,7 @@ impl<'sfa> Sfasta<'sfa>
         &mut self,
         seqloc: &SeqLoc,
         range: std::ops::Range<u32>,
-    ) -> Vec<Loc>
-    {
+    ) -> Vec<Loc> {
         let block_size = self.get_block_size();
 
         seqloc.seq_slice(block_size, range)
@@ -105,8 +97,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_by_id(
         &mut self,
         id: &str,
-    ) -> Result<Option<Sequence>, &str>
-    {
+    ) -> Result<Option<Sequence>, &str> {
         let matches = self.find(id).expect("Unable to find entry");
         if matches.is_none() {
             return Ok(None);
@@ -160,8 +151,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_by_index(
         &mut self,
         idx: usize,
-    ) -> Result<Option<Sequence>, &'static str>
-    {
+    ) -> Result<Option<Sequence>, &'static str> {
         let seqloc = match self.get_seqloc(idx) {
             Ok(Some(s)) => s,
             Ok(None) => return Ok(None),
@@ -177,8 +167,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_by_seqloc(
         &mut self,
         seqloc: &SeqLoc,
-    ) -> Result<Option<Sequence>, &'static str>
-    {
+    ) -> Result<Option<Sequence>, &'static str> {
         let id = if seqloc.ids > 0 {
             Some(self.get_id(seqloc.get_ids()).unwrap().into_bytes()) // todo
         } else {
@@ -222,8 +211,7 @@ impl<'sfa> Sfasta<'sfa>
         &mut self,
         seqloc: &SeqLoc,
         cache: bool,
-    ) -> Result<Option<Sequence>, &'static str>
-    {
+    ) -> Result<Option<Sequence>, &'static str> {
         let sequence = if seqloc.sequence > 0 {
             if cache {
                 Some(
@@ -253,8 +241,7 @@ impl<'sfa> Sfasta<'sfa>
         &mut self,
         locs: &[Loc],
         cache: bool,
-    ) -> Result<Option<Sequence>, &'static str>
-    {
+    ) -> Result<Option<Sequence>, &'static str> {
         let sequence = if cache {
             Some(self.get_sequence_by_locs(locs).unwrap())
         } else {
@@ -279,8 +266,7 @@ impl<'sfa> Sfasta<'sfa>
         &mut self,
         seqloc: &[Loc],
         maskingloc: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
-    {
+    ) -> Result<Vec<u8>, &'static str> {
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
 
         let mut seq: Vec<u8> = Vec::new();
@@ -307,8 +293,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_nocache(
         &mut self,
         seqloc: &SeqLoc,
-    ) -> Result<Vec<u8>, &'static str>
-    {
+    ) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::new();
 
         assert!(seqloc.sequence > 0);
@@ -342,8 +327,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_by_locs(
         &mut self,
         locs: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
-    {
+    ) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(1024);
 
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
@@ -367,8 +351,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_sequence_by_locs_nocache(
         &mut self,
         locs: &[Loc],
-    ) -> Result<Vec<u8>, &'static str>
-    {
+    ) -> Result<Vec<u8>, &'static str> {
         let mut seq: Vec<u8> = Vec::with_capacity(256);
 
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
@@ -389,8 +372,7 @@ impl<'sfa> Sfasta<'sfa>
         Ok(seq)
     }
 
-    pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str>
-    {
+    pub fn find(&mut self, x: &str) -> Result<Option<SeqLoc>, &str> {
         assert!(self.index.is_some(), "Sfasta index not present");
 
         let idx = self.index.as_mut().unwrap();
@@ -408,37 +390,32 @@ impl<'sfa> Sfasta<'sfa>
         seqlocs.get_seqloc(&mut buf, found.unwrap())
     }
 
-    pub fn get_header(&mut self, locs: &[Loc]) -> Result<String, &'static str>
-    {
+    pub fn get_header(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
         let headers = self.headers.as_mut().unwrap();
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
 
         Ok(headers.get(&mut buf, &locs))
     }
 
-    pub fn get_id(&mut self, locs: &[Loc]) -> Result<String, &'static str>
-    {
+    pub fn get_id(&mut self, locs: &[Loc]) -> Result<String, &'static str> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         let ids = self.ids.as_mut().unwrap();
         Ok(ids.get(&mut buf, &locs))
     }
 
-    pub fn get_id_loaded(&self, locs: &[Loc]) -> Result<String, &'static str>
-    {
+    pub fn get_id_loaded(&self, locs: &[Loc]) -> Result<String, &'static str> {
         let ids = self.ids.as_ref().unwrap();
 
         Ok(ids.get_loaded(&locs))
     }
 
-    pub fn len(&mut self) -> usize
-    {
+    pub fn len(&mut self) -> usize {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.seqlocs.as_mut().unwrap().len(&mut buf)
     }
 
     // Get length from SeqLoc (only for sequence)
-    pub fn seqloc_len(&mut self, seqloc: &SeqLoc) -> usize
-    {
+    pub fn seqloc_len(&mut self, seqloc: &SeqLoc) -> usize {
         seqloc.len()
     }
 
@@ -458,8 +435,7 @@ impl<'sfa> Sfasta<'sfa>
     pub fn get_seqloc(
         &mut self,
         i: usize,
-    ) -> Result<Option<SeqLoc>, &'static str>
-    {
+    ) -> Result<Option<SeqLoc>, &'static str> {
         // assert!(i < self.len(), "Index out of bounds");
         assert!(i < std::u32::MAX as usize, "Index out of bounds");
 
@@ -471,8 +447,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     /// Get all seqlocs
-    pub fn get_seqlocs(&mut self) -> Result<(), &'static str>
-    {
+    pub fn get_seqlocs(&mut self) -> Result<(), &'static str> {
         let mut buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.seqlocs.as_mut().unwrap().prefetch(&mut buf);
 
@@ -482,8 +457,7 @@ impl<'sfa> Sfasta<'sfa>
     }
 
     /// This is more expensive than getting it from the seqlocs
-    pub fn index_len(&self) -> Result<usize, &'static str>
-    {
+    pub fn index_len(&self) -> Result<usize, &'static str> {
         if self.index.is_none() {
             return Err("Index does not exist");
         }
@@ -491,20 +465,17 @@ impl<'sfa> Sfasta<'sfa>
         self.index.as_ref().unwrap().len()
     }
 
-    pub fn index_load(&mut self) -> Result<(), &'static str>
-    {
+    pub fn index_load(&mut self) -> Result<(), &'static str> {
         let buf = &mut *self.buf.as_ref().unwrap().write().unwrap();
         self.index.as_mut().unwrap().load_tree(buf)
     }
 }
 
-pub struct SfastaParser<'sfa>
-{
+pub struct SfastaParser<'sfa> {
     pub sfasta: Sfasta<'sfa>,
 }
 
-impl<'sfa> SfastaParser<'sfa>
-{
+impl<'sfa> SfastaParser<'sfa> {
     /// Convenience function to open a file and parse it.
     ///
     /// ```no_run
@@ -513,8 +484,7 @@ impl<'sfa> SfastaParser<'sfa>
     /// ```
     pub fn open<P: AsRef<std::path::Path>>(
         path: P,
-    ) -> Result<Sfasta<'sfa>, String>
-    {
+    ) -> Result<Sfasta<'sfa>, String> {
         // Check file size is reasonable:
         let metadata = std::fs::metadata(&path).unwrap();
         if metadata.len() < 128 {
@@ -574,7 +544,7 @@ impl<'sfa> SfastaParser<'sfa>
                 Err(y) => {
                     return Result::Err(format!(
                         "Error reading SFASTA directory: {y}"
-                    ))
+                    ));
                 }
             },
             ..Default::default()
@@ -601,14 +571,14 @@ impl<'sfa> SfastaParser<'sfa>
             Err(y) => {
                 return Result::Err(format!(
                     "Error reading SFASTA directory: {y}"
-                ))
+                ));
             }
         };
 
         match dir.sanity_check(buffer_length) {
             Ok(_) => (),
             Err(x) => {
-                return Result::Err(format!("Invalid SFASTA directory: {x}"))
+                return Result::Err(format!("Invalid SFASTA directory: {x}"));
             }
         }
 
@@ -639,7 +609,7 @@ impl<'sfa> SfastaParser<'sfa>
                     Err(y) => {
                         return Result::Err(format!(
                             "Error reading SFASTA seqlocs: {y}"
-                        ))
+                        ));
                     }
                 };
             sfasta.seqlocs = Some(seqlocs);
@@ -669,7 +639,7 @@ impl<'sfa> SfastaParser<'sfa>
                 Err(y) => {
                     return Result::Err(format!(
                         "Error reading SFASTA headers - StringBlockStore: {y}"
-                    ))
+                    ));
                 }
             };
 
@@ -686,7 +656,7 @@ impl<'sfa> SfastaParser<'sfa>
                 Err(y) => {
                     return Result::Err(format!(
                         "Error reading SFASTA ids: {y}"
-                    ))
+                    ));
                 }
             };
             sfasta.ids = Some(ids);
@@ -702,7 +672,7 @@ impl<'sfa> SfastaParser<'sfa>
                 Err(y) => {
                     return Result::Err(format!(
                         "Error reading SFASTA masking: {y}"
-                    ))
+                    ));
                 }
             };
         }
@@ -716,22 +686,18 @@ impl<'sfa> SfastaParser<'sfa>
 }
 
 #[derive(PartialEq, Eq, Clone, Copy, Debug)]
-pub enum SeqMode
-{
+pub enum SeqMode {
     Linear,
     Random,
 }
 
-impl Default for SeqMode
-{
-    fn default() -> Self
-    {
+impl Default for SeqMode {
+    fn default() -> Self {
         SeqMode::Linear
     }
 }
 
-pub struct Sequences<'sfa>
-{
+pub struct Sequences<'sfa> {
     sfasta: Sfasta<'sfa>,
     cur_idx: usize,
     mode: SeqMode,
@@ -744,10 +710,8 @@ pub struct Sequences<'sfa>
 }
 
 #[allow(dead_code)]
-impl<'sfa> Sequences<'sfa>
-{
-    pub fn new(sfasta: Sfasta) -> Sequences
-    {
+impl<'sfa> Sequences<'sfa> {
+    pub fn new(sfasta: Sfasta) -> Sequences {
         Sequences {
             sfasta,
             cur_idx: 0,
@@ -762,8 +726,7 @@ impl<'sfa> Sequences<'sfa>
     }
 
     // Resets the iterator to the beginning of the sequences
-    pub fn set_mode(&mut self, mode: SeqMode)
-    {
+    pub fn set_mode(&mut self, mode: SeqMode) {
         self.mode = mode;
         self.remaining_index = None;
         self.cur_idx = 0;
@@ -771,72 +734,60 @@ impl<'sfa> Sequences<'sfa>
 
     /// Convenience function. Likely to be less performant. Prefetch
     /// is off by default.
-    pub fn from_file(path: String) -> Sequences<'sfa>
-    {
+    pub fn from_file(path: String) -> Sequences<'sfa> {
         Sequences::new(SfastaParser::open(path).expect("Unable to open file"))
     }
 
-    pub fn with_header(mut self) -> Sequences<'sfa>
-    {
+    pub fn with_header(mut self) -> Sequences<'sfa> {
         self.with_header = true;
         self
     }
 
-    pub fn without_header(mut self) -> Sequences<'sfa>
-    {
+    pub fn without_header(mut self) -> Sequences<'sfa> {
         self.with_header = false;
         self
     }
 
-    pub fn with_scores(mut self) -> Sequences<'sfa>
-    {
+    pub fn with_scores(mut self) -> Sequences<'sfa> {
         self.with_scores = true;
         self
     }
 
-    pub fn without_scores(mut self) -> Sequences<'sfa>
-    {
+    pub fn without_scores(mut self) -> Sequences<'sfa> {
         self.with_scores = false;
         self
     }
 
-    pub fn with_seed(mut self, seed: u64) -> Sequences<'sfa>
-    {
+    pub fn with_seed(mut self, seed: u64) -> Sequences<'sfa> {
         self.seed = Some(seed);
         self
     }
 
-    pub fn with_ids(mut self) -> Sequences<'sfa>
-    {
+    pub fn with_ids(mut self) -> Sequences<'sfa> {
         self.with_ids = true;
         self
     }
 
-    pub fn without_ids(mut self) -> Sequences<'sfa>
-    {
+    pub fn without_ids(mut self) -> Sequences<'sfa> {
         self.with_ids = false;
         self
     }
 
-    pub fn with_sequences(mut self) -> Sequences<'sfa>
-    {
+    pub fn with_sequences(mut self) -> Sequences<'sfa> {
         self.with_sequences = true;
         self
     }
 
-    pub fn without_sequences(mut self) -> Sequences<'sfa>
-    {
+    pub fn without_sequences(mut self) -> Sequences<'sfa> {
         self.with_sequences = false;
         self
     }
 }
 
-impl<'sfa> Iterator for Sequences<'sfa>
-{
+impl<'sfa> Iterator for Sequences<'sfa> {
     type Item = Sequence;
 
-    fn next(&mut self) -> Option<Self::Item>
-    {
+    fn next(&mut self) -> Option<Self::Item> {
         if self.sfasta.index.is_none() || self.cur_idx >= self.sfasta.len() {
             return None;
         }
@@ -925,8 +876,7 @@ impl<'sfa> Iterator for Sequences<'sfa>
 }
 
 #[cfg(test)]
-mod tests
-{
+mod tests {
     use super::*;
     use crate::conversion::Converter;
     use std::{
@@ -935,8 +885,7 @@ mod tests
     };
 
     #[test]
-    pub fn test_sfasta_find_and_retrieve_sequence()
-    {
+    pub fn test_sfasta_find_and_retrieve_sequence() {
         let _ = env_logger::builder().is_test(true).try_init();
         let out_buf = Box::new(Cursor::new(Vec::new()));
 
@@ -986,12 +935,14 @@ mod tests
             .get_sequence(output.get_sequence(), output.get_masking())
             .unwrap();
         let sequence = std::str::from_utf8(&sequence).unwrap();
-        assert!("ACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATA" == sequence);
+        assert!(
+            "ACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATAACTGGGGGNAATTATATA"
+                == sequence
+        );
     }
 
     #[test]
-    pub fn test_parse_multiple_blocks()
-    {
+    pub fn test_parse_multiple_blocks() {
         let _ = env_logger::builder().is_test(true).try_init();
         let out_buf = Box::new(Cursor::new(Vec::new()));
 
@@ -1038,13 +989,13 @@ mod tests
 
         println!("{:#?}", &sequence[0..100]);
         assert!(
-      &sequence[0..100]
-        == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT"
-    );
+            &sequence[0..100]
+                == "ATGCGATCCGCCCTTTCATGACTCGGGTCATCCAGCTCAATAACACAGACTATTTTATTGTTCTTCTTTGAAACCAGAACATAATCCATTGCCATGCCAT"
+        );
         assert!(
-      &sequence[48000..48100]
-        == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT"
-    );
+            &sequence[48000..48100]
+                == "AACCGGCAGGTTGAATACCAGTATGACTGTTGGTTATTACTGTTGAAATTCTCATGCTTACCACCGCGGAATAACACTGGCGGTATCATGACCTGCCGGT"
+        );
         // Last 10
 
         assert!(&sequence[last_ten..] == "ATGTACAGCG");
@@ -1052,8 +1003,7 @@ mod tests
     }
 
     #[test]
-    pub fn test_find_does_not_trigger_infinite_loops()
-    {
+    pub fn test_find_does_not_trigger_infinite_loops() {
         let mut out_buf = Box::new(Cursor::new(Vec::new()));
 
         let mut in_buf = BufReader::new(
